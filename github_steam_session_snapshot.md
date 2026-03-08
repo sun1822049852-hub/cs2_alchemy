@@ -1,0 +1,2013 @@
+- generic [ref=e2]:
+  - region
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e9]:
+        - button "Toggle navigation" [ref=e11] [cursor=pointer]
+        - link "Homepage" [ref=e17] [cursor=pointer]:
+          - /url: /
+          - img [ref=e18]
+        - generic [ref=e20]:
+          - link "Sign in" [ref=e21] [cursor=pointer]:
+            - /url: /login?return_to=https%3A%2F%2Fgithub.com%2FDoctorMcKay%2Fnode-steam-session
+          - button "Appearance settings" [ref=e24] [cursor=pointer]:
+            - img
+  - main [ref=e28]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e32]:
+          - img [ref=e33]
+          - link "DoctorMcKay" [ref=e36] [cursor=pointer]:
+            - /url: /DoctorMcKay
+          - generic [ref=e37]: /
+          - strong [ref=e38]:
+            - link "node-steam-session" [ref=e39] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session
+          - generic [ref=e40]: Public
+        - generic [ref=e41]:
+          - list:
+            - listitem [ref=e1555]:
+              - button "Sponsor DoctorMcKay/node-steam-session" [ref=e1557] [cursor=pointer]:
+                - generic [ref=e1559]:
+                  - img [ref=e1560]
+                  - text: Sponsor
+            - listitem [ref=e42]:
+              - link "You must be signed in to change notification settings" [ref=e43] [cursor=pointer]:
+                - /url: /login?return_to=%2FDoctorMcKay%2Fnode-steam-session
+                - img [ref=e44]
+                - text: Notifications
+            - listitem [ref=e46]:
+              - link "Fork 32" [ref=e47] [cursor=pointer]:
+                - /url: /login?return_to=%2FDoctorMcKay%2Fnode-steam-session
+                - img [ref=e48]
+                - text: Fork
+                - generic "32" [ref=e50]
+            - listitem [ref=e51]:
+              - link "You must be signed in to star a repository" [ref=e53] [cursor=pointer]:
+                - /url: /login?return_to=%2FDoctorMcKay%2Fnode-steam-session
+                - img [ref=e54]
+                - text: Star
+                - generic "178 users starred this repository" [ref=e56]: "178"
+      - navigation "Repository" [ref=e57]:
+        - list [ref=e58]:
+          - listitem [ref=e59]:
+            - link "Code" [ref=e60] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session
+              - img [ref=e61]
+              - generic [ref=e63]: Code
+          - listitem [ref=e64]:
+            - link "Issues 11" [ref=e65] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/issues
+              - img [ref=e66]
+              - generic [ref=e69]: Issues
+              - generic "11" [ref=e70]
+          - listitem [ref=e71]:
+            - link "Pull requests 2" [ref=e72] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/pulls
+              - img [ref=e73]
+              - generic [ref=e75]: Pull requests
+              - generic "2" [ref=e76]
+          - listitem [ref=e77]:
+            - link "Actions" [ref=e78] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/actions
+              - img [ref=e79]
+              - generic [ref=e81]: Actions
+          - listitem [ref=e82]:
+            - link "Security" [ref=e83] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/security
+              - img [ref=e84]
+              - generic [ref=e86]: Security
+          - listitem [ref=e87]:
+            - link "Insights" [ref=e88] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/pulse
+              - img [ref=e89]
+              - generic [ref=e91]: Insights
+    - generic [ref=e93]:
+      - heading "DoctorMcKay/node-steam-session" [level=1] [ref=e94]
+      - generic [ref=e97]:
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]:
+              - button "master branch" [ref=e105] [cursor=pointer]:
+                - generic [ref=e106]:
+                  - generic [ref=e108]:
+                    - img [ref=e110]
+                    - generic [ref=e113]: master
+                  - generic:
+                    - img
+              - generic [ref=e114]:
+                - link "Go to Branches page" [ref=e115] [cursor=pointer]:
+                  - /url: /DoctorMcKay/node-steam-session/branches
+                  - img [ref=e116]
+                - link "Go to Tags page" [ref=e118] [cursor=pointer]:
+                  - /url: /DoctorMcKay/node-steam-session/tags
+                  - img [ref=e119]
+            - generic [ref=e121]:
+              - button "Go to file" [ref=e124] [cursor=pointer]:
+                - generic [ref=e126]: Go to file
+              - button "Code" [ref=e127] [cursor=pointer]:
+                - generic [ref=e128]:
+                  - generic:
+                    - img
+                  - generic [ref=e129]: Code
+                  - generic:
+                    - img
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - heading "Folders and files" [level=2] [ref=e132]
+              - table "Folders and files" [ref=e133]:
+                - rowgroup:
+                  - row "Name Last commit message Last commit date":
+                    - columnheader "Name"
+                    - columnheader "Last commit message":
+                      - generic "Last commit message"
+                    - columnheader "Last commit date":
+                      - generic "Last commit date"
+                - rowgroup [ref=e134]:
+                  - row "Latest commit DoctorMcKay commits by DoctorMcKay Request necessary permissions for trusted publishing success Commit 3ac0f34 · Dec 4, 20253 months ago History View commit history for this file." [ref=e1562]:
+                    - cell "Latest commit DoctorMcKay commits by DoctorMcKay Request necessary permissions for trusted publishing success Commit 3ac0f34 · Dec 4, 20253 months ago History View commit history for this file." [ref=e1563]:
+                      - generic [ref=e137]:
+                        - heading "Latest commit" [level=2] [ref=e138]
+                        - generic [ref=e1564]:
+                          - generic [ref=e1566]:
+                            - link "DoctorMcKay" [ref=e1567] [cursor=pointer]:
+                              - /url: /DoctorMcKay
+                              - img "DoctorMcKay" [ref=e1568]
+                            - link "commits by DoctorMcKay" [ref=e1569] [cursor=pointer]:
+                              - /url: /DoctorMcKay/node-steam-session/commits?author=DoctorMcKay
+                              - text: DoctorMcKay
+                          - generic [ref=e1570]:
+                            - link "Request necessary permissions for trusted publishing" [ref=e1573] [cursor=pointer]:
+                              - /url: /DoctorMcKay/node-steam-session/commit/3ac0f34fd964b3f886ba18ef4824ac43c942e030
+                            - button "success" [ref=e1574] [cursor=pointer]:
+                              - img [ref=e1575]
+                        - generic [ref=e140]:
+                          - generic [ref=e1578]:
+                            - link "Commit 3ac0f34" [ref=e1579] [cursor=pointer]:
+                              - /url: /DoctorMcKay/node-steam-session/commit/3ac0f34fd964b3f886ba18ef4824ac43c942e030
+                              - text: 3ac0f34
+                            - text: ·
+                            - generic "Dec 4, 2025, 7:59 PM GMT+8" [ref=e1580]: Dec 4, 20253 months ago
+                          - generic [ref=e141]:
+                            - heading "History" [level=2] [ref=e142]
+                            - link "View commit history for this file." [ref=e144] [cursor=pointer]:
+                              - /url: /DoctorMcKay/node-steam-session/commits/master/
+                              - generic [ref=e145]:
+                                - generic:
+                                  - img
+                  - row ".github, (Directory) Request necessary permissions for trusted publishing Dec 4, 20253 months ago" [ref=e1581]:
+                    - cell ".github, (Directory)" [ref=e147]:
+                      - generic [ref=e148]:
+                        - img [ref=e149]
+                        - link ".github, (Directory)" [ref=e154] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/tree/master/.github
+                          - text: .github
+                    - cell "Request necessary permissions for trusted publishing" [ref=e1582]:
+                      - link "Request necessary permissions for trusted publishing" [ref=e1585] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/3ac0f34fd964b3f886ba18ef4824ac43c942e030
+                    - cell "Dec 4, 20253 months ago" [ref=e1586]:
+                      - generic [ref=e1587]: Dec 4, 20253 months ago
+                  - row ".idea, (Directory) Request necessary permissions for trusted publishing Dec 4, 20253 months ago" [ref=e1588]:
+                    - cell ".idea, (Directory)" [ref=e160]:
+                      - generic [ref=e161]:
+                        - img [ref=e162]
+                        - link ".idea, (Directory)" [ref=e167] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/tree/master/.idea
+                          - text: .idea
+                    - cell "Request necessary permissions for trusted publishing" [ref=e1589]:
+                      - link "Request necessary permissions for trusted publishing" [ref=e1592] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/3ac0f34fd964b3f886ba18ef4824ac43c942e030
+                    - cell "Dec 4, 20253 months ago" [ref=e1593]:
+                      - generic [ref=e1594]: Dec 4, 20253 months ago
+                  - row "examples, (Directory) Fix lint issues in login-to-web-with-2fa.ts Apr 26, 20233 years ago" [ref=e1595]:
+                    - cell "examples, (Directory)" [ref=e173]:
+                      - generic [ref=e174]:
+                        - img [ref=e175]
+                        - link "examples, (Directory)" [ref=e180] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/tree/master/examples
+                          - text: examples
+                    - cell "Fix lint issues in login-to-web-with-2fa.ts" [ref=e1596]:
+                      - link "Fix lint issues in login-to-web-with-2fa.ts" [ref=e1599] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/4d733f0d7daa7031148996e5d5c4e3879595ba3b
+                    - cell "Apr 26, 20233 years ago" [ref=e1600]:
+                      - generic [ref=e1601]: Apr 26, 20233 years ago
+                  - row "protobufs, (Directory) Updated protobufs Jun 30, 20233 years ago" [ref=e1602]:
+                    - cell "protobufs, (Directory)" [ref=e186]:
+                      - generic [ref=e187]:
+                        - img [ref=e188]
+                        - link "protobufs, (Directory)" [ref=e193] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/tree/master/protobufs
+                          - text: protobufs
+                    - cell "Updated protobufs" [ref=e1603]:
+                      - link "Updated protobufs" [ref=e1606] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/d7a5d155472ec836cfc508d1308a5eaa7275e46b
+                    - cell "Jun 30, 20233 years ago" [ref=e1607]:
+                      - generic [ref=e1608]: Jun 30, 20233 years ago
+                  - row "scripts, (Directory) Updated tsdoc Nov 2, 20233 years ago" [ref=e1609]:
+                    - cell "scripts, (Directory)" [ref=e199]:
+                      - generic [ref=e200]:
+                        - img [ref=e201]
+                        - link "scripts, (Directory)" [ref=e206] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/tree/master/scripts
+                          - text: scripts
+                    - cell "Updated tsdoc" [ref=e1610]:
+                      - link "Updated tsdoc" [ref=e1613] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/698469cdbad3e555dda10c81f580f1ee3960156f
+                    - cell "Nov 2, 20233 years ago" [ref=e1614]:
+                      - generic [ref=e1615]: Nov 2, 20233 years ago
+                  - row "src, (Directory) Include origin=SteamMobile in query string for mobile app GET requests Jul 19, 20258 months ago" [ref=e1616]:
+                    - cell "src, (Directory)" [ref=e212]:
+                      - generic [ref=e213]:
+                        - img [ref=e214]
+                        - link "src, (Directory)" [ref=e219] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/tree/master/src
+                          - text: src
+                    - cell "Include origin=SteamMobile in query string for mobile app GET requests" [ref=e1617]:
+                      - link "Include origin=SteamMobile in query string for mobile app GET requests" [ref=e1620] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/2caf8d5ac4337400b9fa15fa16d9f885ca4cb82f
+                    - cell "Jul 19, 20258 months ago" [ref=e1621]:
+                      - generic [ref=e1622]: Jul 19, 20258 months ago
+                  - row "test, (Directory) Fix tests to check new SteamClient request format Oct 26, 20233 years ago" [ref=e1623]:
+                    - cell "test, (Directory)" [ref=e225]:
+                      - generic [ref=e226]:
+                        - img [ref=e227]
+                        - link "test, (Directory)" [ref=e232] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/tree/master/test
+                          - text: test
+                    - cell "Fix tests to check new SteamClient request format" [ref=e1624]:
+                      - link "Fix tests to check new SteamClient request format" [ref=e1627] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/38745ec30f0ade026998aaa5182d84e15f29048b
+                    - cell "Oct 26, 20233 years ago" [ref=e1628]:
+                      - generic [ref=e1629]: Oct 26, 20233 years ago
+                  - row ".eslintrc.js, (File) Fixed lint problems Sep 2, 20224 years ago" [ref=e1630]:
+                    - cell ".eslintrc.js, (File)" [ref=e238]:
+                      - generic [ref=e239]:
+                        - img [ref=e240]
+                        - link ".eslintrc.js, (File)" [ref=e245] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/.eslintrc.js
+                          - text: .eslintrc.js
+                    - cell "Fixed lint problems" [ref=e1631]:
+                      - link "Fixed lint problems" [ref=e1634] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/33e6ec35b6ac80277452257ac590986ca11f617c
+                    - cell "Sep 2, 20224 years ago" [ref=e1635]:
+                      - generic [ref=e1636]: Sep 2, 20224 years ago
+                  - row ".gitignore, (File) Initial commit Aug 30, 20224 years ago" [ref=e1637]:
+                    - cell ".gitignore, (File)" [ref=e251]:
+                      - generic [ref=e252]:
+                        - img [ref=e253]
+                        - link ".gitignore, (File)" [ref=e258] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/.gitignore
+                          - text: .gitignore
+                    - cell "Initial commit" [ref=e1638]:
+                      - link "Initial commit" [ref=e1641] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/fbbd779d141c6022c72f6db0d494201a9eef0a87
+                    - cell "Aug 30, 20224 years ago" [ref=e1642]:
+                      - generic [ref=e1643]: Aug 30, 20224 years ago
+                  - row ".npmrc, (File) Bumped minimum node version Aug 30, 20224 years ago" [ref=e1644]:
+                    - cell ".npmrc, (File)" [ref=e264]:
+                      - generic [ref=e265]:
+                        - img [ref=e266]
+                        - link ".npmrc, (File)" [ref=e271] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/.npmrc
+                          - text: .npmrc
+                    - cell "Bumped minimum node version" [ref=e1645]:
+                      - link "Bumped minimum node version" [ref=e1648] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/cdfa634583895de29d1aad7ff3f3609344805498
+                    - cell "Aug 30, 20224 years ago" [ref=e1649]:
+                      - generic [ref=e1650]: Aug 30, 20224 years ago
+                  - row "LICENSE, (File) Initial commit Aug 30, 20224 years ago" [ref=e1651]:
+                    - cell "LICENSE, (File)" [ref=e277]:
+                      - generic [ref=e278]:
+                        - img [ref=e279]
+                        - link "LICENSE, (File)" [ref=e284] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/LICENSE
+                          - text: LICENSE
+                    - cell "Initial commit" [ref=e1652]:
+                      - link "Initial commit" [ref=e1655] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/fbbd779d141c6022c72f6db0d494201a9eef0a87
+                    - cell "Aug 30, 20224 years ago" [ref=e1656]:
+                      - generic [ref=e1657]: Aug 30, 20224 years ago
+                  - row "README.md, (File) Updated docs May 1, 202511 months ago" [ref=e1658]:
+                    - cell "README.md, (File)" [ref=e290]:
+                      - generic [ref=e291]:
+                        - img [ref=e292]
+                        - link "README.md, (File)" [ref=e297] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/README.md
+                          - text: README.md
+                    - cell "Updated docs" [ref=e1659]:
+                      - link "Updated docs" [ref=e1662] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/842d88b673ec094cb3c9af00d247a21788d4cfac
+                    - cell "May 1, 202511 months ago" [ref=e1663]:
+                      - generic [ref=e1664]: May 1, 202511 months ago
+                  - row "jest.config.js, (File) Added jest test Mar 18, 20233 years ago" [ref=e1665]:
+                    - cell "jest.config.js, (File)" [ref=e303]:
+                      - generic [ref=e304]:
+                        - img [ref=e305]
+                        - link "jest.config.js, (File)" [ref=e310] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/jest.config.js
+                          - text: jest.config.js
+                    - cell "Added jest test" [ref=e1666]:
+                      - link "Added jest test" [ref=e1669] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/862faf3903e9b29b8027df4f317b1a93023c53be
+                    - cell "Mar 18, 20233 years ago" [ref=e1670]:
+                      - generic [ref=e1671]: Mar 18, 20233 years ago
+                  - row "package.json, (File) 1.9.4 Jul 19, 20258 months ago" [ref=e1672]:
+                    - cell "package.json, (File)" [ref=e316]:
+                      - generic [ref=e317]:
+                        - img [ref=e318]
+                        - link "package.json, (File)" [ref=e323] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/package.json
+                          - text: package.json
+                    - cell "1.9.4" [ref=e1673]:
+                      - link "1.9.4" [ref=e1676] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/a13bdf1e9c9a42c17a13db2b6be269e0c740fb07
+                    - cell "Jul 19, 20258 months ago" [ref=e1677]:
+                      - generic [ref=e1678]: Jul 19, 20258 months ago
+                  - row "tsconfig.json, (File) Added jest test Mar 18, 20233 years ago" [ref=e1679]:
+                    - cell "tsconfig.json, (File)" [ref=e329]:
+                      - generic [ref=e330]:
+                        - img [ref=e331]
+                        - link "tsconfig.json, (File)" [ref=e336] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/tsconfig.json
+                          - text: tsconfig.json
+                    - cell "Added jest test" [ref=e1680]:
+                      - link "Added jest test" [ref=e1683] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/862faf3903e9b29b8027df4f317b1a93023c53be
+                    - cell "Mar 18, 20233 years ago" [ref=e1684]:
+                      - generic [ref=e1685]: Mar 18, 20233 years ago
+                  - row "typedoc.json, (File) Some tweaks to typedoc Jun 24, 20233 years ago" [ref=e1686]:
+                    - cell "typedoc.json, (File)" [ref=e342]:
+                      - generic [ref=e343]:
+                        - img [ref=e344]
+                        - link "typedoc.json, (File)" [ref=e349] [cursor=pointer]:
+                          - /url: /DoctorMcKay/node-steam-session/blob/master/typedoc.json
+                          - text: typedoc.json
+                    - cell "Some tweaks to typedoc" [ref=e1687]:
+                      - link "Some tweaks to typedoc" [ref=e1690] [cursor=pointer]:
+                        - /url: /DoctorMcKay/node-steam-session/commit/5c5c85f8c8d770d894e27fb4f7c477a1010ddfba
+                    - cell "Jun 24, 20233 years ago" [ref=e1691]:
+                      - generic [ref=e1692]: Jun 24, 20233 years ago
+            - generic [ref=e355]:
+              - generic [ref=e356]:
+                - heading "Repository files navigation" [level=2] [ref=e357]
+                - navigation "Repository files" [ref=e358]:
+                  - list [ref=e359]:
+                    - listitem [ref=e360]:
+                      - link "README" [ref=e361] [cursor=pointer]:
+                        - /url: "#"
+                        - img [ref=e363]
+                        - generic [ref=e365]: README
+                    - listitem [ref=e366]:
+                      - link "MIT license" [ref=e367] [cursor=pointer]:
+                        - /url: "#"
+                        - img [ref=e369]
+                        - generic [ref=e371]: MIT license
+                - button "Outline" [ref=e372] [cursor=pointer]:
+                  - img [ref=e373]
+              - article [ref=e376]:
+                - generic [ref=e377]:
+                  - heading "Steam Session Manager" [level=1] [ref=e378]
+                  - 'link "Permalink: Steam Session Manager" [ref=e379] [cursor=pointer]':
+                    - /url: "#steam-session-manager"
+                    - img [ref=e380]
+                - paragraph [ref=e382]:
+                  - link "npm version" [ref=e383] [cursor=pointer]:
+                    - /url: https://npmjs.com/package/steam-session
+                    - img "npm version" [ref=e384]
+                  - link "npm downloads" [ref=e385] [cursor=pointer]:
+                    - /url: https://npmjs.com/package/steam-session
+                    - img "npm downloads" [ref=e386]
+                  - link "license" [ref=e387] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/LICENSE
+                    - img "license" [ref=e388]
+                  - link "sponsors" [ref=e389] [cursor=pointer]:
+                    - /url: https://github.com/sponsors/DoctorMcKay
+                    - img "sponsors" [ref=e390]
+                - paragraph [ref=e391]:
+                  - text: This module enables you to negotiate Steam tokens by authenticating with the Steam login server.
+                  - strong [ref=e392]: This is for use with your own accounts.
+                  - text: This is not to be used to authenticate other Steam users or to gain access to their accounts. For that use-case, please use the
+                  - link "Steam OpenID service" [ref=e393] [cursor=pointer]:
+                    - /url: https://steamcommunity.com/dev
+                  - text: (you may want to consider using
+                  - link "steam-signin" [ref=e394] [cursor=pointer]:
+                    - /url: https://www.npmjs.com/package/steam-signin
+                  - text: ) and the many available
+                  - link "WebAPIs" [ref=e395] [cursor=pointer]:
+                    - /url: https://steamapi.xpaw.me/
+                  - text: .
+                - paragraph [ref=e396]: Node.js v12.22.0 or later is required to use this module.
+                - list [ref=e397]:
+                  - listitem [ref=e398]:
+                    - link "Concepts" [ref=e399] [cursor=pointer]:
+                      - /url: "#concepts"
+                  - listitem [ref=e400]:
+                    - link "Example Code" [ref=e401] [cursor=pointer]:
+                      - /url: "#example-code"
+                  - listitem [ref=e402]:
+                    - link "Exports" [ref=e403] [cursor=pointer]:
+                      - /url: "#exports"
+                    - list [ref=e404]:
+                      - listitem [ref=e405]:
+                        - link "Enums" [ref=e406] [cursor=pointer]:
+                          - /url: "#enums"
+                        - list [ref=e407]:
+                          - listitem [ref=e408]:
+                            - link "EAuthSessionSecurityHistory" [ref=e409] [cursor=pointer]:
+                              - /url: "#eauthsessionsecurityhistory"
+                          - listitem [ref=e410]:
+                            - link "EAuthSessionGuardType" [ref=e411] [cursor=pointer]:
+                              - /url: "#eauthsessionguardtype"
+                          - listitem [ref=e412]:
+                            - link "EAuthTokenPlatformType" [ref=e413] [cursor=pointer]:
+                              - /url: "#eauthtokenplatformtype"
+                          - listitem [ref=e414]:
+                            - link "EResult" [ref=e415] [cursor=pointer]:
+                              - /url: "#eresult"
+                          - listitem [ref=e416]:
+                            - link "ESessionPersistence" [ref=e417] [cursor=pointer]:
+                              - /url: "#esessionpersistence"
+                      - listitem [ref=e418]:
+                        - link "Custom Transports" [ref=e419] [cursor=pointer]:
+                          - /url: "#custom-transports"
+                  - listitem [ref=e420]:
+                    - link "LoginSession" [ref=e421] [cursor=pointer]:
+                      - /url: "#loginsession"
+                    - list [ref=e422]:
+                      - listitem [ref=e423]:
+                        - link "Properties" [ref=e424] [cursor=pointer]:
+                          - /url: "#properties"
+                        - list [ref=e425]:
+                          - listitem [ref=e426]:
+                            - link "steamID" [ref=e427] [cursor=pointer]:
+                              - /url: "#steamid"
+                          - listitem [ref=e428]:
+                            - link "loginTimeout" [ref=e429] [cursor=pointer]:
+                              - /url: "#logintimeout"
+                          - listitem [ref=e430]:
+                            - link "accountName" [ref=e431] [cursor=pointer]:
+                              - /url: "#accountname"
+                          - listitem [ref=e432]:
+                            - link "accessToken" [ref=e433] [cursor=pointer]:
+                              - /url: "#accesstoken"
+                          - listitem [ref=e434]:
+                            - link "refreshToken" [ref=e435] [cursor=pointer]:
+                              - /url: "#refreshtoken"
+                          - listitem [ref=e436]:
+                            - link "steamGuardMachineToken" [ref=e437] [cursor=pointer]:
+                              - /url: "#steamguardmachinetoken"
+                      - listitem [ref=e438]:
+                        - link "Methods" [ref=e439] [cursor=pointer]:
+                          - /url: "#methods"
+                        - list [ref=e440]:
+                          - listitem [ref=e441]:
+                            - link "Constructor(platformType[, options])" [ref=e442] [cursor=pointer]:
+                              - /url: "#constructorplatformtype-options"
+                          - listitem [ref=e443]:
+                            - link "startWithCredentials(details)" [ref=e444] [cursor=pointer]:
+                              - /url: "#startwithcredentialsdetails"
+                          - listitem [ref=e445]:
+                            - link "startWithQR()" [ref=e446] [cursor=pointer]:
+                              - /url: "#startwithqr"
+                          - listitem [ref=e447]:
+                            - link "submitSteamGuardCode(authCode)" [ref=e448] [cursor=pointer]:
+                              - /url: "#submitsteamguardcodeauthcode"
+                          - listitem [ref=e449]:
+                            - link "forcePoll()" [ref=e450] [cursor=pointer]:
+                              - /url: "#forcepoll"
+                          - listitem [ref=e451]:
+                            - link "cancelLoginAttempt()" [ref=e452] [cursor=pointer]:
+                              - /url: "#cancelloginattempt"
+                          - listitem [ref=e453]:
+                            - link "getWebCookies()" [ref=e454] [cursor=pointer]:
+                              - /url: "#getwebcookies"
+                          - listitem [ref=e455]:
+                            - link "refreshAccessToken()" [ref=e456] [cursor=pointer]:
+                              - /url: "#refreshaccesstoken"
+                          - listitem [ref=e457]:
+                            - link "renewRefreshToken()" [ref=e458] [cursor=pointer]:
+                              - /url: "#renewrefreshtoken"
+                      - listitem [ref=e459]:
+                        - link "Events" [ref=e460] [cursor=pointer]:
+                          - /url: "#events"
+                        - list [ref=e461]:
+                          - listitem [ref=e462]:
+                            - link "polling" [ref=e463] [cursor=pointer]:
+                              - /url: "#polling"
+                          - listitem [ref=e464]:
+                            - link "timeout" [ref=e465] [cursor=pointer]:
+                              - /url: "#timeout"
+                          - listitem [ref=e466]:
+                            - link "remoteInteraction" [ref=e467] [cursor=pointer]:
+                              - /url: "#remoteinteraction"
+                          - listitem [ref=e468]:
+                            - link "steamGuardMachineToken" [ref=e469] [cursor=pointer]:
+                              - /url: "#steamguardmachinetoken-1"
+                          - listitem [ref=e470]:
+                            - link "authenticated" [ref=e471] [cursor=pointer]:
+                              - /url: "#authenticated"
+                          - listitem [ref=e472]:
+                            - link "error" [ref=e473] [cursor=pointer]:
+                              - /url: "#error"
+                  - listitem [ref=e474]:
+                    - link "LoginApprover" [ref=e475] [cursor=pointer]:
+                      - /url: "#loginapprover"
+                    - list [ref=e476]:
+                      - listitem [ref=e477]:
+                        - link "Properties" [ref=e478] [cursor=pointer]:
+                          - /url: "#properties-1"
+                        - list [ref=e479]:
+                          - listitem [ref=e480]:
+                            - link "steamID" [ref=e481] [cursor=pointer]:
+                              - /url: "#steamid-1"
+                          - listitem [ref=e482]:
+                            - link "accessToken" [ref=e483] [cursor=pointer]:
+                              - /url: "#accesstoken-1"
+                          - listitem [ref=e484]:
+                            - link "sharedSecret" [ref=e485] [cursor=pointer]:
+                              - /url: "#sharedsecret"
+                      - listitem [ref=e486]:
+                        - link "Methods" [ref=e487] [cursor=pointer]:
+                          - /url: "#methods-1"
+                        - list [ref=e488]:
+                          - listitem [ref=e489]:
+                            - link "Constructor(accessToken, sharedSecret[, options])" [ref=e490] [cursor=pointer]:
+                              - /url: "#constructoraccesstoken-sharedsecret-options"
+                          - listitem [ref=e491]:
+                            - link "getAuthSessionInfo(qrChallengeUrl)" [ref=e492] [cursor=pointer]:
+                              - /url: "#getauthsessioninfoqrchallengeurl"
+                          - listitem [ref=e493]:
+                            - link "approveAuthSession(details)" [ref=e494] [cursor=pointer]:
+                              - /url: "#approveauthsessiondetails"
+                - generic [ref=e495]:
+                  - heading "Concepts" [level=1] [ref=e496]
+                  - 'link "Permalink: Concepts" [ref=e497] [cursor=pointer]':
+                    - /url: "#concepts"
+                    - img [ref=e498]
+                - paragraph [ref=e500]: Logging into Steam is a two-step process.
+                - list [ref=e501]:
+                  - listitem [ref=e502]:
+                    - text: You start a login session either using your account credentials (username and password) or by generating a QR code
+                    - list [ref=e503]:
+                      - listitem [ref=e504]:
+                        - text: Use
+                        - link "startWithCredentials" [ref=e505] [cursor=pointer]:
+                          - /url: "#startwithcredentialsdetails"
+                          - code [ref=e506]: startWithCredentials
+                        - text: to start a login session using your account credentials
+                      - listitem [ref=e507]:
+                        - text: Use
+                        - link "startWithQR" [ref=e508] [cursor=pointer]:
+                          - /url: "#startwithqrdetails"
+                          - code [ref=e509]: startWithQR
+                        - text: to start a QR login session
+                  - listitem [ref=e510]:
+                    - text: Assuming any credentials you provided when you started the session were correct, Steam replies with a list of login guards
+                    - list [ref=e511]:
+                      - listitem [ref=e512]:
+                        - text: See
+                        - link "EAuthSessionGuardType" [ref=e513] [cursor=pointer]:
+                          - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/src/enums-steam/EAuthSessionGuardType.ts
+                      - listitem [ref=e514]: If your account doesn't have Steam Guard enabled or you provided a valid code upfront, there may be 0 guards required
+                      - listitem [ref=e515]: Only one guard must be satisfied to complete the login. For example, you might be given a choice of providing a TOTP code or confirming the login in your Steam mobile app
+                  - listitem [ref=e516]:
+                    - text: "When you satisfy any guards, Steam sends back an access token and a refresh token. These can be used to:"
+                    - list [ref=e517]:
+                      - listitem [ref=e518]:
+                        - link "Log on with node-steam-user" [ref=e519] [cursor=pointer]:
+                          - /url: https://github.com/DoctorMcKay/node-steam-user#logondetails
+                      - listitem [ref=e520]:
+                        - link "Obtain web session cookies" [ref=e521] [cursor=pointer]:
+                          - /url: "#getwebcookies"
+                      - listitem [ref=e522]: Authenticate with WebAPI methods used by the mobile app
+                - generic [ref=e523]:
+                  - heading "Example Code" [level=1] [ref=e524]
+                  - 'link "Permalink: Example Code" [ref=e525] [cursor=pointer]':
+                    - /url: "#example-code"
+                    - img [ref=e526]
+                - paragraph [ref=e528]:
+                  - text: See the
+                  - link "examples directory on GitHub" [ref=e529] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/tree/master/examples
+                  - text: for example code.
+                - generic [ref=e530]:
+                  - heading "Exports" [level=1] [ref=e531]
+                  - 'link "Permalink: Exports" [ref=e532] [cursor=pointer]':
+                    - /url: "#exports"
+                    - img [ref=e533]
+                - paragraph [ref=e535]:
+                  - text: When using CommonJS (
+                  - code [ref=e536]: require()
+                  - text: ), steam-session exports an object. When using ES6 modules (
+                  - code [ref=e537]: import
+                  - text: ), steam-session does not offer a default export and you will need to import specific things.
+                - paragraph [ref=e538]:
+                  - text: The majority of steam-session consumers will only care about enums, and the
+                  - link "LoginSession" [ref=e539] [cursor=pointer]:
+                    - /url: "#loginsession"
+                    - code [ref=e540]: LoginSession
+                  - text: and potentially
+                  - link "LoginApprover" [ref=e541] [cursor=pointer]:
+                    - /url: "#loginapprover"
+                    - code [ref=e542]: LoginApprover
+                  - text: classes.
+                - generic [ref=e543]:
+                  - heading "Enums" [level=2] [ref=e544]
+                  - 'link "Permalink: Enums" [ref=e545] [cursor=pointer]':
+                    - /url: "#enums"
+                    - img [ref=e546]
+                - generic [ref=e548]:
+                  - heading "EAuthSessionSecurityHistory" [level=3] [ref=e549]
+                  - 'link "Permalink: EAuthSessionSecurityHistory" [ref=e550] [cursor=pointer]':
+                    - /url: "#eauthsessionsecurityhistory"
+                    - img [ref=e551]
+                - generic [ref=e553]:
+                  - generic [ref=e554]: "const {EAuthSessionSecurityHistory} = require('steam-session'); import {EAuthSessionSecurityHistory} from 'steam-session';"
+                  - button "Copy" [ref=e556] [cursor=pointer]:
+                    - img [ref=e557]
+                - paragraph [ref=e560]:
+                  - link "View on GitHub" [ref=e561] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/src/enums-steam/EAuthSessionSecurityHistory.ts
+                - generic [ref=e562]:
+                  - heading "EAuthSessionGuardType" [level=3] [ref=e563]
+                  - 'link "Permalink: EAuthSessionGuardType" [ref=e564] [cursor=pointer]':
+                    - /url: "#eauthsessionguardtype"
+                    - img [ref=e565]
+                - generic [ref=e567]:
+                  - generic [ref=e568]: "const {EAuthSessionGuardType} = require('steam-session'); import {EAuthSessionGuardType} from 'steam-session';"
+                  - button "Copy" [ref=e570] [cursor=pointer]:
+                    - img [ref=e571]
+                - paragraph [ref=e574]:
+                  - link "View on GitHub" [ref=e575] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/src/enums-steam/EAuthSessionGuardType.ts
+                - paragraph [ref=e576]: Contains the possible auth session guards.
+                - generic [ref=e577]:
+                  - heading "EAuthTokenPlatformType" [level=3] [ref=e578]
+                  - 'link "Permalink: EAuthTokenPlatformType" [ref=e579] [cursor=pointer]':
+                    - /url: "#eauthtokenplatformtype"
+                    - img [ref=e580]
+                - generic [ref=e582]:
+                  - generic [ref=e583]: "const {EAuthTokenPlatformType} = require('steam-session'); import {EAuthTokenPlatformType} from 'steam-session';"
+                  - button "Copy" [ref=e585] [cursor=pointer]:
+                    - img [ref=e586]
+                - paragraph [ref=e589]:
+                  - link "View on GitHub" [ref=e590] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/src/enums-steam/EAuthTokenPlatformType.ts
+                - paragraph [ref=e591]:
+                  - text: Contains the different platform types that can be authenticated for. You should specify the correct platform type when you instantiate a
+                  - link "LoginSession" [ref=e592] [cursor=pointer]:
+                    - /url: "#loginsession"
+                    - code [ref=e593]: LoginSession
+                  - text: object.
+                - paragraph [ref=e594]: "Audiences present in tokens issued for the different platform types:"
+                - list [ref=e595]:
+                  - listitem [ref=e596]:
+                    - code [ref=e597]: SteamClient
+                    - text: "-"
+                    - code [ref=e598]: "['web', 'client']"
+                  - listitem [ref=e599]:
+                    - code [ref=e600]: WebBrowser
+                    - text: "-"
+                    - code [ref=e601]: "['web']"
+                  - listitem [ref=e602]:
+                    - code [ref=e603]: MobileApp
+                    - text: "-"
+                    - code [ref=e604]: "['web', 'mobile']"
+                - generic [ref=e605]:
+                  - heading "EResult" [level=3] [ref=e606]
+                  - 'link "Permalink: EResult" [ref=e607] [cursor=pointer]':
+                    - /url: "#eresult"
+                    - img [ref=e608]
+                - generic [ref=e610]:
+                  - generic [ref=e611]: "const {EResult} = require('steam-session'); import {EResult} from 'steam-session';"
+                  - button "Copy" [ref=e613] [cursor=pointer]:
+                    - img [ref=e614]
+                - paragraph [ref=e617]:
+                  - link "View on GitHub" [ref=e618] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/src/enums-steam/EResult.ts
+                - paragraph [ref=e619]: Contains possible result codes. This is a very large enum that used throughout Steam, so most values in this enum will not be relevant when authenticating.
+                - generic [ref=e620]:
+                  - heading "ESessionPersistence" [level=3] [ref=e621]
+                  - 'link "Permalink: ESessionPersistence" [ref=e622] [cursor=pointer]':
+                    - /url: "#esessionpersistence"
+                    - img [ref=e623]
+                - generic [ref=e625]:
+                  - generic [ref=e626]: "const {ESessionPersistence} = require('steam-session'); import {ESessionPersistence} from 'steam-session';"
+                  - button "Copy" [ref=e628] [cursor=pointer]:
+                    - img [ref=e629]
+                - paragraph [ref=e632]:
+                  - link "View on GitHub" [ref=e633] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/src/enums-steam/ESessionPersistence.ts
+                - paragraph [ref=e634]: Contains possible persistence levels for auth sessions.
+                - generic [ref=e635]:
+                  - heading "Custom Transports" [level=2] [ref=e636]
+                  - 'link "Permalink: Custom Transports" [ref=e637] [cursor=pointer]':
+                    - /url: "#custom-transports"
+                    - img [ref=e638]
+                - paragraph [ref=e640]:
+                  - text: It's possible to define a custom transport to be used when interacting with the Steam login server. The default transport used to interact with the Steam login server is chosen depending on your provided
+                  - link "EAuthTokenPlatformType" [ref=e641] [cursor=pointer]:
+                    - /url: "#eauthtokenplatformtype"
+                  - text: . For the
+                  - code [ref=e642]: SteamClient
+                  - text: platform type, a
+                  - code [ref=e643]: WebSocketCMTransport
+                  - text: will be used to communicate with a CM server using a WebSocket. For other platform types, a
+                  - code [ref=e644]: WebApiTransport
+                  - text: will be used to interact with the Steam login server using api.steampowered.com.
+                  - strong [ref=e645]: It is very likely that you won't need to mess with this.
+                - paragraph [ref=e646]: Everything in this category is TypeScript interfaces, so even if you're implementing a custom transport, you don't need these unless you're using TypeScript.
+                - generic [ref=e647]:
+                  - generic [ref=e648]: "const {ITransport, ApiRequest, ApiResponse} = require('steam-session'); import {ITransport, ApiRequest, ApiResponse} from 'steam-session';"
+                  - button "Copy" [ref=e650] [cursor=pointer]:
+                    - img [ref=e651]
+                - paragraph [ref=e654]:
+                  - link "View on GitHub" [ref=e655] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/src/transports/ITransport.ts
+                - generic [ref=e656]:
+                  - heading "LoginSession" [level=1] [ref=e657]
+                  - 'link "Permalink: LoginSession" [ref=e658] [cursor=pointer]':
+                    - /url: "#loginsession"
+                    - img [ref=e659]
+                - generic [ref=e661]:
+                  - generic [ref=e662]: "const {LoginSession} = require('steam-session'); import {LoginSession} from 'steam-session';"
+                  - button "Copy" [ref=e664] [cursor=pointer]:
+                    - img [ref=e665]
+                - paragraph [ref=e668]:
+                  - text: The
+                  - code [ref=e669]: LoginSession
+                  - text: class is the primary way to interact with steam-session.
+                - generic [ref=e670]:
+                  - heading "Properties" [level=2] [ref=e671]
+                  - 'link "Permalink: Properties" [ref=e672] [cursor=pointer]':
+                    - /url: "#properties"
+                    - img [ref=e673]
+                - generic [ref=e675]:
+                  - heading "steamID" [level=3] [ref=e676]
+                  - 'link "Permalink: steamID" [ref=e677] [cursor=pointer]':
+                    - /url: "#steamid"
+                    - img [ref=e678]
+                - paragraph [ref=e680]:
+                  - strong [ref=e681]: Read-only.
+                  - text: A
+                  - link "SteamID" [ref=e682] [cursor=pointer]:
+                    - /url: https://www.npmjs.com/package/steamid
+                    - code [ref=e683]: SteamID
+                  - text: instance containing the SteamID for the currently-authenticated account. Populated immediately after
+                  - link "startWithCredentials" [ref=e684] [cursor=pointer]:
+                    - /url: "#startwithcredentialsdetails"
+                    - code [ref=e685]: startWithCredentials
+                  - text: resolves, or immediately after
+                  - link "accessToken" [ref=e686] [cursor=pointer]:
+                    - /url: "#accesstoken"
+                    - code [ref=e687]: accessToken
+                  - text: or
+                  - link "refreshToken" [ref=e688] [cursor=pointer]:
+                    - /url: "#refreshtoken"
+                    - code [ref=e689]: refreshToken
+                  - text: are set (meaning that this is always populated when
+                  - link "authenticated" [ref=e690] [cursor=pointer]:
+                    - /url: "#authenticated"
+                    - code [ref=e691]: authenticated
+                  - text: fires).
+                - generic [ref=e692]:
+                  - heading "loginTimeout" [level=3] [ref=e693]
+                  - 'link "Permalink: loginTimeout" [ref=e694] [cursor=pointer]':
+                    - /url: "#logintimeout"
+                    - img [ref=e695]
+                - paragraph [ref=e697]:
+                  - text: A
+                  - code [ref=e698]: number
+                  - text: specifying the time, in milliseconds, before a login attempt will
+                  - link "timeout" [ref=e699] [cursor=pointer]:
+                    - /url: "#timeout"
+                    - code [ref=e700]: timeout
+                  - text: . The timer begins after
+                  - link "polling" [ref=e701] [cursor=pointer]:
+                    - /url: "#polling"
+                    - code [ref=e702]: polling
+                  - text: begins.
+                - paragraph [ref=e703]:
+                  - text: If you attempt to set this property after
+                  - link "polling" [ref=e704] [cursor=pointer]:
+                    - /url: "#polling"
+                    - code [ref=e705]: polling
+                  - text: has already been emitted, an Error will be thrown since setting this property after that point has no effect.
+                - generic [ref=e706]:
+                  - heading "accountName" [level=3] [ref=e707]
+                  - 'link "Permalink: accountName" [ref=e708] [cursor=pointer]':
+                    - /url: "#accountname"
+                    - img [ref=e709]
+                - paragraph [ref=e711]:
+                  - strong [ref=e712]: Read-only.
+                  - text: A
+                  - code [ref=e713]: string
+                  - text: containing your account name. This is populated just before the
+                  - link "authenticated" [ref=e714] [cursor=pointer]:
+                    - /url: "#authenticated"
+                    - code [ref=e715]: authenticated
+                  - text: event is fired.
+                - generic [ref=e716]:
+                  - heading "accessToken" [level=3] [ref=e717]
+                  - 'link "Permalink: accessToken" [ref=e718] [cursor=pointer]':
+                    - /url: "#accesstoken"
+                    - img [ref=e719]
+                - paragraph [ref=e721]:
+                  - text: A
+                  - code [ref=e722]: string
+                  - text: containing your access token.
+                - paragraph [ref=e723]:
+                  - deletion [ref=e724]:
+                    - text: As of 2023-09-12, Steam does not return an access token in response to successful authentication, so this won't be set when the
+                    - link "authenticated" [ref=e725] [cursor=pointer]:
+                      - /url: "#authenticated"
+                      - code [ref=e726]: authenticated
+                    - text: event is fired.
+                  - text: (this behavior has been reverted)
+                - paragraph [ref=e727]:
+                  - text: This will be set after you call
+                  - link "refreshAccessToken()" [ref=e728] [cursor=pointer]:
+                    - /url: "#refreshaccesstoken"
+                    - code [ref=e729]: refreshAccessToken()
+                  - text: or
+                  - link "renewRefreshToken()" [ref=e730] [cursor=pointer]:
+                    - /url: "#renewrefreshtoken"
+                    - code [ref=e731]: renewRefreshToken()
+                  - text: . Also, since
+                  - link "getWebCookies()" [ref=e732] [cursor=pointer]:
+                    - /url: "#getwebcookies"
+                    - code [ref=e733]: getWebCookies()
+                  - text: calls
+                  - code [ref=e734]: refreshAccessToken()
+                  - text: internally for EAuthTokenPlatformType SteamClient or MobileApp, this will also be set after calling
+                  - code [ref=e735]: getWebCookies()
+                  - text: for those platform types.
+                - paragraph [ref=e736]: You can also assign an access token to this property if you already have one, although at present that wouldn't do anything useful.
+                - paragraph [ref=e737]: "Setting this property will throw an Error if:"
+                - list [ref=e738]:
+                  - listitem [ref=e739]: You set it to a token that isn't well-formed, or
+                  - listitem [ref=e740]: You set it to a refresh token rather than an access token, or
+                  - listitem [ref=e741]:
+                    - text: You have already called
+                    - link "startWithCredentials" [ref=e742] [cursor=pointer]:
+                      - /url: "#startwithcredentialsdetails"
+                      - code [ref=e743]: startWithCredentials
+                    - text: and you set it to a token that doesn't belong to the same account, or
+                  - listitem [ref=e744]:
+                    - text: You have already set
+                    - link "refreshToken" [ref=e745] [cursor=pointer]:
+                      - /url: "#refreshtoken"
+                      - code [ref=e746]: refreshToken
+                    - text: and you set this to a token that doesn't belong to the same account as the refresh token
+                - paragraph [ref=e747]:
+                  - text: Access tokens can't be used for much. You can use them with a few undocumented WebAPIs like
+                  - link "IFriendsListService/GetFriendsList" [ref=e748] [cursor=pointer]:
+                    - /url: https://steamapi.xpaw.me/#IFriendsListService/GetFriendsList
+                  - text: "by passing the access token as an access_token query string parameter. For example:"
+                - generic [ref=e749]:
+                  - code [ref=e751]: https://api.steampowered.com/IFriendsListService/GetFriendsList/v1/?access_token=eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyJpc3MiOiJ...
+                  - button "Copy" [ref=e753] [cursor=pointer]:
+                    - img [ref=e754]
+                - paragraph [ref=e757]: "As of time of writing (2023-04-24), it appears that you can also use access tokens with regular published API methods, for example:"
+                - generic [ref=e758]:
+                  - code [ref=e760]: https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=440&access_token=eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyJpc3MiOiJ...
+                  - button "Copy" [ref=e762] [cursor=pointer]:
+                    - img [ref=e763]
+                - generic [ref=e766]:
+                  - heading "refreshToken" [level=3] [ref=e767]
+                  - 'link "Permalink: refreshToken" [ref=e768] [cursor=pointer]':
+                    - /url: "#refreshtoken"
+                    - img [ref=e769]
+                - paragraph [ref=e771]:
+                  - text: A
+                  - code [ref=e772]: string
+                  - text: containing your refresh token. This is populated just before the
+                  - link "authenticated" [ref=e773] [cursor=pointer]:
+                    - /url: "#authenticated"
+                    - code [ref=e774]: authenticated
+                  - text: event is fired. You can also assign a refresh token to this property if you already have one.
+                - paragraph [ref=e775]: "Setting this property will throw an Error if:"
+                - list [ref=e776]:
+                  - listitem [ref=e777]: You set it to a token that isn't well-formed, or
+                  - listitem [ref=e778]: You set it to an access token rather than a refresh token, or
+                  - listitem [ref=e779]:
+                    - text: You have already called
+                    - link "startWithCredentials" [ref=e780] [cursor=pointer]:
+                      - /url: "#startwithcredentialsdetails"
+                      - code [ref=e781]: startWithCredentials
+                    - text: and you set it to a token that doesn't belong to the same account, or
+                  - listitem [ref=e782]:
+                    - text: You have already set
+                    - link "accessToken" [ref=e783] [cursor=pointer]:
+                      - /url: "#accesstoken"
+                      - code [ref=e784]: accessToken
+                    - text: and you set this to a token that doesn't belong to the same account as the access token
+                - generic [ref=e785]:
+                  - heading "steamGuardMachineToken" [level=3] [ref=e786]
+                  - 'link "Permalink: steamGuardMachineToken" [ref=e787] [cursor=pointer]':
+                    - /url: "#steamguardmachinetoken"
+                    - img [ref=e788]
+                - paragraph [ref=e790]:
+                  - strong [ref=e791]: Read-only.
+                  - text: A
+                  - code [ref=e792]: string
+                  - text: containing your Steam Guard machine token. This is populated when you pass a
+                  - code [ref=e793]: steamGuardMachineToken
+                  - text: to
+                  - link "startWithCredentials" [ref=e794] [cursor=pointer]:
+                    - /url: "#startwithcredentialsdetails"
+                    - code [ref=e795]: startWithCredentials
+                  - text: ", or just before the"
+                  - link "steamGuardMachineToken" [ref=e796] [cursor=pointer]:
+                    - /url: "#steamguardmachinetoken-1"
+                    - code [ref=e797]: steamGuardMachineToken
+                  - text: event is emitted.
+                - generic [ref=e798]:
+                  - heading "Methods" [level=2] [ref=e799]
+                  - 'link "Permalink: Methods" [ref=e800] [cursor=pointer]':
+                    - /url: "#methods"
+                    - img [ref=e801]
+                - generic [ref=e803]:
+                  - heading "Constructor(platformType[, options])" [level=3] [ref=e804]
+                  - 'link "Permalink: Constructor(platformType[, options])" [ref=e805] [cursor=pointer]':
+                    - /url: "#constructorplatformtype-options"
+                    - img [ref=e806]
+                - list [ref=e808]:
+                  - listitem [ref=e809]:
+                    - code [ref=e810]: platformType
+                    - text: "- A value from"
+                    - link "EAuthTokenPlatformType" [ref=e811] [cursor=pointer]:
+                      - /url: "#eauthtokenplatformtype"
+                      - code [ref=e812]: EAuthTokenPlatformType
+                    - text: . You should set this to the appropriate platform type for your desired usage.
+                  - listitem [ref=e813]:
+                    - code [ref=e814]: options
+                    - text: "- An object with zero or more of these properties:"
+                    - list [ref=e815]:
+                      - listitem [ref=e816]:
+                        - code [ref=e817]: userAgent
+                        - text: "- Pass a user-agent string if you want to override the"
+                        - link "default user-agent" [ref=e818] [cursor=pointer]:
+                          - /url: https://github.com/DoctorMcKay/node-user-agents/blob/master/index.js
+                        - text: . This is only effective when using EAuthTokenPlatformType.WebBrowser.
+                      - listitem [ref=e819]:
+                        - code [ref=e820]: transport
+                        - text: "- An"
+                        - code [ref=e821]: ITransport
+                        - text: instance, if you need to specify a
+                        - link "custom transport" [ref=e822] [cursor=pointer]:
+                          - /url: "#custom-transports"
+                        - text: . If omitted, defaults to a
+                        - code [ref=e823]: WebSocketCMTransport
+                        - text: instance for
+                        - code [ref=e824]: SteamClient
+                        - text: platform types, and a
+                        - code [ref=e825]: WebApiTransport
+                        - text: instance for all other platform types. In all likelihood, you don't need to use this.
+                      - listitem [ref=e826]:
+                        - code [ref=e827]: localAddress
+                        - text: "- A string containing the local IP address you want to use. For example,"
+                        - code [ref=e828]: 11.22.33.44
+                      - listitem [ref=e829]:
+                        - code [ref=e830]: httpProxy
+                        - text: "- A string containing a URI for an HTTP proxy. For example,"
+                        - code [ref=e831]: http://user:pass@1.2.3.4:80
+                      - listitem [ref=e832]:
+                        - code [ref=e833]: socksProxy
+                        - text: "- A string containing a URI for a SOCKS proxy. For example,"
+                        - code [ref=e834]: socks5://user:pass@1.2.3.4:1080
+                      - listitem [ref=e835]:
+                        - code [ref=e836]: agent
+                        - text: "- An"
+                        - code [ref=e837]: https.Agent
+                        - text: instance to use for requests. If omitted, a new
+                        - code [ref=e838]: https.Agent
+                        - text: will be created internally.
+                      - listitem [ref=e839]:
+                        - code [ref=e840]: machineId
+                        - text: "- Only applicable when using EAuthTokenPlatformType.SteamClient. Pass a"
+                        - code [ref=e841]: Buffer
+                        - text: containing a valid Steam machine ID. Pass
+                        - code [ref=e842]: "true"
+                        - text: to have steam-session internally generate a machine ID using the
+                        - link "same format that steam-user uses" [ref=e843] [cursor=pointer]:
+                          - /url: https://github.com/DoctorMcKay/node-steam-user#machineidformat
+                        - text: . Pass
+                        - code [ref=e844]: "false"
+                        - text: ","
+                        - code [ref=e845]: "null"
+                        - text: ", or omit this property to not send a machine ID (not sending a machine ID may cause problems in the future)."
+                      - listitem [ref=e846]:
+                        - code [ref=e847]: machineFriendlyName
+                        - text: "- Only applicable when using EAuthTokenPlatformType.SteamClient. Pass a"
+                        - code [ref=e848]: string
+                        - text: containing the machine name that you want to report to Steam when logging on. If omitted, a machine name will automatically be generated in the format
+                        - code [ref=e849]: DESKTOP-ABCDEFG
+                        - text: . Auto-generated machine IDs are always the same on the same machine (it's based on the hash of your actual machine's hostname)
+                - paragraph [ref=e850]:
+                  - text: You can only use one of
+                  - code [ref=e851]: localAddress
+                  - text: ","
+                  - code [ref=e852]: httpProxy
+                  - text: ","
+                  - code [ref=e853]: socksProxy
+                  - text: or
+                  - code [ref=e854]: agent
+                  - text: at the same time. If you try to use more than one of them, an Error will be thrown.
+                - paragraph [ref=e855]: If you specify a custom transport, then you are responsible for handling proxy or agent usage in your transport.
+                - paragraph [ref=e856]:
+                  - text: Constructs a new
+                  - code [ref=e857]: LoginSession
+                  - text: "instance. Example usage:"
+                - generic [ref=e858]:
+                  - generic [ref=e859]: "import {LoginSession, EAuthTokenPlatformType} from 'steam-session'; let session = new LoginSession(EAuthTokenPlatformType.WebBrowser);"
+                  - button "Copy" [ref=e861] [cursor=pointer]:
+                    - img [ref=e862]
+                - generic [ref=e865]:
+                  - heading "startWithCredentials(details)" [level=3] [ref=e866]
+                  - 'link "Permalink: startWithCredentials(details)" [ref=e867] [cursor=pointer]':
+                    - /url: "#startwithcredentialsdetails"
+                    - img [ref=e868]
+                - list [ref=e870]:
+                  - listitem [ref=e871]:
+                    - code [ref=e872]: details
+                    - text: "- An object with these properties:"
+                    - list [ref=e873]:
+                      - listitem [ref=e874]:
+                        - code [ref=e875]: accountName
+                        - text: "- Your account's login name, as a string"
+                      - listitem [ref=e876]:
+                        - code [ref=e877]: password
+                        - text: "- Your account's password, as a string"
+                      - listitem [ref=e878]:
+                        - code [ref=e879]: persistence
+                        - text: "- Optional. A value from"
+                        - link "ESessionPersistence" [ref=e880] [cursor=pointer]:
+                          - /url: "#esessionpersistence"
+                        - text: . Defaults to
+                        - code [ref=e881]: Persistent
+                        - text: .
+                      - listitem [ref=e882]:
+                        - code [ref=e883]: steamGuardMachineToken
+                        - text: "- Optional. If you have a valid Steam Guard machine token, supplying it here will allow you to bypass email code verification."
+                      - listitem [ref=e884]:
+                        - code [ref=e885]: steamGuardCode
+                        - text: "- Optional. If you have a valid Steam Guard code (either email or TOTP), supplying it here will attempt to use it during login."
+                - paragraph [ref=e886]: Starts a new login attempt using your account credentials. Returns a Promise.
+                - paragraph [ref=e887]:
+                  - text: If you're logging in with
+                  - code [ref=e888]: EAuthTokenPlatformType.SteamClient
+                  - text: ", you can supply a Buffer containing the SHA-1 hash of your sentry file for"
+                  - code [ref=e889]: steamGuardMachineToken
+                  - text: ". For example:"
+                - generic [ref=e890]:
+                  - generic [ref=e891]: "import {createHash} from 'crypto'; import {readFileSync} from 'fs'; import {LoginSession, EAuthTokenPlatformType} from 'steam-session'; let hash = createHash('sha1'); hash.update(readFileSync('ssfn1234567890')); let buffer = hash.digest(); // buffer contains a Buffer let session = new LoginSession(EAuthTokenPlatformType.SteamClient); session.startWithCredentials({ accountName: 'johndoe', password: 'h3ll0wor1d', steamGuardMachineToken: buffer });"
+                  - button "Copy" [ref=e893] [cursor=pointer]:
+                    - img [ref=e894]
+                - paragraph [ref=e897]:
+                  - text: If you supply a
+                  - code [ref=e898]: steamGuardCode
+                  - text: here and you're using email-based Steam Guard, Steam will send you a new Steam Guard email if you're using EAuthTokenPlatformType = SteamClient or MobileApp. You would ideally keep your LoginSession active that generated your first email, and pass the code using
+                  - link "submitSteamGuardCode" [ref=e899] [cursor=pointer]:
+                    - /url: "#submitsteamguardcodeauthcode"
+                    - code [ref=e900]: submitSteamGuardCode
+                  - text: instead of creating a new LoginSession and supplying the code to
+                  - code [ref=e901]: startWithCredentials
+                  - text: .
+                - paragraph [ref=e902]:
+                  - text: On failure, the Promise will be rejected with its message being equal to the string representation of an
+                  - link "EResult" [ref=e903] [cursor=pointer]:
+                    - /url: "#eresult"
+                  - text: value. There will also be an
+                  - code [ref=e904]: eresult
+                  - text: "property on the Error object equal to the numeric representation of the relevant EResult value. For example:"
+                - generic [ref=e905]:
+                  - code [ref=e907]: "Error: InvalidPassword eresult: 5"
+                  - button "Copy" [ref=e909] [cursor=pointer]:
+                    - img [ref=e910]
+                - paragraph [ref=e913]: "On success, the Promise will be resolved with an object containing these properties:"
+                - list [ref=e914]:
+                  - listitem [ref=e915]:
+                    - code [ref=e916]: actionRequired
+                    - text: "- A boolean indicating whether action is required from you to continue this login attempt. If false, you should expect for"
+                    - link "authenticated" [ref=e917] [cursor=pointer]:
+                      - /url: "#authenticated"
+                      - code [ref=e918]: authenticated
+                    - text: to be emitted shortly.
+                  - listitem [ref=e919]:
+                    - code [ref=e920]: validActions
+                    - text: "- If"
+                    - code [ref=e921]: actionRequired
+                    - text: "is true, this is an array of objects indicating which actions you could take to continue this login attempt. Each object has these properties:"
+                    - list [ref=e922]:
+                      - listitem [ref=e923]:
+                        - code [ref=e924]: type
+                        - text: "- A value from"
+                        - link "EAuthSessionGuardType" [ref=e925] [cursor=pointer]:
+                          - /url: "#eauthsessionguardtype"
+                      - listitem [ref=e926]:
+                        - code [ref=e927]: detail
+                        - text: "- An optional string containing more details about this guard option. Right now, the only known use for this is that it contains your email address' domain for"
+                        - code [ref=e928]: EAuthSessionGuardType.EmailCode
+                        - text: .
+                - paragraph [ref=e929]: "Here's a list of which guard types might be present in this method's response, and how you should proceed:"
+                - list [ref=e930]:
+                  - listitem [ref=e931]:
+                    - code [ref=e932]: EmailCode
+                    - text: ": An email was sent to you containing a code ("
+                    - code [ref=e933]: detail
+                    - text: contains your email address' domain, e.g.
+                    - code [ref=e934]: gmail.com
+                    - text: ). You should get that code and either call
+                    - link "submitSteamGuardCode" [ref=e935] [cursor=pointer]:
+                      - /url: "#submitsteamguardcodeauthcode"
+                      - code [ref=e936]: submitSteamGuardCode
+                    - text: ", or create a new"
+                    - code [ref=e937]: LoginSession
+                    - text: and supply that code to the
+                    - code [ref=e938]: steamGuardCode
+                    - text: property when calling
+                    - link "startWithCredentials" [ref=e939] [cursor=pointer]:
+                      - /url: "#startwithcredentialsdetails"
+                      - code [ref=e940]: startWithCredentials
+                    - text: .
+                  - listitem [ref=e941]:
+                    - code [ref=e942]: DeviceCode
+                    - text: ": You need to supply a TOTP code from your mobile authenticator (or by using"
+                    - link "steam-totp" [ref=e943] [cursor=pointer]:
+                      - /url: https://www.npmjs.com/package/steam-totp
+                    - text: ). Get that code and either call
+                    - link "submitSteamGuardCode" [ref=e944] [cursor=pointer]:
+                      - /url: "#submitsteamguardcodeauthcode"
+                      - code [ref=e945]: submitSteamGuardCode
+                    - text: ", or create a new"
+                    - code [ref=e946]: LoginSession
+                    - text: and supply that code to the
+                    - code [ref=e947]: steamGuardCode
+                    - text: property when calling
+                    - link "startWithCredentials" [ref=e948] [cursor=pointer]:
+                      - /url: "#startwithcredentialsdetails"
+                      - code [ref=e949]: startWithCredentials
+                    - text: .
+                  - listitem [ref=e950]:
+                    - code [ref=e951]: DeviceConfirmation
+                    - text: ": You need to approve the confirmation prompt in your Steam mobile app. If this guard type is present,"
+                    - link "polling" [ref=e952] [cursor=pointer]:
+                      - /url: "#polling"
+                    - text: will start and
+                    - link "loginTimeout" [ref=e953] [cursor=pointer]:
+                      - /url: "#logintimeout"
+                      - code [ref=e954]: loginTimeout
+                    - text: will be in effect.
+                  - listitem [ref=e955]:
+                    - code [ref=e956]: EmailConfirmation
+                    - text: ": You need to approve the confirmation email sent to you. If this guard type is present,"
+                    - link "polling" [ref=e957] [cursor=pointer]:
+                      - /url: "#polling"
+                    - text: will start and
+                    - link "loginTimeout" [ref=e958] [cursor=pointer]:
+                      - /url: "#logintimeout"
+                      - code [ref=e959]: loginTimeout
+                    - text: will be in effect.
+                - paragraph [ref=e960]:
+                  - text: Note that multiple guard types might be available; for example both
+                  - code [ref=e961]: DeviceCode
+                  - text: and
+                  - code [ref=e962]: DeviceConfirmation
+                  - text: can be available at the same time.
+                - paragraph [ref=e963]:
+                  - text: When this method resolves,
+                  - link "steamID" [ref=e964] [cursor=pointer]:
+                    - /url: "#steamid"
+                    - code [ref=e965]: steamID
+                  - text: will be populated.
+                - generic [ref=e966]:
+                  - heading "startWithQR()" [level=3] [ref=e967]
+                  - 'link "Permalink: startWithQR()" [ref=e968] [cursor=pointer]':
+                    - /url: "#startwithqr"
+                    - img [ref=e969]
+                - paragraph [ref=e971]: Starts a new QR login attempt. Returns a Promise.
+                - paragraph [ref=e972]:
+                  - text: On failure, the Promise will be rejected with its message being equal to the string representation of an
+                  - link "EResult" [ref=e973] [cursor=pointer]:
+                    - /url: "#eresult"
+                  - text: value. There will also be an
+                  - code [ref=e974]: eresult
+                  - text: property on the Error object equal to the numeric representation of the relevant EResult value. Realistically, failures should never happen unless Steam is having problems or you're having network issues.
+                - paragraph [ref=e975]: "On success, the Promise will be resolved with an object containing these properties:"
+                - list [ref=e976]:
+                  - listitem [ref=e977]:
+                    - code [ref=e978]: actionRequired
+                    - text: "- Always true."
+                  - listitem [ref=e979]:
+                    - code [ref=e980]: validActions
+                    - text: "- Same as"
+                    - code [ref=e981]: validActions
+                    - text: for
+                    - link "startWithCredentials" [ref=e982] [cursor=pointer]:
+                      - /url: "#startwithcredentialsdetails"
+                      - code [ref=e983]: startWithCredentials
+                    - text: .
+                    - code [ref=e984]: DeviceConfirmation
+                    - text: should always be present.
+                    - code [ref=e985]: DeviceCode
+                    - text: has also been observed, even though at this point Steam doesn't even know what account you intend to log into.
+                  - listitem [ref=e986]:
+                    - code [ref=e987]: qrChallengeUrl
+                    - text: "- A string containing the URL that should be encoded into a QR code and then scanned with the Steam mobile app."
+                - paragraph [ref=e988]:
+                  - link "steamID" [ref=e989] [cursor=pointer]:
+                    - /url: "#steamid"
+                    - code [ref=e990]: steamID
+                  - text: will not be populated when this method resolves, since at this point we don't know which account we're going to log into. It will be populated after you successfully
+                  - link "authenticate" [ref=e991] [cursor=pointer]:
+                    - /url: "#authenticated"
+                  - text: .
+                - paragraph [ref=e992]:
+                  - text: Immediately after this resolves, LoginSession will start
+                  - link "polling" [ref=e993] [cursor=pointer]:
+                    - /url: "#polling"
+                  - text: to determine when authentication has succeeded.
+                - generic [ref=e994]:
+                  - heading "submitSteamGuardCode(authCode)" [level=3] [ref=e995]
+                  - 'link "Permalink: submitSteamGuardCode(authCode)" [ref=e996] [cursor=pointer]':
+                    - /url: "#submitsteamguardcodeauthcode"
+                    - img [ref=e997]
+                - list [ref=e999]:
+                  - listitem [ref=e1000]:
+                    - code [ref=e1001]: authCode
+                    - text: "- Your Steam Guard code, as a string"
+                - paragraph [ref=e1002]: If a Steam Guard code is needed, you can supply it using this method. Returns a Promise.
+                - paragraph [ref=e1003]:
+                  - text: On failure, the Promise will be rejected with its message being equal to the string representation of an
+                  - link "EResult" [ref=e1004] [cursor=pointer]:
+                    - /url: "#eresult"
+                  - text: value. There will also be an
+                  - code [ref=e1005]: eresult
+                  - text: "property on the Error object equal to the numeric representation of the relevant EResult value. For example:"
+                - generic [ref=e1006]:
+                  - code [ref=e1008]: "Error: TwoFactorCodeMismatch eresult: 88"
+                  - button "Copy" [ref=e1010] [cursor=pointer]:
+                    - img [ref=e1011]
+                - paragraph [ref=e1014]: Note that an incorrect email code will fail with EResult value InvalidLoginAuthCode (65), and an incorrect TOTP code will fail with EResult value TwoFactorCodeMismatch (88).
+                - paragraph [ref=e1015]:
+                  - text: On success, the Promise will be resolved with no value. In this case, you should expect for
+                  - link "authenticated" [ref=e1016] [cursor=pointer]:
+                    - /url: "#authenticated"
+                    - code [ref=e1017]: authenticated
+                  - text: to be emitted shortly.
+                - generic [ref=e1018]:
+                  - heading "forcePoll()" [level=3] [ref=e1019]
+                  - 'link "Permalink: forcePoll()" [ref=e1020] [cursor=pointer]':
+                    - /url: "#forcepoll"
+                    - img [ref=e1021]
+                - paragraph [ref=e1023]:
+                  - text: Forces an immediate polling attempt. This will throw an
+                  - code [ref=e1024]: Error
+                  - text: if you call it before the
+                  - link "polling" [ref=e1025] [cursor=pointer]:
+                    - /url: "#polling"
+                    - code [ref=e1026]: polling
+                  - text: event is emitted, after
+                  - link "authenticated" [ref=e1027] [cursor=pointer]:
+                    - /url: "#authenticated"
+                    - code [ref=e1028]: authenticated
+                  - text: is emitted, or after you call
+                  - link "cancelLoginAttempt" [ref=e1029] [cursor=pointer]:
+                    - /url: "#cancelloginattempt"
+                    - code [ref=e1030]: cancelLoginAttempt
+                  - text: .
+                - generic [ref=e1031]:
+                  - heading "cancelLoginAttempt()" [level=3] [ref=e1032]
+                  - 'link "Permalink: cancelLoginAttempt()" [ref=e1033] [cursor=pointer]':
+                    - /url: "#cancelloginattempt"
+                    - img [ref=e1034]
+                - paragraph [ref=e1036]:
+                  - text: Cancels
+                  - link "polling" [ref=e1037] [cursor=pointer]:
+                    - /url: "#polling"
+                  - text: for an ongoing login attempt. Once canceled, you should no longer interact with this
+                  - code [ref=e1038]: LoginSession
+                  - text: object, and you should create a new one if you want to start a new attempt.
+                - generic [ref=e1039]:
+                  - heading "getWebCookies()" [level=3] [ref=e1040]
+                  - 'link "Permalink: getWebCookies()" [ref=e1041] [cursor=pointer]':
+                    - /url: "#getwebcookies"
+                    - img [ref=e1042]
+                - paragraph [ref=e1044]:
+                  - text: Once successfully
+                  - link "authenticated" [ref=e1045] [cursor=pointer]:
+                    - /url: "#authenticated"
+                  - text: ", you can call this method to get cookies for use on the Steam websites. You can also manually set"
+                  - link "refreshToken" [ref=e1046] [cursor=pointer]:
+                    - /url: "#refreshtoken"
+                    - code [ref=e1047]: refreshToken
+                  - text: and then call this method without going through another login attempt if you already have a valid refresh token. Returns a Promise.
+                - paragraph [ref=e1048]: On failure, the Promise will be rejected. Depending on the nature of the failure, an EResult may or may not be available.
+                - paragraph [ref=e1049]: On success, the Promise will be resolved with an array of strings. Each string contains a cookie, e.g.
+                - paragraph [ref=e1050]:
+                  - code [ref=e1051]: steamLoginSecure=blahblahblahblah
+                - paragraph [ref=e1052]: or
+                - paragraph [ref=e1053]:
+                  - code [ref=e1054]: steamLoginSecure=blahblahblahblah; Path=/; Secure; HttpOnly; SameSite=None; Domain=steamcommunity.com
+                - paragraph [ref=e1055]: "Here's an example of how you can get new web cookies when you already have a valid refresh token:"
+                - generic [ref=e1056]:
+                  - generic [ref=e1057]: "import {LoginSession, EAuthTokenPlatformType} from 'steam-session'; let session = new LoginSession(EAuthTokenPlatformType.WebBrowser); session.refreshToken = 'eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyJpc3MiOiJ...'; let cookies = await session.getWebCookies();"
+                  - button "Copy" [ref=e1059] [cursor=pointer]:
+                    - img [ref=e1060]
+                - paragraph [ref=e1063]:
+                  - text: As of 2025-04-30, this method works for EAuthTokenPlatformType WebBrowser and MobileApp, but using SteamClient will fail with response
+                  - code [ref=e1064]: AccessDenied
+                  - text: unless sent over an authenticated CM session. When using a SteamClient refresh token, you should use node-steam-user's
+                  - link "webLogOn()" [ref=e1065] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-user?tab=readme-ov-file#weblogon
+                    - code [ref=e1066]: webLogOn()
+                  - text: method and
+                  - link "webSession" [ref=e1067] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-user?tab=readme-ov-file#websession
+                    - code [ref=e1068]: webSession
+                  - text: event.
+                - generic [ref=e1069]:
+                  - heading "refreshAccessToken()" [level=3] [ref=e1070]
+                  - 'link "Permalink: refreshAccessToken()" [ref=e1071] [cursor=pointer]':
+                    - /url: "#refreshaccesstoken"
+                    - img [ref=e1072]
+                - paragraph [ref=e1074]:
+                  - text: As long as a
+                  - link "refreshToken" [ref=e1075] [cursor=pointer]:
+                    - /url: "#refreshtoken"
+                    - code [ref=e1076]: refreshToken
+                  - text: is set, you can call this method to obtain a new access token. Returns a Promise.
+                - paragraph [ref=e1077]:
+                  - text: On failure, the Promise will be rejected. An EResult will be available under the
+                  - code [ref=e1078]: eresult
+                  - text: property of the Error object.
+                - paragraph [ref=e1079]: On success, the Promise will be resolved with no value. You can then read the access token from the LoginSession's accessToken property.
+                - generic [ref=e1080]:
+                  - generic [ref=e1081]:
+                    - text: "import {LoginSession, EAuthTokenPlatformType} from 'steam-session'; let session = new LoginSession(EAuthTokenPlatformType.SteamClient); session.refreshToken = 'eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyJpc3MiOiJ...'; await session.refreshAccessToken(); console.log("
+                    - generic [ref=e1082]:
+                      - text: "`New access token:"
+                      - generic [ref=e1083]: "${session.accessToken}"
+                      - text: "`"
+                    - text: );
+                  - button "Copy" [ref=e1085] [cursor=pointer]:
+                    - img [ref=e1086]
+                - paragraph [ref=e1089]:
+                  - text: As of 2025-04-30, this method works only for EAuthTokenPlatformType MobileApp, but using WebBrowser will fail with response
+                  - code [ref=e1090]: AccessDenied
+                  - text: ", and SteamClient tokens will fail with the same response unless sent over an authenticated CM session. When using a SteamClient refresh token, you should use node-steam-user's"
+                  - link "webLogOn()" [ref=e1091] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-user?tab=readme-ov-file#weblogon
+                    - code [ref=e1092]: webLogOn()
+                  - text: method and
+                  - link "webSession" [ref=e1093] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-user?tab=readme-ov-file#websession
+                    - code [ref=e1094]: webSession
+                  - text: event to get web cookies (which is the same as an access token).
+                - generic [ref=e1095]:
+                  - heading "renewRefreshToken()" [level=3] [ref=e1096]
+                  - 'link "Permalink: renewRefreshToken()" [ref=e1097] [cursor=pointer]':
+                    - /url: "#renewrefreshtoken"
+                    - img [ref=e1098]
+                - paragraph [ref=e1100]:
+                  - text: Does the same thing as
+                  - link "refreshAccessToken()" [ref=e1101] [cursor=pointer]:
+                    - /url: "#refreshaccesstoken"
+                    - code [ref=e1102]: refreshAccessToken()
+                  - text: ", while also attempting to renew your refresh token."
+                - paragraph [ref=e1103]:
+                  - text: Whether a new refresh token will actually be issued is at the discretion of the Steam backend. This method will return true if a new refresh token was issued (which can be accessed using the
+                  - link "refreshToken" [ref=e1104] [cursor=pointer]:
+                    - /url: "#refreshtoken"
+                    - code [ref=e1105]: refreshToken
+                  - text: property), or false if no new refresh token was issued. Regardless of the return value, the
+                  - link "accessToken" [ref=e1106] [cursor=pointer]:
+                    - /url: "#accesstoken"
+                    - code [ref=e1107]: accessToken
+                  - text: property is always updated with a fresh access token (unless there was an error).
+                - paragraph [ref=e1108]:
+                  - strong [ref=e1109]: "Important:"
+                  - text: If a refresh token is successfully renewed (e.g. this method returns true), the old refresh token will become invalid, even if it is not yet expired.
+                - generic [ref=e1110]:
+                  - generic [ref=e1111]:
+                    - text: "import {LoginSession, EAuthTokenPlatformType} from 'steam-session'; let session = new LoginSession(EAuthTokenPlatformType.SteamClient); session.refreshToken = 'eyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyJpc3MiOiJ...'; let renewed = await session.renewRefreshToken(); console.log("
+                    - generic [ref=e1112]:
+                      - text: "`New access token:"
+                      - generic [ref=e1113]: "${session.accessToken}"
+                      - text: "`"
+                    - text: "); if (renewed) { console.log("
+                    - generic [ref=e1114]:
+                      - text: "`New refresh token:"
+                      - generic [ref=e1115]: "${session.refreshToken}"
+                      - text: "`"
+                    - text: "); } else { console.log('No new refresh token was issued'); }"
+                  - button "Copy" [ref=e1117] [cursor=pointer]:
+                    - img [ref=e1118]
+                - paragraph [ref=e1121]:
+                  - text: As of 2025-04-30, this method works only for EAuthTokenPlatformType MobileApp, but using WebBrowser will fail with response
+                  - code [ref=e1122]: AccessDenied
+                  - text: ", and SteamClient tokens will fail with the same response unless sent over an authenticated CM session. When using a SteamClient refresh token, you should use node-steam-user's"
+                  - link "renewRefreshTokens" [ref=e1123] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-user?tab=readme-ov-file#renewrefreshtokens
+                    - code [ref=e1124]: renewRefreshTokens
+                  - text: option and
+                  - link "refreshToken" [ref=e1125] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-user?tab=readme-ov-file#refreshtoken
+                    - code [ref=e1126]: refreshToken
+                  - text: event to renew refresh tokens.
+                - generic [ref=e1127]:
+                  - heading "Events" [level=2] [ref=e1128]
+                  - 'link "Permalink: Events" [ref=e1129] [cursor=pointer]':
+                    - /url: "#events"
+                    - img [ref=e1130]
+                - generic [ref=e1132]:
+                  - heading "polling" [level=3] [ref=e1133]
+                  - 'link "Permalink: polling" [ref=e1134] [cursor=pointer]':
+                    - /url: "#polling"
+                    - img [ref=e1135]
+                - paragraph [ref=e1137]: "This event is emitted once we start polling Steam to periodically check if the login attempt has succeeded or not. Polling starts when any of these conditions are met:"
+                - list [ref=e1138]:
+                  - listitem [ref=e1139]: A login session is successfully started with credentials and no guard is required (e.g. Steam Guard is disabled)*
+                  - listitem [ref=e1140]:
+                    - text: A login session is successfully started with credentials and you supplied a valid code to
+                    - code [ref=e1141]: steamGuardCode
+                    - text: "*"
+                  - listitem [ref=e1142]:
+                    - text: A login session is successfully started with credentials, you're using email Steam Guard, and you supplied a valid
+                    - code [ref=e1143]: steamGuardMachineToken
+                    - text: "*"
+                  - listitem [ref=e1144]:
+                    - text: A login session is successfully started with credentials, then you supplied a valid code to
+                    - link "submitSteamGuardCode" [ref=e1145] [cursor=pointer]:
+                      - /url: "#submitsteamguardcodeauthcode"
+                      - code [ref=e1146]: submitSteamGuardCode
+                    - text: "*"
+                  - listitem [ref=e1147]:
+                    - text: A login session is successfully started, and
+                    - code [ref=e1148]: DeviceConfirmation
+                    - text: or
+                    - code [ref=e1149]: EmailConfirmation
+                    - text: are among the valid guards
+                    - list [ref=e1150]:
+                      - listitem [ref=e1151]:
+                        - text: This case covers
+                        - link "QR logins" [ref=e1152] [cursor=pointer]:
+                          - /url: "#startwithqrdetails"
+                        - text: ", since a QR login is a device confirmation under the hood"
+                - paragraph [ref=e1153]: "* = in these cases, we expect to only have to poll once before login succeeds."
+                - paragraph [ref=e1154]:
+                  - text: After this event is emitted, if your
+                  - link "loginTimeout" [ref=e1155] [cursor=pointer]:
+                    - /url: "#logintimeout"
+                    - code [ref=e1156]: loginTimeout
+                  - text: elapses and the login attempt has not yet succeeded,
+                  - link "timeout" [ref=e1157] [cursor=pointer]:
+                    - /url: "#timeout"
+                    - code [ref=e1158]: timeout
+                  - text: is emitted and the login attempt is abandoned. You would then need to start a new login attempt using a fresh
+                  - code [ref=e1159]: LoginSession
+                  - text: object.
+                - generic [ref=e1160]:
+                  - heading "timeout" [level=3] [ref=e1161]
+                  - 'link "Permalink: timeout" [ref=e1162] [cursor=pointer]':
+                    - /url: "#timeout"
+                    - img [ref=e1163]
+                - paragraph [ref=e1165]:
+                  - text: This event is emitted when the time specified by
+                  - link "loginTimeout" [ref=e1166] [cursor=pointer]:
+                    - /url: "#logintimeout"
+                    - code [ref=e1167]: loginTimeout
+                  - text: elapses after
+                  - link "polling" [ref=e1168] [cursor=pointer]:
+                    - /url: "#polling"
+                  - text: begins, and the login attempt has not yet succeeded. When
+                  - code [ref=e1169]: timeout
+                  - text: is emitted,
+                  - link "cancelLoginAttempt" [ref=e1170] [cursor=pointer]:
+                    - /url: "#cancelloginattempt"
+                    - code [ref=e1171]: cancelLoginAttempt
+                  - text: is called internally.
+                - generic [ref=e1172]:
+                  - heading "remoteInteraction" [level=3] [ref=e1173]
+                  - 'link "Permalink: remoteInteraction" [ref=e1174] [cursor=pointer]':
+                    - /url: "#remoteinteraction"
+                    - img [ref=e1175]
+                - paragraph [ref=e1177]:
+                  - text: This event is emitted when Steam reports a "remote interaction" via
+                  - link "polling" [ref=e1178] [cursor=pointer]:
+                    - /url: "#polling"
+                  - text: . This is observed to happen when the approval prompt is viewed in the Steam mobile app for the
+                  - code [ref=e1179]: DeviceConfirmation
+                  - text: guard. For a
+                  - link "QR login" [ref=e1180] [cursor=pointer]:
+                    - /url: "#startwithqrdetails"
+                  - text: ", this would be after you scan the code, but before you tap approve or deny."
+                - generic [ref=e1181]:
+                  - heading "steamGuardMachineToken" [level=3] [ref=e1182]
+                  - 'link "Permalink: steamGuardMachineToken" [ref=e1183] [cursor=pointer]':
+                    - /url: "#steamguardmachinetoken-1"
+                    - img [ref=e1184]
+                - paragraph [ref=e1186]: This event is emitted when Steam sends us a new Steam Guard machine token. Machine tokens are only relevant when logging into an account that has email-based Steam Guard enabled. Thus, this will only be emitted after successfully logging into such an account.
+                - paragraph [ref=e1187]: At this time, this event is only emitted when logging in using EAuthTokenPlatformType = SteamClient. It's not presently possible to get a machine token for the WebBrowser platform (and MobileApp platform doesn't support machine tokens at all).
+                - paragraph [ref=e1188]:
+                  - text: When this event is emitted, the
+                  - link "steamGuardMachineToken" [ref=e1189] [cursor=pointer]:
+                    - /url: "#steamguardmachinetoken"
+                    - code [ref=e1190]: steamGuardMachineToken
+                  - text: property contains your new machine token.
+                - generic [ref=e1191]:
+                  - heading "authenticated" [level=3] [ref=e1192]
+                  - 'link "Permalink: authenticated" [ref=e1193] [cursor=pointer]':
+                    - /url: "#authenticated"
+                    - img [ref=e1194]
+                - paragraph [ref=e1196]:
+                  - text: This event is emitted when we successfully authenticate with Steam. At this point,
+                  - link "accountName" [ref=e1197] [cursor=pointer]:
+                    - /url: "#accountname"
+                    - code [ref=e1198]: accountName
+                  - text: and
+                  - link "refreshToken" [ref=e1199] [cursor=pointer]:
+                    - /url: "#refreshtoken"
+                    - code [ref=e1200]: refreshToken
+                  - text: are populated. If the
+                  - link "EAuthTokenPlatformType" [ref=e1201] [cursor=pointer]:
+                    - /url: "#eauthtokenplatformtype"
+                  - text: passed to the
+                  - link "constructor" [ref=e1202] [cursor=pointer]:
+                    - /url: "#constructorplatformtype-transport"
+                  - text: is appropriate, you can now safely call
+                  - link "getWebCookies" [ref=e1203] [cursor=pointer]:
+                    - /url: "#getwebcookies"
+                    - code [ref=e1204]: getWebCookies
+                  - text: .
+                - generic [ref=e1205]:
+                  - heading "error" [level=3] [ref=e1206]
+                  - 'link "Permalink: error" [ref=e1207] [cursor=pointer]':
+                    - /url: "#error"
+                    - img [ref=e1208]
+                - paragraph [ref=e1210]:
+                  - text: This event is emitted if we encounter an error while
+                  - link "polling" [ref=e1211] [cursor=pointer]:
+                    - /url: "#polling"
+                  - text: . The first argument to the event handler is an Error object. If this happens, the login attempt has failed and will need to be retried.
+                - paragraph [ref=e1212]: Node.js will crash if this event is emitted and not handled.
+                - generic [ref=e1213]:
+                  - heading "LoginApprover" [level=1] [ref=e1214]
+                  - 'link "Permalink: LoginApprover" [ref=e1215] [cursor=pointer]':
+                    - /url: "#loginapprover"
+                    - img [ref=e1216]
+                - generic [ref=e1218]:
+                  - generic [ref=e1219]: "const {LoginApprover} = require('steam-session'); import {LoginApprover} from 'steam-session';"
+                  - button "Copy" [ref=e1221] [cursor=pointer]:
+                    - img [ref=e1222]
+                - paragraph [ref=e1225]:
+                  - text: This class can be used to approve a login attempt that was started with a QR code.
+                  - link "See the approve-qr example." [ref=e1226] [cursor=pointer]:
+                    - /url: https://github.com/DoctorMcKay/node-steam-session/blob/master/examples/approve-qr.ts
+                - generic [ref=e1227]:
+                  - heading "Properties" [level=2] [ref=e1228]
+                  - 'link "Permalink: Properties" [ref=e1229] [cursor=pointer]':
+                    - /url: "#properties-1"
+                    - img [ref=e1230]
+                - generic [ref=e1232]:
+                  - heading "steamID" [level=3] [ref=e1233]
+                  - 'link "Permalink: steamID" [ref=e1234] [cursor=pointer]':
+                    - /url: "#steamid-1"
+                    - img [ref=e1235]
+                - paragraph [ref=e1237]:
+                  - strong [ref=e1238]: Read-only.
+                  - text: A
+                  - link "SteamID" [ref=e1239] [cursor=pointer]:
+                    - /url: https://www.npmjs.com/package/steamid
+                    - code [ref=e1240]: SteamID
+                  - text: instance containing the SteamID for the account to which the provided
+                  - link "accessToken" [ref=e1241] [cursor=pointer]:
+                    - /url: "#accesstoken-1"
+                    - code [ref=e1242]: accessToken
+                  - text: belongs. Populated immediately after
+                  - link "accessToken" [ref=e1243] [cursor=pointer]:
+                    - /url: "#accesstoken-1"
+                    - code [ref=e1244]: accessToken
+                  - text: is set.
+                - generic [ref=e1245]:
+                  - heading "accessToken" [level=3] [ref=e1246]
+                  - 'link "Permalink: accessToken" [ref=e1247] [cursor=pointer]':
+                    - /url: "#accesstoken-1"
+                    - img [ref=e1248]
+                - paragraph [ref=e1250]:
+                  - text: A
+                  - code [ref=e1251]: string
+                  - text: containing your access token. This is automatically set by the constructor, but you can also manually assign it if you need to set a new access token.
+                - paragraph [ref=e1252]:
+                  - text: An Error will be thrown when you set this property if you set it to a value that isn't a well-formed JWT, if you set it to a refresh token rather than an access token, or if you set it to an access token that was not generated using
+                  - code [ref=e1253]: EAuthTokenPlatformType.MobileApp
+                  - text: .
+                - generic [ref=e1254]:
+                  - heading "sharedSecret" [level=3] [ref=e1255]
+                  - 'link "Permalink: sharedSecret" [ref=e1256] [cursor=pointer]':
+                    - /url: "#sharedsecret"
+                    - img [ref=e1257]
+                - paragraph [ref=e1259]:
+                  - text: A
+                  - code [ref=e1260]: string
+                  - text: or
+                  - code [ref=e1261]: Buffer
+                  - text: containing your shared secret. This is automatically set by the constructor, but you can also manually assign it if you need to set a new shared secret.
+                - paragraph [ref=e1262]:
+                  - text: If this is a
+                  - code [ref=e1263]: string
+                  - text: ", it must be either hex- or base64-encoded."
+                - generic [ref=e1264]:
+                  - heading "Methods" [level=2] [ref=e1265]
+                  - 'link "Permalink: Methods" [ref=e1266] [cursor=pointer]':
+                    - /url: "#methods-1"
+                    - img [ref=e1267]
+                - generic [ref=e1269]:
+                  - heading "Constructor(accessToken, sharedSecret[, transport])" [level=3] [ref=e1270]
+                  - 'link "Permalink: Constructor(accessToken, sharedSecret[, transport])" [ref=e1271] [cursor=pointer]':
+                    - /url: "#constructoraccesstoken-sharedsecret-transport"
+                    - img [ref=e1272]
+                - list [ref=e1274]:
+                  - listitem [ref=e1275]:
+                    - code [ref=e1276]: accessToken
+                    - text: "- A"
+                    - code [ref=e1277]: string
+                    - text: containing a valid access token for the account you want to approve logins for. This access token (
+                    - strong [ref=e1278]: not refresh token
+                    - text: ) must have been created using the
+                    - code [ref=e1279]: MobileApp
+                    - text: platform type.
+                  - listitem [ref=e1280]:
+                    - code [ref=e1281]: sharedSecret
+                    - text: "- A"
+                    - code [ref=e1282]: string
+                    - text: or
+                    - code [ref=e1283]: Buffer
+                    - text: containing your account's TOTP shared secret. If this is a string, it must be hex- or base64-encoded.
+                  - listitem [ref=e1284]:
+                    - code [ref=e1285]: options
+                    - text: "- An object with zero or more of these properties:"
+                    - list [ref=e1286]:
+                      - listitem [ref=e1287]:
+                        - code [ref=e1288]: transport
+                        - text: "- An"
+                        - code [ref=e1289]: ITransport
+                        - text: instance, if you need to specify a
+                        - link "custom transport" [ref=e1290] [cursor=pointer]:
+                          - /url: "#custom-transports"
+                        - text: . If omitted, defaults to a
+                        - code [ref=e1291]: WebApiTransport
+                        - text: instance. In all likelihood, you don't need to use this.
+                      - listitem [ref=e1292]:
+                        - code [ref=e1293]: localAddress
+                        - text: "- A string containing the local IP address you want to use. For example,"
+                        - code [ref=e1294]: 11.22.33.44
+                      - listitem [ref=e1295]:
+                        - code [ref=e1296]: httpProxy
+                        - text: "- A string containing a URI for an HTTP proxy. For example,"
+                        - code [ref=e1297]: http://user:pass@1.2.3.4:80
+                      - listitem [ref=e1298]:
+                        - code [ref=e1299]: socksProxy
+                        - text: A string containing a URI for a SOCKS proxy. For example,
+                        - code [ref=e1300]: socks5://user:pass@1.2.3.4:1080
+                      - listitem [ref=e1301]:
+                        - code [ref=e1302]: agent
+                        - text: "- An"
+                        - code [ref=e1303]: https.Agent
+                        - text: instance to use for requests. If omitted, a new
+                        - code [ref=e1304]: https.Agent
+                        - text: will be created internally.
+                - paragraph [ref=e1305]:
+                  - text: You can only use one of
+                  - code [ref=e1306]: localAddress
+                  - text: ","
+                  - code [ref=e1307]: httpProxy
+                  - text: ","
+                  - code [ref=e1308]: socksProxy
+                  - text: or
+                  - code [ref=e1309]: agent
+                  - text: at the same time. If you try to use more than one of them, an Error will be thrown.
+                - paragraph [ref=e1310]: If you specify a custom transport, then you are responsible for handling proxy or agent usage in your transport.
+                - paragraph [ref=e1311]:
+                  - text: Constructs a new
+                  - code [ref=e1312]: LoginApprover
+                  - text: "instance. Example usage:"
+                - generic [ref=e1313]:
+                  - generic [ref=e1314]: "import {LoginApprover} from 'steam-session'; let approver = new LoginApprover('eyAid...', 'oTVMfZJ9uHXo3m9MwTD9IOEWQaw=');"
+                  - button "Copy" [ref=e1316] [cursor=pointer]:
+                    - img [ref=e1317]
+                - paragraph [ref=e1320]:
+                  - text: An Error will be thrown if your
+                  - code [ref=e1321]: accessToken
+                  - text: isn't a well-formed JWT, if it's a refresh token rather than an access token, or if it's an access token that was not generated using
+                  - code [ref=e1322]: EAuthTokenPlatformType.MobileApp
+                  - text: .
+                - generic [ref=e1323]:
+                  - heading "getAuthSessionInfo(qrChallengeUrl)" [level=3] [ref=e1324]
+                  - 'link "Permalink: getAuthSessionInfo(qrChallengeUrl)" [ref=e1325] [cursor=pointer]':
+                    - /url: "#getauthsessioninfoqrchallengeurl"
+                    - img [ref=e1326]
+                - list [ref=e1328]:
+                  - listitem [ref=e1329]:
+                    - code [ref=e1330]: qrChallengeUrl
+                    - text: "- A"
+                    - code [ref=e1331]: string
+                    - text: containing the QR challenge URL from a
+                    - link "startWithQR" [ref=e1332] [cursor=pointer]:
+                      - /url: "#startwithqrdetails"
+                      - code [ref=e1333]: startWithQR
+                    - text: call
+                - paragraph [ref=e1334]: "Returns a Promise which resolves to an object with these properties:"
+                - list [ref=e1335]:
+                  - listitem [ref=e1336]:
+                    - code [ref=e1337]: ip
+                    - text: "- The origin IP address of the QR login attempt, as a string"
+                  - listitem [ref=e1338]:
+                    - code [ref=e1339]: location
+                    - text: "- An object"
+                    - list [ref=e1340]:
+                      - listitem [ref=e1341]:
+                        - code [ref=e1342]: geoloc
+                        - text: "- A string containing geo coordinates"
+                      - listitem [ref=e1343]:
+                        - code [ref=e1344]: city
+                        - text: "- String"
+                      - listitem [ref=e1345]:
+                        - code [ref=e1346]: state
+                        - text: "- String"
+                  - listitem [ref=e1347]:
+                    - code [ref=e1348]: platformType
+                    - text: "- The"
+                    - link "EAuthTokenPlatformType" [ref=e1349] [cursor=pointer]:
+                      - /url: "#eauthtokenplatformtype"
+                      - code [ref=e1350]: EAuthTokenPlatformType
+                    - text: provided for the QR code
+                  - listitem [ref=e1351]:
+                    - code [ref=e1352]: deviceFriendlyName
+                    - text: "- The device name provided when the QR code was generated (likely a browser user-agent)"
+                  - listitem [ref=e1353]:
+                    - code [ref=e1354]: version
+                    - text: "- A number containing the version from the QR code, probably not useful to you"
+                  - listitem [ref=e1355]:
+                    - code [ref=e1356]: loginHistory
+                    - text: "-"
+                    - link "EAuthSessionSecurityHistory" [ref=e1357] [cursor=pointer]:
+                      - /url: "#eauthsessionsecurityhistory"
+                      - code [ref=e1358]: EAuthSessionSecurityHistory
+                  - listitem [ref=e1359]:
+                    - code [ref=e1360]: locationMismatch
+                    - text: "- A boolean indicating whether the location you requested the auth session info from doesn't match the location where the QR code was generated"
+                  - listitem [ref=e1361]:
+                    - code [ref=e1362]: highUsageLogin
+                    - text: "- A boolean indicating \"whether this login has seen high usage recently\""
+                  - listitem [ref=e1363]:
+                    - code [ref=e1364]: requestedPersistence
+                    - text: "- The"
+                    - link "ESessionPersistence" [ref=e1365] [cursor=pointer]:
+                      - /url: "#esessionpersistence"
+                      - code [ref=e1366]: ESessionPersistence
+                    - text: requested for this login
+                - generic [ref=e1367]:
+                  - heading "approveAuthSession(details)" [level=3] [ref=e1368]
+                  - 'link "Permalink: approveAuthSession(details)" [ref=e1369] [cursor=pointer]':
+                    - /url: "#approveauthsessiondetails"
+                    - img [ref=e1370]
+                - list [ref=e1372]:
+                  - listitem [ref=e1373]:
+                    - code [ref=e1374]: details
+                    - text: "- An object with these properties:"
+                    - list [ref=e1375]:
+                      - listitem [ref=e1376]:
+                        - code [ref=e1377]: qrChallengeUrl
+                        - text: "- A"
+                        - code [ref=e1378]: string
+                        - text: containing the QR challenge URL from a
+                        - link "startWithQR" [ref=e1379] [cursor=pointer]:
+                          - /url: "#startwithqrdetails"
+                          - code [ref=e1380]: startWithQR
+                        - text: call
+                      - listitem [ref=e1381]:
+                        - code [ref=e1382]: approve
+                        - text: "-"
+                        - code [ref=e1383]: "true"
+                        - text: to approve the login or
+                        - code [ref=e1384]: "false"
+                        - text: to deny
+                      - listitem [ref=e1385]:
+                        - code [ref=e1386]: persistence
+                        - text: "- An option value from"
+                        - link "ESessionPersistence" [ref=e1387] [cursor=pointer]:
+                          - /url: "#esessionpersistence"
+                          - code [ref=e1388]: ESessionPersistence
+                - paragraph [ref=e1389]:
+                  - text: Approves or denies an auth session from a QR URL. If you pass
+                  - code [ref=e1390]: "true"
+                  - text: for
+                  - code [ref=e1391]: approve
+                  - text: ", then the next poll from the"
+                  - code [ref=e1392]: LoginSession
+                  - text: will return access tokens. If you pass
+                  - code [ref=e1393]: "false"
+                  - text: ", then the"
+                  - code [ref=e1394]: LoginSession
+                  - text: will emit an
+                  - link "error" [ref=e1395] [cursor=pointer]:
+                    - /url: "#error"
+                    - code [ref=e1396]: error
+                  - text: event with
+                  - link "EResult" [ref=e1397] [cursor=pointer]:
+                    - /url: "#eresult"
+                  - code [ref=e1398]: FileNotFound
+                  - text: (9).
+                - paragraph [ref=e1399]:
+                  - text: Returns a Promise which resolves with no value. Once this Promise resolves, you could call
+                  - link "forcePoll" [ref=e1400] [cursor=pointer]:
+                    - /url: "#forcepoll"
+                    - code [ref=e1401]: forcePoll
+                  - text: ", and the"
+                  - code [ref=e1402]: LoginSession
+                  - text: should then immediately emit
+                  - link "authenticated" [ref=e1403] [cursor=pointer]:
+                    - /url: "#authenticated"
+                    - code [ref=e1404]: authenticated
+                  - text: .
+        - generic [ref=e1406]:
+          - generic [ref=e1409]:
+            - heading "About" [level=2] [ref=e1410]
+            - paragraph [ref=e1411]: Node.js module for authenticating with the Steam auth server. Allows for generating refresh tokens and web auth cookies for use with steam-user and other packages.
+            - generic [ref=e1412]:
+              - img [ref=e1413]
+              - link "www.npmjs.com/package/steam-session" [ref=e1416] [cursor=pointer]:
+                - /url: https://www.npmjs.com/package/steam-session
+            - heading "Topics" [level=3] [ref=e1417]
+            - generic [ref=e1419]:
+              - link "nodejs" [ref=e1420] [cursor=pointer]:
+                - /url: /topics/nodejs
+              - link "javascript" [ref=e1421] [cursor=pointer]:
+                - /url: /topics/javascript
+              - link "steam" [ref=e1422] [cursor=pointer]:
+                - /url: /topics/steam
+              - link "typescript" [ref=e1423] [cursor=pointer]:
+                - /url: /topics/typescript
+            - heading "Resources" [level=3] [ref=e1424]
+            - link "Readme" [ref=e1426] [cursor=pointer]:
+              - /url: "#readme-ov-file"
+              - img [ref=e1427]
+              - text: Readme
+            - heading "License" [level=3] [ref=e1429]
+            - link "MIT license" [ref=e1431] [cursor=pointer]:
+              - /url: "#MIT-1-ov-file"
+              - img [ref=e1432]
+              - text: MIT license
+            - link "Activity" [ref=e1435] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/activity
+              - img [ref=e1436]
+              - text: Activity
+            - heading "Stars" [level=3] [ref=e1438]
+            - link "178 stars" [ref=e1440] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/stargazers
+              - img [ref=e1441]
+              - strong [ref=e1443]: "178"
+              - text: stars
+            - heading "Watchers" [level=3] [ref=e1444]
+            - link "10 watching" [ref=e1446] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/watchers
+              - img [ref=e1447]
+              - strong [ref=e1449]: "10"
+              - text: watching
+            - heading "Forks" [level=3] [ref=e1450]
+            - link "32 forks" [ref=e1452] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/forks
+              - img [ref=e1453]
+              - strong [ref=e1455]: "32"
+              - text: forks
+            - link "Report repository" [ref=e1457] [cursor=pointer]:
+              - /url: /contact/report-content?content_url=https%3A%2F%2Fgithub.com%2FDoctorMcKay%2Fnode-steam-session&report=DoctorMcKay+%28user%29
+          - generic [ref=e1459]:
+            - heading "Releases 30" [level=2] [ref=e1460]:
+              - link "Releases 30" [ref=e1461] [cursor=pointer]:
+                - /url: /DoctorMcKay/node-steam-session/releases
+                - text: Releases
+                - generic "30" [ref=e1462]
+            - link "v1.9.4 Latest Jul 19, 2025on Jul 19, 2025" [ref=e1463] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/releases/tag/v1.9.4
+              - img [ref=e1464]
+              - generic [ref=e1466]:
+                - generic [ref=e1467]:
+                  - generic [ref=e1468]: v1.9.4
+                  - 'generic "Label: Latest" [ref=e1469]': Latest
+                - generic [ref=e1470]: Jul 19, 2025on Jul 19, 2025
+            - link "+ 29 releases" [ref=e1472] [cursor=pointer]:
+              - /url: /DoctorMcKay/node-steam-session/releases
+          - generic [ref=e1474]:
+            - heading "Sponsor this project" [level=2] [ref=e1475]
+            - list [ref=e1693]:
+              - listitem [ref=e1694]:
+                - link "@DoctorMcKay" [ref=e1695] [cursor=pointer]:
+                  - /url: /DoctorMcKay
+                  - img "@DoctorMcKay" [ref=e1696]
+                - link "DoctorMcKay" [ref=e1698] [cursor=pointer]:
+                  - /url: /DoctorMcKay
+                  - strong [ref=e1699]: DoctorMcKay
+                - link "Sponsor @DoctorMcKay" [ref=e1700] [cursor=pointer]:
+                  - /url: /sponsors/DoctorMcKay
+                  - img [ref=e1703]
+            - list [ref=e1481]:
+              - listitem [ref=e1482]:
+                - img [ref=e1484]
+                - link "https://doctormckay.com/donate" [ref=e1487] [cursor=pointer]:
+                  - /url: https://doctormckay.com/donate
+            - link "Learn more about GitHub Sponsors" [ref=e1489] [cursor=pointer]:
+              - /url: /sponsors
+          - generic [ref=e1491]:
+            - heading "Contributors 4" [level=2] [ref=e1705]:
+              - link "Contributors 4" [ref=e1706] [cursor=pointer]:
+                - /url: /DoctorMcKay/node-steam-session/graphs/contributors
+                - text: Contributors
+                - generic "4" [ref=e1707]
+            - list [ref=e1708]:
+              - listitem [ref=e1709]:
+                - link "@DoctorMcKay" [ref=e1710] [cursor=pointer]:
+                  - /url: https://github.com/DoctorMcKay
+                  - img "@DoctorMcKay" [ref=e1711]
+                - link "DoctorMcKay" [ref=e1713] [cursor=pointer]:
+                  - /url: https://github.com/DoctorMcKay
+                  - strong [ref=e1714]: DoctorMcKay
+              - listitem [ref=e1715]:
+                - link "@Sadzurami" [ref=e1716] [cursor=pointer]:
+                  - /url: https://github.com/Sadzurami
+                  - img "@Sadzurami" [ref=e1717]
+                - link "Sadzurami" [ref=e1719] [cursor=pointer]:
+                  - /url: https://github.com/Sadzurami
+                  - strong [ref=e1720]: Sadzurami
+              - listitem [ref=e1721]:
+                - link "@Revadike" [ref=e1722] [cursor=pointer]:
+                  - /url: https://github.com/Revadike
+                  - img "@Revadike" [ref=e1723]
+                - link "Revadike Revadike" [ref=e1725] [cursor=pointer]:
+                  - /url: https://github.com/Revadike
+                  - strong [ref=e1726]: Revadike
+                  - text: Revadike
+              - listitem [ref=e1727]:
+                - link "@timvandam" [ref=e1728] [cursor=pointer]:
+                  - /url: https://github.com/timvandam
+                  - img "@timvandam" [ref=e1729]
+                - link "timvandam Tim van Dam" [ref=e1731] [cursor=pointer]:
+                  - /url: https://github.com/timvandam
+                  - strong [ref=e1732]: timvandam
+                  - text: Tim van Dam
+          - generic [ref=e1503]:
+            - heading "Languages" [level=2] [ref=e1504]
+            - list [ref=e1509]:
+              - listitem [ref=e1510]:
+                - link "TypeScript 96.7%" [ref=e1511] [cursor=pointer]:
+                  - /url: /DoctorMcKay/node-steam-session/search?l=typescript
+                  - img [ref=e1512]
+                  - generic [ref=e1514]: TypeScript
+                  - generic [ref=e1515]: 96.7%
+              - listitem [ref=e1516]:
+                - link "JavaScript 3.3%" [ref=e1517] [cursor=pointer]:
+                  - /url: /DoctorMcKay/node-steam-session/search?l=javascript
+                  - img [ref=e1518]
+                  - generic [ref=e1520]: JavaScript
+                  - generic [ref=e1521]: 3.3%
+  - contentinfo [ref=e1522]:
+    - heading "Footer" [level=2] [ref=e1523]
+    - generic [ref=e1524]:
+      - generic [ref=e1525]:
+        - link "GitHub Homepage" [ref=e1526] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e1527]
+        - generic [ref=e1529]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e1530]:
+        - heading "Footer navigation" [level=3] [ref=e1531]
+        - list "Footer navigation" [ref=e1532]:
+          - listitem [ref=e1533]:
+            - link "Terms" [ref=e1534] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e1535]:
+            - link "Privacy" [ref=e1536] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e1537]:
+            - link "Security" [ref=e1538] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e1539]:
+            - link "Status" [ref=e1540] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e1541]:
+            - link "Community" [ref=e1542] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e1543]:
+            - link "Docs" [ref=e1544] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e1545]:
+            - link "Contact" [ref=e1546] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e1547]:
+            - button "Manage cookies" [ref=e1549] [cursor=pointer]
+          - listitem [ref=e1550]:
+            - button "Do not share my personal information" [ref=e1552] [cursor=pointer]

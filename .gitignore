@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+.session_locks/
+.playwright-mcp/
+tmp/
+logs/
+sentries/
+
+*.pyc
+*.pyo
+*.pyd
+
+# local runtime/state
+accounts.json
+login_keys.json
+machine_id.bin
+inventory_ui_state.json
+schema_cache.json

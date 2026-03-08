@@ -1,0 +1,7053 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - region "Site notifications" [ref=e4]:
+      - generic [ref=e8]:
+        - generic [ref=e9]: ⚠️
+        - alert [ref=e11]:
+          - text: "Security Update: Classic tokens have been revoked. Granular tokens are now limited to 90 days and require 2FA by default. Update your CI/CD workflows to avoid disruption."
+          - link "Learn more about npm authentication changes" [ref=e12] [cursor=pointer]:
+            - /url: https://gh.io/all-npm-classic-tokens-revoked
+            - text: Learn more
+          - text: .
+        - button "Close notification" [ref=e13] [cursor=pointer]: ×
+    - generic [ref=e14]:
+      - banner [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]:
+            - text: "skip to:"
+            - link "skip to content" [ref=e18] [cursor=pointer]:
+              - /url: "#main"
+              - text: content
+            - link "skip to package search" [ref=e19] [cursor=pointer]:
+              - /url: "#search"
+              - text: package search
+            - link "skip to sign in" [ref=e20] [cursor=pointer]:
+              - /url: "#signin"
+              - text: sign in
+          - generic [ref=e21]:
+            - generic [ref=e22]: ❤
+            - navigation "Product Navigation" [ref=e23]:
+              - list [ref=e24]:
+                - listitem [ref=e25]:
+                  - link "Pro" [ref=e26] [cursor=pointer]:
+                    - /url: /products/pro
+                - listitem [ref=e27]:
+                  - link "Teams" [ref=e28] [cursor=pointer]:
+                    - /url: /products/teams
+                - listitem [ref=e29]:
+                  - link "Pricing" [ref=e30] [cursor=pointer]:
+                    - /url: /products
+                - listitem [ref=e31]:
+                  - link "Documentation" [ref=e32] [cursor=pointer]:
+                    - /url: https://docs.npmjs.com
+        - generic [ref=e34]:
+          - generic [ref=e35]: npm
+          - link "Npm" [ref=e37] [cursor=pointer]:
+            - /url: /
+            - img [ref=e38]
+          - generic [ref=e41]:
+            - generic [ref=e43]:
+              - img [ref=e45]
+              - combobox "Search packages" [ref=e51]
+            - button "Search" [ref=e53]
+          - generic [ref=e55]:
+            - link "Sign Up" [ref=e56] [cursor=pointer]:
+              - /url: /signup
+            - link "Sign In" [ref=e57] [cursor=pointer]:
+              - /url: /login
+      - main [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - heading "steam-user DefinitelyTyped icon, indicating that this package has TypeScript declarations provided by the separate @types/steam-user package" [level=1] [ref=e61]:
+              - generic [ref=e62]: steam-user
+              - link "DefinitelyTyped icon, indicating that this package has TypeScript declarations provided by the separate @types/steam-user package" [ref=e64] [cursor=pointer]:
+                - /url: /package/@types/steam-user
+                - img "DefinitelyTyped icon, indicating that this package has TypeScript declarations provided by the separate @types/steam-user package" [ref=e65]
+            - generic [ref=e66]: 5.3.0 •
+            - generic [ref=e67]: Public
+            - generic [ref=e68]:
+              - text: • Published
+              - time [ref=e69]: 3 months ago
+          - tablist [ref=e70]:
+            - tab "Readme" [selected] [ref=e71] [cursor=pointer]:
+              - generic [ref=e72]:
+                - img [ref=e73]
+                - text: Readme
+            - tab "Code Beta" [ref=e75] [cursor=pointer]:
+              - generic [ref=e76]:
+                - img [ref=e77]
+                - text: Code
+                - generic [ref=e80]: Beta
+            - tab "17 Dependencies" [ref=e81] [cursor=pointer]:
+              - generic [ref=e82]:
+                - img [ref=e83]
+                - text: 17 Dependencies
+            - tab "68 Dependents" [ref=e85] [cursor=pointer]:
+              - generic [ref=e86]:
+                - img [ref=e87]
+                - text: 68 Dependents
+            - tab "219 Versions" [ref=e89] [cursor=pointer]:
+              - generic [ref=e90]:
+                - img [ref=e91]
+                - text: 219 Versions
+          - generic [ref=e94]:
+            - tabpanel "Readme" [ref=e95]:
+              - article [ref=e97]:
+                - generic [ref=e98]:
+                  - generic [ref=e99]:
+                    - heading "SteamUser" [level=1] [ref=e100]
+                    - 'link "Permalink: SteamUser" [ref=e101] [cursor=pointer]':
+                      - /url: "#steamuser"
+                  - generic [ref=e102]:
+                    - heading "Allows interaction with the Steam network via the Steam client protocol" [level=3] [ref=e103]
+                    - 'link "Permalink: Allows interaction with the Steam network via the Steam client protocol" [ref=e104] [cursor=pointer]':
+                      - /url: "#allows-interaction-with-the-steam-network-via-the-steam-client-protocol"
+                  - paragraph [ref=e105]:
+                    - link "npm version" [ref=e106] [cursor=pointer]:
+                      - /url: https://npmjs.com/package/steam-user
+                      - img "npm version" [ref=e107]
+                    - link "npm downloads" [ref=e108] [cursor=pointer]:
+                      - /url: https://npmjs.com/package/steam-user
+                      - img "npm downloads" [ref=e109]
+                    - link "license" [ref=e110] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/LICENSE
+                      - img "license" [ref=e111]
+                    - link "sponsors" [ref=e112] [cursor=pointer]:
+                      - /url: https://github.com/sponsors/DoctorMcKay
+                      - img "sponsors" [ref=e113]
+                  - paragraph [ref=e114]: SteamUser allows you to communicate with the Steam servers in the same manner as a proper Steam client. It's designed to be a self-contained module which provides all the functionality expected of a Steam user client.
+                  - paragraph [ref=e115]: Node.js v14.0.0 or later is required.
+                  - paragraph [ref=e116]:
+                    - link "Subscribe to release announcements" [ref=e117] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/releases.atom
+                  - paragraph [ref=e118]:
+                    - strong [ref=e119]:
+                      - text: Have a question about the module or coding in general?
+                      - emphasis [ref=e120]: Do not create a GitHub issue.
+                      - text: GitHub issues are for feature requests and bug reports. Instead, post in the
+                      - link "dedicated forum" [ref=e121] [cursor=pointer]:
+                        - /url: https://dev.doctormckay.com/forum/7-node-steam-user/
+                      - text: . Such issues may be ignored!
+                  - paragraph [ref=e122]:
+                    - link "Upgrading from v4?" [ref=e123] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/v4-%E2%86%92-v5-migration-guide
+                    - link "Upgrading from v3?" [ref=e124] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/releases/tag/v4.0.0
+                  - generic [ref=e125]:
+                    - heading "Installation" [level=2] [ref=e126]
+                    - 'link "Permalink: Installation" [ref=e127] [cursor=pointer]':
+                      - /url: "#installation"
+                  - paragraph [ref=e128]:
+                    - text: Install it from
+                    - link "npm" [ref=e129] [cursor=pointer]:
+                      - /url: https://www.npmjs.com/package/steam-user
+                    - text: ":"
+                  - code [ref=e131]: $ npm install steam-user
+                  - generic [ref=e132]:
+                    - heading "Contents" [level=1] [ref=e133]
+                    - 'link "Permalink: Contents" [ref=e134] [cursor=pointer]':
+                      - /url: "#contents"
+                  - list [ref=e135]:
+                    - listitem [ref=e136]:
+                      - link "Patterns" [ref=e137] [cursor=pointer]:
+                        - /url: "#patterns-"
+                    - listitem [ref=e138]:
+                      - link "Enums" [ref=e139] [cursor=pointer]:
+                        - /url: "#enums-"
+                    - listitem [ref=e140]:
+                      - link "Static Methods" [ref=e141] [cursor=pointer]:
+                        - /url: "#static-methods-"
+                    - listitem [ref=e142]:
+                      - link "Options" [ref=e143] [cursor=pointer]:
+                        - /url: "#options-"
+                    - listitem [ref=e144]:
+                      - link "Properties" [ref=e145] [cursor=pointer]:
+                        - /url: "#properties-"
+                    - listitem [ref=e146]:
+                      - link "Methods" [ref=e147] [cursor=pointer]:
+                        - /url: "#methods-"
+                    - listitem [ref=e148]:
+                      - link "Events" [ref=e149] [cursor=pointer]:
+                        - /url: "#events-"
+                  - paragraph [ref=e150]:
+                    - text: Some of the documentation for
+                    - code [ref=e151]: SteamUser
+                    - text: ", especially documentation for experimental features (but not exclusively), is located in"
+                    - link "the GitHub wiki" [ref=e152] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki
+                    - text: .
+                  - generic [ref=e153]:
+                    - heading "Patterns ^" [level=1] [ref=e154]:
+                      - text: Patterns
+                      - link "^" [ref=e155] [cursor=pointer]:
+                        - /url: "#contents"
+                    - 'link "Permalink: Patterns ^" [ref=e156] [cursor=pointer]':
+                      - /url: "#patterns-"
+                  - paragraph [ref=e157]:
+                    - text: There are a number of coding patterns that are repeated throughout
+                    - code [ref=e158]: SteamUser
+                    - text: .
+                    - strong [ref=e159]:
+                      - text: Please read this section in its entirety before starting work with
+                      - code [ref=e160]: SteamUser
+                      - text: .
+                  - generic [ref=e161]:
+                    - heading "Callbacks and Promises" [level=3] [ref=e162]
+                    - 'link "Permalink: Callbacks and Promises" [ref=e163] [cursor=pointer]':
+                      - /url: "#callbacks-and-promises"
+                  - paragraph [ref=e164]:
+                    - text: All methods listed in this document that accept a callback also return a
+                    - code [ref=e165]: Promise
+                    - text: . You may use either callbacks or promises.
+                  - paragraph [ref=e166]:
+                    - text: Legacy callbacks return their data spanning across multiple arguments. All promises (which return any data at all) return a single object containing one or more properties. The names of these properties for legacy callbacks are the names of the callback arguments listed in this readme. Newer callbacks return a single object
+                    - code [ref=e167]: response
+                    - text: argument, which is identical to the promise output for that method.
+                  - paragraph [ref=e168]:
+                    - text: Some methods indicate that their callback is required or optional.
+                    - strong [ref=e169]: You are never required to use callbacks over promises
+                    - text: ", but if a callback is listed as optional then an unhandled promise rejection will not raise a warning/error. If a callback is listed as required and you neither supply a callback nor handle the promise rejection, then a promise rejection will raise a warning, and eventually a crash in a future Node.js release."
+                  - generic [ref=e170]:
+                    - heading "Enums ^" [level=1] [ref=e171]:
+                      - text: Enums
+                      - link "^" [ref=e172] [cursor=pointer]:
+                        - /url: "#contents"
+                    - 'link "Permalink: Enums ^" [ref=e173] [cursor=pointer]':
+                      - /url: "#enums-"
+                  - paragraph [ref=e174]:
+                    - text: There are a lot of enums used in Steam. They're all available directly from
+                    - code [ref=e175]: SteamUser
+                    - text: . For example, access
+                    - code [ref=e176]: EResult
+                    - text: using
+                    - code [ref=e177]: SteamUser.EResult
+                    - text: .
+                  - paragraph [ref=e178]:
+                    - text: All enums can be viewed
+                    - link "on GitHub" [ref=e179] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/tree/master/enums
+                    - text: .
+                  - paragraph [ref=e180]:
+                    - text: Additionally, for convenience, the name of an enum value is available from any enum at the key identified by the enum value. For example, given an EResult of
+                    - code [ref=e181]: "88"
+                    - text: you can translate it using
+                    - code [ref=e182]: SteamUser.EResult[88]
+                    - text: which gives you the string
+                    - code [ref=e183]: TwoFactorCodeMismatch
+                    - text: .
+                  - generic [ref=e184]:
+                    - heading "Static Methods ^" [level=1] [ref=e185]:
+                      - text: Static Methods
+                      - link "^" [ref=e186] [cursor=pointer]:
+                        - /url: "#contents"
+                    - 'link "Permalink: Static Methods ^" [ref=e187] [cursor=pointer]':
+                      - /url: "#static-methods-"
+                  - paragraph [ref=e188]:
+                    - text: Static methods, or functions attached directly to
+                    - code [ref=e189]: SteamUser
+                    - text: ", are called on the root module and not on instantiated handler instances."
+                  - generic [ref=e190]:
+                    - heading "formatCurrency(amount, currency)" [level=3] [ref=e191]
+                    - 'link "Permalink: formatCurrency(amount, currency)" [ref=e192] [cursor=pointer]':
+                      - /url: "#formatcurrencyamount-currency"
+                  - list [ref=e193]:
+                    - listitem [ref=e194]:
+                      - code [ref=e195]: amount
+                      - text: "- The amount of the currency"
+                    - listitem [ref=e196]:
+                      - code [ref=e197]: currency
+                      - text: "- The currency code value in the"
+                      - link "ECurrencyCode" [ref=e198] [cursor=pointer]:
+                        - /url: "#ecurrencycode"
+                        - code [ref=e199]: ECurrencyCode
+                      - text: enum
+                  - paragraph [ref=e200]: "Formats a currency value and returns a string. For example:"
+                  - generic [ref=e202]: console.log(SteamUser.formatCurrency(12.34, SteamUser.ECurrencyCode.USD)); // $12.34 console.log(SteamUser.formatCurrency(12345, SteamUser.ECurrencyCode.JPY)); // ¥ 12345 console.log(SteamUser.formatCurrency(123.45, SteamUser.ECurrencyCode.EUR)); // 123,45€
+                  - generic [ref=e203]:
+                    - heading "Options ^" [level=1] [ref=e204]:
+                      - text: Options
+                      - link "^" [ref=e205] [cursor=pointer]:
+                        - /url: "#contents"
+                    - 'link "Permalink: Options ^" [ref=e206] [cursor=pointer]':
+                      - /url: "#options-"
+                  - paragraph [ref=e207]:
+                    - text: There are a number of options which can control the behavior of the
+                    - code [ref=e208]: SteamUser
+                    - text: "object. They are:"
+                  - generic [ref=e209]:
+                    - heading "dataDirectory" [level=3] [ref=e210]
+                    - 'link "Permalink: dataDirectory" [ref=e211] [cursor=pointer]':
+                      - /url: "#datadirectory"
+                  - paragraph [ref=e212]:
+                    - text: Controls where the Steam server list and machine auth token files are written. If
+                    - code [ref=e213]: "null"
+                    - text: ", no data will be automatically stored."
+                  - paragraph [ref=e214]: Defaults to a platform-specific user data directory.
+                  - list [ref=e215]:
+                    - listitem [ref=e216]:
+                      - text: "On"
+                      - link "OpenShift" [ref=e217] [cursor=pointer]:
+                        - /url: https://www.openshift.com
+                      - text: ", this is"
+                      - code [ref=e218]: $OPENSHIFT_DATA_DIR/node-steamuser
+                    - listitem [ref=e219]:
+                      - text: On Windows, this is
+                      - code [ref=e220]: "%localappdata%\\doctormckay\\node-steamuser"
+                    - listitem [ref=e221]:
+                      - text: On Mac, this is
+                      - code [ref=e222]: ~/Library/Application Support/node-steamuser
+                    - listitem [ref=e223]:
+                      - text: On Linux, this is
+                      - code [ref=e224]: $XDG_DATA_HOME/node-steamuser
+                      - text: ", or"
+                      - code [ref=e225]: ~/.local/share/node-steamuser
+                      - text: if
+                      - code [ref=e226]: $XDG_DATA_HOME
+                      - text: isn't defined or is empty
+                  - generic [ref=e227]:
+                    - heading "Custom Storage Engine" [level=4] [ref=e228]
+                    - 'link "Permalink: Custom Storage Engine" [ref=e229] [cursor=pointer]':
+                      - /url: "#custom-storage-engine"
+                  - paragraph [ref=e230]: "If you don't want to (or can't) save data to the disk, you can implement your own storage engine. To do this, simply add the following code:"
+                  - generic [ref=e232]: "user.storage.on('save', function(filename, contents, callback) { // filename is the name of the file, as a string // contents is a Buffer containing the file's contents // callback is a function which you MUST call on completion or error, with a single error argument // For example: someStorageSystem.saveFile(filename, contents, function(err) { callback(err); }); }); user.storage.on('read', function(filename, callback) { // filename is the name of the file, as a string // callback is a function which you MUST call on completion or error, with an error argument and a Buffer argument // For example: someStorageSystem.readFile(filename, function(err, file) { if(err) { callback(err); return; } callback(null, file); }); });"
+                  - paragraph [ref=e233]: In this manner, you can save data to a database, a cloud service, or anything else you choose.
+                  - generic [ref=e234]:
+                    - heading "autoRelogin" [level=3] [ref=e235]
+                    - 'link "Permalink: autoRelogin" [ref=e236] [cursor=pointer]':
+                      - /url: "#autorelogin"
+                  - paragraph [ref=e237]:
+                    - text: A boolean which controls whether or not
+                    - code [ref=e238]: SteamUser
+                    - text: will automatically reconnect to Steam if disconnected due to Steam going down.
+                  - paragraph [ref=e239]:
+                    - text: Defaults to
+                    - code [ref=e240]: "true"
+                    - text: .
+                  - generic [ref=e241]:
+                    - heading "machineIdType" [level=3] [ref=e242]
+                    - 'link "Permalink: machineIdType" [ref=e243] [cursor=pointer]':
+                      - /url: "#machineidtype"
+                  - paragraph [ref=e244]:
+                    - text: What kind of machine ID will SteamUser send to Steam when logging on? Should be a value from
+                    - link "EMachineIDType" [ref=e245] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EMachineIDType.js
+                      - code [ref=e246]: EMachineIDType
+                    - text: .
+                  - paragraph [ref=e247]: Added in 1.7.0.
+                  - paragraph [ref=e248]:
+                    - text: Defaults to
+                    - code [ref=e249]: AccountNameGenerated
+                    - text: .
+                  - generic [ref=e250]:
+                    - heading "machineIdFormat" [level=3] [ref=e251]
+                    - 'link "Permalink: machineIdFormat" [ref=e252] [cursor=pointer]':
+                      - /url: "#machineidformat"
+                  - paragraph [ref=e253]:
+                    - text: If you're using
+                    - code [ref=e254]: machineIdType
+                    - code [ref=e255]: AccountGenerated
+                    - text: ", this is the format it uses. This is an array of three strings, each of which will be hashed with SHA1 before being sent to Steam."
+                    - code [ref=e256]: "{account_name}"
+                    - text: will be replaced with the current account name.
+                  - paragraph [ref=e257]: Added in 1.13.0.
+                  - paragraph [ref=e258]:
+                    - text: Defaults to
+                    - code [ref=e259]: "[\"SteamUser Hash BB3 {account_name}\", \"SteamUser Hash FF2 {account_name}\", \"SteamUser Hash 3B3 {account_name}\"]"
+                    - text: .
+                  - generic [ref=e260]:
+                    - heading "enablePicsCache" [level=3] [ref=e261]
+                    - 'link "Permalink: enablePicsCache" [ref=e262] [cursor=pointer]':
+                      - /url: "#enablepicscache"
+                  - paragraph [ref=e263]:
+                    - text: If enabled, then
+                    - code [ref=e264]: node-steam-user
+                    - text: will internally cache data in memory about all apps and packages that it knows about. Currently,
+                    - code [ref=e265]: node-steam-user
+                    - text: "\"knows about\" an app/package if:"
+                  - list [ref=e266]:
+                    - listitem [ref=e267]:
+                      - text: Packages
+                      - list [ref=e268]:
+                        - listitem [ref=e269]: You own it, or
+                        - listitem [ref=e270]:
+                          - text: You request info about it via
+                          - code [ref=e271]: getProductInfo
+                    - listitem [ref=e272]:
+                      - text: Apps
+                      - list [ref=e273]:
+                        - listitem [ref=e274]: It's in a known package, or
+                        - listitem [ref=e275]:
+                          - text: You request info about it via
+                          - code [ref=e276]: getProductInfo
+                          - text: ", or"
+                        - listitem [ref=e277]: A friend who is online plays the app, or
+                        - listitem [ref=e278]:
+                          - text: You request info about an online user who is playing it via
+                          - code [ref=e279]: getPersonas
+                  - paragraph [ref=e280]: This option is required in order to use several methods and events. This works when logging in anonymously.
+                  - paragraph [ref=e281]: Added in 3.3.0.
+                  - paragraph [ref=e282]:
+                    - text: Defaults to
+                    - code [ref=e283]: "false"
+                    - text: .
+                  - generic [ref=e284]:
+                    - heading "picsCacheAll" [level=3] [ref=e285]
+                    - 'link "Permalink: picsCacheAll" [ref=e286] [cursor=pointer]':
+                      - /url: "#picscacheall"
+                  - paragraph [ref=e287]:
+                    - text: If
+                    - code [ref=e288]: picsCacheAll
+                    - text: is enabled,
+                    - code [ref=e289]: enablePicsCache
+                    - text: is enabled, and
+                    - code [ref=e290]: changelistUpdateInterval
+                    - text: is nonzero, then apps and packages which get updated while your bot is running will also be added to the cache. Default behavior is to only cache apps and packages that are "known" via the above criteria.
+                  - paragraph [ref=e291]: Added in 3.3.0.
+                  - paragraph [ref=e292]:
+                    - text: Defaults to
+                    - code [ref=e293]: "false"
+                    - text: .
+                  - generic [ref=e294]:
+                    - heading "changelistUpdateInterval" [level=3] [ref=e295]
+                    - 'link "Permalink: changelistUpdateInterval" [ref=e296] [cursor=pointer]':
+                      - /url: "#changelistupdateinterval"
+                  - paragraph [ref=e297]:
+                    - text: If
+                    - code [ref=e298]: enablePicsCache
+                    - text: is enabled, then
+                    - code [ref=e299]: node-steam-user
+                    - text: will automatically request app/package changes (via
+                    - code [ref=e300]: getProductChanges
+                    - text: ) for known apps and packages, and update the internal cache when they update. This is the frequency, in milliseconds, for changelist update requests. Set to
+                    - code [ref=e301]: "0"
+                    - text: to disable.
+                  - paragraph [ref=e302]: Added in 3.3.0.
+                  - paragraph [ref=e303]:
+                    - text: Defaults to
+                    - code [ref=e304]: "60000"
+                    - text: . Minimum value
+                    - code [ref=e305]: "1000"
+                    - text: ", although you're recommended to not go below 10 seconds or so."
+                  - generic [ref=e306]:
+                    - heading "ownershipFilter" [level=3] [ref=e307]
+                    - 'link "Permalink: ownershipFilter" [ref=e308] [cursor=pointer]':
+                      - /url: "#ownershipfilter"
+                  - paragraph [ref=e309]:
+                    - text: Specify a custom app/package ownership filter object or function to be applied to all calls to
+                    - code [ref=e310]: getOwned*()
+                    - text: and
+                    - code [ref=e311]: owns*()
+                    - text: where a filter is not specified in the method invocation. If you specify a
+                    - code [ref=e312]: filter
+                    - text: when you call
+                    - code [ref=e313]: getOwned*()
+                    - text: or
+                    - code [ref=e314]: owns*()
+                    - text: ", then that filter is applied and the global"
+                    - code [ref=e315]: ownershipFilter
+                    - text: is ignored.
+                  - paragraph [ref=e316]: Added in 4.22.0.
+                  - paragraph [ref=e317]: Defaults to a filter that excludes expired licenses only.
+                  - paragraph [ref=e318]: "This filter can be either an object or a function:"
+                  - generic [ref=e319]:
+                    - heading "Filter Object" [level=4] [ref=e320]
+                    - 'link "Permalink: Filter Object" [ref=e321] [cursor=pointer]':
+                      - /url: "#filter-object"
+                  - paragraph [ref=e322]: "A filter object should contain zero or more of these properties:"
+                  - list [ref=e323]:
+                    - listitem [ref=e324]:
+                      - code [ref=e325]: excludeFree
+                      - text: "- Pass"
+                      - code [ref=e326]: "true"
+                      - text: to exclude free licenses (no cost/guest pass/free on demand/free commercial license)
+                    - listitem [ref=e327]:
+                      - code [ref=e328]: excludeShared
+                      - text: "- Pass"
+                      - code [ref=e329]: "true"
+                      - text: to exclude licenses acquired via
+                      - link "family sharing" [ref=e330] [cursor=pointer]:
+                        - /url: https://store.steampowered.com/promotion/familysharing
+                    - listitem [ref=e331]:
+                      - code [ref=e332]: excludeExpiring
+                      - text: "- Pass"
+                      - code [ref=e333]: "true"
+                      - text: to exclude licenses that have an expiration date (e.g. free weekends) but are not yet expired
+                  - paragraph [ref=e334]:
+                    - text: Any omitted properties are assumed to be
+                    - code [ref=e335]: "false"
+                    - text: . If you don't specify an ownership filter, an empty object is assumed.
+                  - generic [ref=e336]:
+                    - heading "Filter Function" [level=4] [ref=e337]
+                    - 'link "Permalink: Filter Function" [ref=e338] [cursor=pointer]':
+                      - /url: "#filter-function"
+                  - paragraph [ref=e339]:
+                    - text: You can also provide your own custom filter function. This function will be called for each license owned by your account, and should return
+                    - code [ref=e340]: "true"
+                    - text: to include a license or
+                    - code [ref=e341]: "false"
+                    - text: to exclude it. This function should have the same arguments as the callback you'd pass to
+                    - link "Array.prototype.filter" [ref=e342] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter
+                    - text: .
+                  - paragraph [ref=e343]:
+                    - text: The
+                    - code [ref=e344]: element
+                    - text: argument will be an object of type
+                    - link "Proto_CMsgClientLicenseList_License" [ref=e345] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/blob/9312326c34fed69a2ea6c4102ed25e3073f0516d/protobufs/generated/_types.js#L9755-L9775
+                    - text: (same as the
+                    - link "licenses" [ref=e346] [cursor=pointer]:
+                      - /url: "#licenses"
+                      - code [ref=e347]: licenses
+                    - text: property).
+                  - paragraph [ref=e348]:
+                    - text: Please note that when you specify a custom filter function, expired licenses (e.g. past free weekends) will be sent to your filter function as candidates for inclusion, but these licenses are filtered out in all other cases. You can determine if a license is expired by checking
+                    - code [ref=e349]: if (license.flags & SteamUser.ELicenseFlags.Expired)
+                    - text: .
+                  - paragraph [ref=e350]: "Example usage:"
+                  - generic [ref=e352]: "user.setOption('ownershipFilter', (license) => { // only passes licenses that were acquired at least a year ago let time = Math.floor(Date.now() / 1000); return time - license.time_created >= 60 * 60 * 24 * 365; });"
+                  - generic [ref=e353]:
+                    - heading "additionalHeaders" [level=3] [ref=e354]
+                    - 'link "Permalink: additionalHeaders" [ref=e355] [cursor=pointer]':
+                      - /url: "#additionalheaders"
+                  - paragraph [ref=e356]:
+                    - text: Set this to an object where keys are header names and values are header values, and those headers will be included with all HTTP requests
+                    - code [ref=e357]: node-steam-user
+                    - text: makes to the Steam WebAPI.
+                  - paragraph [ref=e358]: Added in 3.29.0.
+                  - paragraph [ref=e359]:
+                    - text: Defaults to
+                    - code [ref=e360]: "{}"
+                    - text: .
+                  - generic [ref=e361]:
+                    - heading "localAddress" [level=3] [ref=e362]
+                    - 'link "Permalink: localAddress" [ref=e363] [cursor=pointer]':
+                      - /url: "#localaddress"
+                  - paragraph [ref=e364]:
+                    - text: Pass an IP here (as a string) to bind to that address, or
+                    - code [ref=e365]: "null"
+                    - text: to let the OS decide.
+                  - paragraph [ref=e366]: Added in 4.0.0.
+                  - paragraph [ref=e367]:
+                    - text: Defaults to
+                    - code [ref=e368]: "null"
+                    - text: .
+                  - generic [ref=e369]:
+                    - heading "localPort" [level=3] [ref=e370]
+                    - 'link "Permalink: localPort" [ref=e371] [cursor=pointer]':
+                      - /url: "#localport"
+                  - paragraph [ref=e372]:
+                    - text: Pass a port here to bind to that port, or
+                    - code [ref=e373]: "null"
+                    - text: to let the OS decide.
+                  - paragraph [ref=e374]: Added in 4.0.0.
+                  - paragraph [ref=e375]:
+                    - text: Defaults to
+                    - code [ref=e376]: "null"
+                    - text: .
+                  - generic [ref=e377]:
+                    - heading "httpProxy" [level=3] [ref=e378]
+                    - 'link "Permalink: httpProxy" [ref=e379] [cursor=pointer]':
+                      - /url: "#httpproxy"
+                  - paragraph [ref=e380]:
+                    - text: Specify a URL here to use an HTTP proxy. For example,
+                    - code [ref=e381]: http://user:pass@1.2.3.4:8081
+                  - paragraph [ref=e382]: Added in 4.0.0.
+                  - generic [ref=e383]:
+                    - heading "socksProxy" [level=3] [ref=e384]
+                    - 'link "Permalink: socksProxy" [ref=e385] [cursor=pointer]':
+                      - /url: "#socksproxy"
+                  - paragraph [ref=e386]: Specify a URL here to use a SOCKS proxy. SOCKS4, SOCKS4a, and SOCKS5 are supported.
+                  - paragraph [ref=e387]:
+                    - text: "Example:"
+                    - code [ref=e388]: socks5://x1234567:kNRLnUDG46@proxy-nl.privateinternetaccess.com:1080
+                  - paragraph [ref=e389]: Added in 4.26.0.
+                  - generic [ref=e390]:
+                    - heading "protocol" [level=3] [ref=e391]
+                    - 'link "Permalink: protocol" [ref=e392] [cursor=pointer]':
+                      - /url: "#protocol"
+                  - paragraph [ref=e393]:
+                    - text: A value from
+                    - link "EConnectionProtocol" [ref=e394] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EConnectionProtocol.js
+                      - code [ref=e395]: EConnectionProtocol
+                    - text: .
+                  - paragraph [ref=e396]: Added in 4.0.0.
+                  - paragraph [ref=e397]:
+                    - text: Defaults to
+                    - code [ref=e398]: Auto
+                    - text: .
+                  - generic [ref=e399]:
+                    - heading "language" [level=3] [ref=e400]
+                    - 'link "Permalink: language" [ref=e401] [cursor=pointer]':
+                      - /url: "#language"
+                  - paragraph [ref=e402]:
+                    - text: Set this to the full name of a language (e.g. "english" or "spanish") to localize specific things within steam-user. Currently this is only used to localize
+                    - code [ref=e403]: rich_presence_string
+                    - text: in
+                    - link "user" [ref=e404] [cursor=pointer]:
+                      - /url: "#user"
+                      - code [ref=e405]: user
+                    - text: event data and in
+                    - code [ref=e406]: requestRichPresence
+                    - text: .
+                  - paragraph [ref=e407]: Added in 4.0.0.
+                  - paragraph [ref=e408]:
+                    - text: Defaults to
+                    - code [ref=e409]: english
+                    - text: .
+                  - generic [ref=e410]:
+                    - heading "webCompatibilityMode" [level=3] [ref=e411]
+                    - 'link "Permalink: webCompatibilityMode" [ref=e412] [cursor=pointer]':
+                      - /url: "#webcompatibilitymode"
+                  - paragraph [ref=e413]:
+                    - text: If you're having trouble connecting to Steam (e.g. through a firewall or a proxy), set this to
+                    - code [ref=e414]: "true"
+                    - text: . When in web compatibility mode, connections to Steam will always use WebSockets (the
+                    - code [ref=e415]: protocol
+                    - text: option will be ignored, and you will get a warning if you set it to
+                    - code [ref=e416]: TCP
+                    - text: ), and only Steam servers listening on port 443 will be considered.
+                  - paragraph [ref=e417]: Added in 4.6.0.
+                  - paragraph [ref=e418]:
+                    - text: Defaults to
+                    - code [ref=e419]: "false"
+                    - text: .
+                  - generic [ref=e420]:
+                    - heading "saveAppTickets" [level=3] [ref=e421]
+                    - 'link "Permalink: saveAppTickets" [ref=e422] [cursor=pointer]':
+                      - /url: "#saveapptickets"
+                  - paragraph [ref=e423]:
+                    - text: If true, then calls to
+                    - link "getAppOwnershipTicket" [ref=e424] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/Steam-App-Auth#getappownershipticketappid-callback
+                      - code [ref=e425]: getAppOwnershipTicket
+                    - text: will save ownership tickets to disk and will return cached tickets unless they are expired.
+                  - paragraph [ref=e426]: Added in 3.5.0.
+                  - paragraph [ref=e427]:
+                    - text: Defaults to
+                    - code [ref=e428]: "true"
+                    - text: .
+                  - generic [ref=e429]:
+                    - heading "renewRefreshTokens" [level=3] [ref=e430]
+                    - 'link "Permalink: renewRefreshTokens" [ref=e431] [cursor=pointer]':
+                      - /url: "#renewrefreshtokens"
+                  - paragraph [ref=e432]:
+                    - text: If true, then
+                    - code [ref=e433]: SteamUser
+                    - text: will attempt to renew your refresh token every time you call
+                    - link "logOn()" [ref=e434] [cursor=pointer]:
+                      - /url: "#logondetails"
+                      - code [ref=e435]: logOn()
+                    - text: by passing a refresh token. If renewal succeeds, the
+                    - link "refreshToken" [ref=e436] [cursor=pointer]:
+                      - /url: "#refreshtoken"
+                      - code [ref=e437]: refreshToken
+                    - text: event will be emitted, and the refresh token you used to log on will become invalid.
+                  - paragraph [ref=e438]: Added in 5.0.0.
+                  - paragraph [ref=e439]:
+                    - text: Defaults to
+                    - code [ref=e440]: "false"
+                    - text: .
+                  - generic [ref=e441]:
+                    - heading "Properties ^" [level=1] [ref=e442]:
+                      - text: Properties
+                      - link "^" [ref=e443] [cursor=pointer]:
+                        - /url: "#contents"
+                    - 'link "Permalink: Properties ^" [ref=e444] [cursor=pointer]':
+                      - /url: "#properties-"
+                  - generic [ref=e445]:
+                    - heading "steamID" [level=3] [ref=e446]
+                    - 'link "Permalink: steamID" [ref=e447] [cursor=pointer]':
+                      - /url: "#steamid"
+                  - paragraph [ref=e448]:
+                    - code [ref=e449]: "null"
+                    - text: if not connected, a
+                    - link "SteamID" [ref=e450] [cursor=pointer]:
+                      - /url: https://www.npmjs.com/package/steamid
+                      - code [ref=e451]: SteamID
+                    - text: containing your SteamID otherwise.
+                  - generic [ref=e452]:
+                    - heading "options" [level=3] [ref=e453]
+                    - 'link "Permalink: options" [ref=e454] [cursor=pointer]':
+                      - /url: "#options"
+                  - paragraph [ref=e455]:
+                    - text: An object containing options for this
+                    - code [ref=e456]: SteamUser
+                    - text: .
+                    - strong [ref=e457]: Read-only
+                    - text: ; use
+                    - code [ref=e458]: setOption
+                    - text: or
+                    - code [ref=e459]: setOptions
+                    - text: to change an option.
+                  - generic [ref=e460]:
+                    - heading "publicIP" [level=3] [ref=e461]
+                    - 'link "Permalink: publicIP" [ref=e462] [cursor=pointer]':
+                      - /url: "#publicip"
+                  - paragraph [ref=e463]:
+                    - strong [ref=e464]: v1.12.0 or later is required to use this property
+                  - paragraph [ref=e465]: Only defined if you're currently logged on. This is your public IP as reported by Steam, in "x.x.x.x" format.
+                  - generic [ref=e466]:
+                    - heading "cellID" [level=3] [ref=e467]
+                    - 'link "Permalink: cellID" [ref=e468] [cursor=pointer]':
+                      - /url: "#cellid"
+                  - paragraph [ref=e469]:
+                    - strong [ref=e470]: v1.12.0 or later is required to use this property
+                  - paragraph [ref=e471]: Only defined if you're currently logged on. This is your cell (region ID) on the Steam network.
+                  - generic [ref=e472]:
+                    - heading "vanityURL" [level=3] [ref=e473]
+                    - 'link "Permalink: vanityURL" [ref=e474] [cursor=pointer]':
+                      - /url: "#vanityurl"
+                  - paragraph [ref=e475]:
+                    - strong [ref=e476]: v3.7.0 or later is required to use this property
+                  - paragraph [ref=e477]:
+                    - text: Only defined if you're currently logged on. This is your vanity URL (the part that goes after
+                    - code [ref=e478]: /id/
+                    - text: in your profile URL). Falsy if you don't have one.
+                  - generic [ref=e479]:
+                    - heading "accountInfo" [level=3] [ref=e480]
+                    - 'link "Permalink: accountInfo" [ref=e481] [cursor=pointer]':
+                      - /url: "#accountinfo"
+                  - paragraph [ref=e482]:
+                    - text: An object containing information about your account.
+                    - code [ref=e483]: "null"
+                    - text: until
+                    - link "accountInfo" [ref=e484] [cursor=pointer]:
+                      - /url: "#accountinfo-1"
+                      - code [ref=e485]: accountInfo
+                    - text: is emitted.
+                  - list [ref=e486]:
+                    - listitem [ref=e487]:
+                      - code [ref=e488]: name
+                      - text: "- Your account's Steam (persona) name"
+                    - listitem [ref=e489]:
+                      - code [ref=e490]: country
+                      - text: "- The country code from which you're logging in (via GeoIP), e.g. \"US\""
+                    - listitem [ref=e491]:
+                      - code [ref=e492]: authedMachines
+                      - text: "- How many machines are authorized to login to your account with Steam Guard"
+                    - listitem [ref=e493]:
+                      - code [ref=e494]: flags
+                      - text: "- Your account's bitwise"
+                      - link "flags" [ref=e495] [cursor=pointer]:
+                        - /url: https://github.com/SteamRE/SteamKit/blob/b80cdf5249891d54c655e39262d8267c7b40b249/Resources/SteamLanguage/enums.steamd#L81-L113
+                    - listitem [ref=e496]:
+                      - code [ref=e497]: facebookID
+                      - text: "- If your account is linked with Facebook, this is your Facebook account ID"
+                    - listitem [ref=e498]:
+                      - code [ref=e499]: facebookName
+                      - text: "- If your account is linked with Facebook, this is your (real) name on Facebook"
+                  - generic [ref=e500]:
+                    - heading "emailInfo" [level=3] [ref=e501]
+                    - 'link "Permalink: emailInfo" [ref=e502] [cursor=pointer]':
+                      - /url: "#emailinfo"
+                  - paragraph [ref=e503]:
+                    - text: An object containing information about your account's email address.
+                    - code [ref=e504]: "null"
+                    - text: until
+                    - link "emailInfo" [ref=e505] [cursor=pointer]:
+                      - /url: "#emailinfo-1"
+                      - code [ref=e506]: emailInfo
+                    - text: is emitted.
+                  - list [ref=e507]:
+                    - listitem [ref=e508]:
+                      - code [ref=e509]: address
+                      - text: "- Your email address"
+                    - listitem [ref=e510]:
+                      - code [ref=e511]: validated
+                      - text: "-"
+                      - code [ref=e512]: "true"
+                      - text: if your email is validated,
+                      - code [ref=e513]: "false"
+                      - text: if not
+                  - generic [ref=e514]:
+                    - heading "limitations" [level=3] [ref=e515]
+                    - 'link "Permalink: limitations" [ref=e516] [cursor=pointer]':
+                      - /url: "#limitations"
+                  - paragraph [ref=e517]:
+                    - text: An object containing information about your account's limitations.
+                    - code [ref=e518]: "null"
+                    - text: until
+                    - link "accountLimitations" [ref=e519] [cursor=pointer]:
+                      - /url: "#accountlimitations"
+                      - code [ref=e520]: accountLimitations
+                    - text: is emitted.
+                  - list [ref=e521]:
+                    - listitem [ref=e522]:
+                      - code [ref=e523]: limited
+                      - text: "-"
+                      - code [ref=e524]: "true"
+                      - text: if your account is
+                      - link "limited" [ref=e525] [cursor=pointer]:
+                        - /url: https://support.steampowered.com/kb_article.php?ref=3330-IAGK-7663
+                      - text: ","
+                      - code [ref=e526]: "false"
+                      - text: if not
+                    - listitem [ref=e527]:
+                      - code [ref=e528]: communityBanned
+                      - text: "-"
+                      - code [ref=e529]: "true"
+                      - text: if your account is banned from Steam Community,
+                      - code [ref=e530]: "false"
+                      - text: if not
+                    - listitem [ref=e531]:
+                      - code [ref=e532]: locked
+                      - text: "-"
+                      - code [ref=e533]: "true"
+                      - text: if your account is
+                      - link "locked" [ref=e534] [cursor=pointer]:
+                        - /url: https://support.steampowered.com/kb_article.php?ref=6416-FHVM-3982
+                      - text: ","
+                      - code [ref=e535]: "false"
+                      - text: if not (accounts can also be locked by Support)
+                    - listitem [ref=e536]:
+                      - code [ref=e537]: canInviteFriends
+                      - text: "-"
+                      - code [ref=e538]: "true"
+                      - text: if your account can invite friends,
+                      - code [ref=e539]: "false"
+                      - text: if not
+                  - generic [ref=e540]:
+                    - heading "vac" [level=3] [ref=e541]
+                    - 'link "Permalink: vac" [ref=e542] [cursor=pointer]':
+                      - /url: "#vac"
+                  - paragraph [ref=e543]:
+                    - text: An object containing information about your account's VAC bans.
+                    - code [ref=e544]: "null"
+                    - text: until
+                    - link "vacBans" [ref=e545] [cursor=pointer]:
+                      - /url: "#vacbans"
+                      - code [ref=e546]: vacBans
+                    - text: is emitted.
+                  - list [ref=e547]:
+                    - listitem [ref=e548]:
+                      - code [ref=e549]: numBans
+                      - text: "- How many bans are registered on your account"
+                    - listitem [ref=e550]:
+                      - code [ref=e551]: appids
+                      - text: "- An array of AppIDs from which you're banned. Since each ban affects a range of AppIDs, some of the AppIDs in this array may not exist."
+                  - generic [ref=e552]:
+                    - heading "wallet" [level=3] [ref=e553]
+                    - 'link "Permalink: wallet" [ref=e554] [cursor=pointer]':
+                      - /url: "#wallet"
+                  - paragraph [ref=e555]:
+                    - text: An object containing information about your Steam Wallet.
+                    - code [ref=e556]: "null"
+                    - text: until
+                    - link "wallet" [ref=e557] [cursor=pointer]:
+                      - /url: "#wallet-1"
+                      - code [ref=e558]: wallet
+                    - text: is emitted.
+                  - list [ref=e559]:
+                    - listitem [ref=e560]:
+                      - code [ref=e561]: hasWallet
+                      - text: "-"
+                      - code [ref=e562]: "true"
+                      - text: if your account has a Steam Wallet,
+                      - code [ref=e563]: "false"
+                      - text: if not
+                    - listitem [ref=e564]:
+                      - code [ref=e565]: currency
+                      - text: "- The currency ID of your account's wallet (the enum of currencies is available as"
+                      - code [ref=e566]: SteamUser.ECurrencyCode
+                      - text: )
+                    - listitem [ref=e567]:
+                      - code [ref=e568]: balance
+                      - text: "- Your account's current wallet balance"
+                  - generic [ref=e569]:
+                    - heading "licenses" [level=3] [ref=e570]
+                    - 'link "Permalink: licenses" [ref=e571] [cursor=pointer]':
+                      - /url: "#licenses"
+                  - paragraph [ref=e572]:
+                    - text: An array containing license data for the packages which your Steam account owns.
+                    - code [ref=e573]: "null"
+                    - text: until
+                    - link "licenses" [ref=e574] [cursor=pointer]:
+                      - /url: "#licenses-1"
+                      - code [ref=e575]: licenses
+                    - text: is emitted.
+                  - generic [ref=e576]:
+                    - heading "gifts" [level=3] [ref=e577]
+                    - 'link "Permalink: gifts" [ref=e578] [cursor=pointer]':
+                      - /url: "#gifts"
+                  - paragraph [ref=e579]:
+                    - text: An array containing gifts and guest passes you've received but haven't accepted (to your library or to your inventory) or declined.
+                    - code [ref=e580]: "null"
+                    - text: until
+                    - link "gifts" [ref=e581] [cursor=pointer]:
+                      - /url: "#gifts-1"
+                      - code [ref=e582]: gifts
+                    - text: "is emitted. Each object in the array contains these properties:"
+                  - list [ref=e583]:
+                    - listitem [ref=e584]:
+                      - code [ref=e585]: gid
+                      - text: "- The ID of this gift/guest pass, as a string (it's a 64-bit number)"
+                    - listitem [ref=e586]:
+                      - code [ref=e587]: packageid
+                      - text: "- The ID of the package which this gift/guest pass will grant"
+                    - listitem [ref=e588]:
+                      - code [ref=e589]: TimeCreated
+                      - text: "- A"
+                      - code [ref=e590]: Date
+                      - text: object for when this gift was purchased or guest pass was granted
+                    - listitem [ref=e591]:
+                      - code [ref=e592]: TimeExpiration
+                      - text: "- A"
+                      - code [ref=e593]: Date
+                      - text: object for when this guest pass will expire (if it's a gift, this will be Mon Jan 18 2038 22:14:07 GMT-0500 (Eastern Standard Time))
+                    - listitem [ref=e594]:
+                      - code [ref=e595]: TimeSent
+                      - text: "- A"
+                      - code [ref=e596]: Date
+                      - text: object for when this gift/guest pass was sent to you
+                    - listitem [ref=e597]:
+                      - code [ref=e598]: TimeAcked
+                      - text: "- Appears to be the same as"
+                      - code [ref=e599]: TimeSent
+                    - listitem [ref=e600]:
+                      - code [ref=e601]: TimeRedeemed
+                      - text: "- Appears to always be"
+                      - code [ref=e602]: "null"
+                    - listitem [ref=e603]:
+                      - code [ref=e604]: RecipientAddress
+                      - text: "- Appears to always be an empty string"
+                    - listitem [ref=e605]:
+                      - code [ref=e606]: SenderAddress
+                      - text: "- Appears to always be an empty string"
+                    - listitem [ref=e607]:
+                      - code [ref=e608]: SenderName
+                      - text: "- The Steam display name of the user who sent you this gift"
+                  - generic [ref=e609]:
+                    - heading "users" [level=3] [ref=e610]
+                    - 'link "Permalink: users" [ref=e611] [cursor=pointer]':
+                      - /url: "#users"
+                  - paragraph [ref=e612]:
+                    - text: An object containing persona data about all Steam users we've encountered or requested data for. Key are 64-bit SteamIDs, and values are identical to the objects received in the
+                    - link "user" [ref=e613] [cursor=pointer]:
+                      - /url: "#user"
+                      - code [ref=e614]: user
+                    - text: event.
+                  - paragraph [ref=e615]:
+                    - text: This property may not be updated unless you set your instance to
+                    - link "online" [ref=e616] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: .
+                  - generic [ref=e617]:
+                    - heading "groups" [level=3] [ref=e618]
+                    - 'link "Permalink: groups" [ref=e619] [cursor=pointer]':
+                      - /url: "#groups"
+                  - paragraph [ref=e620]:
+                    - text: An object containing information about all Steam groups we've encountered. Keys are 64-bit SteamIDs, and values are identical to those received in the
+                    - link "group" [ref=e621] [cursor=pointer]:
+                      - /url: "#group"
+                      - code [ref=e622]: group
+                    - text: event.
+                  - paragraph [ref=e623]:
+                    - text: This property may not be updated unless you set your instance to
+                    - link "online" [ref=e624] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: .
+                  - generic [ref=e625]:
+                    - heading "chats" [level=3] [ref=e626]
+                    - 'link "Permalink: chats" [ref=e627] [cursor=pointer]':
+                      - /url: "#chats"
+                  - paragraph [ref=e628]: "An object containing information about all legacy chat rooms we're in. Keys are 64-bit SteamIDs, values are objects with this structure:"
+                  - list [ref=e629]:
+                    - listitem [ref=e630]:
+                      - code [ref=e631]: name
+                      - text: "- The name of the chat, or empty if it's a multi-user chat"
+                    - listitem [ref=e632]:
+                      - code [ref=e633]: private
+                      - text: "-"
+                      - code [ref=e634]: "true"
+                      - text: if only group members can join,
+                      - code [ref=e635]: "false"
+                      - text: if it's open to everyone
+                    - listitem [ref=e636]:
+                      - code [ref=e637]: invisibleToFriends
+                      - text: "-"
+                      - code [ref=e638]: "true"
+                      - text: if the chat is invisible to friends,
+                      - code [ref=e639]: "false"
+                      - text: if visible (unsure what this means at this time)
+                    - listitem [ref=e640]:
+                      - code [ref=e641]: officersOnlyChat
+                      - text: "-"
+                      - code [ref=e642]: "true"
+                      - text: if only group officers can chat right now,
+                      - code [ref=e643]: "false"
+                      - text: if everyone can
+                    - listitem [ref=e644]:
+                      - code [ref=e645]: unjoinable
+                      - text: "-"
+                      - code [ref=e646]: "true"
+                      - text: if the chat can't be joined,
+                      - code [ref=e647]: "false"
+                      - text: if it can (note that this doesn't necessary mean
+                      - strong [ref=e648]: your
+                      - text: effective access)
+                    - listitem [ref=e649]:
+                      - code [ref=e650]: members
+                      - text: "- An object whose keys are 64-bit SteamIDs of users in this chat room, and whose values are objects with this structure:"
+                      - list [ref=e651]:
+                        - listitem [ref=e652]:
+                          - code [ref=e653]: rank
+                          - text: "- A value from"
+                          - code [ref=e654]: EClanRank
+                        - listitem [ref=e655]:
+                          - code [ref=e656]: permissions
+                          - text: "- A bitstring of values in"
+                          - code [ref=e657]: EChatPermission
+                          - text: for the user's permissions in this chat
+                  - generic [ref=e658]:
+                    - heading "myFriends" [level=3] [ref=e659]
+                    - 'link "Permalink: myFriends" [ref=e660] [cursor=pointer]':
+                      - /url: "#myfriends"
+                  - paragraph [ref=e661]:
+                    - text: An object whose keys are 64-bit SteamIDs, and whose values are values from the
+                    - code [ref=e662]: EFriendRelationship
+                    - text: enum. Therefore, you can deduce your friends list from this object.
+                  - paragraph [ref=e663]:
+                    - text: When we get unfriended, instead of setting the value to
+                    - code [ref=e664]: EFriendRelationship.None
+                    - text: ", the key is deleted from the object entirely."
+                  - paragraph [ref=e665]:
+                    - text: This isn't populated after logon until
+                    - link "friendsList" [ref=e666] [cursor=pointer]:
+                      - /url: "#friendslist"
+                      - code [ref=e667]: friendsList
+                    - text: is emitted.
+                  - generic [ref=e668]:
+                    - heading "myGroups" [level=3] [ref=e669]
+                    - 'link "Permalink: myGroups" [ref=e670] [cursor=pointer]':
+                      - /url: "#mygroups"
+                  - paragraph [ref=e671]:
+                    - text: An object whose keys are 64-bit SteamIDs, and whose values are from the
+                    - code [ref=e672]: EClanRelationship
+                    - text: enum. Therefore, you can deduce which groups you're in from this object.
+                  - paragraph [ref=e673]:
+                    - text: When we leave a group, instead of setting the value to
+                    - code [ref=e674]: EClanRelationship.None
+                    - text: ", the key is deleted from the object entirely."
+                  - paragraph [ref=e675]:
+                    - text: This isn't populated after logon until
+                    - link "groupList" [ref=e676] [cursor=pointer]:
+                      - /url: "#grouplist"
+                      - code [ref=e677]: groupList
+                    - text: is emitted.
+                  - generic [ref=e678]:
+                    - heading "myFriendGroups" [level=3] [ref=e679]
+                    - 'link "Permalink: myFriendGroups" [ref=e680] [cursor=pointer]':
+                      - /url: "#myfriendgroups"
+                  - paragraph [ref=e681]:
+                    - strong [ref=e682]: v1.10.0 or later is required to use this property
+                  - paragraph [ref=e683]:
+                    - text: An object containing your friend groups (in the official client, these are called
+                    - emphasis [ref=e684]: tags
+                    - text: "). Keys are numeric group IDs, and objects as follows:"
+                  - list [ref=e685]:
+                    - listitem [ref=e686]:
+                      - code [ref=e687]: name
+                      - text: "- A"
+                      - code [ref=e688]: string
+                      - text: containing the name of the group.
+                    - listitem [ref=e689]:
+                      - code [ref=e690]: members
+                      - text: "- An array containing"
+                      - code [ref=e691]: SteamID
+                      - text: objects for the members of this friend group.
+                  - generic [ref=e692]:
+                    - heading "myNicknames" [level=3] [ref=e693]
+                    - 'link "Permalink: myNicknames" [ref=e694] [cursor=pointer]':
+                      - /url: "#mynicknames"
+                  - paragraph [ref=e695]:
+                    - strong [ref=e696]: v3.15.0 or later is required to use this property
+                  - paragraph [ref=e697]: An object containing the nicknames you have assigned to other users. Keys are numeric 64-bit SteamIDs, properties are strings containing that user's nickname.
+                  - paragraph [ref=e698]:
+                    - text: This is empty until
+                    - link "nicknameList" [ref=e699] [cursor=pointer]:
+                      - /url: "#nicknamelist"
+                      - code [ref=e700]: nicknameList
+                    - text: is emitted.
+                  - generic [ref=e701]:
+                    - heading "picsCache" [level=3] [ref=e702]
+                    - 'link "Permalink: picsCache" [ref=e703] [cursor=pointer]':
+                      - /url: "#picscache"
+                  - paragraph [ref=e704]:
+                    - strong [ref=e705]: v3.3.0 or later is required to use this property
+                  - paragraph [ref=e706]:
+                    - text: An object containing cached data about known apps and packages. Only useful if the
+                    - code [ref=e707]: enablePicsCache
+                    - text: option is
+                    - code [ref=e708]: "true"
+                    - text: .
+                  - list [ref=e709]:
+                    - listitem [ref=e710]:
+                      - code [ref=e711]: changenumber
+                      - text: "- The last known changenumber"
+                    - listitem [ref=e712]:
+                      - code [ref=e713]: apps
+                      - text: "- An object whose keys are AppIDs and values are objects identical to those returned by"
+                      - code [ref=e714]: getProductInfo
+                    - listitem [ref=e715]:
+                      - code [ref=e716]: packages
+                      - text: "- An object whose keys are PackageIDs and values are objects identical to those returned by"
+                      - code [ref=e717]: getProductInfo
+                  - generic [ref=e718]:
+                    - heading "chat" [level=3] [ref=e719]
+                    - 'link "Permalink: chat" [ref=e720] [cursor=pointer]':
+                      - /url: "#chat"
+                  - paragraph [ref=e721]:
+                    - strong [ref=e722]: v4.0.0 or later is required to use this property
+                  - paragraph [ref=e723]:
+                    - text: This is a
+                    - code [ref=e724]: SteamChatRoomClient
+                    - text: instance. Use this object to chat with friends and chat rooms.
+                  - paragraph [ref=e725]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e726] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e727]:
+                    - heading "playingState" [level=3] [ref=e728]
+                    - 'link "Permalink: playingState" [ref=e729] [cursor=pointer]':
+                      - /url: "#playingstate"
+                  - paragraph [ref=e730]:
+                    - strong [ref=e731]: v4.0.0 or later is required to use this property
+                  - paragraph [ref=e732]: "An object containing information about your current playing state. This object has these properties:"
+                  - list [ref=e733]:
+                    - listitem [ref=e734]:
+                      - code [ref=e735]: blocked
+                      - text: "-"
+                      - code [ref=e736]: "true"
+                      - text: if you're blocked from playing a game on this session (because a game is being played on this account using another logon session)
+                    - listitem [ref=e737]:
+                      - code [ref=e738]: appid
+                      - text: "- The AppID of the game you're playing, or"
+                      - code [ref=e739]: "0"
+                      - text: if you're not playing any game
+                  - generic [ref=e740]:
+                    - heading "packageName" [level=3] [ref=e741]
+                    - 'link "Permalink: packageName" [ref=e742] [cursor=pointer]':
+                      - /url: "#packagename"
+                  - paragraph [ref=e743]:
+                    - strong [ref=e744]: v4.2.0 or later is required to use this property
+                  - paragraph [ref=e745]:
+                    - text: Contains the name of this package. The value is always
+                    - code [ref=e746]: "\"steam-user\""
+                    - text: . This allows other modules to verify interoperability.
+                  - generic [ref=e747]:
+                    - heading "packageVersion" [level=3] [ref=e748]
+                    - 'link "Permalink: packageVersion" [ref=e749] [cursor=pointer]':
+                      - /url: "#packageversion"
+                  - paragraph [ref=e750]:
+                    - strong [ref=e751]: v4.2.0 or later is required to use this property
+                  - paragraph [ref=e752]:
+                    - text: Contains the version of this package. For example,
+                    - code [ref=e753]: "\"4.2.0\""
+                    - text: . This allows other modules to verify interoperability.
+                  - generic [ref=e754]:
+                    - heading "Methods ^" [level=1] [ref=e755]:
+                      - text: Methods
+                      - link "^" [ref=e756] [cursor=pointer]:
+                        - /url: "#contents"
+                    - 'link "Permalink: Methods ^" [ref=e757] [cursor=pointer]':
+                      - /url: "#methods-"
+                  - generic [ref=e758]:
+                    - heading "Constructor(options)" [level=3] [ref=e759]
+                    - 'link "Permalink: Constructor(options)" [ref=e760] [cursor=pointer]':
+                      - /url: "#constructoroptions"
+                  - list [ref=e761]:
+                    - listitem [ref=e762]:
+                      - code [ref=e763]: options
+                      - text: "- An optional object containing zero or more"
+                      - link "options" [ref=e764] [cursor=pointer]:
+                        - /url: "#options-"
+                      - text: to set for this
+                      - code [ref=e765]: SteamUser
+                      - text: .
+                  - paragraph [ref=e766]:
+                    - text: Constructs a new
+                    - code [ref=e767]: SteamUser
+                    - text: .
+                  - paragraph [ref=e768]:
+                    - text: Prior to v4.0.0, it was possible to pass a SteamClient instance as the first argument to this constructor. This functionality was removed in v4.0.0.
+                    - link "See the full list of v4 changes." [ref=e769] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/releases/tag/v4.0.0
+                  - generic [ref=e770]:
+                    - heading "setOption(option, value)" [level=3] [ref=e771]
+                    - 'link "Permalink: setOption(option, value)" [ref=e772] [cursor=pointer]':
+                      - /url: "#setoptionoption-value"
+                  - list [ref=e773]:
+                    - listitem [ref=e774]:
+                      - code [ref=e775]: option
+                      - text: "- The name of the option to set"
+                    - listitem [ref=e776]:
+                      - code [ref=e777]: value
+                      - text: "- The value to set for this option"
+                  - paragraph [ref=e778]:
+                    - text: Changes the value of an
+                    - link "option" [ref=e779] [cursor=pointer]:
+                      - /url: "#options-"
+                    - text: .
+                  - generic [ref=e780]:
+                    - heading "setOptions(options)" [level=3] [ref=e781]
+                    - 'link "Permalink: setOptions(options)" [ref=e782] [cursor=pointer]':
+                      - /url: "#setoptionsoptions"
+                  - list [ref=e783]:
+                    - listitem [ref=e784]:
+                      - code [ref=e785]: options
+                      - text: "- An object containing zero or more"
+                      - link "options" [ref=e786] [cursor=pointer]:
+                        - /url: "#options-"
+                      - text: .
+                  - generic [ref=e787]:
+                    - heading "logOn([details])" [level=3] [ref=e788]
+                    - 'link "Permalink: logOn([details])" [ref=e789] [cursor=pointer]':
+                      - /url: "#logondetails"
+                  - list [ref=e790]:
+                    - listitem [ref=e791]:
+                      - code [ref=e792]: details
+                      - text: "- An object containing details for this logon"
+                      - list [ref=e793]:
+                        - listitem [ref=e794]:
+                          - code [ref=e795]: anonymous
+                          - text: "- Pass"
+                          - code [ref=e796]: "true"
+                          - text: if you want to log into an anonymous account, omit or pass
+                          - code [ref=e797]: "false"
+                          - text: if not
+                        - listitem [ref=e798]:
+                          - code [ref=e799]: refreshToken
+                          - text: "- A refresh token,"
+                          - link "see below" [ref=e800] [cursor=pointer]:
+                            - /url: "#using-refresh-tokens"
+                        - listitem [ref=e801]:
+                          - code [ref=e802]: accountName
+                          - text: "- If logging into a user account, the account's name"
+                        - listitem [ref=e803]:
+                          - code [ref=e804]: password
+                          - text: "- If logging into an account without a refresh token or web logon token, the account's password"
+                        - listitem [ref=e805]:
+                          - code [ref=e806]: machineAuthToken
+                          - text: "- If logging into an account that has email Steam Guard using the account name and password, pass a valid machine auth token to avoid needing to provide an"
+                          - code [ref=e807]: authCode
+                          - text: . This is only necessary in advanced cases, as steam-user
+                          - link "will take care of this for you by default" [ref=e808] [cursor=pointer]:
+                            - /url: "#machine-auth-tokens"
+                        - listitem [ref=e809]:
+                          - code [ref=e810]: webLogonToken
+                          - text: "- If logging into an account with a"
+                          - link "client logon token obtained from the web" [ref=e811] [cursor=pointer]:
+                            - /url: https://github.com/DoctorMcKay/node-steamcommunity/wiki/SteamCommunity#getclientlogontokencallback
+                          - text: ", this is the token"
+                        - listitem [ref=e812]:
+                          - code [ref=e813]: steamID
+                          - text: "- If logging into an account with a client logon token obtained from the web, this is your account's SteamID, as a string or a"
+                          - code [ref=e814]: SteamID
+                          - text: object
+                        - listitem [ref=e815]:
+                          - code [ref=e816]: authCode
+                          - text: "- If you have a Steam Guard email code, you can provide it here. You might not need to, see the"
+                          - link "steamGuard" [ref=e817] [cursor=pointer]:
+                            - /url: "#steamguard"
+                            - code [ref=e818]: steamGuard
+                          - text: event. (Added in 1.9.0)
+                        - listitem [ref=e819]:
+                          - code [ref=e820]: twoFactorCode
+                          - text: "- If you have a Steam Guard mobile two-factor authentication code, you can provide it here. You might not need to, see the"
+                          - link "steamGuard" [ref=e821] [cursor=pointer]:
+                            - /url: "#steamguard"
+                            - code [ref=e822]: steamGuard
+                          - text: event. (Added in 1.9.0)
+                        - listitem [ref=e823]:
+                          - code [ref=e824]: logonID
+                          - text: "- A 32-bit integer to identify this login. The official Steam client derives this from your machine's private IP (it's the"
+                          - code [ref=e825]: obfuscated_private_ip
+                          - text: field in
+                          - code [ref=e826]: CMsgClientLogOn
+                          - text: ). If you try to logon twice to the same account from the same public IP with the same
+                          - code [ref=e827]: logonID
+                          - text: ", the first session will be kicked with reason"
+                          - code [ref=e828]: SteamUser.EResult.LogonSessionReplaced
+                          - text: . Defaults to
+                          - code [ref=e829]: "0"
+                          - text: if not specified.
+                          - list [ref=e830]:
+                            - listitem [ref=e831]:
+                              - text: As of v4.13.0, this can also be an IPv4 address as a string, in dotted-decimal notation (e.g.
+                              - code [ref=e832]: "\"192.168.1.5\""
+                              - text: )
+                        - listitem [ref=e833]:
+                          - code [ref=e834]: machineName
+                          - text: "- A string containing the name of this machine that you want to report to Steam. This will be displayed on steamcommunity.com when you view your games list (when logged in)."
+                        - listitem [ref=e835]:
+                          - code [ref=e836]: clientOS
+                          - text: "- A"
+                          - link "number" [ref=e837] [cursor=pointer]:
+                            - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/enums/EOSType.js
+                          - text: to identify your client OS. Auto-detected if you don't provide one.
+                  - paragraph [ref=e838]:
+                    - strong [ref=e839]:
+                      - text: v3.11.0 or later is required to use
+                      - code [ref=e840]: machineName
+                      - text: .
+                    - strong [ref=e841]:
+                      - text: v4.3.0 or later is required to use
+                      - code [ref=e842]: webLogonToken
+                      - text: .
+                    - strong [ref=e843]:
+                      - text: v4.25.0 or later is required to use
+                      - code [ref=e844]: refreshToken
+                      - text: .
+                    - strong [ref=e845]:
+                      - text: v4.29.0 or later is required to use
+                      - code [ref=e846]: machineAuthToken
+                      - text: .
+                  - paragraph [ref=e847]:
+                    - text: Logs onto Steam. Omit the
+                    - code [ref=e848]: details
+                    - text: object if you wish to login to an anonymous user account.
+                  - paragraph [ref=e849]: "There are five ways to log onto Steam:"
+                  - list [ref=e850]:
+                    - listitem [ref=e851]:
+                      - text: Anonymously
+                      - list [ref=e852]:
+                        - listitem [ref=e853]:
+                          - text: Pass
+                          - code [ref=e854]: "anonymous: true"
+                          - text: to log onto an anonymous user account
+                        - listitem [ref=e855]:
+                          - text: "These properties are optional:"
+                          - list [ref=e856]:
+                            - listitem [ref=e857]:
+                              - code [ref=e858]: machineName
+                            - listitem [ref=e859]:
+                              - code [ref=e860]: clientOS
+                            - listitem [ref=e861]:
+                              - emphasis [ref=e862]:
+                                - text: All other properties
+                                - strong [ref=e863]: must not
+                                - text: be provided
+                        - listitem [ref=e864]:
+                          - text: In versions of steam-user prior to 4.27.0, logging on anonymously was accomplished by simply omitting
+                          - code [ref=e865]: refreshToken
+                          - text: and
+                          - code [ref=e866]: accountName
+                          - text: (or omitting the
+                          - code [ref=e867]: details
+                          - text: object entirely). If neither property was set then steam-user would default to logging on anonymously. This is still current behavior, but logging on in this manner is now deprecated. If you now call
+                          - code [ref=e868]: logOn()
+                          - text: without providing a
+                          - code [ref=e869]: refreshToken
+                          - text: or
+                          - code [ref=e870]: accountName
+                          - text: and without specifying
+                          - code [ref=e871]: "anonymous: true"
+                          - text: ", then steam-user will raise a warning and then log on anonymously."
+                    - listitem [ref=e872]:
+                      - text: Individually using a refresh token
+                      - strong [ref=e873]: (recommended)
+                      - list [ref=e874]:
+                        - listitem [ref=e875]:
+                          - text: "These properties are required:"
+                          - list [ref=e876]:
+                            - listitem [ref=e877]:
+                              - code [ref=e878]: refreshToken
+                        - listitem [ref=e879]:
+                          - text: "These properties are optional:"
+                          - list [ref=e880]:
+                            - listitem [ref=e881]:
+                              - code [ref=e882]: steamID
+                              - text: "- If provided, steam-user will check to make sure that the provided"
+                              - code [ref=e883]: refreshToken
+                              - text: matches this SteamID. If SteamIDs don't match, the app will crash.
+                            - listitem [ref=e884]:
+                              - code [ref=e885]: logonID
+                              - text: "- Defaults to 0 if not specified."
+                            - listitem [ref=e886]:
+                              - code [ref=e887]: machineName
+                              - text: "- Defaults to empty string if not specified."
+                            - listitem [ref=e888]:
+                              - code [ref=e889]: clientOS
+                              - text: "- Defaults to an auto-detected value if not specified."
+                        - listitem [ref=e890]:
+                          - text: "These properties must not be provided:"
+                          - list [ref=e891]:
+                            - listitem [ref=e892]:
+                              - code [ref=e893]: accountName
+                            - listitem [ref=e894]:
+                              - code [ref=e895]: password
+                            - listitem [ref=e896]:
+                              - code [ref=e897]: machineAuthToken
+                            - listitem [ref=e898]:
+                              - code [ref=e899]: webLogonToken
+                            - listitem [ref=e900]:
+                              - code [ref=e901]: authCode
+                            - listitem [ref=e902]:
+                              - code [ref=e903]: twoFactorCode
+                    - listitem [ref=e904]:
+                      - text: Individually using account name and password
+                      - list [ref=e905]:
+                        - listitem [ref=e906]:
+                          - text: "These properties are required:"
+                          - list [ref=e907]:
+                            - listitem [ref=e908]:
+                              - code [ref=e909]: accountName
+                            - listitem [ref=e910]:
+                              - code [ref=e911]: password
+                        - listitem [ref=e912]:
+                          - text: "These properties are optional:"
+                          - list [ref=e913]:
+                            - listitem [ref=e914]:
+                              - code [ref=e915]: machineAuthToken
+                              - text: "- Specify if you are logged into an account with email Steam Guard and you have a valid machine token"
+                            - listitem [ref=e916]:
+                              - code [ref=e917]: authCode
+                              - text: "- Specify if you are using an email Steam Guard code."
+                            - listitem [ref=e918]:
+                              - code [ref=e919]: twoFactorCode
+                              - text: "- Specify if you are using a TOTP two-factor code (required if your account has 2FA enabled)."
+                            - listitem [ref=e920]:
+                              - code [ref=e921]: logonID
+                              - text: "- Defaults to 0 if not specified."
+                            - listitem [ref=e922]:
+                              - code [ref=e923]: machineName
+                              - text: "- Defaults to empty string if not specified."
+                            - listitem [ref=e924]:
+                              - code [ref=e925]: clientOS
+                              - text: "- Defaults to an auto-detected value if not specified."
+                        - listitem [ref=e926]:
+                          - text: "These properties must not be provided:"
+                          - list [ref=e927]:
+                            - listitem [ref=e928]:
+                              - code [ref=e929]: webLogonToken
+                            - listitem [ref=e930]:
+                              - code [ref=e931]: steamID
+                    - listitem [ref=e932]:
+                      - text: Individually using account name and
+                      - link "client logon token obtained from the web" [ref=e933] [cursor=pointer]:
+                        - /url: https://github.com/DoctorMcKay/node-steamcommunity/wiki/SteamCommunity#getclientlogontokencallback
+                      - text: (deprecated)
+                      - list [ref=e934]:
+                        - listitem [ref=e935]:
+                          - strong [ref=e936]: "NOTE:"
+                          - text: If you log on this way,
+                          - link "webSession" [ref=e937] [cursor=pointer]:
+                            - /url: "#websession"
+                            - code [ref=e938]: webSession
+                          - text: will
+                          - strong [ref=e939]: NOT
+                          - text: be emitted automatically, and you will need to use
+                          - link "webLogOn()" [ref=e940] [cursor=pointer]:
+                            - /url: "#weblogon"
+                            - code [ref=e941]: webLogOn()
+                          - text: to get a web session.
+                        - listitem [ref=e942]:
+                          - text: "These properties are required:"
+                          - list [ref=e943]:
+                            - listitem [ref=e944]:
+                              - code [ref=e945]: accountName
+                            - listitem [ref=e946]:
+                              - code [ref=e947]: webLogonToken
+                            - listitem [ref=e948]:
+                              - code [ref=e949]: steamID
+                        - listitem [ref=e950]:
+                          - text: "These properties must not be provided:"
+                          - list [ref=e951]:
+                            - listitem [ref=e952]:
+                              - code [ref=e953]: password
+                            - listitem [ref=e954]:
+                              - code [ref=e955]: machineAuthToken
+                            - listitem [ref=e956]:
+                              - code [ref=e957]: authCode
+                            - listitem [ref=e958]:
+                              - code [ref=e959]: twoFactorCode
+                            - listitem [ref=e960]:
+                              - code [ref=e961]: logonID
+                            - listitem [ref=e962]:
+                              - code [ref=e963]: machineName
+                            - listitem [ref=e964]:
+                              - code [ref=e965]: clientOS
+                  - generic [ref=e966]:
+                    - heading "Using Refresh Tokens" [level=4] [ref=e967]
+                    - 'link "Permalink: Using Refresh Tokens" [ref=e968] [cursor=pointer]':
+                      - /url: "#using-refresh-tokens"
+                  - paragraph [ref=e969]:
+                    - text: The Steam client uses refresh tokens when logging on. You can obtain a refresh token using the
+                    - link "steam-session module" [ref=e970] [cursor=pointer]:
+                      - /url: https://www.npmjs.com/package/steam-session
+                    - text: ", or you can log on to steam-user using your account name and password as normal. When logging on using your account name and password, steam-user will internally fetch a refresh token, emit the"
+                    - link "refreshToken" [ref=e971] [cursor=pointer]:
+                      - /url: "#refreshtoken"
+                      - code [ref=e972]: refreshToken
+                    - text: event, and then use that token to log on to Steam.
+                  - paragraph [ref=e973]:
+                    - text: As of 2022-09-03, refresh tokens are JWTs that are valid for ~200 days. You can keep using the same refresh token to log on until it expires. You can find out when a token expires by
+                    - link "decoding it" [ref=e974] [cursor=pointer]:
+                      - /url: https://www.npmjs.com/search?q=jwt
+                    - text: and checking the
+                    - code [ref=e975]: exp
+                    - text: property, which is a Unix timestamp indicating when the token expires.
+                  - paragraph [ref=e976]: If you attempt to log on using a refresh token that isn't valid for use with client logins, the app will crash with a relevant error message.
+                  - generic [ref=e977]:
+                    - heading "Machine Auth Tokens" [level=4] [ref=e978]
+                    - 'link "Permalink: Machine Auth Tokens" [ref=e979] [cursor=pointer]':
+                      - /url: "#machine-auth-tokens"
+                  - paragraph [ref=e980]:
+                    - text: When using email Steam Guard,
+                    - emphasis [ref=e981]: machine auth tokens
+                    - text: are used to remember a device, in order to bypass the requirement to provide a code every time you login. By default, steam-user will automatically save your machine auth tokens in your
+                    - link "data directory" [ref=e982] [cursor=pointer]:
+                      - /url: "#datadirectory"
+                    - text: ", but you can also manage them yourself by listening for the"
+                    - link "machineAuthToken" [ref=e983] [cursor=pointer]:
+                      - /url: "#machineauthtoken"
+                      - code [ref=e984]: machineAuthToken
+                    - text: event and providing the token as a
+                    - code [ref=e985]: machineAuthToken
+                    - text: property when you log on.
+                  - generic [ref=e986]:
+                    - heading "logOff()" [level=3] [ref=e987]
+                    - 'link "Permalink: logOff()" [ref=e988] [cursor=pointer]':
+                      - /url: "#logoff"
+                  - paragraph [ref=e989]: Logs you off of Steam and closes the connection.
+                  - generic [ref=e990]:
+                    - heading "relog()" [level=3] [ref=e991]
+                    - 'link "Permalink: relog()" [ref=e992] [cursor=pointer]':
+                      - /url: "#relog"
+                  - paragraph [ref=e993]:
+                    - strong [ref=e994]: v3.18.0 or later is required to use this method
+                  - paragraph [ref=e995]: "Logs you off of Steam and then immediately back on. This can only be used if one of the following criteria are met:"
+                  - list [ref=e996]:
+                    - listitem [ref=e997]: You're logged into an anonymous account
+                    - listitem [ref=e998]: You're logged into an individual account and you logged in using an account name and password
+                    - listitem [ref=e999]:
+                      - text: You're logged into an individual account and you used a
+                      - code [ref=e1000]: refreshToken
+                      - text: to log on
+                  - paragraph [ref=e1001]:
+                    - text: Attempts to call this method under any other circumstance will result in an
+                    - code [ref=e1002]: Error
+                    - text: being thrown and nothing else will happen.
+                  - paragraph [ref=e1003]:
+                    - text: When used,
+                    - code [ref=e1004]: disconnected
+                    - text: and then
+                    - code [ref=e1005]: loggedOn
+                    - text: will be emitted in succession. This is essentially the same as using
+                    - code [ref=e1006]: logOff()
+                    - text: and then calling
+                    - code [ref=e1007]: logOn()
+                    - text: immediately in the
+                    - code [ref=e1008]: disconnected
+                    - text: event callback.
+                  - generic [ref=e1009]:
+                    - heading "webLogOn()" [level=3] [ref=e1010]
+                    - 'link "Permalink: webLogOn()" [ref=e1011] [cursor=pointer]':
+                      - /url: "#weblogon"
+                  - paragraph [ref=e1012]:
+                    - code [ref=e1013]: SteamUser
+                    - text: will automatically log onto steamcommunity.com when a successful connection to Steam is established (as an individual user), but you can call
+                    - code [ref=e1014]: webLogOn()
+                    - text: to create a new session if your old one expires or becomes invalid.
+                  - paragraph [ref=e1015]:
+                    - text: Listen for the
+                    - link "webSession" [ref=e1016] [cursor=pointer]:
+                      - /url: "#websession"
+                      - code [ref=e1017]: webSession
+                    - text: event to get your cookies.
+                  - generic [ref=e1018]:
+                    - heading "requestValidationEmail([callback])" [level=3] [ref=e1019]
+                    - 'link "Permalink: requestValidationEmail([callback])" [ref=e1020] [cursor=pointer]':
+                      - /url: "#requestvalidationemailcallback"
+                  - list [ref=e1021]:
+                    - listitem [ref=e1022]:
+                      - code [ref=e1023]: callback
+                      - text: "- Optional. Called when a response is available"
+                      - list [ref=e1024]:
+                        - listitem [ref=e1025]:
+                          - code [ref=e1026]: err
+                          - text: "- An"
+                          - code [ref=e1027]: Error
+                          - text: object on failure, or
+                          - code [ref=e1028]: "null"
+                          - text: on success
+                  - paragraph [ref=e1029]: Requests Steam to send you a validation email to your registered email address.
+                  - generic [ref=e1030]:
+                    - heading "enableTwoFactor(callback)" [level=3] [ref=e1031]
+                    - 'link "Permalink: enableTwoFactor(callback)" [ref=e1032] [cursor=pointer]':
+                      - /url: "#enabletwofactorcallback"
+                  - list [ref=e1033]:
+                    - listitem [ref=e1034]:
+                      - code [ref=e1035]: callback
+                      - text: "- Required. Called when the activation email or SMS has been sent."
+                      - list [ref=e1036]:
+                        - listitem [ref=e1037]:
+                          - code [ref=e1038]: err
+                          - text: "- An"
+                          - code [ref=e1039]: Error
+                          - text: object on failure, or
+                          - code [ref=e1040]: "null"
+                          - text: on success
+                        - listitem [ref=e1041]:
+                          - code [ref=e1042]: response
+                          - text: "- An object containing the response data"
+                  - paragraph [ref=e1043]:
+                    - strong [ref=e1044]: v2.0.0 or later is required to use this method
+                  - paragraph [ref=e1045]: Starts the process to turn on TOTP for your account.
+                  - paragraph [ref=e1046]:
+                    - text: If you have a phone number linked with your account, then you'll be sent an SMS with an activation code. Otherwise, you'll receive the activation code by email. You'll need to provide the activation code to
+                    - code [ref=e1047]: finalizeTwoFactor
+                    - text: .
+                  - paragraph [ref=e1048]:
+                    - strong [ref=e1049]:
+                      - text: You should save the entire
+                      - code [ref=e1050]: response
+                      - text: object somewhere secure.
+                    - text: You can use
+                    - code [ref=e1051]: JSON.stringify
+                    - text: on it safely.
+                  - paragraph [ref=e1052]:
+                    - text: Properties of note in the
+                    - code [ref=e1053]: response
+                    - text: "object:"
+                  - list [ref=e1054]:
+                    - listitem [ref=e1055]:
+                      - code [ref=e1056]: status
+                      - text: "- A value from"
+                      - code [ref=e1057]: EResult
+                      - text: . If this is not
+                      - code [ref=e1058]: OK
+                      - text: (1), then the request failed.
+                    - listitem [ref=e1059]:
+                      - code [ref=e1060]: shared_secret
+                      - text: "- This is your secret that's used for two-factor authentication."
+                    - listitem [ref=e1061]:
+                      - code [ref=e1062]: identity_secret
+                      - text: "- This is your secret that's used for trade confirmation."
+                    - listitem [ref=e1063]:
+                      - code [ref=e1064]: revocation_code
+                      - text: "- You will need this in the future to disable two-factor authentication."
+                  - generic [ref=e1065]:
+                    - heading "finalizeTwoFactor(secret, activationCode, callback)" [level=3] [ref=e1066]
+                    - 'link "Permalink: finalizeTwoFactor(secret, activationCode, callback)" [ref=e1067] [cursor=pointer]':
+                      - /url: "#finalizetwofactorsecret-activationcode-callback"
+                  - list [ref=e1068]:
+                    - listitem [ref=e1069]:
+                      - code [ref=e1070]: secret
+                      - text: "- A"
+                      - code [ref=e1071]: Buffer
+                      - text: containing your shared secret
+                    - listitem [ref=e1072]:
+                      - code [ref=e1073]: activationCode
+                      - text: "- A"
+                      - code [ref=e1074]: string
+                      - text: containing the activation code you got in your SMS or email
+                    - listitem [ref=e1075]:
+                      - code [ref=e1076]: callback
+                      - text: "- Required."
+                      - list [ref=e1077]:
+                        - listitem [ref=e1078]:
+                          - code [ref=e1079]: err
+                          - text: "- An"
+                          - code [ref=e1080]: Error
+                          - text: object on failure, or
+                          - code [ref=e1081]: "null"
+                          - text: on success
+                  - paragraph [ref=e1082]:
+                    - strong [ref=e1083]: v2.0.0 or later is required to use this method
+                  - paragraph [ref=e1084]:
+                    - text: Finishes the process of enabling TOTP two-factor authentication for your account. You can use
+                    - link "steam-totp" [ref=e1085] [cursor=pointer]:
+                      - /url: https://www.npmjs.com/package/steam-totp
+                      - code [ref=e1086]: steam-totp
+                    - text: in the future when logging on to get a code.
+                  - paragraph [ref=e1087]:
+                    - strong [ref=e1088]:
+                      - text: If TOTP two-factor authentication is enabled, a code will be required
+                      - emphasis [ref=e1089]: on every login
+                      - text: unless a refresh token is used.
+                  - generic [ref=e1090]:
+                    - heading "getSteamGuardDetails(callback)" [level=3] [ref=e1091]
+                    - 'link "Permalink: getSteamGuardDetails(callback)" [ref=e1092] [cursor=pointer]':
+                      - /url: "#getsteamguarddetailscallback"
+                  - list [ref=e1093]:
+                    - listitem [ref=e1094]:
+                      - code [ref=e1095]: callback
+                      - text: "- A function to be called when the requested data is available"
+                      - list [ref=e1096]:
+                        - listitem [ref=e1097]:
+                          - code [ref=e1098]: err
+                          - text: "- An"
+                          - code [ref=e1099]: Error
+                          - text: object on failure, or
+                          - code [ref=e1100]: "null"
+                          - text: on success
+                        - listitem [ref=e1101]:
+                          - code [ref=e1102]: isSteamGuardEnabled
+                          - text: "-"
+                          - code [ref=e1103]: "true"
+                          - text: if Steam Guard is enabled for your account,
+                          - code [ref=e1104]: "false"
+                          - text: if not
+                        - listitem [ref=e1105]:
+                          - code [ref=e1106]: timestampSteamGuardEnabled
+                          - text: "- A"
+                          - code [ref=e1107]: Date
+                          - text: object representing when Steam Guard was enabled for your account, or
+                          - code [ref=e1108]: "null"
+                          - text: if not available
+                        - listitem [ref=e1109]:
+                          - code [ref=e1110]: timestampMachineSteamGuardEnabled
+                          - text: "- A"
+                          - code [ref=e1111]: Date
+                          - text: object representing when your current machine was authorized with Steam Guard, or
+                          - code [ref=e1112]: "null"
+                          - text: if not available
+                        - listitem [ref=e1113]:
+                          - code [ref=e1114]: canTrade
+                          - text: "-"
+                          - code [ref=e1115]: "true"
+                          - text: if Steam Guard will allow you to trade,
+                          - code [ref=e1116]: "false"
+                          - text: if not. You may still be blocked by a trade ban or another trading limitation.
+                        - listitem [ref=e1117]:
+                          - code [ref=e1118]: timestampTwoFactorEnabled
+                          - text: "- A"
+                          - code [ref=e1119]: Date
+                          - text: object representing when the Steam Guard Mobile Authenticator was enabled for your account, or
+                          - code [ref=e1120]: "null"
+                          - text: if not enabled
+                        - listitem [ref=e1121]:
+                          - code [ref=e1122]: isPhoneVerified
+                          - text: "-"
+                          - code [ref=e1123]: "true"
+                          - text: if your account has a linked phone,
+                          - code [ref=e1124]: "false"
+                          - text: if not
+                  - paragraph [ref=e1125]:
+                    - strong [ref=e1126]:
+                      - text: v1.11.0 or later is required to use this method.
+                      - text: v1.12.0 or later is required to use
+                      - code [ref=e1127]: canTrade
+                      - text: .
+                      - text: v3.3.3 or later is required to use
+                      - code [ref=e1128]: timestampTwoFactorEnabled
+                      - text: .
+                      - text: v3.5.0 or later is required to use
+                      - code [ref=e1129]: isPhoneVerified
+                      - text: .
+                  - paragraph [ref=e1130]: Requests details about your account's Steam Guard status. This could be used to see if your account passes the Steam Guard trading requirements.
+                  - paragraph [ref=e1131]:
+                    - text: In order to trade,
+                    - strong [ref=e1132]: all
+                    - text: "of the following must be true:"
+                  - list [ref=e1133]:
+                    - listitem [ref=e1134]:
+                      - code [ref=e1135]: isSteamGuardEnabled
+                      - text: must be
+                      - code [ref=e1136]: "true"
+                      - text: (account-level restriction)
+                    - listitem [ref=e1137]:
+                      - code [ref=e1138]: timestampSteamGuardEnabled
+                      - text: must be at least 15 days ago (account-level restriction)
+                    - listitem [ref=e1139]:
+                      - text: ONE of
+                      - code [ref=e1140]: timestampMachineSteamGuardEnabled
+                      - text: OR
+                      - code [ref=e1141]: timestampTwoFactorEnabled
+                      - text: must be at least 7 days ago
+                  - generic [ref=e1142]:
+                    - heading "getCredentialChangeTimes(callback)" [level=3] [ref=e1143]
+                    - 'link "Permalink: getCredentialChangeTimes(callback)" [ref=e1144] [cursor=pointer]':
+                      - /url: "#getcredentialchangetimescallback"
+                  - list [ref=e1145]:
+                    - listitem [ref=e1146]:
+                      - code [ref=e1147]: callback
+                      - text: "- A function to be called when the requested data is available"
+                      - list [ref=e1148]:
+                        - listitem [ref=e1149]:
+                          - code [ref=e1150]: err
+                          - text: "- An"
+                          - code [ref=e1151]: Error
+                          - text: object on failure, or
+                          - code [ref=e1152]: "null"
+                          - text: on success
+                        - listitem [ref=e1153]:
+                          - code [ref=e1154]: timestampLastPasswordChange
+                          - text: "- A"
+                          - code [ref=e1155]: Date
+                          - text: object representing when your password was last changed, or
+                          - code [ref=e1156]: "null"
+                          - text: if never changed
+                        - listitem [ref=e1157]:
+                          - code [ref=e1158]: timestampLastPasswordReset
+                          - text: "- A"
+                          - code [ref=e1159]: Date
+                          - text: object representing when your password was last
+                          - emphasis [ref=e1160]: reset
+                          - text: via the "forgot your password" utility, or
+                          - code [ref=e1161]: "null"
+                          - text: if never reset
+                        - listitem [ref=e1162]:
+                          - code [ref=e1163]: timestampLastEmailChange
+                          - text: "- A"
+                          - code [ref=e1164]: Date
+                          - text: object representing when your email address was last changed, or
+                          - code [ref=e1165]: "null"
+                          - text: if never changed
+                  - paragraph [ref=e1166]:
+                    - strong [ref=e1167]: v3.10.0 or later is required to use this method
+                  - paragraph [ref=e1168]: Gets when you last changed various account credentials.
+                  - generic [ref=e1169]:
+                    - heading "getAuthSecret(callback)" [level=3] [ref=e1170]
+                    - 'link "Permalink: getAuthSecret(callback)" [ref=e1171] [cursor=pointer]':
+                      - /url: "#getauthsecretcallback"
+                  - list [ref=e1172]:
+                    - listitem [ref=e1173]:
+                      - code [ref=e1174]: callback
+                      - text: "- A function to be called when the requested data is available"
+                      - list [ref=e1175]:
+                        - listitem [ref=e1176]:
+                          - code [ref=e1177]: err
+                          - text: "- An"
+                          - code [ref=e1178]: Error
+                          - text: object on failure, or
+                          - code [ref=e1179]: "null"
+                          - text: on success
+                        - listitem [ref=e1180]:
+                          - code [ref=e1181]: secretID
+                          - text: "- A numeric ID assigned to your key by Steam"
+                        - listitem [ref=e1182]:
+                          - code [ref=e1183]: key
+                          - text: "- Your account's \"auth secret\", as a"
+                          - code [ref=e1184]: Buffer
+                  - paragraph [ref=e1185]:
+                    - strong [ref=e1186]: v3.10.0 or later is required to use this method
+                  - paragraph [ref=e1187]: Gets your account's auth secret, which is the pre-shared key used for in-home streaming.
+                  - generic [ref=e1188]:
+                    - heading "getPrivacySettings(callback)" [level=3] [ref=e1189]
+                    - 'link "Permalink: getPrivacySettings(callback)" [ref=e1190] [cursor=pointer]':
+                      - /url: "#getprivacysettingscallback"
+                  - list [ref=e1191]:
+                    - listitem [ref=e1192]:
+                      - code [ref=e1193]: callback
+                      - text: "- A function to be called when the requested data is available"
+                      - list [ref=e1194]:
+                        - listitem [ref=e1195]:
+                          - code [ref=e1196]: err
+                          - text: "- An"
+                          - code [ref=e1197]: Error
+                          - text: object on failure, or
+                          - code [ref=e1198]: "null"
+                          - text: on success
+                        - listitem [ref=e1199]:
+                          - code [ref=e1200]: response
+                          - text: "- The response object"
+                          - list [ref=e1201]:
+                            - listitem [ref=e1202]:
+                              - code [ref=e1203]: privacy_state
+                              - text: "- The"
+                              - link "privacy state" [ref=e1204] [cursor=pointer]:
+                                - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EPrivacyState.js
+                              - text: of your profile
+                            - listitem [ref=e1205]:
+                              - code [ref=e1206]: privacy_state_inventory
+                              - text: "- The"
+                              - link "privacy state" [ref=e1207] [cursor=pointer]:
+                                - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EPrivacyState.js
+                              - text: of your Steam inventory
+                            - listitem [ref=e1208]:
+                              - code [ref=e1209]: privacy_state_gifts
+                              - text: "- The"
+                              - link "privacy state" [ref=e1210] [cursor=pointer]:
+                                - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EPrivacyState.js
+                              - text: of your Steam gift inventory
+                            - listitem [ref=e1211]:
+                              - code [ref=e1212]: privacy_state_ownedgames
+                              - text: "- The"
+                              - link "privacy state" [ref=e1213] [cursor=pointer]:
+                                - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EPrivacyState.js
+                              - text: of your owned games list
+                            - listitem [ref=e1214]:
+                              - code [ref=e1215]: privacy_state_playtime
+                              - text: "- The"
+                              - link "privacy state" [ref=e1216] [cursor=pointer]:
+                                - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EPrivacyState.js
+                              - text: of your game playtime
+                            - listitem [ref=e1217]:
+                              - code [ref=e1218]: privacy_state_friendslist
+                              - text: "- The"
+                              - link "privacy state" [ref=e1219] [cursor=pointer]:
+                                - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EPrivacyState.js
+                              - text: of your friends list
+                  - paragraph [ref=e1220]:
+                    - strong [ref=e1221]: v4.11.0 or later is required to use this method
+                  - paragraph [ref=e1222]:
+                    - text: Retrieves your account's privacy settings. You can't change your privacy state using steam-user; you'll need to use
+                    - link "steamcommunity" [ref=e1223] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steamcommunity/wiki/SteamCommunity#profilesettingssettings-callback
+                    - text: .
+                  - generic [ref=e1224]:
+                    - heading "kickPlayingSession([callback])" [level=3] [ref=e1225]
+                    - 'link "Permalink: kickPlayingSession([callback])" [ref=e1226] [cursor=pointer]':
+                      - /url: "#kickplayingsessioncallback"
+                  - list [ref=e1227]:
+                    - listitem [ref=e1228]:
+                      - code [ref=e1229]: callback
+                      - text: "- Optional. A function to be called once Steam receives and responds to this request."
+                      - list [ref=e1230]:
+                        - listitem [ref=e1231]:
+                          - code [ref=e1232]: err
+                          - text: "- An"
+                          - code [ref=e1233]: Error
+                          - text: object on failure, or
+                          - code [ref=e1234]: "null"
+                          - text: on success
+                        - listitem [ref=e1235]:
+                          - code [ref=e1236]: response
+                          - text: "- The response object"
+                          - list [ref=e1237]:
+                            - listitem [ref=e1238]:
+                              - code [ref=e1239]: playingApp
+                              - text: "- This is the AppID of the game that was being played elsewhere"
+                  - paragraph [ref=e1240]:
+                    - strong [ref=e1241]: v3.21.0 or later is required to use this method
+                    - strong [ref=e1242]:
+                      - text: v4.22.0 or later is required to read
+                      - code [ref=e1243]: playingApp
+                      - text: in the callback
+                  - paragraph [ref=e1244]:
+                    - text: If this account is being used to play a game on another logon session, calling this method will kick that other session off of Steam entirely (it will get an
+                    - code [ref=e1245]: error
+                    - text: event if the other session is using node-steam-user).
+                  - generic [ref=e1246]:
+                    - heading "gamesPlayed(apps[, force])" [level=3] [ref=e1247]
+                    - 'link "Permalink: gamesPlayed(apps[, force])" [ref=e1248] [cursor=pointer]':
+                      - /url: "#gamesplayedapps-force"
+                  - list [ref=e1249]:
+                    - listitem [ref=e1250]:
+                      - code [ref=e1251]: apps
+                      - text: "- An array, object, string, or number (see below)"
+                    - listitem [ref=e1252]:
+                      - code [ref=e1253]: force
+                      - text: "- Optional, default"
+                      - code [ref=e1254]: "false"
+                      - text: . If
+                      - code [ref=e1255]: "true"
+                      - text: and this account is playing a game elsewhere, calls
+                      - code [ref=e1256]: kickPlayingSession
+                      - text: first.
+                  - paragraph [ref=e1257]:
+                    - strong [ref=e1258]:
+                      - text: v3.21.0 or later is required to use
+                      - code [ref=e1259]: force
+                  - paragraph [ref=e1260]:
+                    - text: Reports to Steam that you're playing or using zero or more games/apps. To exit all games/apps, use an empty array
+                    - code [ref=e1261]: "[]"
+                    - text: .
+                  - paragraph [ref=e1262]:
+                    - text: To play a single game by AppID, use a single integer (e.g.
+                    - code [ref=e1263]: "440"
+                    - text: )
+                  - paragraph [ref=e1264]:
+                    - text: To play a single non-Steam game by name, use a single string (e.g.
+                    - code [ref=e1265]: "\"Minecraft\""
+                    - text: )
+                  - paragraph [ref=e1266]: "To play a single game by AppID and name (the client-provided name is what is given to the WebAPI and mobile app), use an object of this format:"
+                  - generic [ref=e1268]:
+                    - text: "{ \"game_id\": 440, \"game_extra_info\":"
+                    - generic [ref=e1269]: "\"Team Fortress 2\""
+                    - text: "}"
+                  - paragraph [ref=e1270]: You can use multiple apps by providing an array of any mixture of the above formats.
+                  - generic [ref=e1271]:
+                    - heading "getPlayerCount(appid, callback)" [level=3] [ref=e1272]
+                    - 'link "Permalink: getPlayerCount(appid, callback)" [ref=e1273] [cursor=pointer]':
+                      - /url: "#getplayercountappid-callback"
+                  - list [ref=e1274]:
+                    - listitem [ref=e1275]:
+                      - code [ref=e1276]: appid
+                      - text: "- The AppID of the app for which you'd like the current player/user count (use"
+                      - code [ref=e1277]: "0"
+                      - text: to get current logged-in Steam user count)
+                    - listitem [ref=e1278]:
+                      - code [ref=e1279]: callback
+                      - text: "- Called when the requested data is available"
+                      - list [ref=e1280]:
+                        - listitem [ref=e1281]:
+                          - code [ref=e1282]: err
+                          - text: "- An"
+                          - code [ref=e1283]: Error
+                          - text: object on failure, or
+                          - code [ref=e1284]: "null"
+                          - text: on success
+                        - listitem [ref=e1285]:
+                          - code [ref=e1286]: playerCount
+                          - text: "- How many Steam users are currently playing/using the app"
+                  - paragraph [ref=e1287]: Requests a count of how many Steam users are currently playing/using an app.
+                  - generic [ref=e1288]:
+                    - heading "serverQuery(conditions, callback)" [level=3] [ref=e1289]
+                    - 'link "Permalink: serverQuery(conditions, callback)" [ref=e1290] [cursor=pointer]':
+                      - /url: "#serverqueryconditions-callback"
+                  - list [ref=e1291]:
+                    - listitem [ref=e1292]:
+                      - code [ref=e1293]: conditions
+                      - text: "- A"
+                      - link "filter string" [ref=e1294] [cursor=pointer]:
+                        - /url: https://developer.valvesoftware.com/wiki/Master_Server_Query_Protocol#Filter
+                      - text: "or an object containing one or more of the following properties:"
+                      - list [ref=e1295]:
+                        - listitem [ref=e1296]:
+                          - code [ref=e1297]: app_id
+                          - text: "- The AppID of the game for which you want servers"
+                        - listitem [ref=e1298]:
+                          - code [ref=e1299]: geo_location_ip
+                          - text: "- The IP address of the querying client, used for geolocation (in"
+                          - code [ref=e1300]: x.x.x.x
+                          - text: format)
+                        - listitem [ref=e1301]:
+                          - code [ref=e1302]: region_code
+                          - text: "- The"
+                          - link "region code" [ref=e1303] [cursor=pointer]:
+                            - /url: https://developer.valvesoftware.com/wiki/Master_Server_Query_Protocol#Region_codes
+                          - text: where you want servers
+                        - listitem [ref=e1304]:
+                          - code [ref=e1305]: filter_text
+                          - text: "- A"
+                          - link "filter string" [ref=e1306] [cursor=pointer]:
+                            - /url: https://developer.valvesoftware.com/wiki/Master_Server_Query_Protocol#Filter
+                        - listitem [ref=e1307]:
+                          - code [ref=e1308]: max_servers
+                          - text: "- Maximum number of servers to return in this response (default and hard limit 5000)"
+                    - listitem [ref=e1309]:
+                      - code [ref=e1310]: callback
+                      - text: "- Called when the response is available"
+                      - list [ref=e1311]:
+                        - listitem [ref=e1312]:
+                          - code [ref=e1313]: err
+                          - text: "- If an error occurred, this is an"
+                          - code [ref=e1314]: Error
+                          - text: object. Otherwise, it's
+                          - code [ref=e1315]: "null"
+                          - text: .
+                        - listitem [ref=e1316]:
+                          - code [ref=e1317]: servers
+                          - text: "- An array of objects containing server data"
+                          - list [ref=e1318]:
+                            - listitem [ref=e1319]:
+                              - code [ref=e1320]: ip
+                              - text: "- The server's IP in"
+                              - code [ref=e1321]: x.x.x.x
+                              - text: format
+                            - listitem [ref=e1322]:
+                              - code [ref=e1323]: port
+                              - text: "- The server's game port"
+                            - listitem [ref=e1324]:
+                              - code [ref=e1325]: players
+                              - text: "- How many authenticated players are on this server (the Steam server browser will use this value if the gameserver itself reports more players and doesn't report itself as full, to prevent inflated player counts)"
+                  - paragraph [ref=e1326]: Requests a list of game servers from the master server.
+                  - generic [ref=e1327]:
+                    - heading "getServerList(filter, limit, callback)" [level=3] [ref=e1328]
+                    - 'link "Permalink: getServerList(filter, limit, callback)" [ref=e1329] [cursor=pointer]':
+                      - /url: "#getserverlistfilter-limit-callback"
+                  - list [ref=e1330]:
+                    - listitem [ref=e1331]:
+                      - code [ref=e1332]: filter
+                      - text: "- A master server"
+                      - link "filter string" [ref=e1333] [cursor=pointer]:
+                        - /url: https://developer.valvesoftware.com/wiki/Master_Server_Query_Protocol#Filter
+                    - listitem [ref=e1334]:
+                      - code [ref=e1335]: limit
+                      - text: "- How many servers should be returned, at maximum. Hard limit is 20,000."
+                    - listitem [ref=e1336]:
+                      - code [ref=e1337]: callback
+                      - text: "- Called when the requested data is available"
+                      - list [ref=e1338]:
+                        - listitem [ref=e1339]:
+                          - code [ref=e1340]: err
+                          - text: "- An"
+                          - code [ref=e1341]: Error
+                          - text: object on failure, or
+                          - code [ref=e1342]: "null"
+                          - text: on success
+                        - listitem [ref=e1343]:
+                          - code [ref=e1344]: servers
+                          - text: "- An array of objects containing server data"
+                          - list [ref=e1345]:
+                            - listitem [ref=e1346]:
+                              - code [ref=e1347]: addr
+                              - text: "- The server's IP address in"
+                              - code [ref=e1348]: x.x.x.x:p
+                              - text: format
+                            - listitem [ref=e1349]:
+                              - code [ref=e1350]: gameport
+                              - text: "- The port the server is running on for game clients"
+                            - listitem [ref=e1351]:
+                              - code [ref=e1352]: specport
+                              - text: "- The port the server is running on for spectator clients ("
+                              - code [ref=e1353]: "null"
+                              - text: for none)
+                            - listitem [ref=e1354]:
+                              - code [ref=e1355]: steamid
+                              - text: "- A"
+                              - link "SteamID" [ref=e1356] [cursor=pointer]:
+                                - /url: https://www.npmjs.com/package/steamid
+                                - code [ref=e1357]: SteamID
+                              - text: object containing the server's SteamID
+                            - listitem [ref=e1358]:
+                              - code [ref=e1359]: name
+                              - text: "- The server's hostname"
+                            - listitem [ref=e1360]:
+                              - code [ref=e1361]: appid
+                              - text: "- The AppID of the game which the server is serving"
+                            - listitem [ref=e1362]:
+                              - code [ref=e1363]: gamedir
+                              - text: "- The directory of the game which the server is serving"
+                            - listitem [ref=e1364]:
+                              - code [ref=e1365]: version
+                              - text: "- The version of the game which the server is serving"
+                            - listitem [ref=e1366]:
+                              - code [ref=e1367]: product
+                              - text: "- The product name of the game which the server is serving"
+                            - listitem [ref=e1368]:
+                              - code [ref=e1369]: region
+                              - text: "- The"
+                              - link "region code" [ref=e1370] [cursor=pointer]:
+                                - /url: https://developer.valvesoftware.com/wiki/Master_Server_Query_Protocol#Region_codes
+                              - text: for where the server is located
+                            - listitem [ref=e1371]:
+                              - code [ref=e1372]: players
+                              - text: "- How many people are currently on this server"
+                            - listitem [ref=e1373]:
+                              - code [ref=e1374]: max_players
+                              - text: "- How many people can be on the server at once"
+                            - listitem [ref=e1375]:
+                              - code [ref=e1376]: bots
+                              - text: "- How many CPU players are currently on this server"
+                            - listitem [ref=e1377]:
+                              - code [ref=e1378]: map
+                              - text: "- The name of the map which the server is currently running"
+                            - listitem [ref=e1379]:
+                              - code [ref=e1380]: secure
+                              - text: "-"
+                              - code [ref=e1381]: "true"
+                              - text: if the server is VAC-secure,
+                              - code [ref=e1382]: "false"
+                              - text: if not
+                            - listitem [ref=e1383]:
+                              - code [ref=e1384]: dedicated
+                              - text: "-"
+                              - code [ref=e1385]: "true"
+                              - text: if the server is dedicated,
+                              - code [ref=e1386]: "false"
+                              - text: if listen
+                            - listitem [ref=e1387]:
+                              - code [ref=e1388]: os
+                              - text: "-"
+                              - code [ref=e1389]: w
+                              - text: if the server is running on Windows,
+                              - code [ref=e1390]: l
+                              - text: for Linux
+                            - listitem [ref=e1391]:
+                              - code [ref=e1392]: gametype
+                              - text: "- The server's tags, separated by commas"
+                  - paragraph [ref=e1393]:
+                    - strong [ref=e1394]: Works when anonymous.
+                    - text: Requests a list gameservers from Steam matching a given filter, along with information about the server as Steam knows it.
+                  - generic [ref=e1395]:
+                    - heading "getServerSteamIDsByIP(ips, callback)" [level=3] [ref=e1396]
+                    - 'link "Permalink: getServerSteamIDsByIP(ips, callback)" [ref=e1397] [cursor=pointer]':
+                      - /url: "#getserversteamidsbyipips-callback"
+                  - list [ref=e1398]:
+                    - listitem [ref=e1399]:
+                      - code [ref=e1400]: ips
+                      - text: "- An array of IP addresses, in"
+                      - code [ref=e1401]: x.x.x.x:p
+                      - text: format
+                    - listitem [ref=e1402]:
+                      - code [ref=e1403]: callback
+                      - text: "- Called when requested data is available"
+                      - list [ref=e1404]:
+                        - listitem [ref=e1405]:
+                          - code [ref=e1406]: err
+                          - text: "- An"
+                          - code [ref=e1407]: Error
+                          - text: object on failure, or
+                          - code [ref=e1408]: "null"
+                          - text: on success
+                        - listitem [ref=e1409]:
+                          - code [ref=e1410]: servers
+                          - text: "- An object whose keys are IP addresses in"
+                          - code [ref=e1411]: x.x.x.x:p
+                          - text: format and values are
+                          - link "SteamID" [ref=e1412] [cursor=pointer]:
+                            - /url: https://www.npmjs.com/package/steamid
+                            - code [ref=e1413]: SteamID
+                          - text: objects
+                  - paragraph [ref=e1414]:
+                    - strong [ref=e1415]: Works when anonymous.
+                    - text: Gets current SteamIDs for servers running on given addresses.
+                  - generic [ref=e1416]:
+                    - heading "getServerIPsBySteamID(steamids, callback)" [level=3] [ref=e1417]
+                    - 'link "Permalink: getServerIPsBySteamID(steamids, callback)" [ref=e1418] [cursor=pointer]':
+                      - /url: "#getserveripsbysteamidsteamids-callback"
+                  - list [ref=e1419]:
+                    - listitem [ref=e1420]:
+                      - code [ref=e1421]: steamids
+                      - text: "- An array of"
+                      - link "SteamID" [ref=e1422] [cursor=pointer]:
+                        - /url: https://www.npmjs.com/package/steamid
+                        - code [ref=e1423]: SteamID
+                      - text: objects, or something which can parse into one (64-bit SteamID as string, Steam3 rendered format)
+                    - listitem [ref=e1424]:
+                      - code [ref=e1425]: callback
+                      - text: "- Called when requested data is available"
+                      - list [ref=e1426]:
+                        - listitem [ref=e1427]:
+                          - code [ref=e1428]: err
+                          - text: "- An"
+                          - code [ref=e1429]: Error
+                          - text: object on failure, or
+                          - code [ref=e1430]: "null"
+                          - text: on success
+                        - listitem [ref=e1431]:
+                          - code [ref=e1432]: servers
+                          - text: "- An object whose keys are 64-bit numeric SteamIDs and values are IP addresses in"
+                          - code [ref=e1433]: x.x.x.x:p
+                          - text: format
+                  - paragraph [ref=e1434]:
+                    - strong [ref=e1435]: Works when anonymous.
+                    - text: Gets current IP addresses for servers with given SteamIDs.
+                  - generic [ref=e1436]:
+                    - heading "getProductChanges(sinceChangenumber, callback)" [level=3] [ref=e1437]
+                    - 'link "Permalink: getProductChanges(sinceChangenumber, callback)" [ref=e1438] [cursor=pointer]':
+                      - /url: "#getproductchangessincechangenumber-callback"
+                  - list [ref=e1439]:
+                    - listitem [ref=e1440]:
+                      - code [ref=e1441]: sinceChangenumber
+                      - text: "- The changenumber of the last known changelist. You will get changes which have occurred since then and now. You won't get any info except the current changenumber if you request more than around 5,000 changenumbers in the past."
+                    - listitem [ref=e1442]:
+                      - code [ref=e1443]: callback
+                      - text: "- Called when data is available"
+                      - list [ref=e1444]:
+                        - listitem [ref=e1445]:
+                          - code [ref=e1446]: err
+                          - text: "- An"
+                          - code [ref=e1447]: Error
+                          - text: object on failure, or
+                          - code [ref=e1448]: "null"
+                          - text: on success
+                        - listitem [ref=e1449]:
+                          - code [ref=e1450]: currentChangenumber
+                          - text: "- The changenumber of the newest changelist"
+                        - listitem [ref=e1451]:
+                          - code [ref=e1452]: appChanges
+                          - text: "- An array of objects for apps which have changed. Each object has these properties:"
+                          - list [ref=e1453]:
+                            - listitem [ref=e1454]:
+                              - code [ref=e1455]: appid
+                              - text: "- The AppID of the app"
+                            - listitem [ref=e1456]:
+                              - code [ref=e1457]: change_number
+                              - text: "- The changenumber of the latest changelist in which the app has changed"
+                            - listitem [ref=e1458]:
+                              - code [ref=e1459]: needs_token
+                              - text: "-"
+                              - code [ref=e1460]: "true"
+                              - text: if you need an access token to get most details about this app,
+                              - code [ref=e1461]: "null"
+                              - text: if not
+                        - listitem [ref=e1462]:
+                          - code [ref=e1463]: packageChanges
+                          - text: "- An array of objects for packages which have changed. Each object has the same properties as the"
+                          - code [ref=e1464]: apps
+                          - text: array, except
+                          - code [ref=e1465]: appid
+                          - text: is
+                          - code [ref=e1466]: packageid
+                          - text: .
+                  - paragraph [ref=e1467]:
+                    - strong [ref=e1468]: Works when anonymous.
+                    - text: Requests a list of all apps/packages which have changed since a given changenumber.
+                  - generic [ref=e1469]:
+                    - heading "getProductInfo(apps, packages[, inclTokens], callback)" [level=3] [ref=e1470]
+                    - 'link "Permalink: getProductInfo(apps, packages[, inclTokens], callback)" [ref=e1471] [cursor=pointer]':
+                      - /url: "#getproductinfoapps-packages-incltokens-callback"
+                  - list [ref=e1472]:
+                    - listitem [ref=e1473]:
+                      - code [ref=e1474]: apps
+                      - text: "- Either an array of AppIDs, or an array of objects containing"
+                      - code [ref=e1475]: appid
+                      - text: and
+                      - code [ref=e1476]: access_token
+                      - text: properties
+                    - listitem [ref=e1477]:
+                      - code [ref=e1478]: packages
+                      - text: "- Either an array of PackageIDs, or an array of objects containing"
+                      - code [ref=e1479]: packageid
+                      - text: and
+                      - code [ref=e1480]: access_token
+                      - text: properties
+                    - listitem [ref=e1481]:
+                      - code [ref=e1482]: inclTokens
+                      - text: "- Optional boolean to automatically request product access tokens if they need them. The default value is false."
+                    - listitem [ref=e1483]:
+                      - code [ref=e1484]: callback
+                      - text: "- Called when requested data is available"
+                      - list [ref=e1485]:
+                        - listitem [ref=e1486]:
+                          - code [ref=e1487]: err
+                          - text: "- An"
+                          - code [ref=e1488]: Error
+                          - text: object on failure, or
+                          - code [ref=e1489]: "null"
+                          - text: on success
+                        - listitem [ref=e1490]:
+                          - code [ref=e1491]: apps
+                          - text: "- An object whose keys are AppIDs and whose values are objects"
+                          - list [ref=e1492]:
+                            - listitem [ref=e1493]:
+                              - code [ref=e1494]: changenumber
+                              - text: "- The changenumber of the latest changelist in which this app changed"
+                            - listitem [ref=e1495]:
+                              - code [ref=e1496]: missingToken
+                              - text: "-"
+                              - code [ref=e1497]: "true"
+                              - text: if you need to provide an access token to get more details about this app
+                            - listitem [ref=e1498]:
+                              - code [ref=e1499]: appinfo
+                              - text: "- An object whose structure is identical to the output of"
+                              - code [ref=e1500]: app_info_print
+                              - text: in the Steam console
+                        - listitem [ref=e1501]:
+                          - code [ref=e1502]: packages
+                          - text: "- An object whose keys are PackageIDs and whose values are objects. Each object has the same properties as the"
+                          - code [ref=e1503]: apps
+                          - text: array, except
+                          - code [ref=e1504]: appinfo
+                          - text: is
+                          - code [ref=e1505]: packageinfo
+                          - text: .
+                        - listitem [ref=e1506]:
+                          - code [ref=e1507]: unknownApps
+                          - text: "- An array of input AppIDs which don't exist"
+                        - listitem [ref=e1508]:
+                          - code [ref=e1509]: unknownPackages
+                          - text: "- An array of input PackageIDs which don't exist"
+                  - paragraph [ref=e1510]:
+                    - strong [ref=e1511]: Works when anonymous.
+                    - text: Requests details about one or more apps or packages.
+                  - paragraph [ref=e1512]:
+                    - text: If you have the PICS cache enabled and the risk of getting stale data is acceptable, you could check
+                    - link "the PICS cache" [ref=e1513] [cursor=pointer]:
+                      - /url: "#picscache"
+                    - text: if you want instead of calling
+                    - code [ref=e1514]: getProductInfo
+                    - text: .
+                  - generic [ref=e1515]:
+                    - heading "getProductAccessToken(apps, packages, callback)" [level=3] [ref=e1516]
+                    - 'link "Permalink: getProductAccessToken(apps, packages, callback)" [ref=e1517] [cursor=pointer]':
+                      - /url: "#getproductaccesstokenapps-packages-callback"
+                  - list [ref=e1518]:
+                    - listitem [ref=e1519]:
+                      - code [ref=e1520]: apps
+                      - text: "- An array of AppIDs"
+                    - listitem [ref=e1521]:
+                      - code [ref=e1522]: packages
+                      - text: "- An array of PackageIDs"
+                    - listitem [ref=e1523]:
+                      - code [ref=e1524]: callback
+                      - text: "- Called when requested data is available"
+                      - list [ref=e1525]:
+                        - listitem [ref=e1526]:
+                          - code [ref=e1527]: err
+                          - text: "- An"
+                          - code [ref=e1528]: Error
+                          - text: object on failure, or
+                          - code [ref=e1529]: "null"
+                          - text: on success
+                        - listitem [ref=e1530]:
+                          - code [ref=e1531]: appTokens
+                          - text: "- An object whose keys are AppIDs and whose values are access tokens"
+                        - listitem [ref=e1532]:
+                          - code [ref=e1533]: packageTokens
+                          - text: "- An object whose keys are PackageIDs and whose values are access tokens"
+                        - listitem [ref=e1534]:
+                          - code [ref=e1535]: appDeniedTokens
+                          - text: "- An array of AppIDs for which Steam denied you an access token"
+                        - listitem [ref=e1536]:
+                          - code [ref=e1537]: packageDeniedTokens
+                          - text: "- An array of PackageIDs for which Steam denied you an access token"
+                  - paragraph [ref=e1538]:
+                    - strong [ref=e1539]: Works when anonymous.
+                    - text: Requests access tokens for one or more apps or packages. These access tokens can be used with
+                    - link "getProductInfo" [ref=e1540] [cursor=pointer]:
+                      - /url: "#productinfoapps-packages-callback"
+                      - code [ref=e1541]: getProductInfo
+                    - text: .
+                  - paragraph [ref=e1542]: Access tokens are global. That is, everyone who has access to an app receives the same token. Tokens do not seem to expire.
+                  - generic [ref=e1543]:
+                    - heading "getOwnedApps([filter])" [level=3] [ref=e1544]
+                    - 'link "Permalink: getOwnedApps([filter])" [ref=e1545] [cursor=pointer]':
+                      - /url: "#getownedappsfilter"
+                  - list [ref=e1546]:
+                    - listitem [ref=e1547]:
+                      - code [ref=e1548]: filter
+                      - text: "- A filter object or function (see"
+                      - link "ownershipFilter" [ref=e1549] [cursor=pointer]:
+                        - /url: "#ownershipfilter"
+                        - code [ref=e1550]: ownershipFilter
+                      - text: )
+                  - paragraph [ref=e1551]:
+                    - strong [ref=e1552]: v3.3.0 or later is required to use this method
+                    - strong [ref=e1553]:
+                      - text: v4.7.0 or later is required to use
+                      - code [ref=e1554]: excludeSharedLicenses
+                    - strong [ref=e1555]:
+                      - text: v4.22.0 or later is required to use
+                      - code [ref=e1556]: filter
+                  - paragraph [ref=e1557]:
+                    - text: Returns an array of AppIDs which your account owns. This cannot be safely called until
+                    - code [ref=e1558]: ownershipCached
+                    - text: is emitted.
+                  - paragraph [ref=e1559]:
+                    - code [ref=e1560]: enablePicsCache
+                    - text: must be
+                    - code [ref=e1561]: "true"
+                    - text: to use this method. Otherwise, an
+                    - code [ref=e1562]: Error
+                    - text: will be thrown.
+                  - paragraph [ref=e1563]:
+                    - text: If
+                    - code [ref=e1564]: filter
+                    - text: is a boolean, it is interpreted as
+                    - code [ref=e1565]: excludeShared
+                    - text: for backward compatibility. For example,
+                    - code [ref=e1566]: getOwnedApps(true)
+                    - text: is the same as
+                    - code [ref=e1567]: "getOwnedApps({excludeShared: true})"
+                    - text: . This usage is deprecated and will be removed in a future release.
+                  - paragraph [ref=e1568]:
+                    - text: The output of this function will contain all AppIDs that are present in at least one license that was not filtered out. For example, if you previously activated a free on demand package for Spacewar but later activated a retail CD key for the same, it will be included if you pass
+                    - code [ref=e1569]: "{excludeFree: true}"
+                    - text: as your filter since you own it both via a free package and via a paid package.
+                  - generic [ref=e1570]:
+                    - heading "ownsApp(appid[, filter])" [level=3] [ref=e1571]
+                    - 'link "Permalink: ownsApp(appid[, filter])" [ref=e1572] [cursor=pointer]':
+                      - /url: "#ownsappappid-filter"
+                  - list [ref=e1573]:
+                    - listitem [ref=e1574]:
+                      - code [ref=e1575]: appid
+                      - text: "- A numeric AppID"
+                    - listitem [ref=e1576]:
+                      - code [ref=e1577]: filter
+                      - text: "- A filter object or function (see"
+                      - link "ownershipFilter" [ref=e1578] [cursor=pointer]:
+                        - /url: "#ownershipfilter"
+                        - code [ref=e1579]: ownershipFilter
+                      - text: )
+                  - paragraph [ref=e1580]:
+                    - strong [ref=e1581]: v3.3.0 or later is required to use this method
+                    - strong [ref=e1582]:
+                      - text: v4.7.0 or later is required to use
+                      - code [ref=e1583]: excludeSharedLicenses
+                    - strong [ref=e1584]:
+                      - text: v4.22.0 or later is required to use
+                      - code [ref=e1585]: filter
+                  - paragraph [ref=e1586]:
+                    - text: Returns
+                    - code [ref=e1587]: "true"
+                    - text: if your account owns the specified AppID, or
+                    - code [ref=e1588]: "false"
+                    - text: if not. This cannot be safely called until
+                    - code [ref=e1589]: ownershipCached
+                    - text: is emitted.
+                  - paragraph [ref=e1590]:
+                    - code [ref=e1591]: enablePicsCache
+                    - text: must be
+                    - code [ref=e1592]: "true"
+                    - text: to use this method. Otherwise, an
+                    - code [ref=e1593]: Error
+                    - text: will be thrown.
+                  - paragraph [ref=e1594]:
+                    - text: If
+                    - code [ref=e1595]: filter
+                    - text: is a boolean, it is interpreted as
+                    - code [ref=e1596]: excludeShared
+                    - text: for backward compatibility. For example,
+                    - code [ref=e1597]: ownsApp(730, true)
+                    - text: is the same as
+                    - code [ref=e1598]: "ownsApp(730, {excludeShared: true})"
+                    - text: . This usage is deprecated and will be removed in a future release.
+                  - paragraph [ref=e1599]: The output of this function will be true if the provided AppID is present in at least one license that was not filtered out.
+                  - generic [ref=e1600]:
+                    - heading "getOwnedDepots([filter])" [level=3] [ref=e1601]
+                    - 'link "Permalink: getOwnedDepots([filter])" [ref=e1602] [cursor=pointer]':
+                      - /url: "#getowneddepotsfilter"
+                  - list [ref=e1603]:
+                    - listitem [ref=e1604]:
+                      - code [ref=e1605]: filter
+                      - text: "- A filter object or function (see"
+                      - link "ownershipFilter" [ref=e1606] [cursor=pointer]:
+                        - /url: "#ownershipfilter"
+                        - code [ref=e1607]: ownershipFilter
+                      - text: )
+                  - paragraph [ref=e1608]:
+                    - strong [ref=e1609]: v3.3.0 or later is required to use this method
+                    - strong [ref=e1610]:
+                      - text: v4.7.0 or later is required to use
+                      - code [ref=e1611]: excludeSharedLicenses
+                    - strong [ref=e1612]:
+                      - text: v4.22.0 or later is required to use
+                      - code [ref=e1613]: filter
+                  - paragraph [ref=e1614]:
+                    - text: Returns an array of depot IDs which your account owns. This cannot be safely called until
+                    - code [ref=e1615]: ownershipCached
+                    - text: is emitted.
+                  - paragraph [ref=e1616]:
+                    - code [ref=e1617]: enablePicsCache
+                    - text: must be
+                    - code [ref=e1618]: "true"
+                    - text: to use this method. Otherwise, an
+                    - code [ref=e1619]: Error
+                    - text: will be thrown.
+                  - paragraph [ref=e1620]:
+                    - text: If
+                    - code [ref=e1621]: filter
+                    - text: is a boolean, it is interpreted as
+                    - code [ref=e1622]: excludeShared
+                    - text: for backward compatibility. For example,
+                    - code [ref=e1623]: getOwnedDepots(true)
+                    - text: is the same as
+                    - code [ref=e1624]: "getOwnedDepots({excludeShared: true})"
+                    - text: . This usage is deprecated and will be removed in a future release.
+                  - paragraph [ref=e1625]: The output of this function will contain all depot IDs that are present in at least one license that was not filtered out.
+                  - generic [ref=e1626]:
+                    - heading "ownsDepot(depotid[, filter])" [level=3] [ref=e1627]
+                    - 'link "Permalink: ownsDepot(depotid[, filter])" [ref=e1628] [cursor=pointer]':
+                      - /url: "#ownsdepotdepotid-filter"
+                  - list [ref=e1629]:
+                    - listitem [ref=e1630]:
+                      - code [ref=e1631]: depotid
+                      - text: "- A numeric depot ID"
+                    - listitem [ref=e1632]:
+                      - code [ref=e1633]: filter
+                      - text: "- A filter object or function (see"
+                      - link "ownershipFilter" [ref=e1634] [cursor=pointer]:
+                        - /url: "#ownershipfilter"
+                        - code [ref=e1635]: ownershipFilter
+                      - text: )
+                  - paragraph [ref=e1636]:
+                    - strong [ref=e1637]: v3.3.0 or later is required to use this method
+                    - strong [ref=e1638]:
+                      - text: v4.7.0 or later is required to use
+                      - code [ref=e1639]: excludeSharedLicenses
+                    - strong [ref=e1640]:
+                      - text: v4.22.0 or later is required to use
+                      - code [ref=e1641]: filter
+                  - paragraph [ref=e1642]:
+                    - text: Returns
+                    - code [ref=e1643]: "true"
+                    - text: if your account owns the specified depot, or
+                    - code [ref=e1644]: "false"
+                    - text: if not. This cannot be safely called until
+                    - code [ref=e1645]: ownershipCached
+                    - text: is emitted.
+                  - paragraph [ref=e1646]:
+                    - code [ref=e1647]: enablePicsCache
+                    - text: must be
+                    - code [ref=e1648]: "true"
+                    - text: to use this method. Otherwise, an
+                    - code [ref=e1649]: Error
+                    - text: will be thrown.
+                  - paragraph [ref=e1650]:
+                    - text: If
+                    - code [ref=e1651]: filter
+                    - text: is a boolean, it is interpreted as
+                    - code [ref=e1652]: excludeShared
+                    - text: for backward compatibility. For example,
+                    - code [ref=e1653]: ownsDepot(731, true)
+                    - text: is the same as
+                    - code [ref=e1654]: "ownsDepot(731, {excludeShared: true})"
+                    - text: . This usage is deprecated and will be removed in a future release.
+                  - paragraph [ref=e1655]: The output of this function will be true if the provided depot ID is present in at least one license that was not filtered out.
+                  - generic [ref=e1656]:
+                    - heading "getOwnedPackages([filter])" [level=3] [ref=e1657]
+                    - 'link "Permalink: getOwnedPackages([filter])" [ref=e1658] [cursor=pointer]':
+                      - /url: "#getownedpackagesfilter"
+                  - list [ref=e1659]:
+                    - listitem [ref=e1660]:
+                      - code [ref=e1661]: filter
+                      - text: "- A filter object or function (see"
+                      - link "ownershipFilter" [ref=e1662] [cursor=pointer]:
+                        - /url: "#ownershipfilter"
+                        - code [ref=e1663]: ownershipFilter
+                      - text: )
+                  - paragraph [ref=e1664]:
+                    - strong [ref=e1665]: v3.3.0 or later is required to use this method
+                    - strong [ref=e1666]:
+                      - text: v4.7.0 or later is required to use
+                      - code [ref=e1667]: excludeSharedLicenses
+                    - strong [ref=e1668]:
+                      - text: v4.22.0 or later is required to use
+                      - code [ref=e1669]: filter
+                  - paragraph [ref=e1670]: Returns an array of package IDs which your account owns.
+                  - paragraph [ref=e1671]:
+                    - text: If
+                    - code [ref=e1672]: filter
+                    - text: is a boolean, it is interpreted as
+                    - code [ref=e1673]: excludeShared
+                    - text: for backward compatibility. For example,
+                    - code [ref=e1674]: getOwnedPackages(true)
+                    - text: is the same as
+                    - code [ref=e1675]: "getOwnedPackages({excludeShared: true})"
+                    - text: . This usage is deprecated and will be removed in a future release.
+                  - paragraph [ref=e1676]: The output of this function will contain all package IDs for which you have at least one license that was not filtered out.
+                  - paragraph [ref=e1677]: "The point at which this method can be called depends on the following:"
+                  - list [ref=e1678]:
+                    - listitem [ref=e1679]:
+                      - text: If you are logged on anonymously, this can be called immediately following the
+                      - code [ref=e1680]: loggedOn
+                      - text: event
+                    - listitem [ref=e1681]:
+                      - text: If you are using no filters, or if you're using the
+                      - code [ref=e1682]: excludeShared
+                      - text: filter and no other filters, this can be called immediately following the
+                      - code [ref=e1683]: licenses
+                      - text: event
+                    - listitem [ref=e1684]:
+                      - text: If you are using a custom filter function or if you're using the
+                      - code [ref=e1685]: excludeFree
+                      - text: and/or
+                      - code [ref=e1686]: excludeExpiring
+                      - text: filters, this can be called immediately following the
+                      - code [ref=e1687]: ownershipCached
+                      - text: event (which means
+                      - code [ref=e1688]: enablePicsCache
+                      - text: must be true)
+                  - generic [ref=e1689]:
+                    - heading "ownsPackage(packageid[, filter])" [level=3] [ref=e1690]
+                    - 'link "Permalink: ownsPackage(packageid[, filter])" [ref=e1691] [cursor=pointer]':
+                      - /url: "#ownspackagepackageid-filter"
+                  - list [ref=e1692]:
+                    - listitem [ref=e1693]:
+                      - code [ref=e1694]: packageid
+                      - text: "- A numeric package ID"
+                    - listitem [ref=e1695]:
+                      - code [ref=e1696]: filter
+                      - text: "- A filter object or function (see"
+                      - link "ownershipFilter" [ref=e1697] [cursor=pointer]:
+                        - /url: "#ownershipfilter"
+                        - code [ref=e1698]: ownershipFilter
+                      - text: )
+                  - paragraph [ref=e1699]:
+                    - strong [ref=e1700]: v3.3.0 or later is required to use this method
+                    - strong [ref=e1701]:
+                      - text: v4.7.0 or later is required to use
+                      - code [ref=e1702]: excludeSharedLicenses
+                    - strong [ref=e1703]:
+                      - text: v4.22.0 or later is required to use
+                      - code [ref=e1704]: filter
+                  - paragraph [ref=e1705]:
+                    - text: Returns
+                    - code [ref=e1706]: "true"
+                    - text: if your account owns the specified package ID, or
+                    - code [ref=e1707]: "false"
+                    - text: if not.
+                  - paragraph [ref=e1708]: The output of this function will be true if your account has at least one license for the provided package ID that wasn't filtered out.
+                  - paragraph [ref=e1709]:
+                    - text: The same timing requirements apply to this method as apply to
+                    - link "getOwnedPackages" [ref=e1710] [cursor=pointer]:
+                      - /url: "#getownedpackagesfilter"
+                      - code [ref=e1711]: getOwnedPackages
+                    - text: .
+                  - paragraph [ref=e1712]:
+                    - text: If
+                    - code [ref=e1713]: filter
+                    - text: is a boolean, it is interpreted as
+                    - code [ref=e1714]: excludeShared
+                    - text: for backward compatibility. For example,
+                    - code [ref=e1715]: ownsPackage(16018, true)
+                    - text: is the same as
+                    - code [ref=e1716]: "ownsPackage(16018, {excludeShared: true})"
+                    - text: . This usage is deprecated and will be removed in a future release.
+                  - generic [ref=e1717]:
+                    - heading "getStoreTagNames(language, tagIDs, callback)" [level=3] [ref=e1718]
+                    - 'link "Permalink: getStoreTagNames(language, tagIDs, callback)" [ref=e1719] [cursor=pointer]':
+                      - /url: "#getstoretagnameslanguage-tagids-callback"
+                  - list [ref=e1720]:
+                    - listitem [ref=e1721]:
+                      - code [ref=e1722]: language
+                      - text: "- The language you want tag names in, e.g. \"english\" or \"spanish\""
+                    - listitem [ref=e1723]:
+                      - code [ref=e1724]: tagIDs
+                      - text: "- An array of one or more tag IDs"
+                    - listitem [ref=e1725]:
+                      - code [ref=e1726]: callback
+                      - text: "- A function to be called when the requested data is available"
+                      - list [ref=e1727]:
+                        - listitem [ref=e1728]:
+                          - code [ref=e1729]: err
+                          - text: "- An"
+                          - code [ref=e1730]: Error
+                          - text: object on failure, or
+                          - code [ref=e1731]: "null"
+                          - text: on success
+                        - listitem [ref=e1732]:
+                          - code [ref=e1733]: tags
+                          - text: "- An object whose keys are tag IDs and values are objects with two properties:"
+                          - code [ref=e1734]: name
+                          - text: and
+                          - code [ref=e1735]: englishName
+                  - paragraph [ref=e1736]:
+                    - strong [ref=e1737]: v3.26.0 or later is required to use this method
+                  - paragraph [ref=e1738]:
+                    - text: Retrieves localized names for specified store tag IDs. Tag IDs are available in the response to
+                    - code [ref=e1739]: getProductInfo
+                    - text: .
+                  - generic [ref=e1740]:
+                    - heading "getPublishedFileDetails(ids, callback)" [level=3] [ref=e1741]
+                    - 'link "Permalink: getPublishedFileDetails(ids, callback)" [ref=e1742] [cursor=pointer]':
+                      - /url: "#getpublishedfiledetailsids-callback"
+                  - list [ref=e1743]:
+                    - listitem [ref=e1744]:
+                      - code [ref=e1745]: ids
+                      - text: "- Either an integer, or an array of integers containing the IDs of the published file(s) you want details for"
+                    - listitem [ref=e1746]:
+                      - code [ref=e1747]: callback
+                      - text: "- A function to be called when the request has completed"
+                      - list [ref=e1748]:
+                        - listitem [ref=e1749]:
+                          - code [ref=e1750]: err
+                          - text: "- An"
+                          - code [ref=e1751]: Error
+                          - text: object on failure, or
+                          - code [ref=e1752]: "null"
+                          - text: on success
+                        - listitem [ref=e1753]:
+                          - code [ref=e1754]: files
+                          - text: "- An object whose keys are published file IDs, and values are object containing a ton of information"
+                  - paragraph [ref=e1755]:
+                    - strong [ref=e1756]: v3.8.0 or later is required to use this method
+                  - paragraph [ref=e1757]:
+                    - text: Gets details for one or more published files. Published files are anything with a URL like
+                    - code [ref=e1758]: https://steamcommunity.com/sharedfiles/filedetails/?id=662626851
+                    - text: (where
+                    - code [ref=e1759]: id
+                    - text: is the published file ID).
+                  - paragraph [ref=e1760]:
+                    - text: The amount of data available in
+                    - code [ref=e1761]: results
+                    - text: is huge, so I can only suggest that you
+                    - code [ref=e1762]: console.log
+                    - text: it to see what's available.
+                  - generic [ref=e1763]:
+                    - heading "setPersona(state[, name])" [level=3] [ref=e1764]
+                    - 'link "Permalink: setPersona(state[, name])" [ref=e1765] [cursor=pointer]':
+                      - /url: "#setpersonastate-name"
+                  - list [ref=e1766]:
+                    - listitem [ref=e1767]:
+                      - code [ref=e1768]: state
+                      - text: "- A value from"
+                      - link "EPersonaState" [ref=e1769] [cursor=pointer]:
+                        - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/enums/EPersonaState.js
+                        - code [ref=e1770]: EPersonaState
+                    - listitem [ref=e1771]:
+                      - code [ref=e1772]: name
+                      - text: "- Optional. Your new profile name"
+                  - paragraph [ref=e1773]:
+                    - strong [ref=e1774]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e1775]: Changes our online status, and optionally your profile name. You need to call this after you logon or else you'll show up as offline. You won't receive any persona data about your friends if you don't go online.
+                  - generic [ref=e1776]:
+                    - heading "setUIMode(mode)" [level=3] [ref=e1777]
+                    - 'link "Permalink: setUIMode(mode)" [ref=e1778] [cursor=pointer]':
+                      - /url: "#setuimodemode"
+                  - list [ref=e1779]:
+                    - listitem [ref=e1780]:
+                      - code [ref=e1781]: mode
+                      - text: "- A value from"
+                      - link "EClientUIMode" [ref=e1782] [cursor=pointer]:
+                        - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/resources/EClientUIMode.js
+                        - code [ref=e1783]: EClientUIMode
+                  - paragraph [ref=e1784]:
+                    - strong [ref=e1785]: v3.7.0 or later is required to use this method
+                  - paragraph [ref=e1786]: Sets your current UI mode, which displays as an icon next to your online status in Steam chat and the friends list.
+                  - generic [ref=e1787]:
+                    - heading "addFriend(steamID[, callback])" [level=3] [ref=e1788]
+                    - 'link "Permalink: addFriend(steamID[, callback])" [ref=e1789] [cursor=pointer]':
+                      - /url: "#addfriendsteamid-callback"
+                  - list [ref=e1790]:
+                    - listitem [ref=e1791]:
+                      - code [ref=e1792]: steamID
+                      - text: "- The SteamID of the user you want to add as a friend, as a"
+                      - code [ref=e1793]: SteamID
+                      - text: object or a string that can parse into one
+                    - listitem [ref=e1794]:
+                      - code [ref=e1795]: callback
+                      - text: "- Optional. Called when Steam responds to this request."
+                      - list [ref=e1796]:
+                        - listitem [ref=e1797]:
+                          - code [ref=e1798]: err
+                          - text: "- An"
+                          - code [ref=e1799]: Error
+                          - text: object on failure, or
+                          - code [ref=e1800]: "null"
+                          - text: on success. If this is an
+                          - code [ref=e1801]: Error
+                          - text: object, it will have an
+                          - code [ref=e1802]: eresult
+                          - text: property.
+                        - listitem [ref=e1803]:
+                          - code [ref=e1804]: personaName
+                          - text: "- If successful, the current persona name of the user you added."
+                  - paragraph [ref=e1805]:
+                    - strong [ref=e1806]:
+                      - text: v1.9.0 or later is required to use this method. v3.10.0 or later is required to use
+                      - code [ref=e1807]: callback
+                      - text: .
+                  - paragraph [ref=e1808]:
+                    - text: Sends a friend request to the user with the specified
+                    - code [ref=e1809]: SteamID
+                    - text: . If they've already sent you a friend request, accepts it.
+                  - paragraph [ref=e1810]:
+                    - text: If you provide a callback, the
+                    - code [ref=e1811]: message
+                    - text: of the
+                    - code [ref=e1812]: err
+                    - text: will be
+                    - code [ref=e1813]: DuplicateName
+                    - text: and the
+                    - code [ref=e1814]: eresult
+                    - text: will be
+                    - code [ref=e1815]: "14"
+                    - text: if we are already friends with the requested user, or if we've sent them a friend request already that they haven't accepted or ignored.
+                    - code [ref=e1816]: message
+                    - text: will be
+                    - code [ref=e1817]: Blocked
+                    - text: and
+                    - code [ref=e1818]: eresult
+                    - text: will be
+                    - code [ref=e1819]: "40"
+                    - text: if they've blocked us.
+                  - generic [ref=e1820]:
+                    - heading "removeFriend(steamID)" [level=3] [ref=e1821]
+                    - 'link "Permalink: removeFriend(steamID)" [ref=e1822] [cursor=pointer]':
+                      - /url: "#removefriendsteamid"
+                  - list [ref=e1823]:
+                    - listitem [ref=e1824]:
+                      - code [ref=e1825]: steamID
+                      - text: "- The SteamID of the user you want to remove from your friends list, as a"
+                      - code [ref=e1826]: SteamID
+                      - text: object or a string that can parse into one
+                  - paragraph [ref=e1827]:
+                    - strong [ref=e1828]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e1829]: Removed a specified user from your friends list. Also ignores an outstanding friend request from this user.
+                  - generic [ref=e1830]:
+                    - heading "blockUser(steamID[, callback])" [level=3] [ref=e1831]
+                    - 'link "Permalink: blockUser(steamID[, callback])" [ref=e1832] [cursor=pointer]':
+                      - /url: "#blockusersteamid-callback"
+                  - list [ref=e1833]:
+                    - listitem [ref=e1834]:
+                      - code [ref=e1835]: steamID
+                      - text: "- The SteamID of the user you want to block, as a"
+                      - code [ref=e1836]: SteamID
+                      - text: object or a string that can parse into one
+                    - listitem [ref=e1837]:
+                      - code [ref=e1838]: callback
+                      - text: "- Optional. Called when the request completes"
+                      - list [ref=e1839]:
+                        - listitem [ref=e1840]:
+                          - code [ref=e1841]: err
+                          - text: "- An"
+                          - code [ref=e1842]: Error
+                          - text: object on failure, or
+                          - code [ref=e1843]: "null"
+                          - text: on success
+                  - paragraph [ref=e1844]:
+                    - strong [ref=e1845]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e1846]: Blocks all communication with a specified user.
+                  - generic [ref=e1847]:
+                    - heading "unblockUser(steamID[, callback])" [level=3] [ref=e1848]
+                    - 'link "Permalink: unblockUser(steamID[, callback])" [ref=e1849] [cursor=pointer]':
+                      - /url: "#unblockusersteamid-callback"
+                  - list [ref=e1850]:
+                    - listitem [ref=e1851]:
+                      - code [ref=e1852]: steamID
+                      - text: "- The SteamID of the user you want to unblock, as a"
+                      - code [ref=e1853]: SteamID
+                      - text: object or a string that can parse into one
+                    - listitem [ref=e1854]:
+                      - code [ref=e1855]: callback
+                      - text: "- Optional. Called when the request completes"
+                      - list [ref=e1856]:
+                        - listitem [ref=e1857]:
+                          - code [ref=e1858]: err
+                          - text: "- An"
+                          - code [ref=e1859]: Error
+                          - text: object on failure, or
+                          - code [ref=e1860]: "null"
+                          - text: on success
+                  - paragraph [ref=e1861]:
+                    - strong [ref=e1862]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e1863]: Unblocks all communication with a specified user.
+                  - generic [ref=e1864]:
+                    - heading "createQuickInviteLink([options,] callback)" [level=3] [ref=e1865]
+                    - 'link "Permalink: createQuickInviteLink([options,] callback)" [ref=e1866] [cursor=pointer]':
+                      - /url: "#createquickinvitelinkoptions-callback"
+                  - list [ref=e1867]:
+                    - listitem [ref=e1868]:
+                      - code [ref=e1869]: options
+                      - text: "- Optional. An object with zero or more of these properties:"
+                      - list [ref=e1870]:
+                        - listitem [ref=e1871]:
+                          - code [ref=e1872]: inviteLimit
+                          - text: "- How many times this link can be used before it's no longer valid. Defaults to 1."
+                        - listitem [ref=e1873]:
+                          - code [ref=e1874]: inviteDuration
+                          - text: "- How long in seconds this link can be used before it's no longer valid. Defaults to"
+                          - code [ref=e1875]: "null"
+                          - text: (no time limit).
+                    - listitem [ref=e1876]:
+                      - code [ref=e1877]: callback
+                      - text: "- Called when the request completes"
+                      - list [ref=e1878]:
+                        - listitem [ref=e1879]:
+                          - code [ref=e1880]: err
+                          - text: "- An"
+                          - code [ref=e1881]: Error
+                          - text: object on failure, or
+                          - code [ref=e1882]: "null"
+                          - text: on success
+                        - listitem [ref=e1883]:
+                          - code [ref=e1884]: response
+                          - text: "- The response object"
+                          - list [ref=e1885]:
+                            - listitem [ref=e1886]:
+                              - code [ref=e1887]: token
+                              - text: "- An object with these properties:"
+                              - list [ref=e1888]:
+                                - listitem [ref=e1889]:
+                                  - code [ref=e1890]: invite_link
+                                  - text: "- The link that can be used to add your account as a friend directly"
+                                - listitem [ref=e1891]:
+                                  - code [ref=e1892]: invite_token
+                                  - text: "- Just the token part of the link"
+                                - listitem [ref=e1893]:
+                                  - code [ref=e1894]: invite_limit
+                                  - text: "- How many times the link can be used before it's no longer valid"
+                                - listitem [ref=e1895]:
+                                  - code [ref=e1896]: invite_duration
+                                  - text: "- How many seconds are left until the link expires."
+                                  - code [ref=e1897]: "null"
+                                  - text: if it never expires.
+                                - listitem [ref=e1898]:
+                                  - code [ref=e1899]: time_created
+                                  - text: "- A"
+                                  - code [ref=e1900]: Date
+                                  - text: object representing when the link was created
+                                - listitem [ref=e1901]:
+                                  - code [ref=e1902]: valid
+                                  - text: "-"
+                                  - code [ref=e1903]: "true"
+                                  - text: if the link is currently valid, or
+                                  - code [ref=e1904]: "false"
+                                  - text: if not
+                  - paragraph [ref=e1905]:
+                    - strong [ref=e1906]: v4.11.0 or later is required to use this method
+                  - paragraph [ref=e1907]:
+                    - strong [ref=e1908]:
+                      - text: v4.13.0 or later is required to use
+                      - code [ref=e1909]: inviteDuration
+                  - paragraph [ref=e1910]: Creates a quick-invite link that can be used by anyone who has it to add you to their friends list without needing to send an invite that you must to approve.
+                  - generic [ref=e1911]:
+                    - heading "listQuickInviteLinks(callback)" [level=3] [ref=e1912]
+                    - 'link "Permalink: listQuickInviteLinks(callback)" [ref=e1913] [cursor=pointer]':
+                      - /url: "#listquickinvitelinkscallback"
+                  - list [ref=e1914]:
+                    - listitem [ref=e1915]:
+                      - code [ref=e1916]: callback
+                      - text: "- Called when the request completes"
+                      - list [ref=e1917]:
+                        - listitem [ref=e1918]:
+                          - code [ref=e1919]: err
+                          - text: "- An"
+                          - code [ref=e1920]: Error
+                          - text: object on failure, or
+                          - code [ref=e1921]: "null"
+                          - text: on success
+                        - listitem [ref=e1922]:
+                          - code [ref=e1923]: response
+                          - text: "- The response object"
+                          - list [ref=e1924]:
+                            - listitem [ref=e1925]:
+                              - code [ref=e1926]: tokens
+                              - text: "- An array of objects, each of which is identical to the output of"
+                              - code [ref=e1927]: createQuickInviteLink
+                  - paragraph [ref=e1928]:
+                    - strong [ref=e1929]: v4.11.0 or later is required to use this method
+                  - paragraph [ref=e1930]: Retrieves the list of quick-invite links on your account. Links that you've revoked won't appear here.
+                  - generic [ref=e1931]:
+                    - heading "revokeQuickInviteLink(linkOrToken[, callback])" [level=3] [ref=e1932]
+                    - 'link "Permalink: revokeQuickInviteLink(linkOrToken[, callback])" [ref=e1933] [cursor=pointer]':
+                      - /url: "#revokequickinvitelinklinkortoken-callback"
+                  - list [ref=e1934]:
+                    - listitem [ref=e1935]:
+                      - code [ref=e1936]: linkOrToken
+                      - text: "- Either the full link, or just the token part of the link"
+                    - listitem [ref=e1937]:
+                      - code [ref=e1938]: callback
+                      - text: "- Optional. Called when the request completes"
+                      - list [ref=e1939]:
+                        - listitem [ref=e1940]:
+                          - code [ref=e1941]: err
+                          - text: "- An"
+                          - code [ref=e1942]: Error
+                          - text: object on failure, or
+                          - code [ref=e1943]: "null"
+                          - text: on success
+                  - paragraph [ref=e1944]:
+                    - strong [ref=e1945]: v4.11.0 or later is required to use this method
+                  - paragraph [ref=e1946]:
+                    - text: Revokes a quick-invite link. Can also be used to delete an already-used code from
+                    - code [ref=e1947]: listQuickInviteLinks
+                    - text: .
+                  - generic [ref=e1948]:
+                    - heading "getQuickInviteLinkSteamID(link)" [level=3] [ref=e1949]
+                    - 'link "Permalink: getQuickInviteLinkSteamID(link)" [ref=e1950] [cursor=pointer]':
+                      - /url: "#getquickinvitelinksteamidlink"
+                  - list [ref=e1951]:
+                    - listitem [ref=e1952]:
+                      - code [ref=e1953]: link
+                      - text: "- The full quick-invite link"
+                  - paragraph [ref=e1954]:
+                    - strong [ref=e1955]: v4.11.0 or later is required to use this method
+                  - paragraph [ref=e1956]:
+                    - text: Decodes a quick-invite link and returns a
+                    - code [ref=e1957]: SteamID
+                    - text: object representing the user account to whom this link belongs. Returns
+                    - code [ref=e1958]: "null"
+                    - text: if the link is not well-formed.
+                  - paragraph [ref=e1959]: This happens offline and thus returns immediately, without need for a callback or Promise.
+                  - generic [ref=e1960]:
+                    - heading "checkQuickInviteLinkValidity(link, callback)" [level=3] [ref=e1961]
+                    - 'link "Permalink: checkQuickInviteLinkValidity(link, callback)" [ref=e1962] [cursor=pointer]':
+                      - /url: "#checkquickinvitelinkvaliditylink-callback"
+                  - list [ref=e1963]:
+                    - listitem [ref=e1964]:
+                      - code [ref=e1965]: link
+                      - text: "- The full quick-invite link"
+                    - listitem [ref=e1966]:
+                      - code [ref=e1967]: callback
+                      - text: "- Called when the request completes"
+                      - list [ref=e1968]:
+                        - listitem [ref=e1969]:
+                          - code [ref=e1970]: err
+                          - text: "- An"
+                          - code [ref=e1971]: Error
+                          - text: object on failure, or
+                          - code [ref=e1972]: "null"
+                          - text: on success
+                        - listitem [ref=e1973]:
+                          - code [ref=e1974]: response
+                          - text: "- The response object"
+                          - list [ref=e1975]:
+                            - listitem [ref=e1976]:
+                              - code [ref=e1977]: valid
+                              - text: "-"
+                              - code [ref=e1978]: "true"
+                              - text: if the link exists and is valid,
+                              - code [ref=e1979]: "false"
+                              - text: if the link exists but is not valid (e.g. it's already been used); it's an error if the link doesn't exist at all
+                            - listitem [ref=e1980]:
+                              - code [ref=e1981]: steamid
+                              - text: "- A"
+                              - code [ref=e1982]: SteamID
+                              - text: object representing who the link belongs to
+                            - listitem [ref=e1983]:
+                              - code [ref=e1984]: invite_duration
+                              - text: "- How many seconds are left until the link expires."
+                              - code [ref=e1985]: "null"
+                              - text: if it never expires.
+                  - paragraph [ref=e1986]:
+                    - strong [ref=e1987]: v4.11.0 or later is required to use this method
+                  - paragraph [ref=e1988]: Checks whether a quick-invite link is valid.
+                  - generic [ref=e1989]:
+                    - heading "redeemQuickInviteLink(link[, callback])" [level=3] [ref=e1990]
+                    - 'link "Permalink: redeemQuickInviteLink(link[, callback])" [ref=e1991] [cursor=pointer]':
+                      - /url: "#redeemquickinvitelinklink-callback"
+                  - list [ref=e1992]:
+                    - listitem [ref=e1993]:
+                      - code [ref=e1994]: link
+                      - text: "- The full quick-invite link"
+                    - listitem [ref=e1995]:
+                      - code [ref=e1996]: callback
+                      - text: "- Optional. Called when the request completes"
+                      - list [ref=e1997]:
+                        - listitem [ref=e1998]:
+                          - code [ref=e1999]: err
+                          - text: "- An"
+                          - code [ref=e2000]: Error
+                          - text: object on failure, or
+                          - code [ref=e2001]: "null"
+                          - text: on success
+                  - paragraph [ref=e2002]:
+                    - strong [ref=e2003]: v4.11.0 or later is required to use this method
+                  - paragraph [ref=e2004]: Redeems a quick-invite link and adds the user to your friends list.
+                  - generic [ref=e2005]:
+                    - heading "getPersonas(steamids[, callback])" [level=3] [ref=e2006]
+                    - 'link "Permalink: getPersonas(steamids[, callback])" [ref=e2007] [cursor=pointer]':
+                      - /url: "#getpersonassteamids-callback"
+                  - list [ref=e2008]:
+                    - listitem [ref=e2009]:
+                      - code [ref=e2010]: steamids
+                      - text: "- An array of"
+                      - code [ref=e2011]: SteamID
+                      - text: objects or strings which can parse into
+                      - code [ref=e2012]: SteamID
+                      - text: objects
+                    - listitem [ref=e2013]:
+                      - code [ref=e2014]: callback
+                      - text: "- Optional. Called when the requested data is available."
+                      - list [ref=e2015]:
+                        - listitem [ref=e2016]:
+                          - code [ref=e2017]: err
+                          - text: "- An"
+                          - code [ref=e2018]: Error
+                          - text: object on failure, or
+                          - code [ref=e2019]: "null"
+                          - text: on success
+                        - listitem [ref=e2020]:
+                          - code [ref=e2021]: personas
+                          - text: "- An object whose keys are 64-bit SteamIDs and whose values are objects identical to those received in the"
+                          - link "user" [ref=e2022] [cursor=pointer]:
+                            - /url: "#user"
+                            - code [ref=e2023]: user
+                          - text: event
+                  - paragraph [ref=e2024]:
+                    - strong [ref=e2025]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2026]:
+                    - text: Requests persona data for one or more users from Steam. The response will arrive in the
+                    - link "user" [ref=e2027] [cursor=pointer]:
+                      - /url: "#user"
+                      - code [ref=e2028]: user
+                    - text: event, or in the callback if provided.
+                  - generic [ref=e2029]:
+                    - heading "uploadRichPresence(appID, richPresence)" [level=3] [ref=e2030]
+                    - 'link "Permalink: uploadRichPresence(appID, richPresence)" [ref=e2031] [cursor=pointer]':
+                      - /url: "#uploadrichpresenceappid-richpresence"
+                  - list [ref=e2032]:
+                    - listitem [ref=e2033]:
+                      - code [ref=e2034]: appID
+                      - text: "- The ID of the app for which you want to upload rich presence data. You should be"
+                      - link "playing" [ref=e2035] [cursor=pointer]:
+                        - /url: "#gamesplayedapps-force"
+                      - text: this app.
+                    - listitem [ref=e2036]:
+                      - code [ref=e2037]: richPresence
+                      - text: "- An object containing your rich presence data. All values should be strings."
+                  - paragraph [ref=e2038]:
+                    - strong [ref=e2039]: v4.4.0 or later is required to use this method
+                  - paragraph [ref=e2040]:
+                    - text: Uploads rich presence data to Steam. In order to display text in the Steam friends list, you need a key named
+                    - code [ref=e2041]: steam_display
+                    - text: ", which"
+                    - strong [ref=e2042]: must
+                    - text: be a rich presence localization key (you can see RP keys for apps
+                    - link "on SteamDB" [ref=e2043] [cursor=pointer]:
+                      - /url: https://steamdb.info/app/440/localization/
+                    - text: ).
+                  - paragraph [ref=e2044]:
+                    - code [ref=e2045]: "%placeholders%"
+                    - text: "in the rich presence localization value will be replaced with the value of the corresponding key that you upload. For example, to get a TF2 RP string of \"Special Event - Hello, World!\", then you should upload:"
+                  - generic [ref=e2047]:
+                    - text: "{ \"steam_display\":"
+                    - generic [ref=e2048]: "\"#TF_RichPresence_Display\""
+                    - text: ", \"state\":"
+                    - generic [ref=e2049]: "\"PlayingMatchGroup\""
+                    - text: ", \"matchgrouploc\":"
+                    - generic [ref=e2050]: "\"SpecialEvent\""
+                    - text: ", \"currentmap\":"
+                    - generic [ref=e2051]: "\"Hello, World!\""
+                    - text: "}"
+                  - paragraph [ref=e2052]: "This will subsequently be parsed like this:"
+                  - list [ref=e2053]:
+                    - listitem [ref=e2054]:
+                      - code [ref=e2055]: "#TF_RichPresence_Display"
+                      - text: =
+                      - code [ref=e2056]: "{#TF_RichPresence_State_%state%}"
+                    - listitem [ref=e2057]:
+                      - code [ref=e2058]: "{#TF_RichPresence_State_PlayingMatchGroup}"
+                      - text: =
+                      - code [ref=e2059]: "{#TF_RichPresence_MatchGroup_%matchgrouploc%} - %currentmap%"
+                    - listitem [ref=e2060]:
+                      - code [ref=e2061]: "{#TF_RichPresence_MatchGroup_SpecialEvent} - Hello, World!"
+                    - listitem [ref=e2062]:
+                      - code [ref=e2063]: Special Event - Hello, World!
+                  - generic [ref=e2064]:
+                    - heading "getAppRichPresenceLocalization(appID, language, callback)" [level=3] [ref=e2065]
+                    - 'link "Permalink: getAppRichPresenceLocalization(appID, language, callback)" [ref=e2066] [cursor=pointer]':
+                      - /url: "#getapprichpresencelocalizationappid-language-callback"
+                  - list [ref=e2067]:
+                    - listitem [ref=e2068]:
+                      - code [ref=e2069]: appID
+                      - text: "- The ID of the app for which you want rich presence localizations"
+                    - listitem [ref=e2070]:
+                      - code [ref=e2071]: language
+                      - text: "- The full name of the language you want, e.g. \"english\" or \"spanish\""
+                    - listitem [ref=e2072]:
+                      - code [ref=e2073]: callback
+                      - text: "- Called when the requested data is available."
+                      - list [ref=e2074]:
+                        - listitem [ref=e2075]:
+                          - code [ref=e2076]: err
+                          - text: "- An"
+                          - code [ref=e2077]: Error
+                          - text: object on failure, or
+                          - code [ref=e2078]: "null"
+                          - text: on success
+                        - listitem [ref=e2079]:
+                          - code [ref=e2080]: response
+                          - text: "- The response object"
+                          - list [ref=e2081]:
+                            - listitem [ref=e2082]:
+                              - code [ref=e2083]: tokens
+                              - text: "- An object where keys are localization tokens (prefixed with"
+                              - code [ref=e2084]: "#"
+                              - text: ", e.g."
+                              - code [ref=e2085]: "#TF_RichPresence_Display"
+                              - text: ) and values are localized strings
+                  - paragraph [ref=e2086]:
+                    - strong [ref=e2087]: v4.0.0 or later is required to use this method
+                  - paragraph [ref=e2088]:
+                    - text: Requests localized rich presence strings for a particular app in the given language. This will allow you to decode the
+                    - code [ref=e2089]: rich_presence
+                    - text: array in the
+                    - link "user" [ref=e2090] [cursor=pointer]:
+                      - /url: "#user"
+                      - code [ref=e2091]: user
+                    - text: event into the localized string displayed in the Steam client.
+                  - generic [ref=e2092]:
+                    - heading "requestRichPresence(appID, steamIDs, callback)" [level=3] [ref=e2093]
+                    - 'link "Permalink: requestRichPresence(appID, steamIDs, callback)" [ref=e2094] [cursor=pointer]':
+                      - /url: "#requestrichpresenceappid-steamids-callback"
+                  - list [ref=e2095]:
+                    - listitem [ref=e2096]:
+                      - code [ref=e2097]: appID
+                      - text: "- The ID of the app for which you want to get rich presence data for"
+                    - listitem [ref=e2098]:
+                      - code [ref=e2099]: steamIDs
+                      - text: "- An array of SteamID objects or strings that can parse into SteamID objects"
+                    - listitem [ref=e2100]:
+                      - code [ref=e2101]: language
+                      - text: "- Optional. A string containing a full language name (e.g."
+                      - code [ref=e2102]: "'english'"
+                      - text: or
+                      - code [ref=e2103]: "'spanish'"
+                      - text: ). Defaults to language passed in constructor or
+                      - code [ref=e2104]: setOption
+                      - text: if omitted.
+                    - listitem [ref=e2105]:
+                      - code [ref=e2106]: callback
+                      - text: "- Called when the requested data is available."
+                      - list [ref=e2107]:
+                        - listitem [ref=e2108]:
+                          - code [ref=e2109]: err
+                          - text: "- An"
+                          - code [ref=e2110]: Error
+                          - text: object on failure, or
+                          - code [ref=e2111]: "null"
+                          - text: on success
+                        - listitem [ref=e2112]:
+                          - code [ref=e2113]: response
+                          - text: "- The response object"
+                          - list [ref=e2114]:
+                            - listitem [ref=e2115]:
+                              - code [ref=e2116]: users
+                              - text: "- An object whose keys are 64-bit SteamIDs (as strings) and whose values are objects containing the received rich presence data. If no data was received for a SteamID there will be no key for that SteamID (and therefore no value)."
+                  - paragraph [ref=e2117]:
+                    - strong [ref=e2118]: v4.18.0 or later is required to use this method
+                  - paragraph [ref=e2119]: "Requests rich presence key/value data and localized strings as displayed in Steam for a list of given users, for a given app. You do not need to be friends with the requested users. Response object looks like this:"
+                  - generic [ref=e2121]:
+                    - text: "{ \"users\": { \"76561198006409530\": { \"richPresence\": { \"status\":"
+                    - generic [ref=e2122]: "\"Playing CS:GO\""
+                    - text: ", \"version\":"
+                    - generic [ref=e2123]: "\"13765\""
+                    - text: ", \"time\":"
+                    - generic [ref=e2124]: "\"15.851017\""
+                    - text: ", \"game:state\":"
+                    - generic [ref=e2125]: "\"lobby\""
+                    - text: ", \"steam_display\":"
+                    - generic [ref=e2126]: "\"#display_Menu\""
+                    - text: ", \"connect\":"
+                    - generic [ref=e2127]: "\"+gcconnectG02C0193A\""
+                    - text: "}, \"localizedString\":"
+                    - generic [ref=e2128]: "\"Playing CS:GO\""
+                    - text: "} } }"
+                  - paragraph [ref=e2129]:
+                    - text: If the Steam display string cannot be localized, then
+                    - code [ref=e2130]: localizedString
+                    - text: will be null. This is the case when there exists no translation for the language you selected.
+                  - generic [ref=e2131]:
+                    - heading "getSteamLevels(steamids, callback)" [level=3] [ref=e2132]
+                    - 'link "Permalink: getSteamLevels(steamids, callback)" [ref=e2133] [cursor=pointer]':
+                      - /url: "#getsteamlevelssteamids-callback"
+                  - list [ref=e2134]:
+                    - listitem [ref=e2135]:
+                      - code [ref=e2136]: steamids
+                      - text: "- An array of"
+                      - code [ref=e2137]: SteamID
+                      - text: objects or strings that can parse into
+                      - code [ref=e2138]: SteamID
+                      - text: objects
+                    - listitem [ref=e2139]:
+                      - code [ref=e2140]: callback
+                      - text: "- Called when the requested data is available."
+                      - list [ref=e2141]:
+                        - listitem [ref=e2142]:
+                          - code [ref=e2143]: err
+                          - text: "- An"
+                          - code [ref=e2144]: Error
+                          - text: object on failure, or
+                          - code [ref=e2145]: "null"
+                          - text: on success
+                        - listitem [ref=e2146]:
+                          - code [ref=e2147]: users
+                          - text: "- An object whose keys are 64-bit SteamIDs (as strings) and whose values are Steam levels"
+                  - paragraph [ref=e2148]:
+                    - strong [ref=e2149]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2150]: Gets the Steam Level for one or more Steam users (who do not have to be on your friends list).
+                  - generic [ref=e2151]:
+                    - heading "getAliases(steamids, callback)" [level=3] [ref=e2152]
+                    - 'link "Permalink: getAliases(steamids, callback)" [ref=e2153] [cursor=pointer]':
+                      - /url: "#getaliasessteamids-callback"
+                  - list [ref=e2154]:
+                    - listitem [ref=e2155]:
+                      - code [ref=e2156]: steamids
+                      - text: "- An array of"
+                      - code [ref=e2157]: SteamID
+                      - text: objects or strings that can parse into
+                      - code [ref=e2158]: SteamID
+                      - text: objects
+                    - listitem [ref=e2159]:
+                      - code [ref=e2160]: callback
+                      - text: "- Called when the requested data is available"
+                      - list [ref=e2161]:
+                        - listitem [ref=e2162]:
+                          - code [ref=e2163]: err
+                          - text: "- An"
+                          - code [ref=e2164]: Error
+                          - text: object on failure, or
+                          - code [ref=e2165]: "null"
+                          - text: on success
+                        - listitem [ref=e2166]:
+                          - code [ref=e2167]: users
+                          - text: "- An object whose keys are 64-bit SteamIDs (as strings) and whose values are objects containing the following properties:"
+                          - list [ref=e2168]:
+                            - listitem [ref=e2169]:
+                              - code [ref=e2170]: name
+                              - text: "- The new name adopted by the user, as a string"
+                            - listitem [ref=e2171]:
+                              - code [ref=e2172]: name_since
+                              - text: "- A"
+                              - code [ref=e2173]: Date
+                              - text: object representing when the user adopted this name
+                  - paragraph [ref=e2174]:
+                    - strong [ref=e2175]: v3.10.0 or later is required to use this method
+                  - paragraph [ref=e2176]: Gets the last 10 persona names (including the current one) used by one or more Steam users (who do not have to be on your friends list).
+                  - generic [ref=e2177]:
+                    - heading "getNicknames([callback])" [level=3] [ref=e2178]
+                    - 'link "Permalink: getNicknames([callback])" [ref=e2179] [cursor=pointer]':
+                      - /url: "#getnicknamescallback"
+                  - list [ref=e2180]:
+                    - listitem [ref=e2181]:
+                      - code [ref=e2182]: callback
+                      - text: "- Optional. Called when the requested data is available"
+                      - list [ref=e2183]:
+                        - listitem [ref=e2184]:
+                          - code [ref=e2185]: err
+                          - text: "- An"
+                          - code [ref=e2186]: Error
+                          - text: object on failure, or
+                          - code [ref=e2187]: "null"
+                          - text: on success
+                        - listitem [ref=e2188]:
+                          - code [ref=e2189]: nicknames
+                          - text: "- An object whose keys are 64-bit SteamIDs (as strings) and whose values are nicknames for the corresponding users (as strings)"
+                  - paragraph [ref=e2190]:
+                    - strong [ref=e2191]: v3.23.0 or later is required to use this method
+                  - paragraph [ref=e2192]:
+                    - text: Retrieves an up-to-date nickname list (see
+                    - link "nicknameList" [ref=e2193] [cursor=pointer]:
+                      - /url: "#nicknamelist"
+                      - code [ref=e2194]: nicknameList
+                    - text: ) from Steam. The
+                    - code [ref=e2195]: nicknameList
+                    - text: event will be emitted when the response to this request is received, immediately after the callback fires. If you provide no callback, the
+                    - code [ref=e2196]: nicknameList
+                    - text: event is still emitted.
+                  - paragraph [ref=e2197]:
+                    - text: In theory, the nickname list in
+                    - code [ref=e2198]: myNicknames
+                    - text: will always be up-to-date since v3.23.0, but you may wish to use this if you want to be doubly sure.
+                  - generic [ref=e2199]:
+                    - heading "setNickname(steamID, nickname[, callback])" [level=3] [ref=e2200]
+                    - 'link "Permalink: setNickname(steamID, nickname[, callback])" [ref=e2201] [cursor=pointer]':
+                      - /url: "#setnicknamesteamid-nickname-callback"
+                  - list [ref=e2202]:
+                    - listitem [ref=e2203]:
+                      - code [ref=e2204]: steamID
+                      - text: "- The SteamID of the user on whom you want to set a nickname, as a"
+                      - code [ref=e2205]: SteamID
+                      - text: object or a string that can parse into one
+                    - listitem [ref=e2206]:
+                      - code [ref=e2207]: nickname
+                      - text: "- The user's new nickname, as a string. Empty string to remove."
+                    - listitem [ref=e2208]:
+                      - code [ref=e2209]: callback
+                      - text: "- Optional. Called when the request completes."
+                      - list [ref=e2210]:
+                        - listitem [ref=e2211]:
+                          - code [ref=e2212]: err
+                          - text: "- An"
+                          - code [ref=e2213]: Error
+                          - text: object on failure or
+                          - code [ref=e2214]: "null"
+                          - text: on success.
+                  - paragraph [ref=e2215]:
+                    - strong [ref=e2216]: v3.15.0 or later is required to use this method
+                  - paragraph [ref=e2217]:
+                    - text: Sets a nickname on a user. If one already exists, overwrites it. The
+                    - code [ref=e2218]: myNicknames
+                    - text: property will be updated just before the callback fires, on success.
+                  - paragraph [ref=e2219]:
+                    - strong [ref=e2220]: "Note:"
+                    - text: It appears to be possible for Steam to report success when using this method, when in reality your nickname wasn't saved on the server. You can detect this case by calling
+                    - code [ref=e2221]: getNicknames
+                    - text: .
+                  - generic [ref=e2222]:
+                    - heading "getGameBadgeLevel(appid, callback)" [level=3] [ref=e2223]
+                    - 'link "Permalink: getGameBadgeLevel(appid, callback)" [ref=e2224] [cursor=pointer]':
+                      - /url: "#getgamebadgelevelappid-callback"
+                  - list [ref=e2225]:
+                    - listitem [ref=e2226]:
+                      - code [ref=e2227]: appid
+                      - text: "- The AppID of the game you want to get your badge level for"
+                    - listitem [ref=e2228]:
+                      - code [ref=e2229]: callback
+                      - text: "- Called when the requested data is available."
+                      - list [ref=e2230]:
+                        - listitem [ref=e2231]:
+                          - code [ref=e2232]: err
+                          - text: "- An"
+                          - code [ref=e2233]: Error
+                          - text: object on failure, or
+                          - code [ref=e2234]: "null"
+                          - text: on success
+                        - listitem [ref=e2235]:
+                          - code [ref=e2236]: steamLevel
+                          - text: "- Your own Steam level"
+                        - listitem [ref=e2237]:
+                          - code [ref=e2238]: regularBadgeLevel
+                          - text: "- The level on your badge for this game (0 if you don't have one)"
+                        - listitem [ref=e2239]:
+                          - code [ref=e2240]: foilBadgeLevel
+                          - text: "- The level on your foil badge for this game (0 if you don't have one)"
+                  - paragraph [ref=e2241]:
+                    - strong [ref=e2242]: v3.8.0 or later is required to use this method
+                  - paragraph [ref=e2243]: Gets your own Steam Level, and the level you have on a badge for a particular game.
+                  - generic [ref=e2244]:
+                    - heading "getUserOwnedApps(steamID[, options], callback)" [level=3] [ref=e2245]
+                    - 'link "Permalink: getUserOwnedApps(steamID[, options], callback)" [ref=e2246] [cursor=pointer]':
+                      - /url: "#getuserownedappssteamid-options-callback"
+                  - list [ref=e2247]:
+                    - listitem [ref=e2248]:
+                      - code [ref=e2249]: steamID
+                      - text: "- Either a"
+                      - code [ref=e2250]: SteamID
+                      - text: object or a string that can parse into one
+                    - listitem [ref=e2251]:
+                      - code [ref=e2252]: options
+                      - text: "- Optional. An object with zero or more of these properties:"
+                      - list [ref=e2253]:
+                        - listitem [ref=e2254]:
+                          - code [ref=e2255]: includePlayedFreeGames
+                          - text: "- Set to"
+                          - code [ref=e2256]: "true"
+                          - text: to include free games that the user has used before. Default
+                          - code [ref=e2257]: "false"
+                          - text: .
+                        - listitem [ref=e2258]:
+                          - code [ref=e2259]: filterAppids
+                          - text: "- Pass an array of numeric AppIDs here to only retrieve those apps"
+                        - listitem [ref=e2260]:
+                          - code [ref=e2261]: includeFreeSub
+                          - text: "- Set to"
+                          - code [ref=e2262]: "true"
+                          - text: to include apps owned through Steam Sub 0
+                        - listitem [ref=e2263]:
+                          - code [ref=e2264]: includeAppInfo
+                          - text: "- Set to"
+                          - code [ref=e2265]: "false"
+                          - text: to not include app info (default
+                          - code [ref=e2266]: "true"
+                          - text: )
+                        - listitem [ref=e2267]:
+                          - code [ref=e2268]: skipUnvettedApps
+                          - text: "- Set to"
+                          - code [ref=e2269]: "false"
+                          - text: to include apps that haven't been vetted by Valve (default
+                          - code [ref=e2270]: "true"
+                          - text: )
+                    - listitem [ref=e2271]:
+                      - code [ref=e2272]: callback
+                      - text: "- Called when the request completes."
+                      - list [ref=e2273]:
+                        - listitem [ref=e2274]:
+                          - code [ref=e2275]: err
+                          - text: "- An"
+                          - code [ref=e2276]: Error
+                          - text: object on failure or
+                          - code [ref=e2277]: "null"
+                          - text: on success.
+                        - listitem [ref=e2278]:
+                          - code [ref=e2279]: response
+                          - text: "- The response object"
+                          - list [ref=e2280]:
+                            - listitem [ref=e2281]:
+                              - code [ref=e2282]: app_count
+                              - text: "- A number indicating how many total apps this user owns"
+                            - listitem [ref=e2283]:
+                              - code [ref=e2284]: apps
+                              - text: "- An array of objects:"
+                              - list [ref=e2285]:
+                                - listitem [ref=e2286]:
+                                  - code [ref=e2287]: appid
+                                  - text: "- The ID of the app"
+                                - listitem [ref=e2288]:
+                                  - code [ref=e2289]: name
+                                  - text: "- The name of the app"
+                                - listitem [ref=e2290]:
+                                  - code [ref=e2291]: playtime_2weeks
+                                  - text: "- How many minutes this user has played in the past 2 weeks (may be"
+                                  - code [ref=e2292]: "null"
+                                  - text: )
+                                - listitem [ref=e2293]:
+                                  - code [ref=e2294]: playtime_forever
+                                  - text: "- How many minutes this user has played all time"
+                                - listitem [ref=e2295]:
+                                  - code [ref=e2296]: img_icon_url
+                                  - text: "- A URL to the app's 32x32 square icon image"
+                                - listitem [ref=e2297]:
+                                  - code [ref=e2298]: img_logo_url
+                                  - text: "- A URL to the app's 184x69 capsule logo image"
+                                - listitem [ref=e2299]:
+                                  - code [ref=e2300]: has_community_visible_stats
+                                  - text: "-"
+                                  - code [ref=e2301]: "true"
+                                  - text: if this app has visible community stats (e.g. /profiles/:steamID/stats/:appid)
+                                - listitem [ref=e2302]:
+                                  - code [ref=e2303]: playtime_windows_forever
+                                  - text: "- How many minutes this user has played all time on Windows"
+                                - listitem [ref=e2304]:
+                                  - code [ref=e2305]: playtime_mac_forever
+                                  - text: "- How many minutes this user has played all time on Mac"
+                                - listitem [ref=e2306]:
+                                  - code [ref=e2307]: playtime_linux_forever
+                                  - text: "- How many minutes this user has played all time on Linux"
+                  - paragraph [ref=e2308]:
+                    - strong [ref=e2309]: v4.16.0 or later is required to use this method
+                  - paragraph [ref=e2310]: Retrieves a user's list of owned apps. The user's games must not be private.
+                  - paragraph [ref=e2311]:
+                    - emphasis [ref=e2312]:
+                      - text: This is functionally identical to
+                      - link "IPlayerService/GetOwnedGames" [ref=e2313] [cursor=pointer]:
+                        - /url: https://steamapi.xpaw.me/#IPlayerService/GetOwnedGames
+                      - text: but with some minor data processing.
+                  - generic [ref=e2314]:
+                    - heading "getFriendsThatPlay(appID, callback)" [level=3] [ref=e2315]
+                    - 'link "Permalink: getFriendsThatPlay(appID, callback)" [ref=e2316] [cursor=pointer]':
+                      - /url: "#getfriendsthatplayappid-callback"
+                  - list [ref=e2317]:
+                    - listitem [ref=e2318]:
+                      - code [ref=e2319]: appID
+                      - text: "- The ID of the app you want to check"
+                    - listitem [ref=e2320]:
+                      - code [ref=e2321]: callback
+                      - text: "- Called when the request completes."
+                      - list [ref=e2322]:
+                        - listitem [ref=e2323]:
+                          - code [ref=e2324]: err
+                          - text: "- An"
+                          - code [ref=e2325]: Error
+                          - text: object on failure, or
+                          - code [ref=e2326]: "null"
+                          - text: on success
+                        - listitem [ref=e2327]:
+                          - code [ref=e2328]: response
+                          - text: "- The response object"
+                          - list [ref=e2329]:
+                            - listitem [ref=e2330]:
+                              - code [ref=e2331]: friends
+                              - text: "- An array of"
+                              - code [ref=e2332]: SteamID
+                              - text: objects
+                  - paragraph [ref=e2333]:
+                    - strong [ref=e2334]: v4.20.0 or later is required to use this method
+                  - paragraph [ref=e2335]: Retrieves a list of friends that have played or used an app.
+                  - generic [ref=e2336]:
+                    - heading "getOwnedProfileItems([options,] callback)" [level=3] [ref=e2337]
+                    - 'link "Permalink: getOwnedProfileItems([options,] callback)" [ref=e2338] [cursor=pointer]':
+                      - /url: "#getownedprofileitemsoptions-callback"
+                  - list [ref=e2339]:
+                    - listitem [ref=e2340]:
+                      - code [ref=e2341]: options
+                      - text: "- Optional. An object with zero or more of these properties:"
+                      - list [ref=e2342]:
+                        - listitem [ref=e2343]:
+                          - code [ref=e2344]: language
+                          - text: "- A language to localize item data into. Defaults to"
+                          - code [ref=e2345]: english
+                    - listitem [ref=e2346]:
+                      - code [ref=e2347]: callback
+                      - text: "- Called when the request completes."
+                      - list [ref=e2348]:
+                        - listitem [ref=e2349]:
+                          - code [ref=e2350]: err
+                          - text: "- An"
+                          - code [ref=e2351]: Error
+                          - text: object on failure or
+                          - code [ref=e2352]: "null"
+                          - text: on success.
+                        - listitem [ref=e2353]:
+                          - code [ref=e2354]: response
+                          - text: "- The response object. Each property is an array of"
+                          - link "profile item data" [ref=e2355] [cursor=pointer]:
+                            - /url: "#profile-item-data"
+                          - text: objects.
+                          - list [ref=e2356]:
+                            - listitem [ref=e2357]:
+                              - code [ref=e2358]: profile_backgrounds
+                              - text: "- Owned profile backgrounds"
+                            - listitem [ref=e2359]:
+                              - code [ref=e2360]: mini_profile_backgrounds
+                              - text: "- Owned miniprofile backgrounds"
+                            - listitem [ref=e2361]:
+                              - code [ref=e2362]: avatar_frames
+                              - text: "- Owned avatar frames"
+                            - listitem [ref=e2363]:
+                              - code [ref=e2364]: animated_avatars
+                              - text: "- Owned animated avatars"
+                            - listitem [ref=e2365]:
+                              - code [ref=e2366]: profile_modifiers
+                              - text: "- Owned profile modifiers"
+                  - paragraph [ref=e2367]:
+                    - strong [ref=e2368]: v4.16.0 or later is required to use this method
+                  - paragraph [ref=e2369]: Retrieves a listing of all profile items you currently own.
+                  - generic [ref=e2370]:
+                    - heading "Profile Item Data" [level=4] [ref=e2371]
+                    - 'link "Permalink: Profile Item Data" [ref=e2372] [cursor=pointer]':
+                      - /url: "#profile-item-data"
+                  - paragraph [ref=e2373]: "Profile item objects have these properties:"
+                  - list [ref=e2374]:
+                    - listitem [ref=e2375]:
+                      - code [ref=e2376]: communityitemid
+                      - text: "- The asset ID of the item"
+                    - listitem [ref=e2377]:
+                      - code [ref=e2378]: image_small
+                      - text: "- The URL to the image shown in the inventory. May be"
+                      - code [ref=e2379]: "null"
+                      - text: .
+                    - listitem [ref=e2380]:
+                      - code [ref=e2381]: image_large
+                      - text: "- The URL to the full size of the item's image. May be"
+                      - code [ref=e2382]: "null"
+                      - text: if not a profile background.
+                    - listitem [ref=e2383]:
+                      - code [ref=e2384]: name
+                      - text: "- The internal name of the item"
+                    - listitem [ref=e2385]:
+                      - code [ref=e2386]: item_title
+                      - text: "- The localized name of the item"
+                    - listitem [ref=e2387]:
+                      - code [ref=e2388]: item_description
+                      - text: "- The localized description of the item"
+                    - listitem [ref=e2389]:
+                      - code [ref=e2390]: appid
+                      - text: "- The AppID of the app which owns this background"
+                    - listitem [ref=e2391]:
+                      - code [ref=e2392]: item_type
+                    - listitem [ref=e2393]:
+                      - code [ref=e2394]: item_class
+                    - listitem [ref=e2395]:
+                      - code [ref=e2396]: movie_webm
+                      - text: "- The URL to a webm version of a video associated with this item, likely for animated avatars."
+                    - listitem [ref=e2397]:
+                      - code [ref=e2398]: movie_mp4
+                      - text: "- The URL to an mp4 version of a video associated with this item, likely for animated avatars."
+                    - listitem [ref=e2399]:
+                      - code [ref=e2400]: equipped_flags
+                      - text: "- Unknown at this time"
+                  - generic [ref=e2401]:
+                    - heading "getEquippedProfileItems(steamID[, options], callback)" [level=3] [ref=e2402]
+                    - 'link "Permalink: getEquippedProfileItems(steamID[, options], callback)" [ref=e2403] [cursor=pointer]':
+                      - /url: "#getequippedprofileitemssteamid-options-callback"
+                  - list [ref=e2404]:
+                    - listitem [ref=e2405]:
+                      - code [ref=e2406]: steamID
+                      - text: "- Either a"
+                      - code [ref=e2407]: SteamID
+                      - text: object or a string that can parse into one for the user whose currently-equiped profile items you want to see
+                    - listitem [ref=e2408]:
+                      - code [ref=e2409]: options
+                      - text: "- Optional. An object with zero or more of these properties:"
+                      - list [ref=e2410]:
+                        - listitem [ref=e2411]:
+                          - code [ref=e2412]: language
+                          - text: "- A language to localize item data into. Defaults to"
+                          - code [ref=e2413]: english
+                    - listitem [ref=e2414]:
+                      - code [ref=e2415]: callback
+                      - text: "- Called when the request completes."
+                      - list [ref=e2416]:
+                        - listitem [ref=e2417]:
+                          - code [ref=e2418]: err
+                          - text: "- An"
+                          - code [ref=e2419]: Error
+                          - text: object on failure or
+                          - code [ref=e2420]: "null"
+                          - text: on success
+                        - listitem [ref=e2421]:
+                          - code [ref=e2422]: response
+                          - text: "- The response object. Each property is either"
+                          - code [ref=e2423]: "null"
+                          - text: or a
+                          - link "profile item data" [ref=e2424] [cursor=pointer]:
+                            - /url: "#profile-item-data"
+                          - text: object
+                          - list [ref=e2425]:
+                            - listitem [ref=e2426]:
+                              - code [ref=e2427]: profile_background
+                            - listitem [ref=e2428]:
+                              - code [ref=e2429]: mini_profile_background
+                            - listitem [ref=e2430]:
+                              - code [ref=e2431]: avatar_frame
+                            - listitem [ref=e2432]:
+                              - code [ref=e2433]: animated_avatars
+                            - listitem [ref=e2434]:
+                              - code [ref=e2435]: profile_modifiers
+                  - paragraph [ref=e2436]:
+                    - strong [ref=e2437]: v4.16.0 or later is required to use this method
+                  - paragraph [ref=e2438]: Retrieves a list of a given user's equipped profile items.
+                  - generic [ref=e2439]:
+                    - heading "setProfileBackground(backgroundAssetID[, callback])" [level=3] [ref=e2440]
+                    - 'link "Permalink: setProfileBackground(backgroundAssetID[, callback])" [ref=e2441] [cursor=pointer]':
+                      - /url: "#setprofilebackgroundbackgroundassetid-callback"
+                  - list [ref=e2442]:
+                    - listitem [ref=e2443]:
+                      - code [ref=e2444]: backgroundAssetID
+                      - text: "- The asset ID of the item you want to set as your background. Use"
+                      - code [ref=e2445]: "0"
+                      - text: to remove your background.
+                    - listitem [ref=e2446]:
+                      - code [ref=e2447]: callback
+                      - text: "- Optional. Called when the request completes."
+                      - list [ref=e2448]:
+                        - listitem [ref=e2449]:
+                          - code [ref=e2450]: err
+                          - text: "- An"
+                          - code [ref=e2451]: Error
+                          - text: object on failure or
+                          - code [ref=e2452]: "null"
+                          - text: on success.
+                  - paragraph [ref=e2453]:
+                    - strong [ref=e2454]: v4.16.0 or later is required to use this method
+                  - paragraph [ref=e2455]: Changes your own profile background.
+                  - generic [ref=e2456]:
+                    - heading "inviteToGroup(userSteamID, groupSteamID)" [level=3] [ref=e2457]
+                    - 'link "Permalink: inviteToGroup(userSteamID, groupSteamID)" [ref=e2458] [cursor=pointer]':
+                      - /url: "#invitetogroupusersteamid-groupsteamid"
+                  - list [ref=e2459]:
+                    - listitem [ref=e2460]:
+                      - code [ref=e2461]: userSteamID
+                      - text: "- The SteamID of the user you want to invite, as a"
+                      - code [ref=e2462]: SteamID
+                      - text: object or a string which can parse into one
+                    - listitem [ref=e2463]:
+                      - code [ref=e2464]: groupSteamID
+                      - text: "- The SteamID of the group you want to invite the user to, as a"
+                      - code [ref=e2465]: SteamID
+                      - text: object or a string which can parse into one
+                  - paragraph [ref=e2466]:
+                    - strong [ref=e2467]: v3.7.0 or later is required to use this method
+                  - paragraph [ref=e2468]: Invites a user to a Steam group.
+                  - paragraph [ref=e2469]:
+                    - strong [ref=e2470]: "Warning:"
+                    - text: Group invites can only be sent to users on your friends list.
+                    - link "Why is this?" [ref=e2471] [cursor=pointer]:
+                      - /url: https://support.steampowered.com/kb_article.php?ref=2092-QLZX-8453#answer
+                  - generic [ref=e2472]:
+                    - heading "respondToGroupInvite(groupSteamID, accept)" [level=3] [ref=e2473]
+                    - 'link "Permalink: respondToGroupInvite(groupSteamID, accept)" [ref=e2474] [cursor=pointer]':
+                      - /url: "#respondtogroupinvitegroupsteamid-accept"
+                  - list [ref=e2475]:
+                    - listitem [ref=e2476]:
+                      - code [ref=e2477]: groupSteamID
+                      - text: "- The SteamID of the group you were invited to, as a"
+                      - code [ref=e2478]: SteamID
+                      - text: object or a string which can parse into one
+                    - listitem [ref=e2479]:
+                      - code [ref=e2480]: accept
+                      - text: "-"
+                      - code [ref=e2481]: "true"
+                      - text: to join the group,
+                      - code [ref=e2482]: "false"
+                      - text: to ignore the invitation
+                  - paragraph [ref=e2483]:
+                    - strong [ref=e2484]: v3.7.0 or later is required to use this method
+                  - paragraph [ref=e2485]: Joins a group you were invited to or ignores the invite.
+                  - generic [ref=e2486]:
+                    - heading "createFriendsGroup(groupName[, callback])" [level=3] [ref=e2487]
+                    - 'link "Permalink: createFriendsGroup(groupName[, callback])" [ref=e2488] [cursor=pointer]':
+                      - /url: "#createfriendsgroupgroupname-callback"
+                  - list [ref=e2489]:
+                    - listitem [ref=e2490]:
+                      - code [ref=e2491]: groupName
+                      - text: "- The name to create the friends group with"
+                    - listitem [ref=e2492]:
+                      - code [ref=e2493]: callback
+                      - text: "- Optional. Called when requested data is available"
+                      - list [ref=e2494]:
+                        - listitem [ref=e2495]:
+                          - code [ref=e2496]: err
+                          - text: "- An"
+                          - code [ref=e2497]: Error
+                          - text: object on failure, or null on success
+                        - listitem [ref=e2498]:
+                          - code [ref=e2499]: groupID
+                          - text: "- A reference group ID associated with the group"
+                  - paragraph [ref=e2500]:
+                    - strong [ref=e2501]: v3.27.0 or later is required to use this method
+                  - paragraph [ref=e2502]: Creates a friends group (also known as a tag within the official Steam client)
+                  - generic [ref=e2503]:
+                    - heading "deleteFriendsGroup(groupID[, callback])" [level=3] [ref=e2504]
+                    - 'link "Permalink: deleteFriendsGroup(groupID[, callback])" [ref=e2505] [cursor=pointer]':
+                      - /url: "#deletefriendsgroupgroupid-callback"
+                  - list [ref=e2506]:
+                    - listitem [ref=e2507]:
+                      - code [ref=e2508]: groupID
+                      - text: "- The reference group ID associated with the group"
+                    - listitem [ref=e2509]:
+                      - code [ref=e2510]: callback
+                      - text: "- Optional. Called when requested data is available"
+                      - list [ref=e2511]:
+                        - listitem [ref=e2512]:
+                          - code [ref=e2513]: err
+                          - text: An
+                          - code [ref=e2514]: Error
+                          - text: object on failure, or null on success
+                  - paragraph [ref=e2515]:
+                    - strong [ref=e2516]: v3.27.0 or later is required to use this method
+                  - paragraph [ref=e2517]: Deletes a friends group (also known as a tag within the official Steam client)
+                  - generic [ref=e2518]:
+                    - heading "renameFriendsGroup(groupID, newName[, callback])" [level=3] [ref=e2519]
+                    - 'link "Permalink: renameFriendsGroup(groupID, newName[, callback])" [ref=e2520] [cursor=pointer]':
+                      - /url: "#renamefriendsgroupgroupid-newname-callback"
+                  - list [ref=e2521]:
+                    - listitem [ref=e2522]:
+                      - code [ref=e2523]: groupID
+                      - text: "- The reference group ID associated with the group"
+                    - listitem [ref=e2524]:
+                      - code [ref=e2525]: newName
+                      - text: "- The new name to rename the group to"
+                    - listitem [ref=e2526]:
+                      - code [ref=e2527]: callback
+                      - text: "- Optional. Called when requested data is available"
+                      - list [ref=e2528]:
+                        - listitem [ref=e2529]:
+                          - code [ref=e2530]: err
+                          - text: An
+                          - code [ref=e2531]: Error
+                          - text: object on failure, or null on success
+                  - paragraph [ref=e2532]:
+                    - strong [ref=e2533]: v3.27.0 or later is required to use this method
+                  - paragraph [ref=e2534]: Renames a friends group (also known as a tag within the official Steam client)
+                  - paragraph [ref=e2535]:
+                    - strong [ref=e2536]: Note
+                    - text: ": The change does not seem to update within the official Steam client"
+                  - generic [ref=e2537]:
+                    - heading "addFriendToGroup(groupID, userSteamID[, callback])" [level=3] [ref=e2538]
+                    - 'link "Permalink: addFriendToGroup(groupID, userSteamID[, callback])" [ref=e2539] [cursor=pointer]':
+                      - /url: "#addfriendtogroupgroupid-usersteamid-callback"
+                  - list [ref=e2540]:
+                    - listitem [ref=e2541]:
+                      - code [ref=e2542]: groupID
+                      - text: "- The reference group ID associated with the group"
+                    - listitem [ref=e2543]:
+                      - code [ref=e2544]: userSteamID
+                      - text: "- Either a"
+                      - code [ref=e2545]: SteamID
+                      - text: object or a string which can parse into one
+                    - listitem [ref=e2546]:
+                      - code [ref=e2547]: callback
+                      - text: "- Optional. Called when requested data is available"
+                      - list [ref=e2548]:
+                        - listitem [ref=e2549]:
+                          - code [ref=e2550]: err
+                          - text: An
+                          - code [ref=e2551]: Error
+                          - text: object on failure, or null on success
+                  - paragraph [ref=e2552]:
+                    - strong [ref=e2553]: v3.27.0 or later is required to use this method
+                  - paragraph [ref=e2554]: Adds a friend to a friends group (also known as a tag within the official Steam client)
+                  - generic [ref=e2555]:
+                    - heading "removeFriendFromGroup(groupID, userSteamID[, callback])" [level=3] [ref=e2556]
+                    - 'link "Permalink: removeFriendFromGroup(groupID, userSteamID[, callback])" [ref=e2557] [cursor=pointer]':
+                      - /url: "#removefriendfromgroupgroupid-usersteamid-callback"
+                  - list [ref=e2558]:
+                    - listitem [ref=e2559]:
+                      - code [ref=e2560]: groupID
+                      - text: "- The reference group ID associated with the group"
+                    - listitem [ref=e2561]:
+                      - code [ref=e2562]: userSteamID
+                      - text: "- Either a"
+                      - code [ref=e2563]: SteamID
+                      - text: object or a string which can parse into one
+                    - listitem [ref=e2564]:
+                      - code [ref=e2565]: callback
+                      - text: "- Optional. Called when requested data is available"
+                      - list [ref=e2566]:
+                        - listitem [ref=e2567]:
+                          - code [ref=e2568]: err
+                          - text: An
+                          - code [ref=e2569]: Error
+                          - text: object on failure, or null on success
+                  - paragraph [ref=e2570]:
+                    - strong [ref=e2571]: v3.27.0 or later is required to use this method
+                  - paragraph [ref=e2572]: Removes a friend to a friends group (also known as a tag within the official Steam client)
+                  - generic [ref=e2573]:
+                    - heading "trade(steamID)" [level=3] [ref=e2574]
+                    - 'link "Permalink: trade(steamID)" [ref=e2575] [cursor=pointer]':
+                      - /url: "#tradesteamid"
+                  - list [ref=e2576]:
+                    - listitem [ref=e2577]:
+                      - code [ref=e2578]: steamID
+                      - text: "- Either a"
+                      - code [ref=e2579]: SteamID
+                      - text: object or a string which can parse into one
+                  - paragraph [ref=e2580]:
+                    - strong [ref=e2581]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2582]:
+                    - text: Send a trade request to the specified user. Listen for the
+                    - link "tradeResponse" [ref=e2583] [cursor=pointer]:
+                      - /url: "#traderesponse"
+                      - code [ref=e2584]: tradeResponse
+                    - text: event for their response.
+                  - paragraph [ref=e2585]:
+                    - strong [ref=e2586]: "Note: Valve seems to have dropped real-time trade requests from the Steam UI, in favor of trade offers. However, real-time trades are not fully deprecated as they can still be initiated from inside of some games, for example TF2. Users using the Steam client will not see real-time trade requests that your bots send them, but bots should still be able to send and accept trade requests amongst themselves."
+                  - generic [ref=e2587]:
+                    - heading "cancelTradeRequest(steamID)" [level=3] [ref=e2588]
+                    - 'link "Permalink: cancelTradeRequest(steamID)" [ref=e2589] [cursor=pointer]':
+                      - /url: "#canceltraderequeststeamid"
+                  - list [ref=e2590]:
+                    - listitem [ref=e2591]:
+                      - code [ref=e2592]: steamID
+                      - text: "- Either a"
+                      - code [ref=e2593]: SteamID
+                      - text: object or a string which can parse into one
+                  - paragraph [ref=e2594]:
+                    - strong [ref=e2595]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2596]: Cancels your outstanding trade request to the specified user.
+                  - generic [ref=e2597]:
+                    - heading "getAssetClassInfo(language, appid, classes, callback)" [level=3] [ref=e2598]
+                    - 'link "Permalink: getAssetClassInfo(language, appid, classes, callback)" [ref=e2599] [cursor=pointer]':
+                      - /url: "#getassetclassinfolanguage-appid-classes-callback"
+                  - list [ref=e2600]:
+                    - listitem [ref=e2601]:
+                      - code [ref=e2602]: language
+                      - text: "- A string containing the language code you want stuff translated in, e.g. \"en\" or \"es\" or \"zh\""
+                    - listitem [ref=e2603]:
+                      - code [ref=e2604]: appid
+                      - text: "- The AppID of the game which owns the items you're interested in"
+                    - listitem [ref=e2605]:
+                      - code [ref=e2606]: classes
+                      - text: "- An array of objects, where each object has a"
+                      - code [ref=e2607]: classid
+                      - text: property and optionally an
+                      - code [ref=e2608]: instanceid
+                      - text: property
+                    - listitem [ref=e2609]:
+                      - code [ref=e2610]: callback
+                      - text: "- Called when the requested data is available"
+                      - list [ref=e2611]:
+                        - listitem [ref=e2612]:
+                          - code [ref=e2613]: err
+                          - text: "- An"
+                          - code [ref=e2614]: Error
+                          - text: object on failure, or
+                          - code [ref=e2615]: "null"
+                          - text: on success
+                        - listitem [ref=e2616]:
+                          - code [ref=e2617]: descriptions
+                          - text: "- An array of description objects"
+                  - paragraph [ref=e2618]:
+                    - strong [ref=e2619]: v3.25.0 or later is required to use this method
+                  - paragraph [ref=e2620]:
+                    - text: Retrieves asset description data from Steam. Works similarly to
+                    - link "the WebAPI method by the same name" [ref=e2621] [cursor=pointer]:
+                      - /url: https://lab.xpaw.me/steam_api_documentation.html#ISteamEconomy_GetAssetClassInfo_v1
+                    - text: ", although at time of documentation no tags are returned."
+                  - generic [ref=e2622]:
+                    - heading "getTradeURL(callback)" [level=3] [ref=e2623]
+                    - 'link "Permalink: getTradeURL(callback)" [ref=e2624] [cursor=pointer]':
+                      - /url: "#gettradeurlcallback"
+                  - list [ref=e2625]:
+                    - listitem [ref=e2626]:
+                      - code [ref=e2627]: callback
+                      - text: "- Called when the requested data is available"
+                      - list [ref=e2628]:
+                        - listitem [ref=e2629]:
+                          - code [ref=e2630]: err
+                          - text: "- An"
+                          - code [ref=e2631]: Error
+                          - text: object on failure, or
+                          - code [ref=e2632]: "null"
+                          - text: on success
+                        - listitem [ref=e2633]:
+                          - code [ref=e2634]: response
+                          - text: "- The response object"
+                          - list [ref=e2635]:
+                            - listitem [ref=e2636]:
+                              - code [ref=e2637]: token
+                              - text: "- Just the token part of your trade URL"
+                            - listitem [ref=e2638]:
+                              - code [ref=e2639]: url
+                              - text: "- Your full trade URL"
+                  - paragraph [ref=e2640]:
+                    - strong [ref=e2641]: v3.28.0 or later is required to use this method
+                  - paragraph [ref=e2642]: Gets your account's trade token and URL.
+                  - generic [ref=e2643]:
+                    - heading "changeTradeURL(callback)" [level=3] [ref=e2644]
+                    - 'link "Permalink: changeTradeURL(callback)" [ref=e2645] [cursor=pointer]':
+                      - /url: "#changetradeurlcallback"
+                  - list [ref=e2646]:
+                    - listitem [ref=e2647]:
+                      - code [ref=e2648]: callback
+                      - text: "- Called when the requested data is available"
+                      - list [ref=e2649]:
+                        - listitem [ref=e2650]:
+                          - code [ref=e2651]: err
+                          - text: "- An"
+                          - code [ref=e2652]: Error
+                          - text: object on failure, or
+                          - code [ref=e2653]: "null"
+                          - text: on success
+                        - listitem [ref=e2654]:
+                          - code [ref=e2655]: response
+                          - text: "- The response object"
+                          - list [ref=e2656]:
+                            - listitem [ref=e2657]:
+                              - code [ref=e2658]: token
+                              - text: "- Just the token part of your new trade URL"
+                            - listitem [ref=e2659]:
+                              - code [ref=e2660]: url
+                              - text: "- Your full new trade URL"
+                  - paragraph [ref=e2661]:
+                    - strong [ref=e2662]: v3.28.0 or later is required to use this method
+                  - paragraph [ref=e2663]: Asks the Steam server to generate a new trade token for your account, and returns the new token and URL.
+                  - generic [ref=e2664]:
+                    - heading "getEmoticonList(callback)" [level=3] [ref=e2665]
+                    - 'link "Permalink: getEmoticonList(callback)" [ref=e2666] [cursor=pointer]':
+                      - /url: "#getemoticonlistcallback"
+                  - list [ref=e2667]:
+                    - listitem [ref=e2668]:
+                      - code [ref=e2669]: callback
+                      - text: "- Called when the requested data is available"
+                      - list [ref=e2670]:
+                        - listitem [ref=e2671]:
+                          - code [ref=e2672]: err
+                          - text: "- An"
+                          - code [ref=e2673]: Error
+                          - text: object on failure, or
+                          - code [ref=e2674]: "null"
+                          - text: on success
+                        - listitem [ref=e2675]:
+                          - code [ref=e2676]: response
+                          - text: "- The response object"
+                          - list [ref=e2677]:
+                            - listitem [ref=e2678]:
+                              - code [ref=e2679]: emoticons
+                              - text: "- An object where keys are emoticon names (with colons, e.g."
+                              - code [ref=e2680]: "\":steamhappy:\""
+                              - text: ") and values are objects with these properties:"
+                              - list [ref=e2681]:
+                                - listitem [ref=e2682]:
+                                  - code [ref=e2683]: name
+                                  - text: "- The name of this emoticon, with colons (e.g."
+                                  - code [ref=e2684]: "\":steamhappy:\""
+                                  - text: )
+                                - listitem [ref=e2685]:
+                                  - code [ref=e2686]: count
+                                  - text: "- A count of how many of this emoticon you own"
+                                - listitem [ref=e2687]:
+                                  - code [ref=e2688]: time_last_used
+                                  - text: "- A"
+                                  - code [ref=e2689]: Date
+                                  - text: object representing when you last used this emoticon (
+                                  - code [ref=e2690]: "null"
+                                  - text: if never used)
+                                - listitem [ref=e2691]:
+                                  - code [ref=e2692]: use_count
+                                  - text: "- A count of how many times you have used this emoticon"
+                                - listitem [ref=e2693]:
+                                  - code [ref=e2694]: time_received
+                                  - text: "- A"
+                                  - code [ref=e2695]: Date
+                                  - text: object representing when you received this emoticon (
+                                  - code [ref=e2696]: "null"
+                                  - text: if not applicable, e.g. the default Steam emoticons)
+                  - paragraph [ref=e2697]:
+                    - strong [ref=e2698]: v4.5.0 or later is required to use this method
+                  - paragraph [ref=e2699]: Requests a list of emoticons that your account is entitled to use.
+                  - generic [ref=e2700]:
+                    - heading "chatMessage(recipient, message[, type])" [level=3] [ref=e2701]
+                    - 'link "Permalink: chatMessage(recipient, message[, type])" [ref=e2702] [cursor=pointer]':
+                      - /url: "#chatmessagerecipient-message-type"
+                  - list [ref=e2703]:
+                    - listitem [ref=e2704]:
+                      - code [ref=e2705]: recipient
+                      - text: "- Either a"
+                      - code [ref=e2706]: SteamID
+                      - text: object or a string which can parse into one for the recipient of your message
+                    - listitem [ref=e2707]:
+                      - code [ref=e2708]: message
+                      - text: "- The chat message that you're sending to them"
+                    - listitem [ref=e2709]:
+                      - code [ref=e2710]: type
+                      - text: "- Optional. A value from"
+                      - code [ref=e2711]: EChatEntryType
+                      - text: . Defaults to
+                      - code [ref=e2712]: ChatMsg
+                      - text: . This usually shouldn't be needed.
+                  - paragraph [ref=e2713]:
+                    - strong [ref=e2714]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2715]: Sends a chat message to a friend or a legacy chat room.
+                  - paragraph [ref=e2716]:
+                    - strong [ref=e2717]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2718]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2719] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2720]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2721]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2722] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2723]:
+                    - heading "chatTyping(recipient)" [level=3] [ref=e2724]
+                    - 'link "Permalink: chatTyping(recipient)" [ref=e2725] [cursor=pointer]':
+                      - /url: "#chattypingrecipient"
+                  - list [ref=e2726]:
+                    - listitem [ref=e2727]:
+                      - code [ref=e2728]: recipient
+                      - text: "- Either a"
+                      - code [ref=e2729]: SteamID
+                      - text: object or a string which can parse into one
+                  - paragraph [ref=e2730]:
+                    - strong [ref=e2731]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2732]:
+                    - text: Tells the
+                    - code [ref=e2733]: recipient
+                    - text: that you're typing a chat message.
+                  - paragraph [ref=e2734]:
+                    - strong [ref=e2735]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2736]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2737] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2738]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2739]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2740] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2741]:
+                    - heading "getChatHistory(steamID[, callback])" [level=3] [ref=e2742]
+                    - 'link "Permalink: getChatHistory(steamID[, callback])" [ref=e2743] [cursor=pointer]':
+                      - /url: "#getchathistorysteamid-callback"
+                  - list [ref=e2744]:
+                    - listitem [ref=e2745]:
+                      - code [ref=e2746]: steamID
+                      - text: "- Either a"
+                      - code [ref=e2747]: SteamID
+                      - text: object or a string which can parse into one
+                    - listitem [ref=e2748]:
+                      - code [ref=e2749]: callback
+                      - text: "- Optional. Called when the requested data is available"
+                      - list [ref=e2750]:
+                        - listitem [ref=e2751]:
+                          - code [ref=e2752]: err
+                          - text: "- An"
+                          - code [ref=e2753]: Error
+                          - text: object on failure, or
+                          - code [ref=e2754]: "null"
+                          - text: on success
+                        - listitem [ref=e2755]:
+                          - code [ref=e2756]: messages
+                          - text: "- An array of message objects, each of which has the following properties:"
+                          - list [ref=e2757]:
+                            - listitem [ref=e2758]:
+                              - code [ref=e2759]: steamID
+                              - text: "- The SteamID of the user who sent the message, either us or them (as a"
+                              - code [ref=e2760]: SteamID
+                              - text: object)
+                            - listitem [ref=e2761]:
+                              - code [ref=e2762]: timestamp
+                              - text: "- A"
+                              - code [ref=e2763]: Date
+                              - text: object for when the message was sent
+                            - listitem [ref=e2764]:
+                              - code [ref=e2765]: message
+                              - text: "- The message text"
+                            - listitem [ref=e2766]:
+                              - code [ref=e2767]: unread
+                              - text: "-"
+                              - code [ref=e2768]: "true"
+                              - text: if this was a new offline message,
+                              - code [ref=e2769]: "false"
+                              - text: if it's just history
+                  - paragraph [ref=e2770]:
+                    - strong [ref=e2771]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2772]:
+                    - text: Requests our chat history with a user. The results will arrive either in the callback or in the
+                    - link "chatHistory" [ref=e2773] [cursor=pointer]:
+                      - /url: "#chathistory"
+                      - code [ref=e2774]: chatHistory
+                    - text: event.
+                  - paragraph [ref=e2775]:
+                    - strong [ref=e2776]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2777]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2778] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2779]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2780]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2781] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2782]:
+                    - heading "joinChat(steamID[, callback])" [level=3] [ref=e2783]
+                    - 'link "Permalink: joinChat(steamID[, callback])" [ref=e2784] [cursor=pointer]':
+                      - /url: "#joinchatsteamid-callback"
+                  - list [ref=e2785]:
+                    - listitem [ref=e2786]:
+                      - code [ref=e2787]: steamID
+                      - text: "- The SteamID of the chat to join (as a"
+                      - code [ref=e2788]: SteamID
+                      - text: object or a string which can parse into one)
+                    - listitem [ref=e2789]:
+                      - code [ref=e2790]: callback
+                      - text: "- Optional. Called when we either join or fail to join."
+                      - list [ref=e2791]:
+                        - listitem [ref=e2792]:
+                          - code [ref=e2793]: err
+                          - text: "- An"
+                          - code [ref=e2794]: Error
+                          - text: object on failure, or
+                          - code [ref=e2795]: "null"
+                          - text: on success
+                  - paragraph [ref=e2796]:
+                    - strong [ref=e2797]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2798]: Joins a legacy chat room. To join a group chat, use the group's SteamID.
+                  - paragraph [ref=e2799]:
+                    - strong [ref=e2800]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2801]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2802] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2803]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2804]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2805] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2806]:
+                    - heading "leaveChat(steamID)" [level=3] [ref=e2807]
+                    - 'link "Permalink: leaveChat(steamID)" [ref=e2808] [cursor=pointer]':
+                      - /url: "#leavechatsteamid"
+                  - list [ref=e2809]:
+                    - listitem [ref=e2810]:
+                      - code [ref=e2811]: steamID
+                      - text: "- The SteamID of the chat room to leave (as a"
+                      - code [ref=e2812]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2813]:
+                    - strong [ref=e2814]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2815]: Leaves a legacy chat room we're in.
+                  - paragraph [ref=e2816]:
+                    - strong [ref=e2817]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2818]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2819] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2820]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2821]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2822] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2823]:
+                    - heading "setChatPrivate(steamID)" [level=3] [ref=e2824]
+                    - 'link "Permalink: setChatPrivate(steamID)" [ref=e2825] [cursor=pointer]':
+                      - /url: "#setchatprivatesteamid"
+                  - list [ref=e2826]:
+                    - listitem [ref=e2827]:
+                      - code [ref=e2828]: steamID
+                      - text: "- The SteamID of the chat room to lock (as a"
+                      - code [ref=e2829]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2830]:
+                    - strong [ref=e2831]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2832]: Locks a legacy chat room so that only group members and invited users can join.
+                  - paragraph [ref=e2833]:
+                    - strong [ref=e2834]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2835]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2836] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2837]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2838]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2839] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2840]:
+                    - heading "setChatPublic(steamID)" [level=3] [ref=e2841]
+                    - 'link "Permalink: setChatPublic(steamID)" [ref=e2842] [cursor=pointer]':
+                      - /url: "#setchatpublicsteamid"
+                  - list [ref=e2843]:
+                    - listitem [ref=e2844]:
+                      - code [ref=e2845]: steamID
+                      - text: "- The SteamID of the chat room to unlock (as a"
+                      - code [ref=e2846]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2847]:
+                    - strong [ref=e2848]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2849]: Unlocks a legacy chat room so anyone can join.
+                  - paragraph [ref=e2850]:
+                    - strong [ref=e2851]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2852]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2853] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2854]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2855]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2856] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2857]:
+                    - heading "setChatOfficersOnly(steamID)" [level=3] [ref=e2858]
+                    - 'link "Permalink: setChatOfficersOnly(steamID)" [ref=e2859] [cursor=pointer]':
+                      - /url: "#setchatofficersonlysteamid"
+                  - list [ref=e2860]:
+                    - listitem [ref=e2861]:
+                      - code [ref=e2862]: steamID
+                      - text: "- The SteamID of the chat room to set officers-only (as a"
+                      - code [ref=e2863]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2864]:
+                    - strong [ref=e2865]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2866]: Sets a legacy chat room so that only group officers can chat.
+                  - paragraph [ref=e2867]:
+                    - strong [ref=e2868]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2869]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2870] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2871]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2872]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2873] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2874]:
+                    - heading "unsetChatOfficersOnly(steamID)" [level=3] [ref=e2875]
+                    - 'link "Permalink: unsetChatOfficersOnly(steamID)" [ref=e2876] [cursor=pointer]':
+                      - /url: "#unsetchatofficersonlysteamid"
+                  - list [ref=e2877]:
+                    - listitem [ref=e2878]:
+                      - code [ref=e2879]: steamID
+                      - text: "- The SteamID of the chat room to unset officers-only (as a"
+                      - code [ref=e2880]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2881]:
+                    - strong [ref=e2882]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2883]: Sets a legacy chat room so that anyone can chat.
+                  - paragraph [ref=e2884]:
+                    - strong [ref=e2885]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2886]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2887] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2888]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2889]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2890] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2891]:
+                    - heading "kickFromChat(chatID, userID)" [level=3] [ref=e2892]
+                    - 'link "Permalink: kickFromChat(chatID, userID)" [ref=e2893] [cursor=pointer]':
+                      - /url: "#kickfromchatchatid-userid"
+                  - list [ref=e2894]:
+                    - listitem [ref=e2895]:
+                      - code [ref=e2896]: chatID
+                      - text: "- The SteamID of the chat room to kick the user from (as a"
+                      - code [ref=e2897]: SteamID
+                      - text: object or a string which can parse into one)
+                    - listitem [ref=e2898]:
+                      - code [ref=e2899]: userID
+                      - text: "- The SteamID of the user to kick from the room (as a"
+                      - code [ref=e2900]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2901]:
+                    - strong [ref=e2902]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2903]: Kicks a user from a legacy chat room.
+                  - paragraph [ref=e2904]:
+                    - strong [ref=e2905]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2906]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2907] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2908]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2909]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2910] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2911]:
+                    - heading "banFromChat(chatID, userID)" [level=3] [ref=e2912]
+                    - 'link "Permalink: banFromChat(chatID, userID)" [ref=e2913] [cursor=pointer]':
+                      - /url: "#banfromchatchatid-userid"
+                  - list [ref=e2914]:
+                    - listitem [ref=e2915]:
+                      - code [ref=e2916]: chatID
+                      - text: "- The SteamID of the chat room to ban the user from (as a"
+                      - code [ref=e2917]: SteamID
+                      - text: object or a string which can parse into one)
+                    - listitem [ref=e2918]:
+                      - code [ref=e2919]: userID
+                      - text: "- The SteamID of the user to ban from the room (as a"
+                      - code [ref=e2920]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2921]:
+                    - strong [ref=e2922]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2923]: Bans a user from a legacy chat room.
+                  - paragraph [ref=e2924]:
+                    - strong [ref=e2925]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2926]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2927] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2928]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2929]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2930] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2931]:
+                    - heading "unbanFromChat(chatID, userID)" [level=3] [ref=e2932]
+                    - 'link "Permalink: unbanFromChat(chatID, userID)" [ref=e2933] [cursor=pointer]':
+                      - /url: "#unbanfromchatchatid-userid"
+                  - list [ref=e2934]:
+                    - listitem [ref=e2935]:
+                      - code [ref=e2936]: chatID
+                      - text: "- The SteamID of the chat room to unban the user from (as a"
+                      - code [ref=e2937]: SteamID
+                      - text: object or a string which can parse into one)
+                    - listitem [ref=e2938]:
+                      - code [ref=e2939]: userID
+                      - text: "- The SteamID of the user to unban from the room (as a"
+                      - code [ref=e2940]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2941]:
+                    - strong [ref=e2942]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2943]: Unbans a banned user from a legacy chat room.
+                  - paragraph [ref=e2944]:
+                    - strong [ref=e2945]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2946]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2947] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2948]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2949]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2950] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2951]:
+                    - heading "inviteToChat(chatID, userID)" [level=3] [ref=e2952]
+                    - 'link "Permalink: inviteToChat(chatID, userID)" [ref=e2953] [cursor=pointer]':
+                      - /url: "#invitetochatchatid-userid"
+                  - list [ref=e2954]:
+                    - listitem [ref=e2955]:
+                      - code [ref=e2956]: chatID
+                      - text: "- The SteamID of the chat room to invite to (as a"
+                      - code [ref=e2957]: SteamID
+                      - text: object or a string which can parse into one)
+                    - listitem [ref=e2958]:
+                      - code [ref=e2959]: userID
+                      - text: "- The SteamID of the user to invite to the room (as a"
+                      - code [ref=e2960]: SteamID
+                      - text: object or a string which can parse into one)
+                  - paragraph [ref=e2961]:
+                    - strong [ref=e2962]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2963]: Invites a user to a legacy chat room.
+                  - paragraph [ref=e2964]:
+                    - strong [ref=e2965]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e2966]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2967] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2968]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2969]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2970] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2971]:
+                    - heading "createChatRoom([convertUserID, ][inviteUserID, ][callback])" [level=3] [ref=e2972]
+                    - 'link "Permalink: createChatRoom([convertUserID, ][inviteUserID, ][callback])" [ref=e2973] [cursor=pointer]':
+                      - /url: "#createchatroomconvertuserid-inviteuserid-callback"
+                  - list [ref=e2974]:
+                    - listitem [ref=e2975]:
+                      - code [ref=e2976]: convertUserID
+                      - text: "- If the user with the SteamID passed here has a chat window open with us, their window will be converted to the new chat room and they'll join it automatically. If they don't have a window open, they'll get an invite."
+                    - listitem [ref=e2977]:
+                      - code [ref=e2978]: inviteUserID
+                      - text: "- If specified, the user with the SteamID passed here will get invited to the new room automatically."
+                    - listitem [ref=e2979]:
+                      - code [ref=e2980]: callback
+                      - text: "- Optional. Called when the chat is created or a failure occurs."
+                      - list [ref=e2981]:
+                        - listitem [ref=e2982]:
+                          - code [ref=e2983]: err
+                          - text: "- An"
+                          - code [ref=e2984]: Error
+                          - text: object on failure, or
+                          - code [ref=e2985]: "null"
+                          - text: on success
+                        - listitem [ref=e2986]:
+                          - code [ref=e2987]: chatID
+                          - text: "- If successful, the SteamID of the newly-created room, as a"
+                          - code [ref=e2988]: SteamID
+                          - text: object
+                  - paragraph [ref=e2989]:
+                    - strong [ref=e2990]: v1.9.0 or later is required to use this method
+                  - paragraph [ref=e2991]: Creates a new multi-user legacy chat room.
+                  - paragraph [ref=e2992]:
+                    - strong [ref=e2993]: This is deprecated.
+                    - text: This creates an old-style, pre-new-chat chat room, which is not compatible with Steam's newer chat system. You should use
+                    - code [ref=e2994]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e2995] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e2996]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e2997]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e2998] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e2999]:
+                    - heading "redeemKey(key[, callback])" [level=3] [ref=e3000]
+                    - 'link "Permalink: redeemKey(key[, callback])" [ref=e3001] [cursor=pointer]':
+                      - /url: "#redeemkeykey-callback"
+                  - list [ref=e3002]:
+                    - listitem [ref=e3003]:
+                      - code [ref=e3004]: key
+                      - text: "- Steam formatted game key"
+                    - listitem [ref=e3005]:
+                      - code [ref=e3006]: callback
+                      - text: "- Optional. Called when request completes"
+                      - list [ref=e3007]:
+                        - listitem [ref=e3008]:
+                          - code [ref=e3009]: err
+                          - text: "- An"
+                          - code [ref=e3010]: Error
+                          - text: object on failure, or
+                          - code [ref=e3011]: "null"
+                          - text: on success
+                        - listitem [ref=e3012]:
+                          - code [ref=e3013]: purchaseResultDetails
+                          - text: "- A"
+                          - code [ref=e3014]: SteamUser.EPurchaseResult
+                          - text: value
+                        - listitem [ref=e3015]:
+                          - code [ref=e3016]: packageList
+                          - text: "- An object whose keys are packageIDs and values are package names"
+                  - paragraph [ref=e3017]:
+                    - strong [ref=e3018]: v3.2.0 or later is required to use this method
+                  - paragraph [ref=e3019]:
+                    - text: Redeems a game code (CD key) on your account. If this request fails, the
+                    - code [ref=e3020]: Error
+                    - text: object will have
+                    - code [ref=e3021]: purchaseResultDetails
+                    - text: and
+                    - code [ref=e3022]: packageList
+                    - text: properties, and you should access this data via the
+                    - code [ref=e3023]: Error
+                    - text: object and not via the callback arguments.
+                  - generic [ref=e3024]:
+                    - heading "requestFreeLicense(appIDs[, callback])" [level=3] [ref=e3025]
+                    - 'link "Permalink: requestFreeLicense(appIDs[, callback])" [ref=e3026] [cursor=pointer]':
+                      - /url: "#requestfreelicenseappids-callback"
+                  - list [ref=e3027]:
+                    - listitem [ref=e3028]:
+                      - code [ref=e3029]: appIDs
+                      - text: "- An array of AppIDs for which you want licenses"
+                    - listitem [ref=e3030]:
+                      - code [ref=e3031]: callback
+                      - text: "- Optional. Called when request completes"
+                      - list [ref=e3032]:
+                        - listitem [ref=e3033]:
+                          - code [ref=e3034]: err
+                          - text: "- An"
+                          - code [ref=e3035]: Error
+                          - text: object on failure, or
+                          - code [ref=e3036]: "null"
+                          - text: on success
+                        - listitem [ref=e3037]:
+                          - code [ref=e3038]: grantedPackageIds
+                          - text: "- An array of package IDs that were granted to your account as a result of this request"
+                        - listitem [ref=e3039]:
+                          - code [ref=e3040]: grantedAppIds
+                          - text: "- An array of AppIDs that were granted to your account as a result of this request"
+                  - paragraph [ref=e3041]:
+                    - strong [ref=e3042]: v3.18.0 or later is required to use this method
+                  - paragraph [ref=e3043]: Requests a free-on-demand license to be granted to your account.
+                  - paragraph [ref=e3044]:
+                    - text: Older free-to-play games are in the "Steam" package (
+                    - link "package ID 0" [ref=e3045] [cursor=pointer]:
+                      - /url: https://steamdb.info/sub/0/
+                    - text: ). This package is automatically granted to all accounts (but not anonymous ones). Games in this package do not need a license to be explicitly requested.
+                  - paragraph [ref=e3046]: All newer free-to-play games have "free-on-demand packages". These are packages that are not automatically granted to all accounts, but will be granted upon request ("on demand"). This is so that the Steam client can show free-to-play games you have previously added to your library when not installed. In order to "play" any free-to-play app that isn't in sub 0, you need to request a license for it using this method.
+                  - paragraph [ref=e3047]:
+                    - text: If successful, calling this method will result in the
+                    - link "licenses" [ref=e3048] [cursor=pointer]:
+                      - /url: "#licenses-1"
+                      - code [ref=e3049]: licenses
+                    - text: event being emitted containing your new license(s).
+                  - paragraph [ref=e3050]:
+                    - strong [ref=e3051]: "Please note:"
+                    - text: This method is rate-limited to approximately 50 apps per hour.
+                  - paragraph [ref=e3052]:
+                    - strong [ref=e3053]: "Please note:"
+                    - text: This method only works with free-on-demand licenses. Promotional free licenses (i.e. "free to keep for a limited time") cannot be requested using this method. You can request such licenses using the steamstore module's
+                    - link "addFreeLicense" [ref=e3054] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steamstore#addfreelicensesubid-callback
+                    - text: method.
+                  - generic [ref=e3055]:
+                    - heading "getLegacyGameKey(appid, callback)" [level=3] [ref=e3056]
+                    - 'link "Permalink: getLegacyGameKey(appid, callback)" [ref=e3057] [cursor=pointer]':
+                      - /url: "#getlegacygamekeyappid-callback"
+                  - list [ref=e3058]:
+                    - listitem [ref=e3059]:
+                      - code [ref=e3060]: appid
+                      - text: "- The Steam AppID of the app for which you want a legacy key"
+                    - listitem [ref=e3061]:
+                      - code [ref=e3062]: callback
+                      - text: "- Called when the request completes"
+                      - list [ref=e3063]:
+                        - listitem [ref=e3064]:
+                          - code [ref=e3065]: err
+                          - text: "- If there was an error, this is an"
+                          - code [ref=e3066]: Error
+                          - text: object. Otherwise, it's
+                          - code [ref=e3067]: "null"
+                          - text: .
+                        - listitem [ref=e3068]:
+                          - code [ref=e3069]: response
+                          - text: "- The response object"
+                          - list [ref=e3070]:
+                            - listitem [ref=e3071]:
+                              - code [ref=e3072]: key
+                              - text: "- Your key, as a string"
+                  - paragraph [ref=e3073]:
+                    - strong [ref=e3074]: v4.24.0 or later is required to use this method
+                  - paragraph [ref=e3075]: Requests your legacy CD key for a game in your library. This will only succeed if the game in question uses legacy CD keys (usually you'll get a Steam popup when you launch this game presenting you with your key which you can copy and paste into the game when prompted).
+                  - generic [ref=e3076]:
+                    - heading "markNotificationsRead(notificationIds)" [level=3] [ref=e3077]
+                    - 'link "Permalink: markNotificationsRead(notificationIds)" [ref=e3078] [cursor=pointer]':
+                      - /url: "#marknotificationsreadnotificationids"
+                  - list [ref=e3079]:
+                    - listitem [ref=e3080]:
+                      - code [ref=e3081]: notificationIds
+                      - text: "- Array of notification IDs from"
+                      - link "notificationsReceived" [ref=e3082] [cursor=pointer]:
+                        - /url: "#notificationsreceived"
+                        - code [ref=e3083]: notificationsReceived
+                      - text: (numbers or strings) to mark as read
+                  - paragraph [ref=e3084]:
+                    - strong [ref=e3085]: v5.2.0 or later is required to use this method
+                  - paragraph [ref=e3086]: Marks a list of notifications as read. There is no response or feedback to this method.
+                  - generic [ref=e3087]:
+                    - heading "markAllNotificationsRead()" [level=3] [ref=e3088]
+                    - 'link "Permalink: markAllNotificationsRead()" [ref=e3089] [cursor=pointer]':
+                      - /url: "#markallnotificationsread"
+                  - paragraph [ref=e3090]:
+                    - strong [ref=e3091]: v5.2.0 or later is required to use this method
+                  - paragraph [ref=e3092]: Marks all notifications as read. There is no response or feedback to this method.
+                  - generic [ref=e3093]:
+                    - heading "createEncryptedAppTicket(appid[, userData], callback)" [level=3] [ref=e3094]
+                    - 'link "Permalink: createEncryptedAppTicket(appid[, userData], callback)" [ref=e3095] [cursor=pointer]':
+                      - /url: "#createencryptedappticketappid-userdata-callback"
+                  - list [ref=e3096]:
+                    - listitem [ref=e3097]:
+                      - code [ref=e3098]: appid
+                      - text: "- The Steam AppID of the app for which you want a ticket"
+                    - listitem [ref=e3099]:
+                      - code [ref=e3100]: userData
+                      - text: "- If the app expects some \"user data\" (arbitrary data which will be encrypted into the ticket), provide it here. Otherwise, omit this argument or pass an empty Buffer."
+                    - listitem [ref=e3101]:
+                      - code [ref=e3102]: callback
+                      - text: "- Called when the request completes"
+                      - list [ref=e3103]:
+                        - listitem [ref=e3104]:
+                          - code [ref=e3105]: err
+                          - text: "- If there was an error, this is an"
+                          - code [ref=e3106]: Error
+                          - text: object. Otherwise, it's
+                          - code [ref=e3107]: "null"
+                          - text: .
+                        - listitem [ref=e3108]:
+                          - code [ref=e3109]: encryptedAppTicket
+                          - text: "- If successful, this is your encrypted appticket as a Buffer. You should provide the entire contents of the Buffer to the recipient."
+                  - paragraph [ref=e3110]:
+                    - strong [ref=e3111]: v3.14.0 or later is required to use this method
+                  - paragraph [ref=e3112]: Requests an "encrypted app ticket" from Steam servers for a particular game. This can be used to prove your ownership of an app and also your account identity to some publisher server, provided they're expecting an encrypted app ticket. To use encrypted app tickets, publishers must set up an encryption key in the Steamworks backend. Therefore, this will not work if encrypted tickets haven't been set up for the AppID you request a ticket for. You cannot decrypt an encrypted app ticket, nor can you view anything it contains. It is for all intents and purposes an opaque blob of binary data which only the developer/publisher of the game can do anything with.
+                  - generic [ref=e3113]:
+                    - heading "sendToGC(appid, msgType, protoBufHeader, payload[, callback])" [level=3] [ref=e3114]
+                    - 'link "Permalink: sendToGC(appid, msgType, protoBufHeader, payload[, callback])" [ref=e3115] [cursor=pointer]':
+                      - /url: "#sendtogcappid-msgtype-protobufheader-payload-callback"
+                  - paragraph [ref=e3116]:
+                    - strong [ref=e3117]: v4.1.0 or later is required to use this method
+                  - paragraph [ref=e3118]:
+                    - link "Please see documentation for GC interaction on the GitHub wiki." [ref=e3119] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/Game-Coordinator
+                  - generic [ref=e3120]:
+                    - heading "Events ^" [level=1] [ref=e3121]:
+                      - text: Events
+                      - link "^" [ref=e3122] [cursor=pointer]:
+                        - /url: "#contents"
+                    - 'link "Permalink: Events ^" [ref=e3123] [cursor=pointer]':
+                      - /url: "#events-"
+                  - generic [ref=e3124]:
+                    - heading "ID Events" [level=2] [ref=e3125]
+                    - 'link "Permalink: ID Events" [ref=e3126] [cursor=pointer]':
+                      - /url: "#id-events"
+                  - paragraph [ref=e3127]:
+                    - text: Events marked as
+                    - strong [ref=e3128]: ID events
+                    - text: are special. They all have a
+                    - code [ref=e3129]: SteamID
+                    - text: object as their first parameter. In addition to the event itself firing, a second event comprised of
+                    - code [ref=e3130]: eventName + "#" + steamID.getSteamID64()
+                    - text: is fired.
+                  - paragraph [ref=e3131]: "For example:"
+                  - generic [ref=e3133]: "// This will fire when we receive a chat message from ANY friend user.on('friendMessage', function(steamID, message) { console.log(\"Friend message from \" + steamID.getSteam3RenderedID() + \": \" + message); }); // This will fire when we receive a chat message from [U:1:46143802] / 76561198006409530 ONLY user.on('friendMessage#76561198006409530', function(steamID, message) { console.log(\"Friend message from \" + steamID.getSteam3RenderedID() + \": \" + message); });"
+                  - generic [ref=e3134]:
+                    - heading "loggedOn" [level=3] [ref=e3135]
+                    - 'link "Permalink: loggedOn" [ref=e3136] [cursor=pointer]':
+                      - /url: "#loggedon"
+                  - list [ref=e3137]:
+                    - listitem [ref=e3138]:
+                      - code [ref=e3139]: details
+                      - text: "- An object containing various details about your account (see"
+                      - link "CMsgClientLogonResponse" [ref=e3140] [cursor=pointer]:
+                        - /url: https://github.com/SteamRE/SteamKit/blob/SteamKit_1.6.3/Resources/Protobufs/steamclient/steammessages_clientserver.proto#L93-L116
+                        - code [ref=e3141]: CMsgClientLogonResponse
+                      - text: )
+                    - listitem [ref=e3142]:
+                      - code [ref=e3143]: parental
+                      - text: "- An object containing your parental controls settings"
+                  - paragraph [ref=e3144]:
+                    - strong [ref=e3145]:
+                      - text: v3.5.0 or later is required to use
+                      - code [ref=e3146]: parental
+                      - text: .
+                  - paragraph [ref=e3147]: Emitted when you're successfully logged into Steam.
+                  - generic [ref=e3148]:
+                    - heading "steamGuard" [level=3] [ref=e3149]
+                    - 'link "Permalink: steamGuard" [ref=e3150] [cursor=pointer]':
+                      - /url: "#steamguard"
+                  - list [ref=e3151]:
+                    - listitem [ref=e3152]:
+                      - code [ref=e3153]: domain
+                      - text: "- If an email code is needed, the domain name of the address where the email was sent."
+                      - code [ref=e3154]: "null"
+                      - text: if an app code is needed.
+                    - listitem [ref=e3155]:
+                      - code [ref=e3156]: callback
+                      - text: "- Should be called when the code is available."
+                      - list [ref=e3157]:
+                        - listitem [ref=e3158]:
+                          - code [ref=e3159]: code
+                          - text: "- The Steam Guard auth code"
+                    - listitem [ref=e3160]:
+                      - code [ref=e3161]: lastCodeWrong
+                      - text: "-"
+                      - code [ref=e3162]: "true"
+                      - text: if you're using 2FA and the last code you provided was wrong,
+                      - code [ref=e3163]: "false"
+                      - text: otherwise
+                  - paragraph [ref=e3164]:
+                    - text: This event will be emitted when Steam requests a Steam Guard code from us. You should collect the code from the user somehow and then call the
+                    - code [ref=e3165]: callback
+                    - text: with the code as the sole argument.
+                  - paragraph [ref=e3166]:
+                    - text: If no listener is bound to this event, then
+                    - code [ref=e3167]: steam-user
+                    - text: will prompt the user for a code via stdin.
+                  - paragraph [ref=e3168]:
+                    - strong [ref=e3169]:
+                      - text: If you are using 2FA, you need to check the
+                      - code [ref=e3170]: lastCodeWrong
+                      - text: argument.
+                    - text: If it's true, then the last code you provided was incorrect (likely already used). In this case, you should wait 30 seconds to allow the TOTP algorithm to generate a new code. Failure to do so will result in a login loop, causing your IP address to be temporarily banned.
+                  - paragraph [ref=e3171]: "Example:"
+                  - generic [ref=e3173]: "user.on('steamGuard', function(domain, callback) { console.log(\"Steam Guard code needed from email ending in \" + domain); var code = getCodeSomehow(); callback(code); });"
+                  - generic [ref=e3174]:
+                    - heading "error" [level=3] [ref=e3175]
+                    - 'link "Permalink: error" [ref=e3176] [cursor=pointer]':
+                      - /url: "#error"
+                  - list [ref=e3177]:
+                    - listitem [ref=e3178]:
+                      - code [ref=e3179]: err
+                      - text: "- An"
+                      - code [ref=e3180]: Error
+                      - text: object
+                  - paragraph [ref=e3181]:
+                    - text: Emitted when an error occurs during logon. Also emitted if we're disconnected and
+                    - code [ref=e3182]: autoRelogin
+                    - text: is either disabled, or it's a fatal disconnect.
+                  - paragraph [ref=e3183]: If this event isn't handled, the program will crash.
+                  - paragraph [ref=e3184]:
+                    - text: The
+                    - code [ref=e3185]: SteamUser
+                    - text: object's
+                    - code [ref=e3186]: steamID
+                    - text: property will still be defined when this is emitted. The
+                    - code [ref=e3187]: Error
+                    - text: object will have an
+                    - code [ref=e3188]: eresult
+                    - text: parameter which is a value from the
+                    - link "EResult" [ref=e3189] [cursor=pointer]:
+                      - /url: https://github.com/SteamRE/SteamKit/blob/SteamKit_1.6.3/Resources/SteamLanguage/eresult.steamd
+                      - code [ref=e3190]: EResult
+                    - text: enum.
+                  - generic [ref=e3191]:
+                    - heading "disconnected" [level=3] [ref=e3192]
+                    - 'link "Permalink: disconnected" [ref=e3193] [cursor=pointer]':
+                      - /url: "#disconnected"
+                  - list [ref=e3194]:
+                    - listitem [ref=e3195]:
+                      - code [ref=e3196]: eresult
+                      - text: "- A value from the"
+                      - code [ref=e3197]: SteamUser.EResult
+                      - text: enum
+                    - listitem [ref=e3198]:
+                      - code [ref=e3199]: msg
+                      - text: "- A string describing the reason for the disconnect, if available (might be undefined)"
+                  - paragraph [ref=e3200]:
+                    - text: Emitted when we're disconnected from Steam for a non-fatal reason and
+                    - code [ref=e3201]: autoRelogin
+                    - text: is enabled.
+                    - code [ref=e3202]: SteamUser
+                    - text: will continually retry connection and will either emit
+                    - code [ref=e3203]: loggedOn
+                    - text: when logged back on, or
+                    - code [ref=e3204]: error
+                    - text: if a fatal logon error is experienced.
+                  - paragraph [ref=e3205]: Also emitted in response to a logOff() call.
+                  - paragraph [ref=e3206]:
+                    - text: The
+                    - code [ref=e3207]: SteamUser
+                    - text: object's
+                    - code [ref=e3208]: steamID
+                    - text: property will still be defined when this is emitted.
+                  - paragraph [ref=e3209]:
+                    - text: The
+                    - code [ref=e3210]: eresult
+                    - text: value might be 0 (Invalid), which indicates that the disconnection was due to the connection being closed directly, without Steam sending a LoggedOff message.
+                  - generic [ref=e3211]:
+                    - heading "machineAuthToken" [level=3] [ref=e3212]
+                    - 'link "Permalink: machineAuthToken" [ref=e3213] [cursor=pointer]':
+                      - /url: "#machineauthtoken"
+                  - list [ref=e3214]:
+                    - listitem [ref=e3215]:
+                      - code [ref=e3216]: machineAuthToken
+                      - text: "- A string containing your new machine auth token"
+                  - paragraph [ref=e3217]:
+                    - strong [ref=e3218]: v4.29.0 or later is required to use this event
+                  - paragraph [ref=e3219]:
+                    - text: Emitted when a new machine auth token is issued. This is only relevant for accounts using email Steam Guard. Even if you are using email Steam Guard, you likely don't need to worry about this event as steam-user will
+                    - link "automatically manage your machine auth tokens for you" [ref=e3220] [cursor=pointer]:
+                      - /url: "#machine-auth-tokens"
+                    - text: .
+                  - paragraph [ref=e3221]:
+                    - text: This may be emitted before
+                    - link "loggedOn" [ref=e3222] [cursor=pointer]:
+                      - /url: "#loggedon"
+                      - code [ref=e3223]: loggedOn
+                    - text: fires.
+                  - generic [ref=e3224]:
+                    - heading "refreshToken" [level=3] [ref=e3225]
+                    - 'link "Permalink: refreshToken" [ref=e3226] [cursor=pointer]':
+                      - /url: "#refreshtoken"
+                  - list [ref=e3227]:
+                    - listitem [ref=e3228]:
+                      - code [ref=e3229]: refreshToken
+                      - text: "- A string containing your new refresh token"
+                  - paragraph [ref=e3230]:
+                    - strong [ref=e3231]: v5.0.0 or later is required to use this event
+                  - paragraph [ref=e3232]:
+                    - text: Emitted when a new refresh token is issued. This will always be emitted when logging on using an account name and password, and when logging on using an existing refresh token, this may be emitted if a new refresh token is issued because your provided token is nearly expired (only if
+                    - link "renewRefreshTokens" [ref=e3233] [cursor=pointer]:
+                      - /url: "#renewrefreshtokens"
+                      - code [ref=e3234]: renewRefreshTokens
+                    - text: is set to true).
+                  - paragraph [ref=e3235]:
+                    - text: This may be emitted before
+                    - link "loggedOn" [ref=e3236] [cursor=pointer]:
+                      - /url: "#loggedon"
+                      - code [ref=e3237]: loggedOn
+                    - text: fires.
+                  - generic [ref=e3238]:
+                    - heading "webSession" [level=3] [ref=e3239]
+                    - 'link "Permalink: webSession" [ref=e3240] [cursor=pointer]':
+                      - /url: "#websession"
+                  - list [ref=e3241]:
+                    - listitem [ref=e3242]:
+                      - code [ref=e3243]: sessionID
+                      - text: "- The value of the"
+                      - code [ref=e3244]: sessionid
+                      - text: cookie
+                    - listitem [ref=e3245]:
+                      - code [ref=e3246]: cookies
+                      - text: "- An array of cookies, as"
+                      - code [ref=e3247]: name=value
+                      - text: strings
+                  - paragraph [ref=e3248]:
+                    - text: Emitted when a steamcommunity.com web session is successfully negotiated. This will automatically be emitted on logon (
+                    - strong [ref=e3249]: unless
+                    - text: you used a
+                    - code [ref=e3250]: webLogonToken
+                    - text: to log on) and in response to
+                    - link "webLogOn" [ref=e3251] [cursor=pointer]:
+                      - /url: "#weblogon"
+                      - code [ref=e3252]: webLogOn
+                    - text: calls.
+                  - paragraph [ref=e3253]:
+                    - text: Some libraries require you to provide your
+                    - code [ref=e3254]: sessionID
+                    - text: ", others don't. If the library you're using doesn't need you to provide a"
+                    - code [ref=e3255]: sessionID
+                    - text: ", then you can safely ignore it."
+                  - paragraph [ref=e3256]:
+                    - link "Read more about how cookies work and interact with other modules." [ref=e3257] [cursor=pointer]:
+                      - /url: https://dev.doctormckay.com/topic/4584-cookies-updated-for-2023/
+                  - generic [ref=e3258]:
+                    - heading "newItems" [level=3] [ref=e3259]
+                    - 'link "Permalink: newItems" [ref=e3260] [cursor=pointer]':
+                      - /url: "#newitems"
+                  - list [ref=e3261]:
+                    - listitem [ref=e3262]:
+                      - code [ref=e3263]: count
+                      - text: "- How many new items you have (can be 0)"
+                  - paragraph [ref=e3264]:
+                    - text: Emitted when Steam sends a notification of new items. You can reset the count to 0 by loading your inventory page (
+                    - link "https://steamcommunity.com/my/inventory" [ref=e3265] [cursor=pointer]:
+                      - /url: https://steamcommunity.com/my/inventory
+                    - text: ) while logged in.
+                  - generic [ref=e3266]:
+                    - heading "newComments" [level=3] [ref=e3267]
+                    - 'link "Permalink: newComments" [ref=e3268] [cursor=pointer]':
+                      - /url: "#newcomments"
+                  - list [ref=e3269]:
+                    - listitem [ref=e3270]:
+                      - code [ref=e3271]: count
+                      - text: "- How many total new comments you have (can be 0)"
+                    - listitem [ref=e3272]:
+                      - code [ref=e3273]: myItems
+                      - text: "- How many of the total comments are on your content (workshop items, screenshots, your profile, etc.)"
+                    - listitem [ref=e3274]:
+                      - code [ref=e3275]: discussions
+                      - text: "- How many of the total comments are posts in subscribed discussion threads"
+                  - paragraph [ref=e3276]: Emitted when Steam sends a notification of new comments.
+                  - generic [ref=e3277]:
+                    - heading "tradeOffers" [level=3] [ref=e3278]
+                    - 'link "Permalink: tradeOffers" [ref=e3279] [cursor=pointer]':
+                      - /url: "#tradeoffers"
+                  - list [ref=e3280]:
+                    - listitem [ref=e3281]:
+                      - code [ref=e3282]: count
+                      - text: "- How many active received trade offers you have (can be 0)"
+                  - paragraph [ref=e3283]: Emitted when Steam sends a notification of new trade offers. This gets emitted shortly after logon iff it's nonzero, and every time it changes thereafter (i.e. both when you receive a trade offer and when an active trade offer you received gets accepted/canceled/declined).
+                  - generic [ref=e3284]:
+                    - heading "communityMessages" [level=3] [ref=e3285]
+                    - 'link "Permalink: communityMessages" [ref=e3286] [cursor=pointer]':
+                      - /url: "#communitymessages"
+                  - list [ref=e3287]:
+                    - listitem [ref=e3288]:
+                      - code [ref=e3289]: count
+                      - text: "- How many unread community (moderator) messages you have (can be 0)"
+                  - paragraph [ref=e3290]:
+                    - strong [ref=e3291]: v3.26.0 or later is required to use this event
+                  - paragraph [ref=e3292]: Emitted when Steam sends a notification of new community (moderator) messages. This gets emitted shortly after logon iff it's nonzero, and every time it changes thereafter (i.e. both when you receive a community message and when a community message gets read).
+                  - generic [ref=e3293]:
+                    - heading "offlineMessages" [level=3] [ref=e3294]
+                    - 'link "Permalink: offlineMessages" [ref=e3295] [cursor=pointer]':
+                      - /url: "#offlinemessages"
+                  - list [ref=e3296]:
+                    - listitem [ref=e3297]:
+                      - code [ref=e3298]: count
+                      - text: "- How many unread offline chat messages you have"
+                    - listitem [ref=e3299]:
+                      - code [ref=e3300]: friends
+                      - text: "- An array of SteamID strings for the users who have sent you unread offline chat messages"
+                  - paragraph [ref=e3301]: Emitted when Steam sends a notification of unread offline chat messages. This will always be emitted after logon, even if you have no messages.
+                  - generic [ref=e3302]:
+                    - heading "notificationsReceived" [level=3] [ref=e3303]
+                    - 'link "Permalink: notificationsReceived" [ref=e3304] [cursor=pointer]':
+                      - /url: "#notificationsreceived"
+                  - list [ref=e3305]:
+                    - listitem [ref=e3306]:
+                      - code [ref=e3307]: payload
+                      - text: "- An object containing these properties:"
+                      - list [ref=e3308]:
+                        - listitem [ref=e3309]:
+                          - code [ref=e3310]: notifications
+                          - text: "- An array of objects containing these properties:"
+                          - list [ref=e3311]:
+                            - listitem [ref=e3312]:
+                              - code [ref=e3313]: id
+                              - text: "- Notification ID, as a string"
+                            - listitem [ref=e3314]:
+                              - code [ref=e3315]: type
+                              - text: "- Notification type, from"
+                              - link "ESteamNotificationType" [ref=e3316] [cursor=pointer]:
+                                - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/enums/ESteamNotificationType.js
+                              - text: enum
+                            - listitem [ref=e3317]:
+                              - code [ref=e3318]: body
+                              - text: "- Notification \"body data\", which varies depending on the notification type"
+                            - listitem [ref=e3319]:
+                              - code [ref=e3320]: read
+                              - text: "- Boolean indicating whether the notification has been marked read"
+                            - listitem [ref=e3321]:
+                              - code [ref=e3322]: timestamp
+                              - text: "-"
+                              - code [ref=e3323]: Date
+                              - text: object indicating when the notification was created
+                            - listitem [ref=e3324]:
+                              - code [ref=e3325]: hidden
+                              - text: "- Boolean indicating whether the notification should be hidden from the client (has been deleted/cleared)"
+                            - listitem [ref=e3326]:
+                              - code [ref=e3327]: expiry
+                              - text: "-"
+                              - code [ref=e3328]: Date
+                              - text: object indicating when the notification expires
+                            - listitem [ref=e3329]:
+                              - code [ref=e3330]: viewed
+                              - text: "-"
+                              - code [ref=e3331]: Date
+                              - text: object indicating when the notification was viewed, or
+                              - code [ref=e3332]: "null"
+                              - text: if not yet viewed
+                  - paragraph [ref=e3333]:
+                    - strong [ref=e3334]: v5.2.0 or later is required to use this event
+                  - paragraph [ref=e3335]: "Emitted when the Steam backend notifies us of new or changed notifications. The behavior is not 100% intuitive, but here is what has been observed:"
+                  - list [ref=e3336]:
+                    - listitem [ref=e3337]:
+                      - text: If a new notification is received, this will be emitted with
+                      - strong [ref=e3338]: only that new notification
+                      - text: . Any other pending notification will not be included in the
+                      - code [ref=e3339]: notifications
+                      - text: array
+                    - listitem [ref=e3340]:
+                      - text: If you open the notification dropdown, unviewed notifications will be marked as viewed, and
+                      - strong [ref=e3341]: only those changed notifications
+                      - text: will be included in the
+                      - code [ref=e3342]: notifications
+                      - text: array
+                    - listitem [ref=e3343]: If a notification is marked as read, this doesn't appear to be emitted at all
+                    - listitem [ref=e3344]:
+                      - text: If a notification is hidden (removed),
+                      - strong [ref=e3345]: only that hidden notification
+                      - text: will be included in the
+                      - code [ref=e3346]: notifications
+                      - text: array with
+                      - code [ref=e3347]: "hidden: true"
+                    - listitem [ref=e3348]:
+                      - text: This is never emitted in response to
+                      - link "markNotificationsRead()" [ref=e3349] [cursor=pointer]:
+                        - /url: "#marknotificationsreadnotificationids"
+                        - code [ref=e3350]: markNotificationsRead()
+                      - text: or
+                      - link "markAllNotificationsRead()" [ref=e3351] [cursor=pointer]:
+                        - /url: "#markallnotificationsread"
+                        - code [ref=e3352]: markAllNotificationsRead()
+                  - generic [ref=e3353]:
+                    - heading "vanityURL" [level=3] [ref=e3354]
+                    - 'link "Permalink: vanityURL" [ref=e3355] [cursor=pointer]':
+                      - /url: "#vanityurl-1"
+                  - list [ref=e3356]:
+                    - listitem [ref=e3357]:
+                      - code [ref=e3358]: url
+                      - text: "- Your new vanity URL"
+                  - paragraph [ref=e3359]:
+                    - strong [ref=e3360]: v3.7.0 or later is required to use this event
+                  - paragraph [ref=e3361]:
+                    - text: Emitted when your vanity URL changes.
+                    - code [ref=e3362]: url
+                    - text: is your new vanity URL. This event is emitted before the
+                    - link "vanityURL" [ref=e3363] [cursor=pointer]:
+                      - /url: "#vanityurl"
+                      - code [ref=e3364]: vanityURL
+                    - text: property is updated, so you can compare to see what changed.
+                  - generic [ref=e3365]:
+                    - heading "accountInfo" [level=3] [ref=e3366]
+                    - 'link "Permalink: accountInfo" [ref=e3367] [cursor=pointer]':
+                      - /url: "#accountinfo-1"
+                  - list [ref=e3368]:
+                    - listitem [ref=e3369]:
+                      - code [ref=e3370]: name
+                      - text: "- Your account's Steam (persona) name"
+                    - listitem [ref=e3371]:
+                      - code [ref=e3372]: country
+                      - text: "- The character code from which you're logging in (via GeoIP), e.g. \"US\""
+                    - listitem [ref=e3373]:
+                      - code [ref=e3374]: authedMachines
+                      - text: "- How many machines are authorized to login to your account with Steam Guard"
+                    - listitem [ref=e3375]:
+                      - code [ref=e3376]: flags
+                      - text: "- Your account's bitwise"
+                      - link "flags" [ref=e3377] [cursor=pointer]:
+                        - /url: https://github.com/SteamRE/SteamKit/blob/b80cdf5249891d54c655e39262d8267c7b40b249/Resources/SteamLanguage/enums.steamd#L81-L113
+                    - listitem [ref=e3378]:
+                      - code [ref=e3379]: facebookID
+                      - text: "- If your account is linked with Facebook, this is your Facebook account ID"
+                    - listitem [ref=e3380]:
+                      - code [ref=e3381]: facebookName
+                      - text: "- If your account is linked with Facebook, this is your (real) name on Facebook"
+                  - paragraph [ref=e3382]:
+                    - strong [ref=e3383]: v3.4.0 or later is required to use this event
+                  - paragraph [ref=e3384]:
+                    - text: Emitted on logon and when account info changes. This event is emitted before the
+                    - link "accountInfo" [ref=e3385] [cursor=pointer]:
+                      - /url: "#accountinfo"
+                      - code [ref=e3386]: accountInfo
+                    - text: property is updated, so you can compare to see what changed.
+                  - generic [ref=e3387]:
+                    - heading "emailInfo" [level=3] [ref=e3388]
+                    - 'link "Permalink: emailInfo" [ref=e3389] [cursor=pointer]':
+                      - /url: "#emailinfo-1"
+                  - list [ref=e3390]:
+                    - listitem [ref=e3391]:
+                      - code [ref=e3392]: address
+                      - text: "- Your account's email address"
+                    - listitem [ref=e3393]:
+                      - code [ref=e3394]: validated
+                      - text: "- A boolean value for whether or not your email address is validated"
+                  - paragraph [ref=e3395]:
+                    - text: Emitted on logon and when email info changes. The
+                    - link "emailInfo" [ref=e3396] [cursor=pointer]:
+                      - /url: "#emailinfo"
+                      - code [ref=e3397]: emailInfo
+                    - text: property will be updated after this event is emitted.
+                  - generic [ref=e3398]:
+                    - heading "accountLimitations" [level=3] [ref=e3399]
+                    - 'link "Permalink: accountLimitations" [ref=e3400] [cursor=pointer]':
+                      - /url: "#accountlimitations"
+                  - list [ref=e3401]:
+                    - listitem [ref=e3402]:
+                      - code [ref=e3403]: limited
+                      - text: "-"
+                      - code [ref=e3404]: "true"
+                      - text: if your account is
+                      - link "limited" [ref=e3405] [cursor=pointer]:
+                        - /url: https://support.steampowered.com/kb_article.php?ref=3330-IAGK-7663
+                      - text: ","
+                      - code [ref=e3406]: "false"
+                      - text: if not
+                    - listitem [ref=e3407]:
+                      - code [ref=e3408]: communityBanned
+                      - text: "-"
+                      - code [ref=e3409]: "true"
+                      - text: if your account is banned from Steam Community,
+                      - code [ref=e3410]: "false"
+                      - text: if not
+                    - listitem [ref=e3411]:
+                      - code [ref=e3412]: locked
+                      - text: "-"
+                      - code [ref=e3413]: "true"
+                      - text: if your account is
+                      - link "locked" [ref=e3414] [cursor=pointer]:
+                        - /url: https://support.steampowered.com/kb_article.php?ref=6416-FHVM-3982
+                      - text: ","
+                      - code [ref=e3415]: "false"
+                      - text: if not (accounts can also be locked by Support)
+                    - listitem [ref=e3416]:
+                      - code [ref=e3417]: canInviteFriends
+                      - text: "-"
+                      - code [ref=e3418]: "true"
+                      - text: if your account can invite friends,
+                      - code [ref=e3419]: "false"
+                      - text: if not
+                  - paragraph [ref=e3420]:
+                    - text: Emitted on logon and when limitations change. The
+                    - link "limitations" [ref=e3421] [cursor=pointer]:
+                      - /url: "#limitations"
+                      - code [ref=e3422]: limitations
+                    - text: property will be updated after this event is emitted.
+                  - generic [ref=e3423]:
+                    - heading "vacBans" [level=3] [ref=e3424]
+                    - 'link "Permalink: vacBans" [ref=e3425] [cursor=pointer]':
+                      - /url: "#vacbans"
+                  - list [ref=e3426]:
+                    - listitem [ref=e3427]:
+                      - code [ref=e3428]: numBans
+                      - text: "- How many bans your account has"
+                    - listitem [ref=e3429]:
+                      - code [ref=e3430]: appids
+                      - text: "- The AppIDs from which you're banned. Since each ban affects a range of AppIDs, some of the AppIDs in this array may not exist."
+                  - paragraph [ref=e3431]:
+                    - text: Emitted on logon and probably when you get banned/unbanned. The
+                    - link "vac" [ref=e3432] [cursor=pointer]:
+                      - /url: "#vac"
+                      - code [ref=e3433]: vac
+                    - text: property will be updated after this event is emitted.
+                  - generic [ref=e3434]:
+                    - heading "wallet" [level=3] [ref=e3435]
+                    - 'link "Permalink: wallet" [ref=e3436] [cursor=pointer]':
+                      - /url: "#wallet-1"
+                  - list [ref=e3437]:
+                    - listitem [ref=e3438]:
+                      - code [ref=e3439]: hasWallet
+                      - text: "-"
+                      - code [ref=e3440]: "true"
+                      - text: if your account has a Steam Wallet,
+                      - code [ref=e3441]: "false"
+                      - text: if not
+                    - listitem [ref=e3442]:
+                      - code [ref=e3443]: currency
+                      - text: "- The currency ID of your account's wallet (the enum of currencies is available as"
+                      - code [ref=e3444]: SteamUser.ECurrencyCode
+                      - text: )
+                    - listitem [ref=e3445]:
+                      - code [ref=e3446]: balance
+                      - text: "- Your account's current wallet balance"
+                  - paragraph [ref=e3447]:
+                    - text: Emitted on logon and when wallet balance changes. The
+                    - link "wallet" [ref=e3448] [cursor=pointer]:
+                      - /url: "#wallet"
+                      - code [ref=e3449]: wallet
+                    - text: property will be updated after this event is emitted.
+                  - generic [ref=e3450]:
+                    - heading "licenses" [level=3] [ref=e3451]
+                    - 'link "Permalink: licenses" [ref=e3452] [cursor=pointer]':
+                      - /url: "#licenses-1"
+                  - list [ref=e3453]:
+                    - listitem [ref=e3454]:
+                      - code [ref=e3455]: licenses
+                      - text: "- An array of licenses"
+                  - paragraph [ref=e3456]:
+                    - text: Contains the license data for the packages which your Steam account owns. To see license object structure, see
+                    - link "CMsgClientLicenseList.License" [ref=e3457] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/protobufs/steammessages_clientserver.proto#L214-L233
+                      - code [ref=e3458]: CMsgClientLicenseList.License
+                    - text: .
+                  - paragraph [ref=e3459]:
+                    - text: Emitted on logon and when licenses change. The
+                    - link "licenses" [ref=e3460] [cursor=pointer]:
+                      - /url: "#licenses"
+                      - code [ref=e3461]: licenses
+                    - text: property will be updated after this event is emitted.
+                  - paragraph [ref=e3462]: This isn't emitted for anonymous accounts. However, all anonymous user accounts have a license for package 17906 automatically.
+                  - generic [ref=e3463]:
+                    - heading "gifts" [level=3] [ref=e3464]
+                    - 'link "Permalink: gifts" [ref=e3465] [cursor=pointer]':
+                      - /url: "#gifts-1"
+                  - list [ref=e3466]:
+                    - listitem [ref=e3467]:
+                      - code [ref=e3468]: gifts
+                      - text: "- An array of gift objects"
+                  - paragraph [ref=e3469]:
+                    - text: Emitted on logon and when you receive/accept/decline a gift or guest pass. The
+                    - link "gifts" [ref=e3470] [cursor=pointer]:
+                      - /url: "#gifts"
+                      - code [ref=e3471]: gifts
+                    - text: property will be updated after this event is emitted.
+                  - paragraph [ref=e3472]: Guest Passes (do they even still exist?) are gifts (actually, gifts are Guest Passes with a very long expiration date). Consequently, both come through this event.
+                  - paragraph [ref=e3473]:
+                    - text: Each object in the array is an oustanding gift or guest pass that was sent to you that you haven't accepted/declined yet. Only
+                    - strong [ref=e3474]: outstanding
+                    - text: gifts show up here. Gifts that you stored in your inventory don't show up here.
+                  - paragraph [ref=e3475]:
+                    - text: The structure of the objects in the array is defined in the documentation for the
+                    - link "gifts" [ref=e3476] [cursor=pointer]:
+                      - /url: "#gifts"
+                      - code [ref=e3477]: gifts
+                    - text: property.
+                  - generic [ref=e3478]:
+                    - heading "ownershipCached" [level=3] [ref=e3479]
+                    - 'link "Permalink: ownershipCached" [ref=e3480] [cursor=pointer]':
+                      - /url: "#ownershipcached"
+                  - paragraph [ref=e3481]:
+                    - strong [ref=e3482]:
+                      - text: v3.3.0 or later is required to use this event under the name
+                      - code [ref=e3483]: appOwnershipCached
+                    - strong [ref=e3484]:
+                      - text: v4.22.1 or later is required to use this event under the name
+                      - code [ref=e3485]: ownershipCached
+                  - paragraph [ref=e3486]:
+                    - text: Emitted once we have all data required in order to determine app ownership. You can now safely call
+                    - code [ref=e3487]: getOwnedApps
+                    - text: ","
+                    - code [ref=e3488]: ownsApp
+                    - text: ","
+                    - code [ref=e3489]: getOwnedDepots
+                    - text: ", and"
+                    - code [ref=e3490]: ownsDepot
+                    - text: .
+                  - paragraph [ref=e3491]:
+                    - text: This is only emitted if
+                    - code [ref=e3492]: enablePicsCache
+                    - text: is
+                    - code [ref=e3493]: "true"
+                    - text: .
+                  - paragraph [ref=e3494]:
+                    - emphasis [ref=e3495]:
+                      - text: This event was renamed from
+                      - code [ref=e3496]: appOwnershipCached
+                      - text: in v4.22.1. It can still be used by the old name, although such usage is deprecated and will be removed in a future release.
+                  - generic [ref=e3497]:
+                    - heading "changelist" [level=3] [ref=e3498]
+                    - 'link "Permalink: changelist" [ref=e3499] [cursor=pointer]':
+                      - /url: "#changelist"
+                  - list [ref=e3500]:
+                    - listitem [ref=e3501]:
+                      - code [ref=e3502]: changenumber
+                      - text: "- The changenumber of the changelist we just received"
+                    - listitem [ref=e3503]:
+                      - code [ref=e3504]: apps
+                      - text: "- An array of AppIDs which changed since our last received changelist"
+                    - listitem [ref=e3505]:
+                      - code [ref=e3506]: packages
+                      - text: "- An array of PackageIDs which changed since our last received changelist"
+                  - paragraph [ref=e3507]:
+                    - strong [ref=e3508]: v3.3.0 or later is required to use this event
+                  - paragraph [ref=e3509]:
+                    - text: Emitted when we receive a new changelist from Steam. The
+                    - code [ref=e3510]: picsCache
+                    - text: property is updated after this is emitted, so you can get the previous changenumber via
+                    - code [ref=e3511]: picsCache.changenumber
+                    - text: .
+                  - paragraph [ref=e3512]:
+                    - text: This is only emitted if
+                    - code [ref=e3513]: enablePicsCache
+                    - text: is
+                    - code [ref=e3514]: "true"
+                    - text: and
+                    - code [ref=e3515]: changelistUpdateInterval
+                    - text: is nonzero.
+                  - generic [ref=e3516]:
+                    - heading "appUpdate" [level=3] [ref=e3517]
+                    - 'link "Permalink: appUpdate" [ref=e3518] [cursor=pointer]':
+                      - /url: "#appupdate"
+                  - list [ref=e3519]:
+                    - listitem [ref=e3520]:
+                      - code [ref=e3521]: appid
+                      - text: "- The AppID of the app which just changed"
+                    - listitem [ref=e3522]:
+                      - code [ref=e3523]: data
+                      - text: "- An object identical to that received from"
+                      - code [ref=e3524]: getProductInfo
+                  - paragraph [ref=e3525]:
+                    - strong [ref=e3526]: v3.3.0 or later is required to use this event
+                  - paragraph [ref=e3527]:
+                    - text: Emitted when an app that was already in our cache updates. The
+                    - code [ref=e3528]: picsCache
+                    - text: property is updated after this is emitted, so you can get the previous app data via
+                    - code [ref=e3529]: picsCache.apps[appid]
+                    - text: .
+                  - paragraph [ref=e3530]:
+                    - text: This is only emitted if
+                    - code [ref=e3531]: enablePicsCache
+                    - text: is
+                    - code [ref=e3532]: "true"
+                    - text: and
+                    - code [ref=e3533]: changelistUpdateInterval
+                    - text: is nonzero.
+                  - generic [ref=e3534]:
+                    - heading "packageUpdate" [level=3] [ref=e3535]
+                    - 'link "Permalink: packageUpdate" [ref=e3536] [cursor=pointer]':
+                      - /url: "#packageupdate"
+                  - list [ref=e3537]:
+                    - listitem [ref=e3538]:
+                      - code [ref=e3539]: packageid
+                      - text: "- The PackageID of the package which just changed"
+                    - listitem [ref=e3540]:
+                      - code [ref=e3541]: data
+                      - text: "- An object identical to that received from"
+                      - code [ref=e3542]: getProductInfo
+                  - paragraph [ref=e3543]:
+                    - strong [ref=e3544]: v3.3.0 or later is required to use this event
+                  - paragraph [ref=e3545]:
+                    - text: Emitted when a package that was already in our cache updates. The
+                    - code [ref=e3546]: picsCache
+                    - text: property is updated after this is emitted, so you can get the previous package data via
+                    - code [ref=e3547]: picsCache.packages[packageid]
+                    - text: .
+                  - paragraph [ref=e3548]:
+                    - text: This is only emitted if
+                    - code [ref=e3549]: enablePicsCache
+                    - text: is
+                    - code [ref=e3550]: "true"
+                    - text: and
+                    - code [ref=e3551]: changelistUpdateInterval
+                    - text: is nonzero.
+                  - generic [ref=e3552]:
+                    - heading "marketingMessages" [level=3] [ref=e3553]
+                    - 'link "Permalink: marketingMessages" [ref=e3554] [cursor=pointer]':
+                      - /url: "#marketingmessages"
+                  - list [ref=e3555]:
+                    - listitem [ref=e3556]:
+                      - code [ref=e3557]: timestamp
+                      - text: "- A"
+                      - code [ref=e3558]: Date
+                      - text: object containing the time when this batch of messages was published
+                    - listitem [ref=e3559]:
+                      - code [ref=e3560]: messages
+                      - text: "- An array of objects containing the following properties"
+                      - list [ref=e3561]:
+                        - listitem [ref=e3562]:
+                          - code [ref=e3563]: id
+                          - text: "- The marketing message's 64-bit numeric ID, as a string"
+                        - listitem [ref=e3564]:
+                          - code [ref=e3565]: url
+                          - text: "- The URL where you can view this message"
+                        - listitem [ref=e3566]:
+                          - code [ref=e3567]: flags
+                          - text: "- A 32-bit integer containing the message's bitwise"
+                          - link "flags" [ref=e3568] [cursor=pointer]:
+                            - /url: https://github.com/SteamRE/SteamKit/blob/b80cdf5249891d54c655e39262d8267c7b40b249/Resources/SteamLanguage/enums.steamd#L827-L836
+                  - paragraph [ref=e3569]:
+                    - strong [ref=e3570]: v3.4.0 or later is required to use this event
+                  - paragraph [ref=e3571]: Emitted on logon, and when new marketing messages are published. Marketing messages are the popups that appear after you exit a game if you have "Notify me about additions or changes to my games, new releases, and upcoming releases" enabled in the Steam client.
+                  - generic [ref=e3572]:
+                    - heading "tradeRequest" [level=3] [ref=e3573]
+                    - 'link "Permalink: tradeRequest" [ref=e3574] [cursor=pointer]':
+                      - /url: "#traderequest"
+                  - list [ref=e3575]:
+                    - listitem [ref=e3576]:
+                      - code [ref=e3577]: steamID
+                      - text: "- The SteamID of the user who sent the request, as a"
+                      - code [ref=e3578]: SteamID
+                      - text: object
+                    - listitem [ref=e3579]:
+                      - code [ref=e3580]: respond
+                      - text: "- A function which you should call to either accept or decline the request"
+                      - list [ref=e3581]:
+                        - listitem [ref=e3582]:
+                          - code [ref=e3583]: accept
+                          - text: "-"
+                          - code [ref=e3584]: "true"
+                          - text: to accept the request,
+                          - code [ref=e3585]: "false"
+                          - text: to decline it
+                  - paragraph [ref=e3586]:
+                    - strong [ref=e3587]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3588]:
+                    - emphasis [ref=e3589]:
+                      - text: This is an
+                      - link "ID event" [ref=e3590] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3591]: "Emitted when someone sends us a trade request. Example usage:"
+                  - generic [ref=e3593]: "user.on('tradeRequest', function(steamID, respond) { console.log(\"Incoming trade request from \" + steamID.getSteam3RenderedID() + \", accepting\"); respond(true); });"
+                  - generic [ref=e3594]:
+                    - heading "tradeResponse" [level=3] [ref=e3595]
+                    - 'link "Permalink: tradeResponse" [ref=e3596] [cursor=pointer]':
+                      - /url: "#traderesponse"
+                  - list [ref=e3597]:
+                    - listitem [ref=e3598]:
+                      - code [ref=e3599]: steamID
+                      - text: "- The SteamID of the other user, as a"
+                      - code [ref=e3600]: SteamID
+                      - text: object
+                    - listitem [ref=e3601]:
+                      - code [ref=e3602]: response
+                      - text: "- A value from the"
+                      - code [ref=e3603]: EEconTradeResponse
+                      - text: enum
+                    - listitem [ref=e3604]:
+                      - code [ref=e3605]: restrictions
+                      - text: "- An object containing the following properties (of which any or all could be undefined)"
+                      - list [ref=e3606]:
+                        - listitem [ref=e3607]:
+                          - code [ref=e3608]: steamguardRequiredDays
+                        - listitem [ref=e3609]:
+                          - code [ref=e3610]: newDeviceCooldownDays
+                        - listitem [ref=e3611]:
+                          - code [ref=e3612]: defaultPasswordResetProbationDays
+                        - listitem [ref=e3613]:
+                          - code [ref=e3614]: passwordResetProbationDays
+                        - listitem [ref=e3615]:
+                          - code [ref=e3616]: defaultEmailChangeProbationDays
+                        - listitem [ref=e3617]:
+                          - code [ref=e3618]: emailChangeProbationDays
+                  - paragraph [ref=e3619]:
+                    - strong [ref=e3620]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3621]:
+                    - emphasis [ref=e3622]:
+                      - text: This is an
+                      - link "ID event" [ref=e3623] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3624]:
+                    - text: Emitted when someone responds to our trade request. Also emitted with response
+                    - code [ref=e3625]: EEconTradeResponse.Cancel
+                    - text: when someone cancels their outstanding trade request to us.
+                  - generic [ref=e3626]:
+                    - heading "tradeStarted" [level=3] [ref=e3627]
+                    - 'link "Permalink: tradeStarted" [ref=e3628] [cursor=pointer]':
+                      - /url: "#tradestarted"
+                  - list [ref=e3629]:
+                    - listitem [ref=e3630]:
+                      - code [ref=e3631]: steamID
+                      - text: "- The SteamID of your trade partner, as a"
+                      - code [ref=e3632]: SteamID
+                      - text: object
+                  - paragraph [ref=e3633]:
+                    - strong [ref=e3634]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3635]:
+                    - emphasis [ref=e3636]:
+                      - text: This is an
+                      - link "ID event" [ref=e3637] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3638]: Emitted when a new trade session has started (either as a result of someone accepting a Steam trade request, an in-game (TF2) trade request, or something else).
+                  - paragraph [ref=e3639]:
+                    - text: The trade is now available at
+                    - link "http://steamcommunity.com/trade/[SteamID]" [ref=e3640] [cursor=pointer]:
+                      - /url: http://steamcommunity.com/trade/%5BSteamID%5D
+                    - text: ", and can be automated with"
+                    - link "node-steam-trade" [ref=e3641] [cursor=pointer]:
+                      - /url: https://github.com/seishun/node-steam-trade
+                      - code [ref=e3642]: node-steam-trade
+                    - text: .
+                  - generic [ref=e3643]:
+                    - heading "playingState" [level=3] [ref=e3644]
+                    - 'link "Permalink: playingState" [ref=e3645] [cursor=pointer]':
+                      - /url: "#playingstate-1"
+                  - list [ref=e3646]:
+                    - listitem [ref=e3647]:
+                      - code [ref=e3648]: blocked
+                      - text: "-"
+                      - code [ref=e3649]: "true"
+                      - text: if you're blocked from playing a game on this session (because a game is being played on this account using another logon session)
+                    - listitem [ref=e3650]:
+                      - code [ref=e3651]: playingApp
+                      - text: "- If"
+                      - code [ref=e3652]: blocked
+                      - text: ", this is the AppID of the game that is being played elsewhere"
+                  - paragraph [ref=e3653]:
+                    - strong [ref=e3654]: v3.21.0 or later is required to use this event
+                  - paragraph [ref=e3655]: "Emitted under these conditions:"
+                  - list [ref=e3656]:
+                    - listitem [ref=e3657]:
+                      - text: Right after logon,
+                      - strong [ref=e3658]: only if
+                      - text: a game is being played on this account in another location (i.e.
+                      - code [ref=e3659]: blocked
+                      - text: is
+                      - code [ref=e3660]: "true"
+                      - text: )
+                    - listitem [ref=e3661]: Whenever a game starts (or stops) being played on another session
+                    - listitem [ref=e3662]:
+                      - text: Whenever you start (or stop) playing a game on this session (via
+                      - code [ref=e3663]: gamesPlayed
+                      - text: )
+                      - list [ref=e3664]:
+                        - listitem [ref=e3665]:
+                          - text: In this case,
+                          - code [ref=e3666]: blocked
+                          - text: is
+                          - code [ref=e3667]: "false"
+                          - text: and
+                          - code [ref=e3668]: playingApp
+                          - text: is the AppID you're currently playing
+                  - generic [ref=e3669]:
+                    - heading "user" [level=3] [ref=e3670]
+                    - 'link "Permalink: user" [ref=e3671] [cursor=pointer]':
+                      - /url: "#user"
+                  - list [ref=e3672]:
+                    - listitem [ref=e3673]:
+                      - code [ref=e3674]: sid
+                      - text: "- A"
+                      - code [ref=e3675]: SteamID
+                      - text: object for the user whose data we just received
+                    - listitem [ref=e3676]:
+                      - code [ref=e3677]: user
+                      - text: "- An object containing the user's persona data"
+                  - paragraph [ref=e3678]:
+                    - strong [ref=e3679]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3680]:
+                    - emphasis [ref=e3681]:
+                      - text: This is an
+                      - link "ID event" [ref=e3682] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3683]:
+                    - text: Emitted when Steam sends us persona information about a user, which will only happen if this client instance's persona state is
+                    - link "online" [ref=e3684] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: . The
+                    - link "users" [ref=e3685] [cursor=pointer]:
+                      - /url: "#users"
+                      - code [ref=e3686]: users
+                    - text: property isn't yet updated when this is emitted, so you can compare to see what changed.
+                  - generic [ref=e3687]:
+                    - heading "group" [level=3] [ref=e3688]
+                    - 'link "Permalink: group" [ref=e3689] [cursor=pointer]':
+                      - /url: "#group"
+                  - list [ref=e3690]:
+                    - listitem [ref=e3691]:
+                      - code [ref=e3692]: sid
+                      - text: "- A"
+                      - code [ref=e3693]: SteamID
+                      - text: object for the group whose data we just received
+                    - listitem [ref=e3694]:
+                      - code [ref=e3695]: group
+                      - text: "- An object containing the group's data"
+                  - paragraph [ref=e3696]:
+                    - strong [ref=e3697]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3698]:
+                    - emphasis [ref=e3699]:
+                      - text: This is an
+                      - link "ID event" [ref=e3700] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3701]:
+                    - text: Emitted when Steam sends us information about a Steam group. The
+                    - link "groups" [ref=e3702] [cursor=pointer]:
+                      - /url: "#groups"
+                      - code [ref=e3703]: groups
+                    - text: property isn't yet updated when this is emitted, so you can compare to see what changed.
+                  - generic [ref=e3704]:
+                    - heading "groupEvent" [level=3] [ref=e3705]
+                    - 'link "Permalink: groupEvent" [ref=e3706] [cursor=pointer]':
+                      - /url: "#groupevent"
+                  - list [ref=e3707]:
+                    - listitem [ref=e3708]:
+                      - code [ref=e3709]: sid
+                      - text: "- A"
+                      - code [ref=e3710]: SteamID
+                      - text: object for the group who just posted/started an event
+                    - listitem [ref=e3711]:
+                      - code [ref=e3712]: headline
+                      - text: "- The name of the event"
+                    - listitem [ref=e3713]:
+                      - code [ref=e3714]: date
+                      - text: "- A"
+                      - code [ref=e3715]: Date
+                      - text: object for the event's start time
+                    - listitem [ref=e3716]:
+                      - code [ref=e3717]: gid
+                      - text: "- The event's GID (link to the event page at"
+                      - link "https://steamcommunity.com/gid/" [ref=e3718] [cursor=pointer]:
+                        - /url: https://steamcommunity.com/gid/
+                      - text: /event/)
+                    - listitem [ref=e3719]:
+                      - code [ref=e3720]: gameID
+                      - text: "- The AppID of the game which this event is associated with"
+                  - paragraph [ref=e3721]:
+                    - strong [ref=e3722]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3723]:
+                    - emphasis [ref=e3724]:
+                      - text: This is an
+                      - link "ID event" [ref=e3725] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3726]: Emitted when a group schedules a new event, or a new event starts.
+                  - generic [ref=e3727]:
+                    - heading "groupAnnouncement" [level=3] [ref=e3728]
+                    - 'link "Permalink: groupAnnouncement" [ref=e3729] [cursor=pointer]':
+                      - /url: "#groupannouncement"
+                  - list [ref=e3730]:
+                    - listitem [ref=e3731]:
+                      - code [ref=e3732]: sid
+                      - text: "- A"
+                      - code [ref=e3733]: SteamID
+                      - text: object for the group who just posted an announcement
+                    - listitem [ref=e3734]:
+                      - code [ref=e3735]: headline
+                      - text: "- The title of the announcement"
+                    - listitem [ref=e3736]:
+                      - code [ref=e3737]: gid
+                      - text: "- The announcement's GID (link to the announcement page at"
+                      - link "https://steamcommunity.com/gid/" [ref=e3738] [cursor=pointer]:
+                        - /url: https://steamcommunity.com/gid/
+                      - text: /announcements/detail/)
+                  - paragraph [ref=e3739]:
+                    - strong [ref=e3740]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3741]:
+                    - emphasis [ref=e3742]:
+                      - text: This is an
+                      - link "ID event" [ref=e3743] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3744]: Emitted when a group posts a new announcement.
+                  - generic [ref=e3745]:
+                    - heading "friendRelationship" [level=3] [ref=e3746]
+                    - 'link "Permalink: friendRelationship" [ref=e3747] [cursor=pointer]':
+                      - /url: "#friendrelationship"
+                  - list [ref=e3748]:
+                    - listitem [ref=e3749]:
+                      - code [ref=e3750]: sid
+                      - text: "- A"
+                      - code [ref=e3751]: SteamID
+                      - text: object for the user whose relationship with us just changed
+                    - listitem [ref=e3752]:
+                      - code [ref=e3753]: relationship
+                      - text: "- A value from"
+                      - link "EFriendRelationship" [ref=e3754] [cursor=pointer]:
+                        - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/enums/EFriendRelationship.js
+                        - code [ref=e3755]: EFriendRelationship
+                    - listitem [ref=e3756]:
+                      - code [ref=e3757]: previousRelationship
+                      - text: "- Your previous relationship with this user. This is also a value from"
+                      - link "EFriendRelationship" [ref=e3758] [cursor=pointer]:
+                        - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/enums/EFriendRelationship.js
+                        - code [ref=e3759]: EFriendRelationship
+                  - paragraph [ref=e3760]:
+                    - strong [ref=e3761]:
+                      - text: v1.9.0 or later is required to use this event. v4.20.2 or later is required to use
+                      - code [ref=e3762]: previousRelationship
+                  - paragraph [ref=e3763]:
+                    - emphasis [ref=e3764]:
+                      - text: This is an
+                      - link "ID event" [ref=e3765] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3766]:
+                    - text: Emitted when our relationship with a particular user changes. For example,
+                    - code [ref=e3767]: EFriendRelationship.RequestRecipient
+                    - text: means that we got invited as a friend, and
+                    - code [ref=e3768]: EFriendRelationship.None
+                    - text: means that we got unfriended.
+                  - paragraph [ref=e3769]:
+                    - text: The
+                    - link "myFriends" [ref=e3770] [cursor=pointer]:
+                      - /url: "#myfriends"
+                      - code [ref=e3771]: myFriends
+                    - text: property isn't yet updated when this is emitted, so you can compare to the old value to see what changed.
+                  - generic [ref=e3772]:
+                    - heading "groupRelationship" [level=3] [ref=e3773]
+                    - 'link "Permalink: groupRelationship" [ref=e3774] [cursor=pointer]':
+                      - /url: "#grouprelationship"
+                  - list [ref=e3775]:
+                    - listitem [ref=e3776]:
+                      - code [ref=e3777]: sid
+                      - text: "- A"
+                      - code [ref=e3778]: SteamID
+                      - text: object for the group whose relationship with us just changed
+                    - listitem [ref=e3779]:
+                      - code [ref=e3780]: relationship
+                      - text: "- A value from"
+                      - link "EClanRelationship" [ref=e3781] [cursor=pointer]:
+                        - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/enums/EClanRelationship.js
+                        - code [ref=e3782]: EClanRelationship
+                    - listitem [ref=e3783]:
+                      - code [ref=e3784]: previousRelationship
+                      - text: "- Your previous relationship with this group. This is also a value from"
+                      - link "EClanRelationship" [ref=e3785] [cursor=pointer]:
+                        - /url: https://github.com/DoctorMcKay/node-steam-user/blob/master/enums/EClanRelationship.js
+                        - code [ref=e3786]: EClanRelationship
+                  - paragraph [ref=e3787]:
+                    - strong [ref=e3788]:
+                      - text: v1.9.0 or later is required to use this event. v4.20.2 or later is required to use
+                      - code [ref=e3789]: previousRelationship
+                  - paragraph [ref=e3790]:
+                    - emphasis [ref=e3791]:
+                      - text: This is an
+                      - link "ID event" [ref=e3792] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3793]: Emitted when our relationship with a particular Steam group changes.
+                  - paragraph [ref=e3794]:
+                    - text: The
+                    - link "myGroups" [ref=e3795] [cursor=pointer]:
+                      - /url: "#mygroups"
+                      - code [ref=e3796]: myGroups
+                    - text: property isn't yet updated when this is emitted, so you can compare to the old value to see what changed.
+                  - generic [ref=e3797]:
+                    - heading "friendsList" [level=3] [ref=e3798]
+                    - 'link "Permalink: friendsList" [ref=e3799] [cursor=pointer]':
+                      - /url: "#friendslist"
+                  - paragraph [ref=e3800]:
+                    - strong [ref=e3801]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3802]:
+                    - text: Emitted when our friends list is downloaded from Steam after logon, and is now available in
+                    - link "myFriends" [ref=e3803] [cursor=pointer]:
+                      - /url: "#myfriends"
+                      - code [ref=e3804]: myFriends
+                    - text: .
+                  - generic [ref=e3805]:
+                    - heading "friendPersonasLoaded" [level=3] [ref=e3806]
+                    - 'link "Permalink: friendPersonasLoaded" [ref=e3807] [cursor=pointer]':
+                      - /url: "#friendpersonasloaded"
+                  - paragraph [ref=e3808]:
+                    - strong [ref=e3809]: v3.22.0 or later is required to use this event
+                  - paragraph [ref=e3810]:
+                    - text: Emitted when all personas have been loaded for our entire friends list, and they are all now available in
+                    - link "users" [ref=e3811] [cursor=pointer]:
+                      - /url: "#users"
+                      - code [ref=e3812]: users
+                    - text: .
+                  - generic [ref=e3813]:
+                    - heading "groupList" [level=3] [ref=e3814]
+                    - 'link "Permalink: groupList" [ref=e3815] [cursor=pointer]':
+                      - /url: "#grouplist"
+                  - paragraph [ref=e3816]:
+                    - strong [ref=e3817]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3818]:
+                    - text: Emitted when our group list is downloaded from Steam after logon, and is now available in
+                    - link "myGroups" [ref=e3819] [cursor=pointer]:
+                      - /url: "#mygroups"
+                      - code [ref=e3820]: myGroups
+                    - text: .
+                  - generic [ref=e3821]:
+                    - heading "friendsGroupList" [level=3] [ref=e3822]
+                    - 'link "Permalink: friendsGroupList" [ref=e3823] [cursor=pointer]':
+                      - /url: "#friendsgrouplist"
+                  - list [ref=e3824]:
+                    - listitem [ref=e3825]:
+                      - code [ref=e3826]: groups
+                      - text: "- An object whose structure is identical to the"
+                      - link "myFriendGroups" [ref=e3827] [cursor=pointer]:
+                        - /url: "#myfriendgroups"
+                        - code [ref=e3828]: myFriendGroups
+                      - text: property
+                  - paragraph [ref=e3829]:
+                    - strong [ref=e3830]: v1.10.0 or later is required to use this event
+                  - paragraph [ref=e3831]: Emitted when our friends group list is downloaded from Steam, which should be shortly after logon (automatically).
+                  - paragraph [ref=e3832]:
+                    - text: In the official client, friend groups are called
+                    - emphasis [ref=e3833]: tags
+                    - text: .
+                  - paragraph [ref=e3834]:
+                    - text: The
+                    - code [ref=e3835]: myFriendGroups
+                    - text: property will be updated
+                    - strong [ref=e3836]: after
+                    - text: this event is emitted, so you can compare
+                    - code [ref=e3837]: groups
+                    - text: with the property to see what changed.
+                  - generic [ref=e3838]:
+                    - heading "nicknameList" [level=3] [ref=e3839]
+                    - 'link "Permalink: nicknameList" [ref=e3840] [cursor=pointer]':
+                      - /url: "#nicknamelist"
+                  - paragraph [ref=e3841]:
+                    - strong [ref=e3842]: v3.15.0 or later is required to use this event
+                  - paragraph [ref=e3843]:
+                    - text: Emitted when we receive our full nickname list from Steam, which should be shortly after logon (automatically). You can access it via the
+                    - link "myNicknames" [ref=e3844] [cursor=pointer]:
+                      - /url: "#mynicknames"
+                      - code [ref=e3845]: myNicknames
+                    - text: property.
+                  - generic [ref=e3846]:
+                    - heading "nickname" [level=3] [ref=e3847]
+                    - 'link "Permalink: nickname" [ref=e3848] [cursor=pointer]':
+                      - /url: "#nickname"
+                  - list [ref=e3849]:
+                    - listitem [ref=e3850]:
+                      - code [ref=e3851]: steamID
+                      - text: "- The SteamID of the user whose nickname changed, as a"
+                      - code [ref=e3852]: SteamID
+                      - text: object
+                    - listitem [ref=e3853]:
+                      - code [ref=e3854]: newNickname
+                      - text: "- The user's new nickname, or"
+                      - code [ref=e3855]: "null"
+                      - text: if their existing nickname has been deleted
+                  - paragraph [ref=e3856]:
+                    - strong [ref=e3857]: v3.23.0 or later is required to use this event
+                  - paragraph [ref=e3858]:
+                    - text: Emitted when a friend's nickname is changed somewhere else (that is, on the web or by another client sessions). This is not emitted in response to a
+                    - code [ref=e3859]: setNickname
+                    - text: call.
+                  - paragraph [ref=e3860]:
+                    - text: This is emitted before the
+                    - code [ref=e3861]: myNicknames
+                    - text: property is updated, so you can compare with that object to see what it used to be.
+                  - generic [ref=e3862]:
+                    - heading "friendOrChatMessage" [level=3] [ref=e3863]
+                    - 'link "Permalink: friendOrChatMessage" [ref=e3864] [cursor=pointer]':
+                      - /url: "#friendorchatmessage"
+                  - list [ref=e3865]:
+                    - listitem [ref=e3866]:
+                      - code [ref=e3867]: senderID
+                      - text: "- The message sender, as a"
+                      - code [ref=e3868]: SteamID
+                      - text: object
+                    - listitem [ref=e3869]:
+                      - code [ref=e3870]: message
+                      - text: "- The message text"
+                    - listitem [ref=e3871]:
+                      - code [ref=e3872]: room
+                      - text: "- The room to which the message was sent. This is the user's"
+                      - code [ref=e3873]: SteamID
+                      - text: if it was a friend message
+                  - paragraph [ref=e3874]:
+                    - strong [ref=e3875]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3876]:
+                    - emphasis [ref=e3877]:
+                      - text: This is an
+                      - link "ID event" [ref=e3878] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3879]:
+                    - text: Emitted when we receive either a friend message or a legacy chat room message, as long as we're
+                    - link "online" [ref=e3880] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: .
+                  - paragraph [ref=e3881]:
+                    - strong [ref=e3882]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e3883]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e3884] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e3885]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e3886]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e3887] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e3888]:
+                    - heading "friendMessage" [level=3] [ref=e3889]
+                    - 'link "Permalink: friendMessage" [ref=e3890] [cursor=pointer]':
+                      - /url: "#friendmessage"
+                  - list [ref=e3891]:
+                    - listitem [ref=e3892]:
+                      - code [ref=e3893]: senderID
+                      - text: "- The message sender, as a"
+                      - code [ref=e3894]: SteamID
+                      - text: object
+                    - listitem [ref=e3895]:
+                      - code [ref=e3896]: message
+                      - text: "- The message text"
+                  - paragraph [ref=e3897]:
+                    - strong [ref=e3898]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3899]:
+                    - emphasis [ref=e3900]:
+                      - text: This is an
+                      - link "ID event" [ref=e3901] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3902]:
+                    - text: Emitted when we receive a direct friend message (that is, not through a chat room), as long as we're
+                    - link "online" [ref=e3903] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: .
+                  - paragraph [ref=e3904]:
+                    - strong [ref=e3905]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e3906]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e3907] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e3908]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e3909]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e3910] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e3911]:
+                    - heading "friendTyping" [level=3] [ref=e3912]
+                    - 'link "Permalink: friendTyping" [ref=e3913] [cursor=pointer]':
+                      - /url: "#friendtyping"
+                  - list [ref=e3914]:
+                    - listitem [ref=e3915]:
+                      - code [ref=e3916]: senderID
+                      - text: "- The"
+                      - code [ref=e3917]: SteamID
+                      - text: of the friend who's typing
+                  - paragraph [ref=e3918]:
+                    - strong [ref=e3919]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3920]:
+                    - emphasis [ref=e3921]:
+                      - text: This is an
+                      - link "ID event" [ref=e3922] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3923]:
+                    - text: Emitted when Steam notifies us that one of our friends is typing a message to us, as long as we're
+                    - link "online" [ref=e3924] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: .
+                  - paragraph [ref=e3925]:
+                    - strong [ref=e3926]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e3927]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e3928] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e3929]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e3930]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e3931] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e3932]:
+                    - heading "friendLeftConversation" [level=3] [ref=e3933]
+                    - 'link "Permalink: friendLeftConversation" [ref=e3934] [cursor=pointer]':
+                      - /url: "#friendleftconversation"
+                  - list [ref=e3935]:
+                    - listitem [ref=e3936]:
+                      - code [ref=e3937]: senderID
+                      - text: "- The"
+                      - code [ref=e3938]: SteamID
+                      - text: of the friend who closed our chat window
+                  - paragraph [ref=e3939]:
+                    - strong [ref=e3940]: v3.10.0 or later is required to use this event
+                  - paragraph [ref=e3941]:
+                    - emphasis [ref=e3942]:
+                      - text: This is an
+                      - link "ID event" [ref=e3943] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3944]:
+                    - text: Emitted when Steam notifies us that one of our friends with whom we've been chatting has closed our chat window, as long as we're
+                    - link "online" [ref=e3945] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: .
+                  - paragraph [ref=e3946]:
+                    - strong [ref=e3947]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e3948]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e3949] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e3950]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e3951]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e3952] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e3953]:
+                    - heading "friendMessageEcho" [level=3] [ref=e3954]
+                    - 'link "Permalink: friendMessageEcho" [ref=e3955] [cursor=pointer]':
+                      - /url: "#friendmessageecho"
+                  - list [ref=e3956]:
+                    - listitem [ref=e3957]:
+                      - code [ref=e3958]: recipientID
+                      - text: "- The"
+                      - code [ref=e3959]: SteamID
+                      - text: of the user who rececived this message
+                    - listitem [ref=e3960]:
+                      - code [ref=e3961]: message
+                      - text: "- The message text"
+                  - paragraph [ref=e3962]:
+                    - strong [ref=e3963]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3964]:
+                    - emphasis [ref=e3965]:
+                      - text: This is an
+                      - link "ID event" [ref=e3966] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3967]: Emitted when Steam echos us a message that we sent to a friend on another login.
+                  - paragraph [ref=e3968]:
+                    - strong [ref=e3969]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e3970]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e3971] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e3972]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e3973]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e3974] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e3975]:
+                    - heading "friendTypingEcho" [level=3] [ref=e3976]
+                    - 'link "Permalink: friendTypingEcho" [ref=e3977] [cursor=pointer]':
+                      - /url: "#friendtypingecho"
+                  - list [ref=e3978]:
+                    - listitem [ref=e3979]:
+                      - code [ref=e3980]: recipientID
+                      - text: "- The"
+                      - code [ref=e3981]: SteamID
+                      - text: of the user who we're typing to
+                  - paragraph [ref=e3982]:
+                    - strong [ref=e3983]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e3984]:
+                    - emphasis [ref=e3985]:
+                      - text: This is an
+                      - link "ID event" [ref=e3986] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e3987]: Emitted when Steam echos us a notification that we're typing to a friend on another login.
+                  - paragraph [ref=e3988]:
+                    - strong [ref=e3989]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e3990]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e3991] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e3992]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e3993]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e3994] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e3995]:
+                    - heading "chatMessage" [level=3] [ref=e3996]
+                    - 'link "Permalink: chatMessage" [ref=e3997] [cursor=pointer]':
+                      - /url: "#chatmessage"
+                  - list [ref=e3998]:
+                    - listitem [ref=e3999]:
+                      - code [ref=e4000]: room
+                      - text: "- The"
+                      - code [ref=e4001]: SteamID
+                      - text: of the chat room
+                    - listitem [ref=e4002]:
+                      - code [ref=e4003]: chatter
+                      - text: "- The"
+                      - code [ref=e4004]: SteamID
+                      - text: of the message sender
+                    - listitem [ref=e4005]:
+                      - code [ref=e4006]: message
+                      - text: "- The message text"
+                  - paragraph [ref=e4007]:
+                    - strong [ref=e4008]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4009]:
+                    - emphasis [ref=e4010]:
+                      - text: This is an
+                      - link "ID event" [ref=e4011] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4012]:
+                    - text: Emitted when we receive a chat message from a legacy chat room, as long as we're
+                    - link "online" [ref=e4013] [cursor=pointer]:
+                      - /url: "#setpersonastate-name"
+                    - text: ". This is a special ID event. Any of the following are acceptable:"
+                  - list [ref=e4014]:
+                    - listitem [ref=e4015]:
+                      - code [ref=e4016]: chatMessage
+                    - listitem [ref=e4017]:
+                      - code [ref=e4018]: chatMessage#roomID
+                    - listitem [ref=e4019]:
+                      - code [ref=e4020]: chatMessage#senderID
+                    - listitem [ref=e4021]:
+                      - code [ref=e4022]: chatMessage#roomID#senderID
+                  - paragraph [ref=e4023]:
+                    - strong [ref=e4024]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4025]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4026] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4027]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4028]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4029] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4030]:
+                    - heading "chatHistory" [level=3] [ref=e4031]
+                    - 'link "Permalink: chatHistory" [ref=e4032] [cursor=pointer]':
+                      - /url: "#chathistory"
+                  - list [ref=e4033]:
+                    - listitem [ref=e4034]:
+                      - code [ref=e4035]: steamID
+                      - text: "- The"
+                      - code [ref=e4036]: SteamID
+                      - text: of the user with whom we got chat history
+                    - listitem [ref=e4037]:
+                      - code [ref=e4038]: success
+                      - text: "- An"
+                      - code [ref=e4039]: EResult
+                      - text: value
+                    - listitem [ref=e4040]:
+                      - code [ref=e4041]: messages
+                      - text: "- An array of message objects"
+                  - paragraph [ref=e4042]:
+                    - strong [ref=e4043]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4044]:
+                    - emphasis [ref=e4045]:
+                      - text: This is an
+                      - link "ID event" [ref=e4046] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4047]:
+                    - text: With the exception of the
+                    - code [ref=e4048]: steamID
+                    - text: argument, this is identical to the callback of
+                    - code [ref=e4049]: getChatHistory
+                    - text: .
+                  - paragraph [ref=e4050]:
+                    - strong [ref=e4051]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4052]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4053] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4054]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4055]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4056] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4057]:
+                    - heading "chatInvite" [level=3] [ref=e4058]
+                    - 'link "Permalink: chatInvite" [ref=e4059] [cursor=pointer]':
+                      - /url: "#chatinvite"
+                  - list [ref=e4060]:
+                    - listitem [ref=e4061]:
+                      - code [ref=e4062]: inviterID
+                      - text: "- The"
+                      - code [ref=e4063]: SteamID
+                      - text: of the user who invited us
+                    - listitem [ref=e4064]:
+                      - code [ref=e4065]: chatID
+                      - text: "- The"
+                      - code [ref=e4066]: SteamID
+                      - text: of the chat that we were invited to
+                    - listitem [ref=e4067]:
+                      - code [ref=e4068]: chatName
+                      - text: "- The name of the chat we were invited to. Empty if it's a multi-user chat and not a group chat."
+                  - paragraph [ref=e4069]:
+                    - strong [ref=e4070]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4071]:
+                    - emphasis [ref=e4072]:
+                      - text: This is an
+                      - link "ID event" [ref=e4073] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4074]: "Emitted when we're invited to join a legacy chat room. This is a special ID event. Any of the following are acceptable:"
+                  - list [ref=e4075]:
+                    - listitem [ref=e4076]:
+                      - code [ref=e4077]: chatInvite
+                    - listitem [ref=e4078]:
+                      - code [ref=e4079]: chatInvite#inviterID
+                    - listitem [ref=e4080]:
+                      - code [ref=e4081]: chatInvite#chatID
+                    - listitem [ref=e4082]:
+                      - code [ref=e4083]: chatInvite#inviterID#chatID
+                  - paragraph [ref=e4084]:
+                    - strong [ref=e4085]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4086]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4087] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4088]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4089]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4090] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4091]:
+                    - heading "chatCreated" [level=3] [ref=e4092]
+                    - 'link "Permalink: chatCreated" [ref=e4093] [cursor=pointer]':
+                      - /url: "#chatcreated"
+                  - list [ref=e4094]:
+                    - listitem [ref=e4095]:
+                      - code [ref=e4096]: friendID
+                      - text: "- The"
+                      - code [ref=e4097]: SteamID
+                      - text: of the friend with whom we were creating this legacy chat room
+                    - listitem [ref=e4098]:
+                      - code [ref=e4099]: eresult
+                      - text: "- An"
+                      - code [ref=e4100]: EResult
+                      - text: value
+                    - listitem [ref=e4101]:
+                      - code [ref=e4102]: chatID
+                      - text: "- The"
+                      - code [ref=e4103]: SteamID
+                      - text: of the newly-created legacy chat, if successful
+                  - paragraph [ref=e4104]:
+                    - strong [ref=e4105]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4106]:
+                    - emphasis [ref=e4107]:
+                      - text: This is an
+                      - link "ID event" [ref=e4108] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4109]:
+                    - text: With the exception of the
+                    - code [ref=e4110]: friendID
+                    - text: argument, this event is identical to the callback of
+                    - code [ref=e4111]: createChatRoom
+                    - text: .
+                  - paragraph [ref=e4112]:
+                    - strong [ref=e4113]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4114]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4115] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4116]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4117]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4118] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4119]:
+                    - heading "chatEnter" [level=3] [ref=e4120]
+                    - 'link "Permalink: chatEnter" [ref=e4121] [cursor=pointer]':
+                      - /url: "#chatenter"
+                  - list [ref=e4122]:
+                    - listitem [ref=e4123]:
+                      - code [ref=e4124]: chatID
+                      - text: "- The"
+                      - code [ref=e4125]: SteamID
+                      - text: of the legacy chat room that we either entered or failed to enter
+                    - listitem [ref=e4126]:
+                      - code [ref=e4127]: response
+                      - text: "- A value from"
+                      - code [ref=e4128]: EChatRoomEnterResponse
+                  - paragraph [ref=e4129]:
+                    - strong [ref=e4130]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4131]:
+                    - emphasis [ref=e4132]:
+                      - text: This is an
+                      - link "ID event" [ref=e4133] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4134]:
+                    - text: With the exception of the
+                    - code [ref=e4135]: chatID
+                    - text: argument, this event is identical to the callback of
+                    - code [ref=e4136]: joinChat
+                    - text: .
+                  - paragraph [ref=e4137]:
+                    - strong [ref=e4138]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4139]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4140] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4141]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4142]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4143] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4144]:
+                    - heading "chatLeft" [level=3] [ref=e4145]
+                    - 'link "Permalink: chatLeft" [ref=e4146] [cursor=pointer]':
+                      - /url: "#chatleft"
+                  - list [ref=e4147]:
+                    - listitem [ref=e4148]:
+                      - code [ref=e4149]: chatID
+                      - text: "- The"
+                      - code [ref=e4150]: SteamID
+                      - text: of the legacy chat room that we left
+                  - paragraph [ref=e4151]:
+                    - strong [ref=e4152]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4153]:
+                    - emphasis [ref=e4154]:
+                      - text: This is an
+                      - link "ID event" [ref=e4155] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4156]: Emitted when we leave a legacy chat room for any reason (we left, kicked, banned, etc).
+                  - paragraph [ref=e4157]:
+                    - strong [ref=e4158]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4159]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4160] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4161]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4162]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4163] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4164]:
+                    - heading "chatUserJoined" [level=3] [ref=e4165]
+                    - 'link "Permalink: chatUserJoined" [ref=e4166] [cursor=pointer]':
+                      - /url: "#chatuserjoined"
+                  - list [ref=e4167]:
+                    - listitem [ref=e4168]:
+                      - code [ref=e4169]: chatID
+                      - text: "- The"
+                      - code [ref=e4170]: SteamID
+                      - text: of the legacy chat room that the user joined
+                    - listitem [ref=e4171]:
+                      - code [ref=e4172]: userID
+                      - text: "- The"
+                      - code [ref=e4173]: SteamID
+                      - text: of the user who joined
+                  - paragraph [ref=e4174]:
+                    - strong [ref=e4175]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4176]:
+                    - emphasis [ref=e4177]:
+                      - text: This is an
+                      - link "ID event" [ref=e4178] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4179]: Emitted when a user joins a legacy chat room we're in.
+                  - paragraph [ref=e4180]:
+                    - strong [ref=e4181]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4182]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4183] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4184]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4185]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4186] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4187]:
+                    - heading "chatUserLeft" [level=3] [ref=e4188]
+                    - 'link "Permalink: chatUserLeft" [ref=e4189] [cursor=pointer]':
+                      - /url: "#chatuserleft"
+                  - list [ref=e4190]:
+                    - listitem [ref=e4191]:
+                      - code [ref=e4192]: chatID
+                      - text: "- The"
+                      - code [ref=e4193]: SteamID
+                      - text: of the legacy chat room that the user left
+                    - listitem [ref=e4194]:
+                      - code [ref=e4195]: userID
+                      - text: "- The"
+                      - code [ref=e4196]: SteamID
+                      - text: of the user who left
+                  - paragraph [ref=e4197]:
+                    - strong [ref=e4198]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4199]:
+                    - emphasis [ref=e4200]:
+                      - text: This is an
+                      - link "ID event" [ref=e4201] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4202]: Emitted when a user leaves a legacy chat room we're in.
+                  - paragraph [ref=e4203]:
+                    - strong [ref=e4204]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4205]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4206] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4207]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4208]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4209] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4210]:
+                    - heading "chatUserDisconnected" [level=3] [ref=e4211]
+                    - 'link "Permalink: chatUserDisconnected" [ref=e4212] [cursor=pointer]':
+                      - /url: "#chatuserdisconnected"
+                  - list [ref=e4213]:
+                    - listitem [ref=e4214]:
+                      - code [ref=e4215]: chatID
+                      - text: "- The"
+                      - code [ref=e4216]: SteamID
+                      - text: of the legacy chat room that the user disconnected from
+                    - listitem [ref=e4217]:
+                      - code [ref=e4218]: userID
+                      - text: "- The"
+                      - code [ref=e4219]: SteamID
+                      - text: of the user who disconnected
+                  - paragraph [ref=e4220]:
+                    - strong [ref=e4221]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4222]:
+                    - emphasis [ref=e4223]:
+                      - text: This is an
+                      - link "ID event" [ref=e4224] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4225]: Emitted when a user in a legacy chat room we're in disconnects from Steam.
+                  - paragraph [ref=e4226]:
+                    - strong [ref=e4227]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4228]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4229] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4230]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4231]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4232] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4233]:
+                    - heading "chatUserKicked" [level=3] [ref=e4234]
+                    - 'link "Permalink: chatUserKicked" [ref=e4235] [cursor=pointer]':
+                      - /url: "#chatuserkicked"
+                  - list [ref=e4236]:
+                    - listitem [ref=e4237]:
+                      - code [ref=e4238]: chatID
+                      - text: "- The"
+                      - code [ref=e4239]: SteamID
+                      - text: of the legacy chat room that the user was kicked from
+                    - listitem [ref=e4240]:
+                      - code [ref=e4241]: userID
+                      - text: "- The"
+                      - code [ref=e4242]: SteamID
+                      - text: of the user who was kicked
+                    - listitem [ref=e4243]:
+                      - code [ref=e4244]: actor
+                      - text: "- The"
+                      - code [ref=e4245]: SteamID
+                      - text: of the user who did the kicking
+                  - paragraph [ref=e4246]:
+                    - strong [ref=e4247]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4248]:
+                    - emphasis [ref=e4249]:
+                      - text: This is an
+                      - link "ID event" [ref=e4250] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4251]: Emitted when a user is kicked from a legacy chat room we're in.
+                  - paragraph [ref=e4252]:
+                    - strong [ref=e4253]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4254]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4255] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4256]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4257]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4258] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4259]:
+                    - heading "chatUserBanned" [level=3] [ref=e4260]
+                    - 'link "Permalink: chatUserBanned" [ref=e4261] [cursor=pointer]':
+                      - /url: "#chatuserbanned"
+                  - list [ref=e4262]:
+                    - listitem [ref=e4263]:
+                      - code [ref=e4264]: chatID
+                      - text: "- The"
+                      - code [ref=e4265]: SteamID
+                      - text: of the legacy chat room that the user was banned from
+                    - listitem [ref=e4266]:
+                      - code [ref=e4267]: userID
+                      - text: "- The"
+                      - code [ref=e4268]: SteamID
+                      - text: of the user who was banned
+                    - listitem [ref=e4269]:
+                      - code [ref=e4270]: actor
+                      - text: "- The"
+                      - code [ref=e4271]: SteamID
+                      - text: of the user who did the banning
+                  - paragraph [ref=e4272]:
+                    - strong [ref=e4273]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4274]:
+                    - emphasis [ref=e4275]:
+                      - text: This is an
+                      - link "ID event" [ref=e4276] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4277]: Emitted when a user is banned from a legacy chat room we're in.
+                  - paragraph [ref=e4278]:
+                    - strong [ref=e4279]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4280]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4281] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4282]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4283]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4284] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4285]:
+                    - heading "chatUserSpeaking" [level=3] [ref=e4286]
+                    - 'link "Permalink: chatUserSpeaking" [ref=e4287] [cursor=pointer]':
+                      - /url: "#chatuserspeaking"
+                  - list [ref=e4288]:
+                    - listitem [ref=e4289]:
+                      - code [ref=e4290]: chatID
+                      - text: "- The"
+                      - code [ref=e4291]: SteamID
+                      - text: of the legacy chat room that the user is speaking in
+                    - listitem [ref=e4292]:
+                      - code [ref=e4293]: userID
+                      - text: "- The"
+                      - code [ref=e4294]: SteamID
+                      - text: of the user who is speaking
+                  - paragraph [ref=e4295]:
+                    - strong [ref=e4296]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4297]:
+                    - emphasis [ref=e4298]:
+                      - text: This is an
+                      - link "ID event" [ref=e4299] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4300]: Emitted when a user in a legacy chat room we're in starts speaking over voice chat.
+                  - paragraph [ref=e4301]:
+                    - strong [ref=e4302]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4303]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4304] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4305]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4306]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4307] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4308]:
+                    - heading "chatUserDoneSpeaking" [level=3] [ref=e4309]
+                    - 'link "Permalink: chatUserDoneSpeaking" [ref=e4310] [cursor=pointer]':
+                      - /url: "#chatuserdonespeaking"
+                  - list [ref=e4311]:
+                    - listitem [ref=e4312]:
+                      - code [ref=e4313]: chatID
+                      - text: "- The"
+                      - code [ref=e4314]: SteamID
+                      - text: of the legacy chat room that the user is done speaking in
+                    - listitem [ref=e4315]:
+                      - code [ref=e4316]: userID
+                      - text: "- The"
+                      - code [ref=e4317]: SteamID
+                      - text: of the user who is done speaking
+                  - paragraph [ref=e4318]:
+                    - strong [ref=e4319]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4320]:
+                    - emphasis [ref=e4321]:
+                      - text: This is an
+                      - link "ID event" [ref=e4322] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4323]: Emitted when a user in a legacy chat room we're in stops speaking over voice chat.
+                  - paragraph [ref=e4324]:
+                    - strong [ref=e4325]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4326]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4327] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4328]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4329]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4330] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4331]:
+                    - heading "chatSetPublic" [level=3] [ref=e4332]
+                    - 'link "Permalink: chatSetPublic" [ref=e4333] [cursor=pointer]':
+                      - /url: "#chatsetpublic"
+                  - list [ref=e4334]:
+                    - listitem [ref=e4335]:
+                      - code [ref=e4336]: chatID
+                      - text: "- The"
+                      - code [ref=e4337]: SteamID
+                      - text: of the legacy chat room that was unlocked
+                    - listitem [ref=e4338]:
+                      - code [ref=e4339]: actor
+                      - text: "- The"
+                      - code [ref=e4340]: SteamID
+                      - text: of the user who unlocked it
+                  - paragraph [ref=e4341]:
+                    - strong [ref=e4342]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4343]:
+                    - emphasis [ref=e4344]:
+                      - text: This is an
+                      - link "ID event" [ref=e4345] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4346]: Emitted when a legacy chat room we're in is unlocked so that anyone can join.
+                  - paragraph [ref=e4347]:
+                    - strong [ref=e4348]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4349]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4350] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4351]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4352]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4353] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4354]:
+                    - heading "chatSetPrivate" [level=3] [ref=e4355]
+                    - 'link "Permalink: chatSetPrivate" [ref=e4356] [cursor=pointer]':
+                      - /url: "#chatsetprivate"
+                  - list [ref=e4357]:
+                    - listitem [ref=e4358]:
+                      - code [ref=e4359]: chatID
+                      - text: "- The"
+                      - code [ref=e4360]: SteamID
+                      - text: of the legacy chat room that was locked
+                    - listitem [ref=e4361]:
+                      - code [ref=e4362]: actor
+                      - text: "- The"
+                      - code [ref=e4363]: SteamID
+                      - text: of the user who locked it
+                  - paragraph [ref=e4364]:
+                    - strong [ref=e4365]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4366]:
+                    - emphasis [ref=e4367]:
+                      - text: This is an
+                      - link "ID event" [ref=e4368] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4369]: Emitted when a legacy chat room we're in is locked so that only group members can join without an invite.
+                  - paragraph [ref=e4370]:
+                    - strong [ref=e4371]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4372]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4373] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4374]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4375]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4376] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4377]:
+                    - heading "chatSetOfficersOnly" [level=3] [ref=e4378]
+                    - 'link "Permalink: chatSetOfficersOnly" [ref=e4379] [cursor=pointer]':
+                      - /url: "#chatsetofficersonly"
+                  - list [ref=e4380]:
+                    - listitem [ref=e4381]:
+                      - code [ref=e4382]: chatID
+                      - text: "- The"
+                      - code [ref=e4383]: SteamID
+                      - text: of the legacy chat room that was set officers-only
+                    - listitem [ref=e4384]:
+                      - code [ref=e4385]: actor
+                      - text: "- The"
+                      - code [ref=e4386]: SteamID
+                      - text: of the user who set it officers-only
+                  - paragraph [ref=e4387]:
+                    - strong [ref=e4388]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4389]:
+                    - emphasis [ref=e4390]:
+                      - text: This is an
+                      - link "ID event" [ref=e4391] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4392]: Emitted when a legacy chat room we're in is set so that only group officers can chat.
+                  - paragraph [ref=e4393]:
+                    - strong [ref=e4394]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4395]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4396] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4397]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4398]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4399] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4400]:
+                    - heading "chatSetPrivate" [level=3] [ref=e4401]
+                    - 'link "Permalink: chatSetPrivate" [ref=e4402] [cursor=pointer]':
+                      - /url: "#chatsetprivate-1"
+                  - list [ref=e4403]:
+                    - listitem [ref=e4404]:
+                      - code [ref=e4405]: chatID
+                      - text: "- The"
+                      - code [ref=e4406]: SteamID
+                      - text: of the legacy chat room that was unset officers-only
+                    - listitem [ref=e4407]:
+                      - code [ref=e4408]: actor
+                      - text: "- The"
+                      - code [ref=e4409]: SteamID
+                      - text: of the user who unset it officers-only
+                  - paragraph [ref=e4410]:
+                    - strong [ref=e4411]: v1.9.0 or later is required to use this event
+                  - paragraph [ref=e4412]:
+                    - emphasis [ref=e4413]:
+                      - text: This is an
+                      - link "ID event" [ref=e4414] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .
+                  - paragraph [ref=e4415]: Emitted when a legacy chat room we're in is set so that everyone can chat.
+                  - paragraph [ref=e4416]:
+                    - strong [ref=e4417]: This is deprecated.
+                    - text: You should use
+                    - code [ref=e4418]: SteamChatRoomClient
+                    - text: instead, which is available as the
+                    - link "chat" [ref=e4419] [cursor=pointer]:
+                      - /url: "#chat"
+                    - text: property of each
+                    - code [ref=e4420]: SteamUser
+                    - text: instance.
+                  - paragraph [ref=e4421]:
+                    - link "Read SteamChatRoomClient docs here." [ref=e4422] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/SteamChatRoomClient
+                  - generic [ref=e4423]:
+                    - heading "lobbyInvite" [level=3] [ref=e4424]
+                    - 'link "Permalink: lobbyInvite" [ref=e4425] [cursor=pointer]':
+                      - /url: "#lobbyinvite"
+                  - list [ref=e4426]:
+                    - listitem [ref=e4427]:
+                      - code [ref=e4428]: inviterID
+                      - text: "- The"
+                      - code [ref=e4429]: SteamID
+                      - text: of the user who invited us to a Steam lobby
+                    - listitem [ref=e4430]:
+                      - code [ref=e4431]: lobbyID
+                      - text: "- The"
+                      - code [ref=e4432]: SteamID
+                      - text: of the lobby we were invited to
+                  - paragraph [ref=e4433]:
+                    - strong [ref=e4434]: v3.9.0 or later is required to use this event
+                  - list [ref=e4435]:
+                    - listitem [ref=e4436]:
+                      - text: This is an
+                      - link "ID event" [ref=e4437] [cursor=pointer]:
+                        - /url: "#id-events"
+                      - text: .*
+                  - paragraph [ref=e4438]: Emitted when we're invited to a Steam lobby. The inviter should be currently playing the game associated with this lobby, so you can get the AppID of the associated game from their user persona data.
+                  - generic [ref=e4439]:
+                    - heading "appLaunched" [level=3] [ref=e4440]
+                    - 'link "Permalink: appLaunched" [ref=e4441] [cursor=pointer]':
+                      - /url: "#applaunched"
+                  - list [ref=e4442]:
+                    - listitem [ref=e4443]:
+                      - code [ref=e4444]: appid
+                  - paragraph [ref=e4445]:
+                    - strong [ref=e4446]: v4.1.0 or later is required to use this event
+                  - paragraph [ref=e4447]:
+                    - link "Please see documentation for GC interaction on the GitHub wiki." [ref=e4448] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/Game-Coordinator
+                  - generic [ref=e4449]:
+                    - heading "appQuit" [level=3] [ref=e4450]
+                    - 'link "Permalink: appQuit" [ref=e4451] [cursor=pointer]':
+                      - /url: "#appquit"
+                  - list [ref=e4452]:
+                    - listitem [ref=e4453]:
+                      - code [ref=e4454]: appid
+                  - paragraph [ref=e4455]:
+                    - strong [ref=e4456]: v4.1.0 or later is required to use this event
+                  - paragraph [ref=e4457]:
+                    - link "Please see documentation for GC interaction on the GitHub wiki." [ref=e4458] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/Game-Coordinator
+                  - generic [ref=e4459]:
+                    - heading "receivedFromGC" [level=3] [ref=e4460]
+                    - 'link "Permalink: receivedFromGC" [ref=e4461] [cursor=pointer]':
+                      - /url: "#receivedfromgc"
+                  - list [ref=e4462]:
+                    - listitem [ref=e4463]:
+                      - code [ref=e4464]: appid
+                    - listitem [ref=e4465]:
+                      - code [ref=e4466]: msgType
+                    - listitem [ref=e4467]:
+                      - code [ref=e4468]: payload
+                  - paragraph [ref=e4469]:
+                    - strong [ref=e4470]: v4.1.0 or later is required to use this event
+                  - paragraph [ref=e4471]:
+                    - link "Please see documentation for GC interaction on the GitHub wiki." [ref=e4472] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/wiki/Game-Coordinator
+              - generic [ref=e4473]:
+                - heading "Readme" [level=2] [ref=e4474]
+                - heading "Keywords" [level=3] [ref=e4475]
+                - list [ref=e4476]:
+                  - listitem [ref=e4477]:
+                    - link "steam" [ref=e4478] [cursor=pointer]:
+                      - /url: /search?q=keywords:steam
+                  - listitem [ref=e4479]:
+                    - link "steam client" [ref=e4480] [cursor=pointer]:
+                      - /url: /search?q=keywords:"steam client"
+                  - listitem [ref=e4481]:
+                    - link "steam user" [ref=e4482] [cursor=pointer]:
+                      - /url: /search?q=keywords:"steam user"
+              - complementary [ref=e4483]:
+                - heading "Provenance" [level=1] [ref=e4484]
+                - generic [ref=e4624]:
+                  - generic [ref=e4626]:
+                    - img [ref=e4628]
+                    - generic [ref=e4630]: Built and signed on
+                    - heading "GitHub Actions" [level=2] [ref=e4631]
+                    - link "View build summary" [ref=e4632] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/actions/runs/19928075020/attempts/1
+                  - generic [ref=e4633]:
+                    - paragraph [ref=e4634]: Source Commit
+                    - link "Source Commit" [ref=e4635] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/tree/e39d7cb8e0d4c83905f2d3896fb354b13f2591ec
+                      - text: github.com/DoctorMcKay/node-steam-user@e39d7cb
+                    - paragraph [ref=e4636]: Build File
+                    - link "Build File" [ref=e4637] [cursor=pointer]:
+                      - /url: https://github.com/DoctorMcKay/node-steam-user/actions/runs/19928075020/workflow
+                      - text: .github/workflows/lint-and-syntax-check.yml
+                    - paragraph [ref=e4638]: Public Ledger
+                    - link "Transparency log entry" [ref=e4639] [cursor=pointer]:
+                      - /url: https://search.sigstore.dev/?logIndex=740344796
+                - link "Share feedback" [ref=e4490] [cursor=pointer]:
+                  - /url: " https://github.com/npm/feedback"
+            - tabpanel
+            - tabpanel
+            - tabpanel "17 Dependencies"
+            - tabpanel "68 Dependents"
+            - tabpanel "219 Versions"
+          - complementary "Package sidebar" [ref=e4491]:
+            - heading "Package Sidebar" [level=2] [ref=e4492]
+            - heading "Install" [level=3] [ref=e4493]
+            - generic [ref=e4494]:
+              - img
+              - paragraph [ref=e4495]:
+                - generic [ref=e4496]:
+                  - code [ref=e4497]: npm i steam-user
+                  - button "Copy install command line" [ref=e4498] [cursor=pointer]:
+                    - img
+            - generic [ref=e4499]:
+              - heading "Repository" [level=3] [ref=e4500]
+              - paragraph [ref=e4501]:
+                - link "Repository github.com/DoctorMcKay/node-steam-user" [ref=e4502] [cursor=pointer]:
+                  - /url: https://github.com/DoctorMcKay/node-steam-user
+                  - img [ref=e4504]
+                  - text: github.com/DoctorMcKay/node-steam-user
+            - generic [ref=e4507]:
+              - heading "Homepage" [level=3] [ref=e4508]
+              - paragraph [ref=e4509]:
+                - link "Homepage github.com/DoctorMcKay/node-steam-user" [ref=e4510] [cursor=pointer]:
+                  - /url: https://github.com/DoctorMcKay/node-steam-user
+                  - img [ref=e4511]
+                  - text: github.com/DoctorMcKay/node-steam-user
+            - button "Showing weekly downloads" [ref=e4513]:
+              - heading "Weekly Downloads" [level=3] [ref=e4514]:
+                - img [ref=e4515]
+                - text: Weekly Downloads
+              - generic [ref=e4519]:
+                - img [ref=e4520]
+                - paragraph [ref=e4525]: 12,103
+            - generic [ref=e4526]:
+              - heading "Version" [level=3] [ref=e4527]
+              - generic [ref=e4528]:
+                - paragraph [ref=e4529]: 5.3.0
+                - button "View more provenance details" [ref=e4532]:
+                  - img [ref=e4533]
+            - generic [ref=e4535]:
+              - heading "License" [level=3] [ref=e4536]
+              - paragraph [ref=e4537]: MIT
+            - generic [ref=e4538]:
+              - heading "Unpacked Size" [level=3] [ref=e4539]
+              - paragraph [ref=e4540]: 7.54 MB
+            - generic [ref=e4541]:
+              - heading "Total Files" [level=3] [ref=e4542]
+              - paragraph [ref=e4543]: "469"
+            - generic [ref=e4544]:
+              - heading "Last publish" [level=3] [ref=e4545]
+              - paragraph [ref=e4546]:
+                - time [ref=e4547]: 3 months ago
+            - generic [ref=e4548]:
+              - heading "Collaborators" [level=3] [ref=e4549]
+              - list "Collaborators" [ref=e4550]:
+                - listitem [ref=e4551]:
+                  - link "doctormckay" [ref=e4553] [cursor=pointer]:
+                    - /url: /~doctormckay
+                    - img "doctormckay" [ref=e4554]
+            - generic [ref=e4555]:
+              - link "Analyze security with Socket" [ref=e4556] [cursor=pointer]:
+                - /url: https://socket.dev/npm/package/steam-user
+                - img [ref=e4557]
+                - strong [ref=e4559]: Analyze security
+                - text: with Socket
+              - link "Check bundle size" [ref=e4560] [cursor=pointer]:
+                - /url: https://bundlephobia.com/package/steam-user
+                - img [ref=e4561]
+                - strong [ref=e4563]: Check bundle size
+              - link "View package health" [ref=e4564] [cursor=pointer]:
+                - /url: https://snyk.io/advisor/npm-package/steam-user
+                - img [ref=e4565]
+                - strong [ref=e4567]: View package health
+              - link "Explore dependencies" [ref=e4568] [cursor=pointer]:
+                - /url: https://npmgraph.js.org/?q=steam-user
+                - img [ref=e4569]
+                - strong [ref=e4571]: Explore dependencies
+            - link "Report malware" [ref=e4573] [cursor=pointer]:
+              - /url: /support?inquire=security&security-inquire=malware&package=steam-user&version=5.3.0
+              - img [ref=e4574]
+              - strong [ref=e4576]: Report
+              - text: malware
+      - contentinfo [ref=e4577]:
+        - heading "Footer" [level=2] [ref=e4578]
+        - generic [ref=e4579]:
+          - generic [ref=e4580]:
+            - link "Visit npm GitHub page" [ref=e4582] [cursor=pointer]:
+              - /url: https://github.com/npm
+              - img [ref=e4583]
+            - link "GitHub" [ref=e4587] [cursor=pointer]:
+              - /url: https://github.com
+              - img [ref=e4588]
+          - generic [ref=e4590]:
+            - heading "Support" [level=3] [ref=e4591]
+            - list "Support" [ref=e4592]:
+              - listitem [ref=e4593]:
+                - link "Help" [ref=e4594] [cursor=pointer]:
+                  - /url: https://docs.npmjs.com
+              - listitem [ref=e4595]:
+                - link "Advisories" [ref=e4596] [cursor=pointer]:
+                  - /url: https://github.com/advisories
+              - listitem [ref=e4597]:
+                - link "Status" [ref=e4598] [cursor=pointer]:
+                  - /url: http://status.npmjs.org/
+              - listitem [ref=e4599]:
+                - link "Contact npm" [ref=e4600] [cursor=pointer]:
+                  - /url: /support
+          - generic [ref=e4601]:
+            - heading "Company" [level=3] [ref=e4602]
+            - list "Company" [ref=e4603]:
+              - listitem [ref=e4604]:
+                - link "About" [ref=e4605] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=e4606]:
+                - link "Blog" [ref=e4607] [cursor=pointer]:
+                  - /url: https://github.blog/tag/npm/
+              - listitem [ref=e4608]:
+                - link "Press" [ref=e4609] [cursor=pointer]:
+                  - /url: /press
+          - generic [ref=e4610]:
+            - heading "Terms & Policies" [level=3] [ref=e4611]
+            - list "Terms & Policies" [ref=e4612]:
+              - listitem [ref=e4613]:
+                - link "Policies" [ref=e4614] [cursor=pointer]:
+                  - /url: /policies/
+              - listitem [ref=e4615]:
+                - link "Terms of Use" [ref=e4616] [cursor=pointer]:
+                  - /url: /policies/terms
+              - listitem [ref=e4617]:
+                - link "Code of Conduct" [ref=e4618] [cursor=pointer]:
+                  - /url: /policies/conduct
+              - listitem [ref=e4619]:
+                - link "Privacy" [ref=e4620] [cursor=pointer]:
+                  - /url: /policies/privacy
+  - generic [ref=e4622]: Viewing steam-user version 5.3.0

@@ -1,0 +1,4 @@
+steam[client]
+csgo
+pyotp
+requests
