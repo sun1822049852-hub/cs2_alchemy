@@ -258,15 +258,9 @@ def _decode_attr_string(item, def_index: int) -> str:
 
 
 def _get_casket_id(item) -> str:
-    casket_id = ComponentManager.decode_casket_id(item)
-    if not casket_id:
-        return ""
-    try:
-        if int(casket_id) == int(getattr(item, "id", 0) or 0):
-            return ""
-    except Exception:
-        pass
-    return casket_id
+    # 组件归属直接由属性 272/273（或兼容字段）解析，不再额外做 id 相等过滤，
+    # 避免把真实组件内物品误判为空。
+    return ComponentManager.decode_casket_id(item)
 
 
 def _get_casket_contained_item_count(item) -> int:

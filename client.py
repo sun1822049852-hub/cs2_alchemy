@@ -27,6 +27,7 @@ _SO_FALLBACK_PROTO = {
     ESOMsg.CacheSubscribed: gcsdk_pb2.CMsgSOCacheSubscribed,
     ESOMsg.CacheUnsubscribed: gcsdk_pb2.CMsgSOCacheUnsubscribed,
 }
+_ITEM_CUSTOMIZATION_EMSG = 1090
 
 
 class _PatchedCSGOClient(CSGOClient):
@@ -42,6 +43,7 @@ class _PatchedCSGOClient(CSGOClient):
         self._need_reset = False # 需要重置游戏会话
         self.on(EGCBaseClientMsg.EMsgGCClientConnectionStatus, self._debug_conn_status)
         self.on(ECsgoGCMsg.EMsgGCCStrike15_v2_ClientLogonFatalError, self._handle_logon_fatal)
+        self.on(ESOMsg.UpdateMultiple, self._handle_so_update_multiple_delta)
 
     def _debug_conn_status(self, msg):
         logger.debug("GC ConnectionStatus: status=%s queue_pos=%s queue_size=%s session_need=%s",
@@ -120,8 +122,66 @@ class _PatchedCSGOClient(CSGOClient):
         if not isinstance(event_id, int):
             self.emit(int(event_id), message)
 
+        # 与 node-globaloffensive 对齐：统一发出 itemCustomizationNotification 事件，
+        # 便于上层按 (item_ids, request) 监听组件内容通知。
+        self._emit_item_customization_notification(event_id, message)
+
         if header.proto.job_id_target != 18446744073709551615:
             self.emit(f"job_{header.proto.job_id_target}", message)
+
+    def _emit_item_customization_notification(self, event_id, message):
+        try:
+            if int(event_id) != _ITEM_CUSTOMIZATION_EMSG:
+                return
+            req = int(getattr(message, "request", 0) or 0)
+            item_ids = [int(x) for x in (getattr(message, "item_id", []) or []) if int(x) > 0]
+            if not item_ids:
+                return
+            self._LOG.info(
+                "ItemCustomizationNotification received: request=%s item_count=%d first_item_id=%s",
+                req,
+                len(item_ids),
+                item_ids[0],
+            )
+            if req == 1012:
+                self._LOG.info(
+                    "CasketContents notification received: request=%s item_count=%d first_item_id=%s",
+                    req,
+                    len(item_ids),
+                    item_ids[0],
+                )
+            self.emit("itemCustomizationNotification", item_ids, req)
+        except Exception:
+            return
+
+    def _handle_so_update_multiple_delta(self, message):
+        socache = getattr(self, "socache", None)
+        if socache is None:
+            return
+
+        added = list(getattr(message, "objects_added", []) or [])
+        removed = list(getattr(message, "objects_removed", []) or [])
+        if not added and not removed:
+            return
+
+        if self.verbose_debug:
+            self._LOG.debug(
+                "SO UpdateMultiple delta: added=%d removed=%d",
+                len(added),
+                len(removed),
+            )
+
+        for so_object in added:
+            try:
+                socache._handle_create(so_object)
+            except Exception as exc:
+                self._LOG.debug("SOCache create(delta) failed: %s", exc)
+
+        for so_object in removed:
+            try:
+                socache._handle_destroy(so_object)
+            except Exception as exc:
+                self._LOG.debug("SOCache destroy(delta) failed: %s", exc)
 
     @staticmethod
     def _normalize_event_id(event_id):

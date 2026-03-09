@@ -1,0 +1,169 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CS2 管理界面 (Node)</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-title">功能导航</div>
+        <button class="nav-btn active" data-page="accountPage" id="navAccount">账号管理</button>
+        <button class="nav-btn" data-page="inventoryPage" id="navInventory">库存总览</button>
+        <button class="nav-btn" data-page="craftPage" id="navCraft">炼金汰换</button>
+      </aside>
+
+      <main class="workspace">
+        <section class="page" id="accountPage">
+          <div class="account-grid">
+            <section class="panel account-form-panel">
+              <h2>账号管理</h2>
+              <div class="form-row">
+                <label for="accountUsername">Steam 账号</label>
+                <input id="accountUsername" type="text" />
+              </div>
+              <div class="form-row">
+                <label for="accountPassword">密码</label>
+                <input id="accountPassword" type="password" />
+              </div>
+              <div class="form-row">
+                <label for="accountTotp">令牌码</label>
+                <input id="accountTotp" type="text" maxlength="6" />
+              </div>
+              <div class="form-row">
+                <label for="accountRemark">备注名</label>
+                <input id="accountRemark" type="text" />
+              </div>
+              <div class="account-actions">
+                <button id="loginSaveBtn">登录并保存</button>
+                <button id="clearAccountBtn">清空输入</button>
+              </div>
+              <div class="tips">
+                规则：<br />
+                1. 成功获取 token 才保存账号。<br />
+                2. 失败只显示原因，不保存账号。<br />
+                3. 备注名在右侧列表里编辑。
+              </div>
+              <div class="status-box">
+                <div class="status-title">状态</div>
+                <div id="accountStatus" class="status-text">准备就绪</div>
+              </div>
+            </section>
+
+            <section class="panel account-list-panel">
+              <h2>已保存账号</h2>
+              <div id="savedAccountsWrap" class="saved-accounts"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="page hidden" id="inventoryPage">
+          <header class="topbar">
+            <h1>库存总览</h1>
+            <div class="topbar-meta">
+              <span id="currentAccountText">当前账号：未选择</span>
+              <span class="status" id="statusText">连接状态：未连接</span>
+              <span id="fetchTimeText">库存获取时间：-</span>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="row">
+              <label>账号</label>
+              <select id="accountSelect"></select>
+              <button id="useAccountBtn">设为当前</button>
+              <button id="refreshBtn">连接并刷新库存信息</button>
+              <span id="summaryText">尚未加载库存</span>
+            </div>
+            <div class="row">
+              <label class="inline"><input type="radio" name="mode" value="cards" checked />分散大图视图</label>
+              <label class="inline"><input type="radio" name="mode" value="grouped" />归类折叠视图</label>
+              <label class="inline"><input type="checkbox" id="includeHidden" />包含被过滤条目</label>
+              <label>搜索</label>
+              <input id="searchInput" placeholder="名称/中文名/英文名/market hash" />
+              <span class="muted">预热: 100（固定）</span>
+              <button id="toggleFilterBtn">展开筛选</button>
+            </div>
+          </section>
+
+          <section class="panel hidden" id="filterDrawer">
+            <div class="row wrap">
+              <label>磨损范围</label>
+              <select id="wearMin" class="small"></select>
+              <span>-</span>
+              <select id="wearMax" class="small"></select>
+              <label>稀有度</label>
+              <details class="menu-box">
+                <summary id="raritySummary">全部</summary>
+                <div class="menu-actions">
+                  <button type="button" id="raritySelectAll">全选</button>
+                  <button type="button" id="rarityClear">清空</button>
+                </div>
+                <div id="rarityMenu" class="menu-list"></div>
+              </details>
+              <label>收藏品</label>
+              <details class="menu-box collection-box">
+                <summary id="collectionSummary">全部</summary>
+                <div class="menu-actions">
+                  <button type="button" id="collectionSelectAll">全选</button>
+                  <button type="button" id="collectionClear">清空</button>
+                </div>
+                <div id="collectionMenu" class="menu-list"></div>
+              </details>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="row">
+              <label>磨损</label>
+              <button id="wearSortUp" class="arrow active" title="由低到高">▲</button>
+              <button id="wearSortDown" class="arrow" title="由高到低">▼</button>
+              <label>稀有度</label>
+              <button id="raritySortUp" class="arrow" title="由低到高">▲</button>
+              <button id="raritySortDown" class="arrow active" title="由高到低">▼</button>
+              <span id="wearHint" class="hint"></span>
+            </div>
+          </section>
+
+          <section class="panel" id="componentPanel">
+            <div class="row">
+              <label>组件</label>
+              <select id="componentSelect"></select>
+              <span id="componentHint">暂无可管理组件</span>
+              <label class="inline"><input type="checkbox" id="showComponentItems" />显示组件内物品</label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="row">
+              <label>每页</label>
+              <select id="pageSize">
+                <option value="60">60</option>
+                <option value="90" selected>90</option>
+                <option value="120">120</option>
+                <option value="180">180</option>
+              </select>
+              <button id="prevBtn">上一页</button>
+              <span id="pageInfo">1/1</span>
+              <button id="nextBtn">下一页</button>
+              <span id="snapshotPath"></span>
+            </div>
+          </section>
+
+          <main id="listWrap" class="list-wrap"></main>
+        </section>
+
+        <section class="page hidden" id="craftPage">
+          <div class="craft-holder panel">
+            <h2>炼金汰换页面（占位）</h2>
+            <p>该页面先保留占位，后续按你的指令实现。</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

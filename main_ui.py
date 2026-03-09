@@ -2125,15 +2125,35 @@ class InventoryOverviewPage(ttk.Frame):
             if self._shutdown_event.is_set():
                 return
 
-            try:
-                self._post_refresh_progress(username, "正在加载组件内容...", "连接状态：已连接（刷新中）")
-                self.component_manager.preload_component_contents(active_client)
-            except Exception:
-                pass
+            self._post_refresh_progress(username, "正在读取 SO 库存缓存（基础）...", "连接状态：已连接（刷新中）")
+            excluded_records_base: list[dict] = []
+            _base_items = get_inventory(
+                active_client,
+                self.loader.schema,
+                dump_raw_path=None,
+                excluded_records=excluded_records_base,
+            )
 
             if self._shutdown_event.is_set():
                 return
-            self._post_refresh_progress(username, "正在读取 SO 库存缓存...", "连接状态：已连接（刷新中）")
+            try:
+                self._post_refresh_progress(username, "正在加载组件内容...", "连接状态：已连接（刷新中）")
+                sent = self.component_manager.preload_component_contents(active_client)
+                stats = getattr(self.component_manager, "last_preload_stats", {}) or {}
+                logger.info(
+                    "component preload stats: sent=%s waiting=%s notified=%s baseline=%s final=%s",
+                    stats.get("sent", sent),
+                    stats.get("waiting", 0),
+                    stats.get("notified", 0),
+                    stats.get("baseline_loaded", 0),
+                    stats.get("final_loaded", 0),
+                )
+            except Exception as exc:
+                logger.warning("component preload failed: username=%s err=%s", username, exc)
+
+            if self._shutdown_event.is_set():
+                return
+            self._post_refresh_progress(username, "正在读取 SO 库存缓存（最终）...", "连接状态：已连接（刷新中）")
             excluded_records: list[dict] = []
             items = get_inventory(
                 active_client,
@@ -2176,6 +2196,15 @@ class InventoryOverviewPage(ttk.Frame):
             self.entries = rows
             self._refresh_collection_filter_options()
             self._refresh_component_controls()
+            component_count = len(self.component_summary_map)
+            component_loaded = sum(len(v) for v in self.component_item_map.values())
+            component_expected = sum(int(getattr(v, "expected_count", 0) or 0) for v in self.component_summary_map.values())
+            logger.info(
+                "component cache stats: components=%d loaded=%d expected=%d",
+                component_count,
+                component_loaded,
+                component_expected,
+            )
             self.snapshot_path = snapshot_path
             if snapshot_path is not None:
                 self.path_var.set(f"快照：{snapshot_path}")
@@ -2190,7 +2219,10 @@ class InventoryOverviewPage(ttk.Frame):
             self._update_connection_ui()
             self._empty_hint = "当前条件下无物品"
             self._refresh_view()
-            self.summary_var.set(f"{message}，共 {len(rows)} 条")
+            if component_count > 0 and component_expected > 0 and component_loaded == 0:
+                self.summary_var.set(f"{message}，共 {len(rows)} 条（组件内容未加载）")
+            else:
+                self.summary_var.set(f"{message}，共 {len(rows)} 条")
             return
         self.selected_account_username = username
         self.current_username = username
@@ -2722,6 +2754,7 @@ class MainUI(tk.Tk):
 
 def main():
     configure_ui_logging()
+    logger.warning("Python UI 已进入 Legacy 模式，默认入口已切换到 Node 桌面版（main_ui_node_desktop.js）。")
     logger.info("main_ui starting")
     app = MainUI()
     app.mainloop()

@@ -1,0 +1,22 @@
+{
+  "name": "cs2-component-sidecar",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Node sidecar for loading CS2 storage unit contents",
+  "type": "commonjs",
+  "scripts": {
+    "fetch-components": "node fetch_component_contents.js",
+    "refresh": "node src/main.js refresh",
+    "main": "node src/main.js",
+    "ui": "node src/uiServer.js",
+    "ui:cli": "node src/main_ui.js",
+    "ui:desktop": "electron electron-main.js"
+  },
+  "dependencies": {
+    "globaloffensive": "^3.2.0",
+    "steam-user": "^4.29.0"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0"
+  }
+}

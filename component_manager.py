@@ -5,11 +5,21 @@ from typing import Any
 
 from csgo.enums import ESOType
 from csgo.proto_enums import ECsgoGCMsg
+try:
+    from csgo.proto_enums import EGCItemMsg
+except Exception:  # pragma: no cover
+    EGCItemMsg = None
 
 try:
-    from csgo.protobufs.econ_gcmessages_pb2 import CMsgCasketItem
+    from csgo.protobufs.econ_gcmessages_pb2 import (
+        CMsgCasketItem,
+        CMsgGCItemCustomizationNotification,
+        k_EGCItemCustomizationNotification_CasketContents,
+    )
 except Exception:  # pragma: no cover
     CMsgCasketItem = None
+    CMsgGCItemCustomizationNotification = None
+    k_EGCItemCustomizationNotification_CasketContents = 1012
 
 logger = logging.getLogger("component_manager")
 
@@ -17,6 +27,8 @@ STORAGE_UNIT_DEF_INDEX = 1201
 _CASKET_ID_LOW_ATTR = 272
 _CASKET_ID_HIGH_ATTR = 273
 _CASKET_LOAD_CONTENTS_EMSG = 1094
+_ITEM_CUSTOMIZATION_EMSG = 1090
+_CASKET_CONTENTS_NOTIFICATION = int(k_EGCItemCustomizationNotification_CasketContents or 1012)
 
 
 @dataclass
@@ -31,6 +43,15 @@ class ComponentSummary:
 class ComponentManager:
     """Storage Unit loading and index building."""
 
+    def __init__(self):
+        self.last_preload_stats: dict[str, int] = {
+            "sent": 0,
+            "waiting": 0,
+            "notified": 0,
+            "baseline_loaded": 0,
+            "final_loaded": 0,
+        }
+
     def preload_component_contents(
         self,
         cs2_client,
@@ -41,47 +62,202 @@ class ComponentManager:
     ) -> int:
         component_ids = self._collect_component_ids_from_socache(cs2_client)
         if not component_ids:
+            self.last_preload_stats = {
+                "sent": 0,
+                "waiting": 0,
+                "notified": 0,
+                "baseline_loaded": 0,
+                "final_loaded": 0,
+            }
             return 0
 
-        baseline_loaded = self._count_items_with_component_id(cs2_client)
-        sent = 0
-        for component_id in component_ids:
-            try:
-                # For load-contents, item_item_id is a cursor; first page should use 0.
-                self._send_component_load_request(cs2_client, int(component_id), cursor_item_id=0)
-                sent += 1
-            except Exception as exc:
-                logger.warning(
-                    "request component load failed: component=%s err_type=%s err=%s",
-                    component_id,
-                    type(exc).__name__,
-                    exc,
-                )
-            time.sleep(max(0.0, request_interval_seconds))
+        waiting_ids = {int(x) for x in component_ids if int(x) > 0}
+        notified_ids: set[int] = set()
+        detach_listener = self._attach_component_notification_listener(cs2_client, waiting_ids, notified_ids)
 
-        if sent > 0:
-            self._wait_component_items_settled(
-                cs2_client,
-                baseline_loaded=baseline_loaded,
-                settle_seconds=max(0.0, settle_seconds),
-                max_wait_seconds=max(0.0, max_wait_seconds),
-            )
+        baseline_loaded = self._count_items_with_component_id(cs2_client)
+        self.last_preload_stats = {
+            "sent": 0,
+            "waiting": len(waiting_ids),
+            "notified": 0,
+            "baseline_loaded": int(baseline_loaded),
+            "final_loaded": int(baseline_loaded),
+        }
+        sent = 0
+        try:
+            for component_id in component_ids:
+                try:
+                    # 与 node-globaloffensive 对齐：item_item_id 使用 casket 本身 id 触发加载。
+                    self._send_component_load_request(cs2_client, int(component_id), cursor_item_id=int(component_id))
+                    sent += 1
+                    self._wait_single_component_notification(
+                        component_id=int(component_id),
+                        notified_ids=notified_ids,
+                        max_wait_seconds=max(1.0, max_wait_seconds / max(1, len(component_ids))),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "request component load failed: component=%s err_type=%s err=%s",
+                        component_id,
+                        type(exc).__name__,
+                        exc,
+                    )
+                time.sleep(max(0.0, request_interval_seconds))
+
+            if sent > 0:
+                self._wait_component_notifications(
+                    waiting_ids=waiting_ids,
+                    notified_ids=notified_ids,
+                    max_wait_seconds=max(0.0, max_wait_seconds),
+                )
+                self._wait_component_items_settled(
+                    cs2_client,
+                    baseline_loaded=baseline_loaded,
+                    settle_seconds=max(0.0, settle_seconds),
+                    max_wait_seconds=max(0.0, max_wait_seconds),
+                )
+            final_loaded = self._count_items_with_component_id(cs2_client)
+            self.last_preload_stats = {
+                "sent": int(sent),
+                "waiting": len(waiting_ids),
+                "notified": len(notified_ids),
+                "baseline_loaded": int(baseline_loaded),
+                "final_loaded": int(final_loaded),
+            }
+        finally:
+            detach_listener()
         return sent
+
+    @staticmethod
+    def _wait_single_component_notification(*, component_id: int, notified_ids: set[int], max_wait_seconds: float):
+        deadline = time.time() + max(0.3, max_wait_seconds)
+        while time.time() < deadline:
+            if int(component_id) in notified_ids:
+                return
+            time.sleep(0.05)
+
+    def _attach_component_notification_listener(self, cs2_client, waiting_ids: set[int], notified_ids: set[int]):
+        gc = getattr(cs2_client, "cs2", None)
+        if gc is None:
+            return lambda: None
+
+        event_keys: list[Any] = ["itemCustomizationNotification", _ITEM_CUSTOMIZATION_EMSG]
+        if EGCItemMsg is not None:
+            ev = getattr(EGCItemMsg, "EMsgGCItemCustomizationNotification", None)
+            if ev is not None:
+                event_keys.append(ev)
+
+        unique_event_keys = list(dict.fromkeys(event_keys))
+
+        def _on_notify(*args):
+            if len(args) >= 2 and isinstance(args[0], (list, tuple)):
+                ids = []
+                req = 0
+                try:
+                    ids = [int(x) for x in args[0] if int(x) > 0]
+                    req = int(args[1] or 0)
+                except Exception:
+                    return
+                if req != _CASKET_CONTENTS_NOTIFICATION:
+                    return
+            else:
+                if not args:
+                    return
+                ids = self._extract_casket_contents_ids(args[0])
+                if not ids:
+                    return
+            for cid in ids:
+                if cid in waiting_ids:
+                    notified_ids.add(cid)
+
+        for key in unique_event_keys:
+            try:
+                gc.on(key, _on_notify)
+            except Exception:
+                pass
+
+        def _detach():
+            for key in unique_event_keys:
+                try:
+                    gc.remove_listener(key, _on_notify)
+                except Exception:
+                    pass
+
+        return _detach
+
+    def _wait_component_notifications(self, *, waiting_ids: set[int], notified_ids: set[int], max_wait_seconds: float):
+        if not waiting_ids:
+            return
+        deadline = time.time() + max(0.5, max_wait_seconds)
+        while time.time() < deadline:
+            if len(notified_ids) >= len(waiting_ids):
+                break
+            time.sleep(0.1)
+        logger.info(
+            "component contents notifications: got=%d expected=%d",
+            len(notified_ids),
+            len(waiting_ids),
+        )
+
+    @staticmethod
+    def _extract_casket_contents_ids(message) -> list[int]:
+        msg = message
+        if isinstance(message, (bytes, bytearray)):
+            if CMsgGCItemCustomizationNotification is None:
+                return []
+            try:
+                parsed = CMsgGCItemCustomizationNotification()
+                parsed.ParseFromString(bytes(message))
+                msg = parsed
+            except Exception:
+                return []
+
+        try:
+            req = int(getattr(msg, "request", 0) or 0)
+        except Exception:
+            return []
+        if req != _CASKET_CONTENTS_NOTIFICATION:
+            return []
+
+        out: list[int] = []
+        for x in getattr(msg, "item_id", []) or []:
+            try:
+                xid = int(x)
+            except Exception:
+                continue
+            if xid > 0:
+                out.append(xid)
+        return out
 
     @staticmethod
     def _send_component_load_request(cs2_client, component_id: int, *, cursor_item_id: int = 0):
         enum_send_error: Exception | None = None
+        cursor = int(cursor_item_id) if int(cursor_item_id) > 0 else int(component_id)
 
-        emsg_enum = getattr(ECsgoGCMsg, "EMsgGCCasketItemLoadContents", None)
+        emsg_enum = None
+        if EGCItemMsg is not None:
+            emsg_enum = getattr(EGCItemMsg, "EMsgGCCasketItemLoadContents", None)
+        if emsg_enum is None:
+            emsg_enum = getattr(ECsgoGCMsg, "EMsgGCCasketItemLoadContents", None)
         if emsg_enum is not None:
             try:
-                cs2_client.cs2.send(
-                    emsg_enum,
-                    {
-                        "casket_item_id": int(component_id),
-                        "item_item_id": int(cursor_item_id),
-                    },
-                )
+                if CMsgCasketItem is not None:
+                    cs2_client.cs2.send(
+                        emsg_enum,
+                        {
+                            "casket_item_id": int(component_id),
+                            "item_item_id": cursor,
+                        },
+                        proto=CMsgCasketItem,
+                    )
+                else:
+                    cs2_client.cs2.send(
+                        emsg_enum,
+                        {
+                            "casket_item_id": int(component_id),
+                            "item_item_id": cursor,
+                        },
+                    )
                 return
             except Exception as exc:
                 enum_send_error = exc
@@ -89,7 +265,7 @@ class ComponentManager:
         if CMsgCasketItem is not None and hasattr(cs2_client.cs2, "send_raw_gc"):
             msg = CMsgCasketItem()
             msg.casket_item_id = int(component_id)
-            msg.item_item_id = int(cursor_item_id)
+            msg.item_item_id = cursor
             cs2_client.cs2.send_raw_gc(_CASKET_LOAD_CONTENTS_EMSG, msg.SerializeToString())
             return
 
@@ -189,6 +365,13 @@ class ComponentManager:
 
     @staticmethod
     def decode_casket_id(raw_item) -> str:
+        try:
+            direct_id = int(getattr(raw_item, "casket_id", 0) or 0)
+            if direct_id > 0:
+                return str(direct_id)
+        except Exception:
+            pass
+
         low = ComponentManager._read_attr_u32(raw_item, _CASKET_ID_LOW_ATTR)
         high = ComponentManager._read_attr_u32(raw_item, _CASKET_ID_HIGH_ATTR)
         if low > 0 or high > 0:
@@ -209,7 +392,10 @@ class ComponentManager:
 
     @staticmethod
     def _read_attr_u32(raw_item, def_index: int) -> int:
-        for attr in getattr(raw_item, "attribute", []):
+        attr_list = getattr(raw_item, "attribute", None)
+        if attr_list is None:
+            attr_list = getattr(raw_item, "attributes", None)
+        for attr in attr_list or []:
             try:
                 if int(getattr(attr, "def_index", 0)) != def_index:
                     continue
@@ -221,5 +407,6 @@ class ComponentManager:
                     return value_int
                 return 0
             except Exception:
-                return 0
+                # 兼容脏属性数据：跳过当前属性，继续尝试后续属性。
+                continue
         return 0

@@ -426,6 +426,7 @@ def main():
 
 
 if __name__ == "__main__":
+    print("[提示] Python CLI 入口已标记为 Legacy，建议优先使用 Node 桌面版：node main_ui_node_desktop.js")
     try:
         main()
     except SystemExit:
