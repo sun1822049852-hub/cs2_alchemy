@@ -78,8 +78,14 @@
               <span id="summaryText">尚未加载库存</span>
             </div>
             <div class="row">
-              <label class="inline"><input type="radio" name="mode" value="cards" checked />分散大图视图</label>
-              <label class="inline"><input type="radio" name="mode" value="grouped" />归类折叠视图</label>
+              <div class="view-mode-switch" role="group" aria-label="切换视图">
+                <button id="modeGridBtn" class="view-mode-btn" type="button" title="网格视图" aria-label="网格视图">
+                  <span class="icon-grid" aria-hidden="true"></span>
+                </button>
+                <button id="modeListBtn" class="view-mode-btn active" type="button" title="列表视图" aria-label="列表视图">
+                  <span class="icon-list" aria-hidden="true"></span>
+                </button>
+              </div>
               <label class="inline"><input type="checkbox" id="includeHidden" />包含被过滤条目</label>
               <label>搜索</label>
               <input id="searchInput" placeholder="名称/中文名/英文名/market hash" />
@@ -129,10 +135,12 @@
 
           <section class="panel" id="componentPanel">
             <div class="row">
-              <label>组件</label>
+              <label><span class="icon-box" aria-hidden="true"></span> 组件管理</label>
               <select id="componentSelect"></select>
+              <button id="componentDepositBtn">存入组件</button>
+              <button id="componentWithdrawBtn">取出选中</button>
               <span id="componentHint">暂无可管理组件</span>
-              <label class="inline"><input type="checkbox" id="showComponentItems" />显示组件内物品</label>
+              <label id="showComponentItemsWrap" class="inline"><input type="checkbox" id="showComponentItems" />显示组件内物品</label>
             </div>
           </section>
 
@@ -153,6 +161,28 @@
           </section>
 
           <main id="listWrap" class="list-wrap"></main>
+
+          <div id="depositModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="depositModalTitle">
+            <div class="modal-card">
+              <div class="modal-header">
+                <h3 id="depositModalTitle">存入组件</h3>
+                <button id="depositModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+              </div>
+              <div class="row wrap">
+                <label>搜索</label>
+                <input id="depositSearchInput" placeholder="名称/market hash" />
+                <label class="inline"><input type="checkbox" id="depositWearOnly" />仅可磨损</label>
+                <button id="depositSelectAllBtn" type="button">全选</button>
+                <button id="depositInvertBtn" type="button">反选</button>
+                <span id="depositCounter" class="muted">已选 0 项</span>
+              </div>
+              <div id="depositListWrap" class="deposit-list"></div>
+              <div class="row modal-actions">
+                <button id="depositConfirmBtn" type="button">确认存入</button>
+                <button id="depositCancelBtn" type="button">取消</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="page hidden" id="craftPage">

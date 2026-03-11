@@ -14,7 +14,7 @@ Implemented flow:
 From project root:
 
 ```powershell
-node main_node.js refresh --account <username>
+node node_sidecar/src/main.js refresh --account <username>
 ```
 
 From `node_sidecar`:
@@ -26,10 +26,17 @@ npm run refresh -- --account <username>
 ## Web UI
 
 ```powershell
-node main_ui_node.js
+node main_ui_node_desktop.js
 ```
 
-Open `http://127.0.0.1:8787`.
+Desktop 版本会直接打开窗口。  
+如需浏览器模式可运行：
+
+```powershell
+node src/uiServer.js
+```
+
+然后打开 `http://127.0.0.1:8787`。
 
 Optional CLI menu:
 
@@ -40,8 +47,8 @@ npm run ui:cli
 ## Commands
 
 ```powershell
-node main_node.js accounts list
-node main_node.js accounts use --account <username>
-node main_node.js accounts delete --account <username>
-node main_node.js tokens clear --account <username>
+node node_sidecar/src/main.js accounts list
+node node_sidecar/src/main.js accounts use --account <username>
+node node_sidecar/src/main.js accounts delete --account <username>
+node node_sidecar/src/main.js tokens clear --account <username>
 ```

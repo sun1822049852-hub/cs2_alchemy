@@ -29,11 +29,11 @@ function printHelp() {
   console.log(
     [
       "Usage:",
-      "  node main_node.js refresh [--account <name>] [--password <pwd>] [--dump-raw true|false]",
-      "  node main_node.js accounts list",
-      "  node main_node.js accounts use --account <name>",
-      "  node main_node.js accounts delete --account <name>",
-      "  node main_node.js tokens clear --account <name>",
+      "  node node_sidecar/src/main.js refresh [--account <name>] [--password <pwd>] [--dump-raw true|false]",
+      "  node node_sidecar/src/main.js accounts list",
+      "  node node_sidecar/src/main.js accounts use --account <name>",
+      "  node node_sidecar/src/main.js accounts delete --account <name>",
+      "  node node_sidecar/src/main.js tokens clear --account <name>",
       "",
       "Equivalent entry (inside node_sidecar):",
       "  node src/main.js ..."

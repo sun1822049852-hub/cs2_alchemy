@@ -9,6 +9,7 @@ const {loginAndSaveToken} = require("./authService");
 const {refreshInventory} = require("./refreshWorkflow");
 const {createRefreshRuntime} = require("./services/refreshRuntime");
 const {createSessionPool} = require("./services/sessionPool");
+const {createComponentOpsService} = require("./services/componentOpsService");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
 const {PATHS} = require("./constants");
@@ -16,7 +17,32 @@ const {PATHS} = require("./constants");
 const UI_DIR = path.resolve(__dirname, "..", "ui");
 const logger = new DedupLogger({windowMs: 800});
 const sessionPool = createSessionPool({logger});
+const componentOpsService = createComponentOpsService({sessionPool, logger});
 let shutdownHooksInstalled = false;
+let runtimeBootstrapped = false;
+
+function ensureRuntimeBootstrapped() {
+  if (runtimeBootstrapped) {
+    return;
+  }
+  runtimeBootstrapped = true;
+  refreshRuntime.start();
+  if (!shutdownHooksInstalled) {
+    shutdownHooksInstalled = true;
+    const shutdown = () => {
+      sessionPool.shutdown();
+    };
+    process.once("exit", shutdown);
+    process.once("SIGINT", () => {
+      shutdown();
+      process.exit(0);
+    });
+    process.once("SIGTERM", () => {
+      shutdown();
+      process.exit(0);
+    });
+  }
+}
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -377,6 +403,50 @@ async function handleApi(req, res, urlObj) {
     return true;
   }
 
+  if (pathname === "/api/component/deposit" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    const componentId = asString(body.component_id).trim();
+    try {
+      const payload = await componentOpsService.runMove({
+        action: "deposit",
+        username,
+        password: asString(body.password).trim(),
+        componentId,
+        itemIds: body.item_ids
+      });
+      writeJson(res, 200, payload);
+    } catch (err) {
+      writeJson(res, 500, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
+  if (pathname === "/api/component/withdraw" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    const componentId = asString(body.component_id).trim();
+    try {
+      const payload = await componentOpsService.runMove({
+        action: "withdraw",
+        username,
+        password: asString(body.password).trim(),
+        componentId,
+        itemIds: body.item_ids
+      });
+      writeJson(res, 200, payload);
+    } catch (err) {
+      writeJson(res, 500, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
   if (pathname === "/api/snapshot/latest" && req.method === "GET") {
     const snapshots = listProcessedSnapshots();
     if (!snapshots.length) {
@@ -465,7 +535,8 @@ async function handleApi(req, res, urlObj) {
 }
 
 function createServer() {
-  return http.createServer(async (req, res) => {
+  ensureRuntimeBootstrapped();
+  const server = http.createServer(async (req, res) => {
     try {
       const urlObj = new URL(req.url, "http://127.0.0.1");
       if (urlObj.pathname.startsWith("/api/")) {
@@ -489,6 +560,10 @@ function createServer() {
       writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err)});
     }
   });
+  server.once("close", () => {
+    sessionPool.shutdown();
+  });
+  return server;
 }
 
 function parsePort(argv) {
@@ -502,22 +577,6 @@ function parsePort(argv) {
 function start() {
   const port = parsePort(process.argv);
   const server = createServer();
-  refreshRuntime.start();
-  if (!shutdownHooksInstalled) {
-    shutdownHooksInstalled = true;
-    const shutdown = () => {
-      sessionPool.shutdown();
-    };
-    process.once("exit", shutdown);
-    process.once("SIGINT", () => {
-      shutdown();
-      process.exit(0);
-    });
-    process.once("SIGTERM", () => {
-      shutdown();
-      process.exit(0);
-    });
-  }
   server.listen(port, "127.0.0.1", () => {
     logger.info("ui_server", `listening on http://127.0.0.1:${port}`);
   });
