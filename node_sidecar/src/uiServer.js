@@ -407,6 +407,10 @@ async function handleApi(req, res, urlObj) {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const componentId = asString(body.component_id).trim();
+    if (!username || !refreshRuntime.isConnected(username)) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
     try {
       const payload = await componentOpsService.runMove({
         action: "deposit",
@@ -425,10 +429,36 @@ async function handleApi(req, res, urlObj) {
     return true;
   }
 
+  if (pathname === "/api/component/deposit-candidates" && req.method === "GET") {
+    const username = asString(urlObj.searchParams.get("username") || "").trim();
+    const componentId = asString(urlObj.searchParams.get("component_id") || "").trim();
+    if (!username || !refreshRuntime.isConnected(username)) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    try {
+      const payload = await componentOpsService.listDepositCandidates({
+        username,
+        componentId
+      });
+      writeJson(res, 200, payload);
+    } catch (err) {
+      writeJson(res, 500, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
   if (pathname === "/api/component/withdraw" && req.method === "POST") {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const componentId = asString(body.component_id).trim();
+    if (!username || !refreshRuntime.isConnected(username)) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
     try {
       const payload = await componentOpsService.runMove({
         action: "withdraw",

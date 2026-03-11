@@ -9,7 +9,7 @@ const state = {
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", pageSize: 90, page: 1,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false,
   component: {summary_map: {}, item_map: {}}, snapshotPath: "", fetchTime: "", refreshing: false,
-  depositModalOpen: false, depositSearchText: "", depositWearOnly: false, depositSelectedIds: new Set(),
+  depositModalOpen: false, depositSearchText: "", depositWearOnly: false, depositSelectedIds: new Set(), depositCandidates: [], depositFreeSlots: 0,
   refreshPhaseText: "", lastRefreshClickTs: 0, emptyHint: "请选用一个账号",
   rowsVersion: 0, filterCacheKey: "", filterCacheAllRows: [], filterCacheFilteredRows: [],
   groupCacheKey: "", groupCacheRows: [], lastPersistedSelected: ""
@@ -115,6 +115,11 @@ function setRefreshPhase(text) { state.refreshPhaseText = String(text || "").tri
 function clearRefreshPhase() { state.refreshPhaseText = ""; syncInventoryTop(); }
 const selectedAccount = () => state.accounts.find((x) => x.username === String(state.accountSelectedUsername || "").trim()) || null;
 const accountByUsername = (username) => state.accounts.find((x) => x.username === String(username || "").trim()) || null;
+const isCurrentAccountConnected = () => {
+  const current = String(state.currentAccountUsername || "").trim();
+  if (!current) return false;
+  return String(state.connectedUsername || "").trim() === current;
+};
 
 function syncInventoryTop() {
   if (!state.currentAccountUsername) {
@@ -127,9 +132,9 @@ function syncInventoryTop() {
   ui.currentAccountText.textContent = `当前账号：${state.currentAccountUsername}`;
   ui.fetchTimeText.textContent = `库存获取时间：${state.fetchTime || "-"}`;
   if (state.refreshPhaseText) ui.statusText.textContent = state.refreshPhaseText;
-  else if (state.connectedUsername === state.currentAccountUsername) ui.statusText.textContent = "连接状态：已连接";
+  else if (isCurrentAccountConnected()) ui.statusText.textContent = "连接状态：已连接";
   else ui.statusText.textContent = "连接状态：未连接";
-  ui.refreshBtn.textContent = state.connectedUsername === state.currentAccountUsername ? "刷新库存信息" : "连接并刷新库存信息";
+  ui.refreshBtn.textContent = isCurrentAccountConnected() ? "刷新库存信息" : "连接并刷新库存信息";
 }
 
 function setAccountForm({username = "", password = "", totp = "", remark = ""} = {}) {
@@ -329,6 +334,8 @@ function setRows(rows, component, snapshotPath = "") {
   state.page = 1;
   state.selectedComponentItemIds.clear();
   state.depositSelectedIds.clear();
+  state.depositCandidates = [];
+  state.depositFreeSlots = 0;
   state.rowsVersion += 1;
   state.filterCacheKey = "";
   state.filterCacheAllRows = [];
@@ -442,6 +449,8 @@ function setNoAccountState() {
   state.showComponentItems = false;
   state.selectedComponentItemIds.clear();
   state.depositSelectedIds.clear();
+  state.depositCandidates = [];
+  state.depositFreeSlots = 0;
   state.emptyHint = "请选用一个账号";
   ui.showComponentItems.checked = false;
   setRows([], {summary_map: {}, item_map: {}}, "");
@@ -457,7 +466,7 @@ const itemSearchText = (row) => [row.name, row.market_hash_name, row.alchemy_nam
 function itemHasWear(row) { if (row.minfloat != null && row.maxfloat != null) return true; const n = String(row.name || "").toLowerCase(); return ["(factory new)", "(minimal wear)", "(field-tested)", "(well-worn)", "(battle-scarred)"].some((x) => n.includes(x)); }
 function parseTradableAfter(row) { const raw = row.tradable_after; if (raw == null) return 0; if (typeof raw === "string") { if (/^\d+$/.test(raw)) { const num = Number(raw); if (Number.isFinite(num)) return num > 1e12 ? Math.floor(num / 1000) : Math.floor(num); } const p = Date.parse(raw); return Number.isFinite(p) ? Math.floor(p / 1000) : 0; } const n = Number(raw); if (!Number.isFinite(n)) return 0; return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n); }
 const coolingUnlockTs = (row) => { const ts = parseTradableAfter(row); return ts <= Math.floor(Date.now() / 1000) ? 0 : ts; };
-function cooldownEndText(unlockTs) { const d = new Date(unlockTs * 1000); return `${String(d.getMonth() + 1).padStart(2, "0")}月${String(d.getDate()).padStart(2, "0")}日`; }
+function cooldownEndText(unlockTs) { const d = new Date(unlockTs * 1000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`; }
 function cooldownText(row, {compact = false} = {}) { const unlock = coolingUnlockTs(row); if (unlock <= 0) return "无"; const end = cooldownEndText(unlock); return compact ? `冷却中 ${end}结束` : `冷却中 ${end} 结束`; }
 function groupCooldownText(items) { const cooling = items.filter((x) => coolingUnlockTs(x) > 0); if (!cooling.length) return "无"; const earliest = cooling.reduce((a, b) => (coolingUnlockTs(a) <= coolingUnlockTs(b) ? a : b)); if (cooling.length === 1) return cooldownText(earliest); return `${cooling.length}件冷却中，最早${cooldownEndText(coolingUnlockTs(earliest))}结束`; }
 function groupCollectionText(items) { const values = Array.from(new Set(items.map((x) => collectionName(x)).filter(Boolean))).sort((a, b) => a.localeCompare(b)); if (!values.length) return ""; if (values.length === 1) return values[0]; return "多收藏品"; }
@@ -471,14 +480,6 @@ function rowsForComponentScope() {
   if (selected) return state.component.item_map[selected] || [];
   if (state.showComponentItems) return state.rows;
   return state.rows.filter((x) => !String(x.casket_id || "").trim());
-}
-function rowsForDepositSource() {
-  return state.rows.filter((row) => {
-    if (String(row.casket_id || "").trim()) return false;
-    if (Number(row.def_index || 0) === 1201) return false;
-    if (row.hidden_reason) return false;
-    return true;
-  });
 }
 function updateFilterDrawer() { const open = !ui.filterDrawer.classList.contains("hidden"); ui.toggleFilterBtn.textContent = open ? "收起筛选" : "展开筛选"; }
 function toggleFilterDrawer() { ui.filterDrawer.classList.toggle("hidden"); updateFilterDrawer(); }
@@ -586,8 +587,9 @@ function refreshComponentControls() {
 }
 function syncComponentActionState() {
   const selected = selectedComponentId();
-  ui.componentDepositBtn.disabled = !selected || state.componentOpBusy || state.refreshing;
-  ui.componentWithdrawBtn.disabled = !selected || state.componentOpBusy || state.refreshing || state.selectedComponentItemIds.size <= 0;
+  const connected = isCurrentAccountConnected();
+  ui.componentDepositBtn.disabled = !connected || !selected || state.componentOpBusy || state.refreshing;
+  ui.componentWithdrawBtn.disabled = !connected || !selected || state.componentOpBusy || state.refreshing || state.selectedComponentItemIds.size <= 0;
 }
 function applyFilter() { const keyword = String(state.searchText || "").trim().toLowerCase(); const allRows = rowsForComponentScope(), selected = selectedComponentId(); if (selected) state.emptyHint = allRows.length ? "该组件在当前条件下无物品" : "该组件暂无已缓存物品，请先刷新库存"; else if (state.showComponentItems) state.emptyHint = "当前条件下无物品"; else state.emptyHint = "当前条件下无物品（已隐藏组件内物品）"; const wearCheck = validateWearFilter({autoFix: false}); const wearRows = allRows.filter(itemHasWear), noWearRows = allRows.filter((x) => !itemHasWear(x)); let rows = wearRows; if (!state.includeHidden) rows = rows.filter((x) => !x.hidden_reason || String(x.casket_id || "").trim()); if (keyword) rows = rows.filter((x) => itemSearchText(x).includes(keyword)); if (state.raritySelected.size && state.raritySelected.size < RARITY_VALUES.length) rows = rows.filter((x) => state.raritySelected.has(rarityName(x))); if (state.collectionSelected.size) rows = rows.filter((x) => state.collectionSelected.has(collectionName(x))); if (wearCheck.valid) { if (wearCheck.minValue !== null) rows = rows.filter((x) => Number(x.float_value || 0) >= wearCheck.minValue); if (wearCheck.maxValue !== null) rows = rows.filter((x) => Number(x.float_value || 0) <= wearCheck.maxValue); } rows.sort((a, b) => { const ra = Number(a.rarity || 0), rb = Number(b.rarity || 0); if (ra !== rb) return state.raritySort === "desc" ? rb - ra : ra - rb; const wa = Number(a.float_value || 0), wb = Number(b.float_value || 0); if (wa !== wb) return state.wearSort === "desc" ? wb - wa : wa - wb; return assetIdNumber(a) - assetIdNumber(b); }); noWearRows.sort((a, b) => assetIdNumber(a) - assetIdNumber(b)); return {allRows, filteredRows: rows.concat(noWearRows)}; }
 const paginate = (list) => { const size = Math.max(1, Number(state.pageSize) || 90), pages = Math.max(1, Math.ceil(list.length / size)); if (state.page < 1) state.page = 1; if (state.page > pages) state.page = pages; const start = (state.page - 1) * size; return {pages, start, pageList: list.slice(start, start + size)}; };
@@ -628,14 +630,14 @@ function renderComponentItems(filteredRows, totalRows) {
 }
 function filteredDepositRows() {
   const keyword = String(state.depositSearchText || "").trim().toLowerCase();
-  let rows = rowsForDepositSource();
+  let rows = Array.isArray(state.depositCandidates) ? state.depositCandidates : [];
   if (state.depositWearOnly) rows = rows.filter(itemHasWear);
   if (keyword) rows = rows.filter((x) => itemSearchText(x).includes(keyword));
   rows = [...rows].sort((a, b) => assetIdNumber(a) - assetIdNumber(b));
   return rows;
 }
 function updateDepositCounter(total = filteredDepositRows().length) {
-  ui.depositCounter.textContent = `已选 ${state.depositSelectedIds.size} 项 / 可选 ${total} 项`;
+  ui.depositCounter.textContent = `已选 ${state.depositSelectedIds.size} 项 / 可选 ${total} 项 / 剩余槽位 ${state.depositFreeSlots}`;
 }
 function renderDepositList() {
   const rows = filteredDepositRows();
@@ -656,8 +658,15 @@ function renderDepositList() {
     tr.innerHTML = `<td><input type="checkbox" ${checked ? "checked" : ""} /></td><td>${itemDisplayName(row)}</td><td>${rarityName(row)}</td><td>${collectionName(row)}</td><td>${itemHasWear(row) ? Number(row.float_value || 0).toFixed(6) : ""}</td>`;
     const box = tr.querySelector("input");
     box.onchange = () => {
-      if (box.checked) state.depositSelectedIds.add(itemId);
-      else state.depositSelectedIds.delete(itemId);
+      if (box.checked) {
+        if (state.depositSelectedIds.size >= state.depositFreeSlots) {
+          box.checked = false;
+          setSummary(`最多可选择 ${state.depositFreeSlots} 件`);
+          updateDepositCounter(rows.length);
+          return;
+        }
+        state.depositSelectedIds.add(itemId);
+      } else state.depositSelectedIds.delete(itemId);
       updateDepositCounter(rows.length);
     };
     tr.onclick = (evt) => {
@@ -670,11 +679,34 @@ function renderDepositList() {
   table.append(tbody);
   ui.depositListWrap.replaceChildren(table);
 }
-function openDepositModal() {
+async function openDepositModal() {
   const componentId = selectedComponentId();
   if (!componentId) {
     setSummary("请先选择组件");
     return;
+  }
+  const username = String(state.currentAccountUsername || "").trim();
+  if (!username || !isCurrentAccountConnected()) {
+    setSummary("请先连接并刷新库存");
+    return;
+  }
+  state.componentOpBusy = true;
+  syncComponentActionState();
+  setSummary("正在读取可存入物品...");
+  try {
+    const data = await api(`/api/component/deposit-candidates?username=${encodeURIComponent(username)}&component_id=${encodeURIComponent(componentId)}`);
+    state.depositCandidates = Array.isArray(data.candidates) ? data.candidates : [];
+    state.depositFreeSlots = Number(data.free_slots || 0);
+    if (state.depositFreeSlots <= 0) {
+      setSummary(String(data.message || "组件已满，无法存入"));
+      return;
+    }
+  } catch (err) {
+    setSummary(`读取可存入物品失败：${err.message}`);
+    return;
+  } finally {
+    state.componentOpBusy = false;
+    syncComponentActionState();
   }
   state.depositModalOpen = true;
   state.depositSearchText = "";
@@ -688,13 +720,15 @@ function openDepositModal() {
 function closeDepositModal() {
   state.depositModalOpen = false;
   state.depositSelectedIds.clear();
+  state.depositCandidates = [];
+  state.depositFreeSlots = 0;
   ui.depositModal.classList.add("hidden");
 }
 async function runComponentMove(action, itemIds) {
   const componentId = selectedComponentId();
   const username = String(state.currentAccountUsername || "").trim();
   if (!componentId) throw new Error("请先选择组件");
-  if (!username) throw new Error("请先选择账号并连接库存");
+  if (!username || !isCurrentAccountConnected()) throw new Error("请先连接并刷新库存");
   state.componentOpBusy = true;
   refreshComponentControls();
   try {
@@ -825,7 +859,9 @@ function bindEvents() {
     state.page = 1;
     render();
   };
-  ui.componentDepositBtn.onclick = () => openDepositModal();
+  ui.componentDepositBtn.onclick = async () => {
+    await openDepositModal();
+  };
   ui.componentWithdrawBtn.onclick = async () => {
     const itemIds = [...state.selectedComponentItemIds];
     if (!itemIds.length) {
@@ -856,7 +892,9 @@ function bindEvents() {
   };
   ui.depositSelectAllBtn.onclick = () => {
     const rows = filteredDepositRows();
-    state.depositSelectedIds = new Set(rows.map((x) => String(x.asset_id || "").trim()).filter(Boolean));
+    const ids = rows.map((x) => String(x.asset_id || "").trim()).filter(Boolean);
+    const max = Math.max(0, Number(state.depositFreeSlots) || 0);
+    state.depositSelectedIds = new Set(ids.slice(0, max));
     renderDepositList();
   };
   ui.depositInvertBtn.onclick = () => {
@@ -874,6 +912,10 @@ function bindEvents() {
     const itemIds = [...state.depositSelectedIds];
     if (!itemIds.length) {
       setSummary("请先选择要存入组件的物品");
+      return;
+    }
+    if (itemIds.length > state.depositFreeSlots) {
+      setSummary(`选择数量超过组件可用槽位（${state.depositFreeSlots}）`);
       return;
     }
     try {
