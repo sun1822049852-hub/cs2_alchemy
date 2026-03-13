@@ -96,6 +96,16 @@ class AccountStore {
     this.save();
   }
 
+  updateRemark(username, remark) {
+    const key = asString(username).trim();
+    if (!key || !this.data.accounts[key]) {
+      return false;
+    }
+    this.data.accounts[key].remark = asString(remark || key);
+    this.save();
+    return true;
+  }
+
   remove(username) {
     const key = asString(username).trim();
     if (!this.data.accounts[key]) {

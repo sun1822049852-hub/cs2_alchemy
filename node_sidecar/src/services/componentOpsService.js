@@ -1,11 +1,12 @@
-const GlobalOffensive = require("globaloffensive");
+﻿const GlobalOffensive = require("globaloffensive");
 const {AccountStore} = require("../accountStore");
 const {TokenStore} = require("../tokenStore");
 const {UiStateStore} = require("../uiStateStore");
 const {SchemaStore} = require("../schemaStore");
-const {parseInventory} = require("../inventoryParser");
+const {parseInventory, decodeCasketId} = require("../inventoryParser");
 const {saveProcessedSnapshot} = require("../snapshotStore");
-const {STORAGE_UNIT_DEF_INDEX} = require("../constants");
+const {preloadComponentContents} = require("../componentLoader");
+const {STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("../constants");
 const {asString, nowString, toInt, sleep, withTimeout} = require("../utils");
 
 const NOTIFICATION = GlobalOffensive.ItemCustomizationNotification || {};
@@ -29,14 +30,46 @@ function normalizeItemIds(itemIds) {
   return out;
 }
 
+function previewIds(itemIds, limit = 8) {
+  const list = Array.isArray(itemIds) ? itemIds : [];
+  const max = Math.max(1, Number(limit) || 8);
+  const head = list.slice(0, max);
+  return `${head.join(",")}${list.length > max ? ",..." : ""}`;
+}
+
+function summarizeFailedReasons(failed) {
+  const summary = {};
+  for (const entry of Array.isArray(failed) ? failed : []) {
+    const reason = asString(entry && entry.reason ? entry.reason : "unknown").trim() || "unknown";
+    summary[reason] = (summary[reason] || 0) + 1;
+  }
+  return summary;
+}
+
 function getInventoryItem(csgo, itemId) {
   const key = asString(itemId).trim();
-  return (csgo.inventory || []).find((item) => asString(item.id || "").trim() === key) || null;
+  return (
+    (csgo.inventory || []).find((item) => {
+      const id = asString(item && (item.id || item.itemid || item.assetid || item.original_id || "")).trim();
+      return id === key;
+    }) || null
+  );
+}
+
+function getItemCasketId(item) {
+  if (!item || typeof item !== "object") return "";
+  const direct = asString(item.casket_id || "").trim();
+  if (direct) return direct;
+  try {
+    return asString(decodeCasketId(item) || "").trim();
+  } catch (_) {
+    return "";
+  }
 }
 
 function notificationErrorMessage(notificationType) {
   if (notificationType === NOTIFICATION.CasketTooFull) return "组件空间已满";
-  if (notificationType === NOTIFICATION.CasketInvFull) return "主仓库空间已满";
+  if (notificationType === NOTIFICATION.CasketInvFull) return "主库存空间已满";
   return `组件操作失败（通知=${notificationType}）`;
 }
 
@@ -44,15 +77,31 @@ function moveSuccessType(action) {
   return action === "deposit" ? NOTIFICATION.CasketAdded : NOTIFICATION.CasketRemoved;
 }
 
+async function refreshComponentContentsOnce(csgo, componentId, timeoutMs = 6000) {
+  await withTimeout(
+    new Promise((resolve, reject) => {
+      csgo.getCasketContents(componentId, (err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    }),
+    timeoutMs,
+    `refresh component ${componentId} timeout`
+  );
+}
+
 function isMoveDone(csgo, action, componentId, itemId) {
   const item = getInventoryItem(csgo, itemId);
   if (!item) return false;
-  const casketId = asString(item.casket_id || "").trim();
+  const casketId = getItemCasketId(item);
   if (action === "deposit") return casketId === componentId;
   return !casketId;
 }
 
-async function waitForCasketMove({csgo, action, componentId, itemId, timeoutMs = 15000, pollMs = 120}) {
+async function waitForCasketMove({csgo, action, componentId, itemId, timeoutMs = 25000, pollMs = 120}) {
   return new Promise((resolve, reject) => {
     let done = false;
     let timeoutTimer = null;
@@ -84,20 +133,31 @@ async function waitForCasketMove({csgo, action, componentId, itemId, timeoutMs =
     function onNotification(itemIds, notificationType) {
       if (done) return;
       const ids = Array.isArray(itemIds) ? itemIds : [];
-      const target = asString(ids[0] || "").trim();
-      if (target && target !== componentId) return;
+      const keys = ids.map((x) => asString(x || "").trim()).filter(Boolean);
+      const related = keys.length === 0 || keys.includes(componentId) || keys.includes(itemId);
       if (notificationType === NOTIFICATION.CasketTooFull || notificationType === NOTIFICATION.CasketInvFull) {
+        if (!related) return;
         finish(new Error(notificationErrorMessage(notificationType)));
         return;
       }
       if (notificationType === moveSuccessType(action)) {
-        pollState();
+        // Some responses do not carry stable ids; for casket add/remove we trust success notification.
+        finish(null);
       }
     }
 
-    timeoutTimer = setTimeout(() => {
+        timeoutTimer = setTimeout(async () => {
+      try {
+        await refreshComponentContentsOnce(csgo, componentId, 6000);
+      } catch (_) {
+        // ignore refresh failure in timeout fallback
+      }
+      if (isMoveDone(csgo, action, componentId, itemId)) {
+        finish(null);
+        return;
+      }
       finish(new Error(`${ACTION_TEXT[action] || "组件操作"}超时: item=${itemId}`));
-    }, Math.max(1000, Number(timeoutMs) || 15000));
+    }, Math.max(1000, Number(timeoutMs) || 25000));
 
     csgo.on("itemCustomizationNotification", onNotification);
     pollState();
@@ -143,8 +203,8 @@ function buildComponentSummary(rows) {
     summaryMap[id] = {
       component_id: id,
       name: asString(row.alchemy_name || row.name || `Component ${id}`),
-      expected_count: toInt(row.casket_contained_item_count, 0),
-      loaded_count: (itemMap[id] || []).length
+      expected_count: STORAGE_UNIT_CAPACITY,
+      loaded_count: Math.max((itemMap[id] || []).length, toInt(row.casket_contained_item_count, 0))
     };
   }
   return {summary_map: summaryMap, item_map: itemMap};
@@ -157,6 +217,65 @@ function makeParsedRows(csgo, schemaStore) {
   return parsed.rows || [];
 }
 
+function mergeRawItem(baseItem, patchItem) {
+  const base = baseItem && typeof baseItem === "object" ? baseItem : {};
+  const patch = patchItem && typeof patchItem === "object" ? patchItem : {};
+  const merged = {...base, ...patch};
+  const patchCasketId = asString(patch.casket_id || "").trim();
+  if (patchCasketId) {
+    merged.casket_id = patchCasketId;
+  }
+  return merged;
+}
+
+async function makeParsedRowsWithComponentPreload(csgo, schemaStore, logger) {
+  const schema = schemaStore.load();
+  const componentStats = await preloadComponentContents(csgo, logger, {requestIntervalMs: 80});
+  const finalRaw = Array.isArray(csgo.inventory) ? [...csgo.inventory] : [];
+  const mergedById = new Map();
+  for (const item of finalRaw) {
+    const key = asString(item && (item.id || item.itemid || item.assetid || item.original_id || "")).trim();
+    if (!key) continue;
+    mergedById.set(key, item);
+  }
+  for (const item of componentStats.loaded_items || []) {
+    const key = asString(item && (item.id || item.itemid || item.assetid || item.original_id || "")).trim();
+    if (!key) continue;
+    const existing = mergedById.get(key);
+    if (!existing) {
+      mergedById.set(key, item);
+      continue;
+    }
+    mergedById.set(key, mergeRawItem(existing, item));
+  }
+  const mergedRaw = Array.from(mergedById.values());
+  const parsed = parseInventory(mergedRaw, schema, {includeHidden: true});
+  return parsed.rows || [];
+}
+
+function hasCompleteComponentCache(csgo) {
+  const inventory = Array.isArray(csgo && csgo.inventory) ? csgo.inventory : [];
+  if (!inventory.length) return false;
+  let expectedTotal = 0;
+  for (const item of inventory) {
+    if (toInt(item && item.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) continue;
+    expectedTotal += Math.max(0, toInt(item && item.casket_contained_item_count, 0));
+  }
+  if (expectedTotal <= 0) return true;
+  let loadedTotal = 0;
+  for (const item of inventory) {
+    if (asString(item && item.casket_id || "").trim()) loadedTotal += 1;
+  }
+  return loadedTotal >= expectedTotal;
+}
+
+async function buildRowsForSnapshot(csgo, schemaStore, logger, {forceComponentPreload = false} = {}) {
+  if (forceComponentPreload || !hasCompleteComponentCache(csgo)) {
+    return makeParsedRowsWithComponentPreload(csgo, schemaStore, logger);
+  }
+  return makeParsedRows(csgo, schemaStore);
+}
+
 function findComponentFromRows(rows, componentId) {
   const key = asString(componentId).trim();
   return (
@@ -167,6 +286,30 @@ function findComponentFromRows(rows, componentId) {
   );
 }
 
+function nthWeekdayOfMonthUtc(year, month, weekday, nth) {
+  const first = new Date(Date.UTC(year, month, 1));
+  const firstWeekday = first.getUTCDay();
+  return 1 + ((7 + weekday - firstWeekday) % 7) + (nth - 1) * 7;
+}
+
+function isUsPacificDst(unlockTs) {
+  if (!Number.isFinite(unlockTs) || unlockTs <= 0) return false;
+  const d = new Date(unlockTs * 1000);
+  const year = d.getUTCFullYear();
+  const marchDay = nthWeekdayOfMonthUtc(year, 2, 0, 2);
+  const novDay = nthWeekdayOfMonthUtc(year, 10, 0, 1);
+  const startUtcTs = Math.floor(Date.UTC(year, 2, marchDay, 10, 0, 0) / 1000);
+  const endUtcTs = Math.floor(Date.UTC(year, 10, novDay, 9, 0, 0) / 1000);
+  return unlockTs >= startUtcTs && unlockTs < endUtcTs;
+}
+
+function normalizeTradableAfterTs(value) {
+  const baseTs = Number(value);
+  if (!Number.isFinite(baseTs) || baseTs <= 0) return 0;
+  const secTs = baseTs > 1e12 ? Math.floor(baseTs / 1000) : Math.floor(baseTs);
+  return isUsPacificDst(secTs) ? secTs : secTs + 3600;
+}
+
 function parseTradableAfterTs(value) {
   if (value === null || value === undefined) return 0;
   if (typeof value === "string") {
@@ -175,14 +318,12 @@ function parseTradableAfterTs(value) {
     if (/^\d+$/.test(text)) {
       const num = Number(text);
       if (!Number.isFinite(num)) return 0;
-      return num > 1e12 ? Math.floor(num / 1000) : Math.floor(num);
+      return normalizeTradableAfterTs(num);
     }
     const parsed = Date.parse(text);
-    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
+    return Number.isFinite(parsed) ? normalizeTradableAfterTs(Math.floor(parsed / 1000)) : 0;
   }
-  const num = Number(value);
-  if (!Number.isFinite(num)) return 0;
-  return num > 1e12 ? Math.floor(num / 1000) : Math.floor(num);
+  return normalizeTradableAfterTs(value);
 }
 
 function isCoolingRow(row) {
@@ -268,13 +409,19 @@ function createComponentOpsService({sessionPool, logger}) {
   function buildDepositCandidateContext({rows, componentId}) {
     const componentRow = findComponentFromRows(rows, componentId);
     if (!componentRow) throw new Error(`component not found: ${componentId}`);
-    const expected = toInt(componentRow.casket_contained_item_count, 0);
-    const loaded = rows.filter((row) => asString(row.casket_id || "").trim() === componentId).length;
+    const expected = STORAGE_UNIT_CAPACITY;
+    const loadedByRows = rows.filter((row) => asString(row.casket_id || "").trim() === componentId).length;
+    const loadedByCounter = Math.max(0, toInt(componentRow.casket_contained_item_count, 0));
+    const loaded = Math.max(loadedByRows, loadedByCounter);
     const freeSlots = Math.max(0, expected - loaded);
     const candidates = [];
+    const excluded = [];
     for (const row of rows) {
       const rule = ensureCanOperateItemByRules(row, componentId);
-      if (!rule.ok) continue;
+      if (!rule.ok) {
+        excluded.push({row, reason: rule.reason || "不满足可存入规则"});
+        continue;
+      }
       const sourceComponentId = asString(row.casket_id || "").trim();
       candidates.push({
         row,
@@ -287,17 +434,28 @@ function createComponentOpsService({sessionPool, logger}) {
       loaded,
       freeSlots,
       candidateRows: candidates,
+      excludedRows: excluded,
       candidateSet: new Set(candidates.map((x) => asString(x.row.asset_id || "").trim()))
     };
   }
 
-  async function listDepositCandidates({username, password, componentId}) {
+  function buildExcludedSummary(excludedRows) {
+    const summary = {};
+    for (const entry of excludedRows || []) {
+      const reason = asString(entry.reason || "未知原因").trim() || "未知原因";
+      summary[reason] = (summary[reason] || 0) + 1;
+    }
+    return summary;
+  }
+
+  async function listDepositCandidates({username, password, componentId, includeExcluded = false}) {
     const componentKey = asString(componentId).trim();
     if (!componentKey || !/^\d+$/.test(componentKey)) throw new Error("component_id 无效");
     const {accountName, csgo} = await acquireContext({username, password});
     return withAccountLock(accountName, async () => {
       const schemaStore = new SchemaStore();
-      const rows = makeParsedRows(csgo, schemaStore);
+      await ensureComponentItemsLoaded(csgo, componentKey);
+      const rows = await makeParsedRowsWithComponentPreload(csgo, schemaStore, logger);
       const ctx = buildDepositCandidateContext({rows, componentId: componentKey});
       const candidates = ctx.candidateRows.map((entry) => {
         const row = entry.row;
@@ -318,6 +476,19 @@ function createComponentOpsService({sessionPool, logger}) {
           source_component_id: entry.source_component_id || ""
         };
       });
+      const excluded = includeExcluded
+        ? ctx.excludedRows.map((entry) => {
+          const row = entry.row;
+          return {
+            asset_id: row.asset_id,
+            name: row.name,
+            market_hash_name: row.market_hash_name,
+            alchemy_name: row.alchemy_name,
+            casket_id: row.casket_id || "",
+            reason: asString(entry.reason || "").trim() || "不满足可存入规则"
+          };
+        })
+        : [];
       return {
         ok: true,
         account: accountName,
@@ -326,30 +497,45 @@ function createComponentOpsService({sessionPool, logger}) {
         loaded_count: ctx.loaded,
         expected_count: ctx.expected,
         candidates,
-        message: ctx.freeSlots <= 0 ? "组件已满，无法继续存入" : `可存入候选 ${candidates.length} 件`
+        excluded,
+        excluded_summary: includeExcluded ? buildExcludedSummary(ctx.excludedRows) : {},
+        message: ctx.freeSlots <= 0 ? "组件已满，无法继续存入" : `可存入候选：${candidates.length} 件`
       };
     });
   }
 
-  async function runMove({action, username, password, componentId, itemIds}) {
+  async function runMove({action, username, password, componentId, itemIds, onProgress}) {
     const opAction = action === "withdraw" ? "withdraw" : "deposit";
     const componentKey = asString(componentId).trim();
     if (!componentKey || !/^\d+$/.test(componentKey)) throw new Error("component_id 无效");
     const items = normalizeItemIds(itemIds);
     if (!items.length) throw new Error("item_ids 不能为空");
+    const progressCb = typeof onProgress === "function" ? onProgress : null;
 
     const {accountName, csgo} = await acquireContext({username, password});
 
     return withAccountLock(accountName, async () => {
+      function emitProgress(payload) {
+        if (!progressCb) return;
+        try {
+          progressCb({
+            account: accountName,
+            action: opAction,
+            component_id: componentKey,
+            total: items.length,
+            ...payload
+          });
+        } catch (_) {
+          // ignore progress callback errors
+        }
+      }
+
       const schemaStore = new SchemaStore();
-      let rows = makeParsedRows(csgo, schemaStore);
+      await ensureComponentItemsLoaded(csgo, componentKey);
+      let rows = await makeParsedRowsWithComponentPreload(csgo, schemaStore, logger);
       const componentItem = getInventoryItem(csgo, componentKey);
       if (!componentItem || toInt(componentItem.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) {
         throw new Error(`component not found: ${componentKey}`);
-      }
-      if (opAction === "withdraw") {
-        await ensureComponentItemsLoaded(csgo, componentKey);
-        rows = makeParsedRows(csgo, schemaStore);
       }
 
       let depositContext = null;
@@ -360,35 +546,74 @@ function createComponentOpsService({sessionPool, logger}) {
       const successIds = [];
       const failed = [];
       let remainFreeSlots = depositContext ? depositContext.freeSlots : 0;
+      let processed = 0;
+
+      emitProgress({
+        phase: "start",
+        processed,
+        success: 0,
+        failed: 0
+      });
 
       for (const itemId of items) {
         const item = getInventoryItem(csgo, itemId);
         if (!item) {
           failed.push({item_id: itemId, reason: "物品不存在或未加载"});
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "failed",
+            reason: "item_missing"
+          });
           continue;
         }
 
         if (opAction === "deposit") {
           if (remainFreeSlots <= 0) {
             failed.push({item_id: itemId, reason: "组件空间已满"});
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "failed",
+              reason: "component_full"
+            });
             continue;
           }
           if (!depositContext.candidateSet.has(itemId)) {
             failed.push({item_id: itemId, reason: "不满足可存入规则"});
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "failed",
+              reason: "rule_blocked"
+            });
             continue;
           }
-          const casketId = asString(item.casket_id || "").trim();
+
+          const sourceCasketId = getItemCasketId(item);
           try {
-            if (casketId && casketId !== componentKey) {
-              // 跨组件转移：先从原组件取出，再存入目标组件。
+            if (sourceCasketId && sourceCasketId !== componentKey) {
               await waitForCasketMove({
                 csgo,
                 action: "withdraw",
-                componentId: casketId,
+                componentId: sourceCasketId,
                 itemId
               });
               await sleep(80);
             }
+
             await waitForCasketMove({
               csgo,
               action: "deposit",
@@ -397,19 +622,49 @@ function createComponentOpsService({sessionPool, logger}) {
             });
             successIds.push(itemId);
             remainFreeSlots = Math.max(0, remainFreeSlots - 1);
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "success"
+            });
           } catch (err) {
             const reason = asString(err && err.message ? err.message : err) || "未知错误";
             failed.push({item_id: itemId, reason});
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "failed",
+              reason
+            });
           }
           await sleep(80);
           continue;
         }
 
-        const casketId = asString(item.casket_id || "").trim();
+        const casketId = getItemCasketId(item);
         if (casketId !== componentKey) {
-          failed.push({item_id: itemId, reason: "物品不在当前组件中"});
+          failed.push({item_id: itemId, reason: "物品不在当前组件内"});
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "failed",
+            reason: "not_in_component"
+          });
           continue;
         }
+
         try {
           await waitForCasketMove({
             csgo,
@@ -418,14 +673,33 @@ function createComponentOpsService({sessionPool, logger}) {
             itemId
           });
           successIds.push(itemId);
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "success"
+          });
         } catch (err) {
           const reason = asString(err && err.message ? err.message : err) || "未知错误";
           failed.push({item_id: itemId, reason});
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "failed",
+            reason
+          });
         }
         await sleep(80);
       }
 
-      const finalRows = makeParsedRows(csgo, schemaStore);
+      const finalRows = await makeParsedRowsWithComponentPreload(csgo, schemaStore, logger);
       const snapshot = saveRowsSnapshot({accountName, rows: finalRows});
 
       const actionText = ACTION_TEXT[opAction] || "组件操作";
@@ -436,6 +710,248 @@ function createComponentOpsService({sessionPool, logger}) {
           `${opAction} done: account=${accountName} component=${componentKey} success=${successIds.length} failed=${failed.length}`
         );
       }
+
+      emitProgress({
+        phase: "done",
+        processed: items.length,
+        success: successIds.length,
+        failed: failed.length
+      });
+
+      return {
+        ok: true,
+        account: accountName,
+        fetch_time: snapshot.fetchTime,
+        snapshot_path: snapshot.snapshotPath,
+        rows: finalRows,
+        component: buildComponentSummary(finalRows),
+        message,
+        op: {
+          action: opAction,
+          component_id: componentKey,
+          requested: items.length,
+          success_ids: successIds,
+          failed
+        }
+      };
+    });
+  }
+
+  async function runMove({action, username, password, componentId, itemIds, onProgress}) {
+    const opAction = action === "withdraw" ? "withdraw" : "deposit";
+    const componentKey = asString(componentId).trim();
+    if (!componentKey || !/^\d+$/.test(componentKey)) throw new Error("component_id 无效");
+    const items = normalizeItemIds(itemIds);
+    if (!items.length) throw new Error("item_ids 不能为空");
+    const progressCb = typeof onProgress === "function" ? onProgress : null;
+
+    const {accountName, csgo} = await acquireContext({username, password});
+
+    return withAccountLock(accountName, async () => {
+      function emitProgress(payload) {
+        if (!progressCb) return;
+        try {
+          progressCb({
+            account: accountName,
+            action: opAction,
+            component_id: componentKey,
+            total: items.length,
+            ...payload
+          });
+        } catch (_) {
+          // ignore progress callback errors
+        }
+      }
+
+      const schemaStore = new SchemaStore();
+      const componentItem = getInventoryItem(csgo, componentKey);
+      if (!componentItem || toInt(componentItem.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) {
+        throw new Error(`component not found: ${componentKey}`);
+      }
+
+      let depositContext = null;
+      if (opAction === "deposit") {
+        const rows = await buildRowsForSnapshot(csgo, schemaStore, logger, {forceComponentPreload: false});
+        depositContext = buildDepositCandidateContext({rows, componentId: componentKey});
+      }
+
+      const successIds = [];
+      const failed = [];
+      let remainFreeSlots = depositContext ? depositContext.freeSlots : 0;
+      let processed = 0;
+
+      emitProgress({
+        phase: "start",
+        processed,
+        success: 0,
+        failed: 0
+      });
+
+      for (const itemId of items) {
+        const item = getInventoryItem(csgo, itemId);
+        if (!item) {
+          failed.push({item_id: itemId, reason: "物品不存在或未加载"});
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "failed",
+            reason: "item_missing"
+          });
+          continue;
+        }
+
+        if (opAction === "deposit") {
+          if (remainFreeSlots <= 0) {
+            failed.push({item_id: itemId, reason: "组件空间已满"});
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "failed",
+              reason: "component_full"
+            });
+            continue;
+          }
+          if (!depositContext || !depositContext.candidateSet.has(itemId)) {
+            failed.push({item_id: itemId, reason: "不满足可存入规则"});
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "failed",
+              reason: "rule_blocked"
+            });
+            continue;
+          }
+
+          const sourceCasketId = getItemCasketId(item);
+          try {
+            if (sourceCasketId && sourceCasketId !== componentKey) {
+              await waitForCasketMove({
+                csgo,
+                action: "withdraw",
+                componentId: sourceCasketId,
+                itemId
+              });
+              await sleep(80);
+            }
+
+            await waitForCasketMove({
+              csgo,
+              action: "deposit",
+              componentId: componentKey,
+              itemId
+            });
+            successIds.push(itemId);
+            remainFreeSlots = Math.max(0, remainFreeSlots - 1);
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "success"
+            });
+          } catch (err) {
+            const reason = asString(err && err.message ? err.message : err) || "未知错误";
+            failed.push({item_id: itemId, reason});
+            processed += 1;
+            emitProgress({
+              phase: "item",
+              processed,
+              success: successIds.length,
+              failed: failed.length,
+              item_id: itemId,
+              item_status: "failed",
+              reason
+            });
+          }
+          await sleep(80);
+          continue;
+        }
+
+        const casketId = getItemCasketId(item);
+        if (casketId !== componentKey) {
+          failed.push({item_id: itemId, reason: "物品不在当前组件内"});
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "failed",
+            reason: "not_in_component"
+          });
+          continue;
+        }
+
+        try {
+          await waitForCasketMove({
+            csgo,
+            action: "withdraw",
+            componentId: componentKey,
+            itemId
+          });
+          successIds.push(itemId);
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "success"
+          });
+        } catch (err) {
+          const reason = asString(err && err.message ? err.message : err) || "未知错误";
+          failed.push({item_id: itemId, reason});
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "failed",
+            reason
+          });
+        }
+        await sleep(80);
+      }
+
+      const finalRows = await buildRowsForSnapshot(csgo, schemaStore, logger, {forceComponentPreload: false});
+      const snapshot = saveRowsSnapshot({accountName, rows: finalRows});
+
+      const actionText = ACTION_TEXT[opAction] || "组件操作";
+      const firstFailed = failed.length ? `${failed[0].item_id}:${failed[0].reason}` : "";
+      const reasonSummary = summarizeFailedReasons(failed);
+      const message = `${actionText}完成：成功${successIds.length}，失败${failed.length}${firstFailed ? `，首个失败 ${firstFailed}` : ""}`;
+      if (logger) {
+        logger.info(
+          "component_ops",
+          `${opAction} done: account=${accountName} component=${componentKey} requested=${items.length} selected=${previewIds(items)} success=${successIds.length} failed=${failed.length} first_failed=${firstFailed || "-"} failed_reasons=${JSON.stringify(reasonSummary)}`
+        );
+      }
+
+      emitProgress({
+        phase: "done",
+        processed: items.length,
+        success: successIds.length,
+        failed: failed.length
+      });
+
       return {
         ok: true,
         account: accountName,
@@ -459,3 +975,5 @@ function createComponentOpsService({sessionPool, logger}) {
 }
 
 module.exports = {createComponentOpsService};
+
+

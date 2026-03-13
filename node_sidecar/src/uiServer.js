@@ -2,6 +2,7 @@
 const path = require("path");
 const http = require("http");
 const {URL} = require("url");
+const {execSync} = require("child_process");
 const {AccountStore} = require("./accountStore");
 const {TokenStore} = require("./tokenStore");
 const {UiStateStore} = require("./uiStateStore");
@@ -10,16 +11,43 @@ const {refreshInventory} = require("./refreshWorkflow");
 const {createRefreshRuntime} = require("./services/refreshRuntime");
 const {createSessionPool} = require("./services/sessionPool");
 const {createComponentOpsService} = require("./services/componentOpsService");
+const {createComponentTaskQueue} = require("./services/componentTaskQueue");
+const {createCraftService} = require("./services/craftService");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
-const {PATHS} = require("./constants");
+const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./constants");
 
 const UI_DIR = path.resolve(__dirname, "..", "ui");
 const logger = new DedupLogger({windowMs: 800});
 const sessionPool = createSessionPool({logger});
 const componentOpsService = createComponentOpsService({sessionPool, logger});
+const craftService = createCraftService({sessionPool, logger});
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
+
+function logEncodingEnvironment() {
+  const locale = asString(process.env.LC_ALL || process.env.LANG || process.env.LC_CTYPE || "").trim();
+  let codePage = "";
+  if (process.platform === "win32") {
+    try {
+      const out = execSync("chcp", {stdio: ["ignore", "pipe", "ignore"]}).toString("utf8");
+      const m = out.match(/:\s*(\d+)/);
+      codePage = m ? m[1] : "";
+    } catch (_) {
+      codePage = "";
+    }
+  }
+  const localeUtf8 = /utf-?8/i.test(locale);
+  const cpUtf8 = !codePage || codePage === "65001";
+  if (localeUtf8 || cpUtf8) {
+    logger.info("encoding", `encoding check passed: locale=${locale || "-"} codepage=${codePage || "-"}`);
+  } else {
+    logger.warn(
+      "encoding",
+      `encoding check failed: locale=${locale || "-"} codepage=${codePage || "-"}, 建议使用 UTF-8（Windows 可执行 chcp 65001）`
+    );
+  }
+}
 
 function ensureRuntimeBootstrapped() {
   if (runtimeBootstrapped) {
@@ -79,6 +107,10 @@ function guessContentType(filePath) {
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
   if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
   if (filePath.endsWith(".svg")) return "image/svg+xml";
+  if (filePath.endsWith(".png")) return "image/png";
+  if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) return "image/jpeg";
+  if (filePath.endsWith(".webp")) return "image/webp";
+  if (filePath.endsWith(".ico")) return "image/x-icon";
   return "application/octet-stream";
 }
 
@@ -112,6 +144,12 @@ function loadSnapshotRows(snapshotPath) {
   return Array.isArray(obj.items) ? obj.items : [];
 }
 
+async function loadSnapshotRowsAsync(snapshotPath) {
+  const text = await fs.promises.readFile(snapshotPath, "utf8");
+  const obj = JSON.parse(text);
+  return Array.isArray(obj.items) ? obj.items : [];
+}
+
 function loadSnapshotSafe(snapshotPath) {
   const full = asString(snapshotPath).trim();
   if (!full || !fs.existsSync(full)) {
@@ -123,6 +161,20 @@ function loadSnapshotSafe(snapshotPath) {
       name: path.basename(full)
     },
     rows: loadSnapshotRows(full)
+  };
+}
+
+async function loadSnapshotSafeAsync(snapshotPath) {
+  const full = asString(snapshotPath).trim();
+  if (!full || !fs.existsSync(full)) {
+    return {snapshot: null, rows: []};
+  }
+  return {
+    snapshot: {
+      path: full,
+      name: path.basename(full)
+    },
+    rows: await loadSnapshotRowsAsync(full)
   };
 }
 
@@ -167,6 +219,83 @@ const refreshRuntime = createRefreshRuntime({
   sseKeepaliveMs: 25 * 1000
 });
 
+const componentTaskQueue = createComponentTaskQueue({
+  logger,
+  onStateChanged: (snapshot) => {
+    refreshRuntime.emitSse("component_task_queue", snapshot);
+  }
+});
+
+async function enqueueComponentMoveJob({
+  action,
+  username,
+  password,
+  componentId,
+  itemIds
+}) {
+  const actionKey = asString(action).trim() === "withdraw" ? "withdraw" : "deposit";
+  const account = asString(username).trim();
+  const componentKey = asString(componentId).trim();
+  const ids = Array.isArray(itemIds) ? itemIds : [];
+  const queued = componentTaskQueue.enqueue({
+    username: account,
+    action: actionKey,
+    componentId: componentKey,
+    itemIds: ids,
+    execute: async ({job_id}) => {
+      try {
+        const payload = await componentOpsService.runMove({
+          action: actionKey,
+          username: account,
+          password: asString(password).trim(),
+          componentId: componentKey,
+          itemIds: ids,
+          onProgress: (progress) => {
+            refreshRuntime.emitSse("component_move_progress", {
+              username: account,
+              job_id,
+              ...progress
+            });
+          }
+        });
+        refreshRuntime.emitSse("component_move_done", {
+          username: account,
+          job_id,
+          action: actionKey,
+          component_id: componentKey,
+          requested: toInt(payload && payload.op ? payload.op.requested : 0, 0),
+          success: Array.isArray(payload && payload.op ? payload.op.success_ids : [])
+            ? payload.op.success_ids.length
+            : 0,
+          failed: Array.isArray(payload && payload.op ? payload.op.failed : [])
+            ? payload.op.failed.length
+            : 0,
+          first_failed_item_id: Array.isArray(payload && payload.op ? payload.op.failed : []) && payload.op.failed[0]
+            ? asString(payload.op.failed[0].item_id || "").trim()
+            : "",
+          first_failed_reason: Array.isArray(payload && payload.op ? payload.op.failed : []) && payload.op.failed[0]
+            ? asString(payload.op.failed[0].reason || "").trim()
+            : "",
+          message: asString(payload && payload.message ? payload.message : "").trim(),
+          snapshot_path: asString(payload && payload.snapshot_path ? payload.snapshot_path : "").trim(),
+          fetch_time: asString(payload && payload.fetch_time ? payload.fetch_time : "").trim()
+        });
+        return payload;
+      } catch (err) {
+        refreshRuntime.emitSse("component_move_failed", {
+          username: account,
+          job_id,
+          action: actionKey,
+          component_id: componentKey,
+          message: asString(err && err.message ? err.message : err)
+        });
+        throw err;
+      }
+    }
+  });
+  return queued;
+}
+
 function buildComponentSummary(rows) {
   const summaryMap = {};
   const itemMap = {};
@@ -180,7 +309,7 @@ function buildComponentSummary(rows) {
     }
   }
   for (const row of rows) {
-    if (toInt(row.def_index, 0) !== 1201) {
+    if (toInt(row.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) {
       continue;
     }
     const id = asString(row.asset_id || "").trim();
@@ -188,11 +317,11 @@ function buildComponentSummary(rows) {
       continue;
     }
     const expected = toInt(row.casket_contained_item_count, 0);
-    const loaded = (itemMap[id] || []).length;
+    const loaded = Math.max((itemMap[id] || []).length, expected);
     summaryMap[id] = {
       component_id: id,
       name: asString(row.alchemy_name || row.name || `Component ${id}`),
-      expected_count: expected,
+      expected_count: Math.max(STORAGE_UNIT_CAPACITY, expected),
       loaded_count: loaded
     };
   }
@@ -321,13 +450,44 @@ async function handleApi(req, res, urlObj) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
     }
-    if (!password) {
+
+    const store = new AccountStore();
+    const existed = store.get(username);
+    const existedPassword = asString(existed && existed.password ? existed.password : "").trim();
+    const finalPassword = password || existedPassword;
+    if (!existed && !finalPassword) {
       writeJson(res, 400, {ok: false, message: "password is required"});
+      return true;
+    }
+    const finalRemark = remark || asString(existed && existed.remark ? existed.remark : username).trim() || username;
+    store.upsert({username, password: finalPassword, remark: finalRemark});
+    const uiState = new UiStateStore();
+    uiState.setLastSelected(username);
+    writeJson(res, 200, {
+      ok: true,
+      active: store.getActive(),
+      accounts: store.list()
+    });
+    return true;
+  }
+
+  if (pathname === "/api/accounts/remark" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    const remark = asString(body.remark).trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
     }
 
     const store = new AccountStore();
-    store.upsert({username, password, remark: remark || username});
+    const ok = store.updateRemark(username, remark || username);
+    if (!ok) {
+      writeJson(res, 404, {ok: false, message: `account not found: ${username}`});
+      return true;
+    }
+
+    logger.info("ui_server", `account remark updated: account=${username}`);
     const uiState = new UiStateStore();
     uiState.setLastSelected(username);
     writeJson(res, 200, {
@@ -352,6 +512,7 @@ async function handleApi(req, res, urlObj) {
     }
     refreshRuntime.removeAccount(username);
     sessionPool.invalidate(username, "account_deleted");
+    componentTaskQueue.cancelByUsername(username);
 
     // 删除账号时同步清理本地 refresh_token，避免残留冲突。
     try {
@@ -412,14 +573,20 @@ async function handleApi(req, res, urlObj) {
       return true;
     }
     try {
-      const payload = await componentOpsService.runMove({
+      const queued = await enqueueComponentMoveJob({
         action: "deposit",
         username,
-        password: asString(body.password).trim(),
+        password: body.password,
         componentId,
         itemIds: body.item_ids
       });
-      writeJson(res, 200, payload);
+      writeJson(res, 202, {
+        ok: true,
+        queued: true,
+        message: `任务已加入队列：${queued.job.job_id}`,
+        job: queued.job,
+        queue: queued.snapshot
+      });
     } catch (err) {
       writeJson(res, 500, {
         ok: false,
@@ -432,6 +599,7 @@ async function handleApi(req, res, urlObj) {
   if (pathname === "/api/component/deposit-candidates" && req.method === "GET") {
     const username = asString(urlObj.searchParams.get("username") || "").trim();
     const componentId = asString(urlObj.searchParams.get("component_id") || "").trim();
+    const includeExcluded = asString(urlObj.searchParams.get("include_excluded") || "").trim() === "1";
     if (!username || !refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
@@ -439,7 +607,8 @@ async function handleApi(req, res, urlObj) {
     try {
       const payload = await componentOpsService.listDepositCandidates({
         username,
-        componentId
+        componentId,
+        includeExcluded
       });
       writeJson(res, 200, payload);
     } catch (err) {
@@ -460,20 +629,106 @@ async function handleApi(req, res, urlObj) {
       return true;
     }
     try {
-      const payload = await componentOpsService.runMove({
+      const queued = await enqueueComponentMoveJob({
         action: "withdraw",
         username,
-        password: asString(body.password).trim(),
+        password: body.password,
         componentId,
         itemIds: body.item_ids
       });
-      writeJson(res, 200, payload);
+      writeJson(res, 202, {
+        ok: true,
+        queued: true,
+        message: `任务已加入队列：${queued.job.job_id}`,
+        job: queued.job,
+        queue: queued.snapshot
+      });
     } catch (err) {
       writeJson(res, 500, {
         ok: false,
         message: asString(err && err.message ? err.message : err)
       });
     }
+    return true;
+  }
+
+  if (pathname === "/api/craft/tradeup" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!username || !refreshRuntime.isConnected(username)) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    try {
+      const allowCoolingRaw = body.allow_cooling;
+      const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
+      const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
+      const hasRecipes = Array.isArray(body.recipes) && body.recipes.length > 0;
+      const payload = hasRecipes
+        ? await craftService.runTradeUpBatch({
+          username,
+          password: body.password,
+          recipes: body.recipes,
+          allowCooling
+        })
+        : await craftService.runTradeUp({
+          username,
+          password: body.password,
+          itemIds: body.item_ids,
+          allowCooling
+        });
+      writeJson(res, 200, {
+        ok: true,
+        ...payload,
+        component: buildComponentSummary(payload.rows || [])
+      });
+    } catch (err) {
+      if (err && err.craft_payload) {
+        const payload = err.craft_payload;
+        writeJson(res, 409, {
+          ok: false,
+          ...payload,
+          component: buildComponentSummary(payload.rows || []),
+          message: asString(err && err.message ? err.message : err)
+        });
+        return true;
+      }
+      const status = err && err.code === "bad_request" ? 400 : 500;
+      writeJson(res, status, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
+  if (pathname === "/api/component/tasks" && req.method === "GET") {
+    const username = asString(urlObj.searchParams.get("username") || "").trim();
+    writeJson(res, 200, {
+      ok: true,
+      ...componentTaskQueue.getSnapshot(username)
+    });
+    return true;
+  }
+
+  if (pathname === "/api/component/tasks/cancel" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const jobId = asString(body.job_id).trim();
+    const result = componentTaskQueue.cancel(jobId);
+    if (!result.ok) {
+      const status = result.code === "running" ? 409 : (result.code === "invalid_job_id" ? 400 : 404);
+      writeJson(res, status, {
+        ok: false,
+        message: result.message
+      });
+      return true;
+    }
+    writeJson(res, 200, {
+      ok: true,
+      message: "任务已取消",
+      job: result.job,
+      queue: componentTaskQueue.getSnapshot("")
+    });
     return true;
   }
 
@@ -516,7 +771,8 @@ async function handleApi(req, res, urlObj) {
         snapshot: null,
         rows: [],
         component: {summary_map: {}, item_map: {}},
-        fetch_time: ""
+        fetch_time: "",
+        connected: refreshRuntime.isConnected(username)
       });
       return true;
     }
@@ -527,7 +783,8 @@ async function handleApi(req, res, urlObj) {
         snapshot: null,
         rows: [],
         component: {summary_map: {}, item_map: {}},
-        fetch_time: asString(accountCache.fetch_time || "")
+        fetch_time: asString(accountCache.fetch_time || ""),
+        connected: refreshRuntime.isConnected(username)
       });
       return true;
     }
@@ -537,7 +794,85 @@ async function handleApi(req, res, urlObj) {
       snapshot: loaded.snapshot,
       rows: loaded.rows,
       component,
-      fetch_time: asString(accountCache.fetch_time || "")
+      fetch_time: asString(accountCache.fetch_time || ""),
+      connected: refreshRuntime.isConnected(username)
+    });
+    return true;
+  }
+
+  if (pathname === "/api/snapshot/accounts" && req.method === "GET") {
+    const csv = asString(urlObj.searchParams.get("usernames") || "").trim();
+    let usernames = csv
+      .split(",")
+      .map((x) => asString(x).trim())
+      .filter(Boolean);
+    if (!usernames.length) {
+      const store = new AccountStore();
+      usernames = store
+        .list()
+        .map((x) => asString(x.username).trim())
+        .filter(Boolean);
+    }
+    usernames = [...new Set(usernames)];
+    if (!usernames.length) {
+      writeJson(res, 200, {ok: true, snapshots: []});
+      return true;
+    }
+
+    const uiState = new UiStateStore();
+    const snapshots = await Promise.all(
+      usernames.map(async (username) => {
+        const accountCache = uiState.getAccount(username);
+        const snapshotPath = asString(accountCache && accountCache.snapshot_path ? accountCache.snapshot_path : "").trim();
+        const fetchTime = asString(accountCache && accountCache.fetch_time ? accountCache.fetch_time : "").trim();
+        if (!snapshotPath) {
+          return {
+            username,
+            snapshot: null,
+            rows: [],
+            component: {summary_map: {}, item_map: {}},
+            fetch_time: fetchTime,
+            connected: refreshRuntime.isConnected(username)
+          };
+        }
+        try {
+          const loaded = await loadSnapshotSafeAsync(snapshotPath);
+          if (!loaded.snapshot) {
+            return {
+              username,
+              snapshot: null,
+              rows: [],
+              component: {summary_map: {}, item_map: {}},
+              fetch_time: fetchTime,
+              connected: refreshRuntime.isConnected(username)
+            };
+          }
+          const component = buildComponentSummary(loaded.rows);
+          return {
+            username,
+            snapshot: loaded.snapshot,
+            rows: loaded.rows,
+            component,
+            fetch_time: fetchTime,
+            connected: refreshRuntime.isConnected(username)
+          };
+        } catch (err) {
+          return {
+            username,
+            snapshot: null,
+            rows: [],
+            component: {summary_map: {}, item_map: {}},
+            fetch_time: fetchTime,
+            connected: refreshRuntime.isConnected(username),
+            error: asString(err && err.message ? err.message : err)
+          };
+        }
+      })
+    );
+
+    writeJson(res, 200, {
+      ok: true,
+      snapshots
     });
     return true;
   }
@@ -605,6 +940,7 @@ function parsePort(argv) {
 }
 
 function start() {
+  logEncodingEnvironment();
   const port = parsePort(process.argv);
   const server = createServer();
   server.listen(port, "127.0.0.1", () => {
@@ -620,4 +956,8 @@ module.exports = {
   start,
   createServer
 };
+
+
+
+
 

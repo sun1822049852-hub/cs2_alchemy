@@ -7,6 +7,23 @@ const {preloadComponentContents} = require("./componentLoader");
 const {saveProcessedSnapshot, saveRawSnapshot} = require("./snapshotStore");
 const {asString} = require("./utils");
 
+function rawItemKey(item) {
+  return asString(
+    item && (item.id || item.itemid || item.assetid || item.original_id || "")
+  ).trim();
+}
+
+function mergeRawItem(baseItem, patchItem) {
+  const base = baseItem && typeof baseItem === "object" ? baseItem : {};
+  const patch = patchItem && typeof patchItem === "object" ? patchItem : {};
+  const merged = {...base, ...patch};
+  const patchCasketId = asString(patch.casket_id || "").trim();
+  if (patchCasketId) {
+    merged.casket_id = patchCasketId;
+  }
+  return merged;
+}
+
 async function refreshInventory({
   username,
   password,
@@ -92,14 +109,21 @@ async function refreshInventory({
     const finalRaw = Array.isArray(csgo.inventory) ? [...csgo.inventory] : [];
     const mergedById = new Map();
     for (const item of finalRaw) {
-      mergedById.set(asString(item.id || ""), item);
+      const key = rawItemKey(item);
+      if (!key) continue;
+      mergedById.set(key, item);
     }
     for (const item of componentStats.loaded_items || []) {
-      const key = asString(item.id || "");
-      if (!key || mergedById.has(key)) {
+      const key = rawItemKey(item);
+      if (!key) {
         continue;
       }
-      mergedById.set(key, item);
+      const existing = mergedById.get(key);
+      if (!existing) {
+        mergedById.set(key, item);
+        continue;
+      }
+      mergedById.set(key, mergeRawItem(existing, item));
     }
     const mergedRaw = Array.from(mergedById.values());
     // 快照始终保存全量（含隐藏），UI 再根据开关本地过滤，避免组件条目丢失。
@@ -127,6 +151,24 @@ async function refreshInventory({
         notifications: componentStats.notified
       }
     };
+    if (logger) {
+      const componentRows = rows.filter((x) => Number(x.def_index || 0) === 1201);
+      const componentIds = componentRows.map((x) => asString(x.asset_id || "").trim()).filter(Boolean);
+      const itemInComponent = rows.filter((x) => asString(x.casket_id || "").trim());
+      const loadedByComponent = new Map();
+      for (const row of itemInComponent) {
+        const cid = asString(row.casket_id || "").trim();
+        if (!cid) continue;
+        loadedByComponent.set(cid, (loadedByComponent.get(cid) || 0) + 1);
+      }
+      const breakdown = componentIds.map((cid) => {
+        const comp = componentRows.find((x) => asString(x.asset_id || "").trim() === cid);
+        const expected = Number(comp && comp.casket_contained_item_count != null ? comp.casket_contained_item_count : 0) || 0;
+        const loaded = loadedByComponent.get(cid) || 0;
+        return `${cid}:${loaded}/${expected}`;
+      }).join(" | ");
+      logger.info("workflow", `component snapshot check: components=${componentIds.length} loaded_items=${itemInComponent.length}${breakdown ? ` | ${breakdown}` : ""}`);
+    }
     if (logger) {
       logger.info(
         "workflow",

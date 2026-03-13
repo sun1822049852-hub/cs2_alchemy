@@ -60,16 +60,26 @@ async function preloadComponentContents(csgo, logger, {requestIntervalMs = 80} =
     const componentId = component.id;
     try {
       const items = await getCasketContents(csgo, componentId, 35000);
+      const normalizedItems = (Array.isArray(items) ? items : []).map((item) => {
+        const row = item && typeof item === "object" ? item : {};
+        const itemId = asString(row.id || row.itemid || row.assetid || row.original_id || "").trim();
+        // Force attach source component id so parser can group all component items reliably.
+        return {
+          ...row,
+          ...(itemId ? {id: itemId} : {}),
+          casket_id: componentId
+        };
+      });
       stats.notified += 1;
-      stats.loaded_total += items.length;
-      loadedItems.push(...items);
+      stats.loaded_total += normalizedItems.length;
+      loadedItems.push(...normalizedItems);
       stats.components.push({
         component_id: componentId,
         expected_count: component.expected_count,
-        loaded_count: items.length
+        loaded_count: normalizedItems.length
       });
       if (logger) {
-        logger.info("component_loader", `component loaded: id=${componentId} items=${items.length}`);
+        logger.info("component_loader", `component loaded: id=${componentId} items=${normalizedItems.length}`);
       }
     } catch (err) {
       stats.components.push({

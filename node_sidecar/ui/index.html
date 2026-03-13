@@ -63,79 +63,77 @@
           <header class="topbar">
             <h1>库存总览</h1>
             <div class="topbar-meta">
-              <span id="currentAccountText">当前账号：未选择</span>
               <span class="status" id="statusText">连接状态：未连接</span>
               <span id="fetchTimeText">库存获取时间：-</span>
+              <div class="account-tools">
+                <label for="accountSelect">账号</label>
+                <select id="accountSelect"></select>
+                <button id="useAccountBtn">设为当前</button>
+                <button id="refreshBtn">连接并刷新库存信息</button>
+              </div>
             </div>
           </header>
 
           <section class="panel">
             <div class="row">
-              <label>账号</label>
-              <select id="accountSelect"></select>
-              <button id="useAccountBtn">设为当前</button>
-              <button id="refreshBtn">连接并刷新库存信息</button>
               <span id="summaryText">尚未加载库存</span>
             </div>
             <div class="row">
-              <div class="view-mode-switch" role="group" aria-label="切换视图">
-                <button id="modeGridBtn" class="view-mode-btn" type="button" title="网格视图" aria-label="网格视图">
-                  <span class="icon-grid" aria-hidden="true"></span>
-                </button>
-                <button id="modeListBtn" class="view-mode-btn active" type="button" title="列表视图" aria-label="列表视图">
-                  <span class="icon-list" aria-hidden="true"></span>
-                </button>
-              </div>
-              <label class="inline"><input type="checkbox" id="includeHidden" />包含被过滤条目</label>
               <label>搜索</label>
               <input id="searchInput" placeholder="名称/中文名/英文名/market hash" />
               <span class="muted">预热: 100（固定）</span>
-              <button id="toggleFilterBtn">展开筛选</button>
             </div>
           </section>
 
           <section class="panel hidden" id="filterDrawer">
-            <div class="row wrap">
-              <label>磨损范围</label>
-              <select id="wearMin" class="small"></select>
-              <span>-</span>
-              <select id="wearMax" class="small"></select>
-              <label>稀有度</label>
-              <details class="menu-box">
-                <summary id="raritySummary">全部</summary>
-                <div class="menu-actions">
-                  <button type="button" id="raritySelectAll">全选</button>
-                  <button type="button" id="rarityClear">清空</button>
+            <div class="filter-menu-shell">
+              <div class="filter-menu-nav">
+                <button id="filterNavWear" class="filter-nav-item active" type="button" data-panel="wear">磨损筛选</button>
+                <button id="filterNavRarity" class="filter-nav-item" type="button" data-panel="rarity">稀有度筛选</button>
+                <button id="filterNavCollection" class="filter-nav-item" type="button" data-panel="collection">收藏品筛选</button>
+              </div>
+              <div class="filter-menu-sub">
+                <div id="filterPanelWear" class="filter-sub-panel">
+                  <div class="filter-sub-title">磨损范围</div>
+                  <div class="row">
+                    <select id="wearMin" class="small"></select>
+                    <span>-</span>
+                    <select id="wearMax" class="small"></select>
+                  </div>
+                  <span id="wearHint" class="hint filter-hint"></span>
                 </div>
-                <div id="rarityMenu" class="menu-list"></div>
-              </details>
-              <label>收藏品</label>
-              <details class="menu-box collection-box">
-                <summary id="collectionSummary">全部</summary>
-                <div class="menu-actions">
-                  <button type="button" id="collectionSelectAll">全选</button>
-                  <button type="button" id="collectionClear">清空</button>
+                <div id="filterPanelRarity" class="filter-sub-panel hidden">
+                  <div class="filter-sub-title">稀有度筛选 <span id="raritySummary" class="muted">全部</span></div>
+                  <div class="menu-actions">
+                    <button type="button" id="raritySelectAll">全选</button>
+                    <button type="button" id="rarityClear">清空</button>
+                  </div>
+                  <div id="rarityMenu" class="menu-list"></div>
                 </div>
-                <div id="collectionMenu" class="menu-list"></div>
-              </details>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="row">
-              <label>磨损</label>
-              <button id="wearSortUp" class="arrow active" title="由低到高">▲</button>
-              <button id="wearSortDown" class="arrow" title="由高到低">▼</button>
-              <label>稀有度</label>
-              <button id="raritySortUp" class="arrow" title="由低到高">▲</button>
-              <button id="raritySortDown" class="arrow active" title="由高到低">▼</button>
-              <span id="wearHint" class="hint"></span>
+                <div id="filterPanelCollection" class="filter-sub-panel hidden">
+                  <div class="filter-sub-title">收藏品筛选 <span id="collectionSummary" class="muted">全部</span></div>
+                  <div class="menu-actions">
+                    <button type="button" id="collectionSelectAll">全选</button>
+                    <button type="button" id="collectionClear">清空</button>
+                  </div>
+                  <div id="collectionMenu" class="menu-list"></div>
+                </div>
+              </div>
             </div>
           </section>
 
           <section class="panel" id="componentPanel">
-            <div class="row">
-              <label><span class="icon-box" aria-hidden="true"></span> 组件管理</label>
+            <div class="row component-toolbar">
+              <button id="toggleFilterBtn" class="icon-btn filter-toggle-btn" type="button" title="展开筛选" aria-label="展开筛选">
+                <span class="filter-glyph" aria-hidden="true"></span>
+              </button>
+              <div class="view-mode-switch" role="group" aria-label="切换视图">
+                <button id="modeToggleBtn" class="view-mode-btn active" type="button" title="列表视图" aria-label="切换视图">
+                  <span id="modeToggleGlyph" class="mode-glyph mode-glyph-list" aria-hidden="true"></span>
+                </button>
+              </div>
+              <label class="inline"><input type="checkbox" id="includeHidden" />包含被过滤条目</label>
+              <label><span class="icon-box" aria-hidden="true"></span> 库存管理</label>
               <select id="componentSelect"></select>
               <button id="componentDepositBtn">存入组件</button>
               <button id="componentWithdrawBtn">取出选中</button>
@@ -146,49 +144,109 @@
 
           <section class="panel">
             <div class="row">
-              <label>每页</label>
-              <select id="pageSize">
-                <option value="60">60</option>
-                <option value="90" selected>90</option>
-                <option value="120">120</option>
-                <option value="180">180</option>
-              </select>
-              <button id="prevBtn">上一页</button>
-              <span id="pageInfo">1/1</span>
-              <button id="nextBtn">下一页</button>
               <span id="snapshotPath"></span>
             </div>
           </section>
 
           <main id="listWrap" class="list-wrap"></main>
 
-          <div id="depositModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="depositModalTitle">
-            <div class="modal-card">
-              <div class="modal-header">
-                <h3 id="depositModalTitle">存入组件</h3>
-                <button id="depositModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
-              </div>
-              <div class="row wrap">
-                <label>搜索</label>
-                <input id="depositSearchInput" placeholder="名称/market hash" />
-                <label class="inline"><input type="checkbox" id="depositWearOnly" />仅可磨损</label>
-                <button id="depositSelectAllBtn" type="button">全选</button>
-                <button id="depositInvertBtn" type="button">反选</button>
-                <span id="depositCounter" class="muted">已选 0 项</span>
-              </div>
-              <div id="depositListWrap" class="deposit-list"></div>
-              <div class="row modal-actions">
-                <button id="depositConfirmBtn" type="button">确认存入</button>
-                <button id="depositCancelBtn" type="button">取消</button>
-              </div>
+          <section id="componentTaskFloat" class="task-float hidden" aria-live="polite">
+            <div class="task-float-title">组件任务</div>
+            <div id="componentTaskInfo" class="muted">执行中：无</div>
+            <div id="componentTaskQueueList" class="task-queue-list"></div>
+            <div class="row task-float-actions">
+              <button id="componentTaskCancelBtn">取消选中排队任务</button>
             </div>
-          </div>
+          </section>
+
+          <section id="targetComponentDrawer" class="component-target-drawer hidden" aria-live="polite" aria-label="选择目标组件">
+            <div class="drawer-head">
+              <div class="drawer-title">选择目标组件</div>
+              <button id="targetComponentDrawerClose" type="button" class="drawer-close-btn" aria-label="关闭">×</button>
+            </div>
+            <div id="targetComponentDrawerHint" class="drawer-hint muted">请选择要存入的目标组件</div>
+            <select id="targetComponentDrawerSelect" class="drawer-select-list" size="8"></select>
+            <div class="row drawer-actions">
+              <button id="targetComponentDrawerCancel" type="button">取消</button>
+              <button id="targetComponentDrawerConfirm" type="button">确认存入</button>
+            </div>
+          </section>
+
         </section>
 
+        <div id="remarkModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="remarkModalTitle">
+          <div class="modal-card remark-modal-card">
+            <div class="modal-header">
+              <h3 id="remarkModalTitle">修改备注名</h3>
+              <button id="remarkModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="form-row">
+              <label for="remarkModalInput">备注名</label>
+              <input id="remarkModalInput" type="text" />
+            </div>
+            <div class="row modal-actions">
+              <button id="remarkModalSaveBtn" type="button">保存</button>
+              <button id="remarkModalCancelBtn" type="button">取消</button>
+            </div>
+          </div>
+        </div>
+
         <section class="page hidden" id="craftPage">
-          <div class="craft-holder panel">
-            <h2>炼金汰换页面（占位）</h2>
-            <p>该页面先保留占位，后续按你的指令实现。</p>
+          <header class="topbar craft-topbar">
+            <div class="topbar-meta">
+              <span class="status" id="craftTopStatusText">连接状态：未连接</span>
+              <span id="craftTopFetchTimeText">库存获取时间：-</span>
+              <div class="account-tools">
+                <label for="craftAccountSelect">账号</label>
+                <select id="craftAccountSelect"></select>
+                <button id="craftUseAccountBtn">设为当前</button>
+                <button id="craftRefreshBtn">连接并刷新库存信息</button>
+              </div>
+            </div>
+          </header>
+          <section class="panel craft-panel">
+            <div class="craft-head">
+              <h2>炼金汰换</h2>
+              <div class="craft-settings-wrap">
+                <button id="craftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">
+                  <span class="craft-gear-glyph" aria-hidden="true"></span>
+                </button>
+                <div id="craftSettingsPanel" class="craft-settings-panel hidden">
+                  <label class="inline"><span>使用冷却中的物品</span><input id="craftIncludeCooling" type="checkbox" /></label>
+                  <label class="inline"><span>显示种子</span><input id="craftShowSeed" type="checkbox" /></label>
+                  <div id="craftCoolingHint" class="muted">冷却中可选：无</div>
+                </div>
+              </div>
+            </div>
+            <div class="row wrap craft-meta">
+              <span id="craftAccountText">账号：-</span>
+              <span id="craftConnectText">连接状态：未连接</span>
+              <span id="craftSelectedText">待添加：0/10，配方预览：0组</span>
+              <span id="craftRecipeText">配方：-</span>
+            </div>
+            <div class="row wrap craft-toolbar">
+              <span id="craftStatusText" class="muted">请在下方选择 10 件物品并添加配方</span>
+            </div>
+          </section>
+          <div id="craftLayout" class="craft-layout">
+            <section class="panel craft-left-panel">
+              <div class="row">
+                <span>主库存可炼金物品</span>
+              </div>
+              <div id="craftSelectionList" class="craft-selection-list"></div>
+            </section>
+            <div id="craftSplitBar" class="craft-split-bar" title="拖拽调整左右区域宽度" aria-hidden="true"></div>
+            <section id="craftRightPanel" class="panel craft-right-panel">
+              <div class="row">
+                <span>配方预览</span>
+              </div>
+              <div id="craftQueueList" class="craft-queue-list"></div>
+              <div class="row craft-queue-actions">
+                <button id="craftAddRecipeBtn" class="btn-primary" type="button">添加配方</button>
+                <button id="craftExecuteQueueBtn" class="btn-primary" type="button">执行</button>
+                <button id="craftClearQueueBtn" type="button">清空</button>
+              </div>
+            </section>
           </div>
         </section>
       </main>

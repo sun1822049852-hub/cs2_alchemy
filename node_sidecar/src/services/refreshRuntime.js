@@ -176,8 +176,20 @@ function createRefreshRuntime({
       }
 
       const accountStore = accountStoreFactory();
+      const active = accountStore.getActive();
+      const activeUsername = active ? asString(active.username).trim() : "";
+      if (activeUsername) {
+        const idx = targets.indexOf(activeUsername);
+        if (idx > 0) {
+          targets.splice(idx, 1);
+          targets.unshift(activeUsername);
+        }
+      }
       const uiState = uiStateStoreFactory();
       const now = Date.now();
+      if (logger && targets.length > 1) {
+        logger.info("heartbeat", `refresh queue (serial): ${targets.join(" -> ")}`);
+      }
       for (const username of targets) {
         const account = accountStore.get(username);
         if (!account) {
@@ -263,9 +275,14 @@ function createRefreshRuntime({
     eventBus.on("inventory_refresh_failed", (payload) => broadcastSse("inventory_refresh_failed", payload));
   }
 
+  function emitSse(event, payload) {
+    broadcastSse(asString(event).trim() || "message", payload || {});
+  }
+
   return {
     start,
     handleSseRequest,
+    emitSse,
     runRefreshJob,
     isConnected(username) {
       return connectedAccounts.has(asString(username).trim());
