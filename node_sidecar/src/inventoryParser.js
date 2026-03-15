@@ -1,6 +1,5 @@
-const fs = require("fs");
-const {DatabaseSync} = require("node:sqlite");
 const {QUALITY_MAP, RARITY_MAP, STORAGE_UNIT_DEF_INDEX, PATHS} = require("./constants");
+const {fetchSkinMetadataMap} = require("./skinMetaStore");
 const {asString, toFloat, toInt} = require("./utils");
 
 function wearNameFromFloat(floatValue) {
@@ -291,14 +290,6 @@ function resolveDisplayParts(item, schema) {
   };
 }
 
-function normalizeFloat(value) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
 function isCraftableBySkinMeta(meta) {
   if (!meta) {
     return {isCraftable: false, reason: "meta_not_found"};
@@ -313,59 +304,6 @@ function isCraftableBySkinMeta(meta) {
     return {isCraftable: false, reason: "missing_float_range"};
   }
   return {isCraftable: true, reason: "ok"};
-}
-
-function fetchSkinMetadataMap(names, dbPath = PATHS.SKIN_DB_FILE) {
-  const clean = Array.from(
-    new Set(
-      (names || [])
-        .map((x) => asString(x).trim())
-        .filter(Boolean)
-    )
-  );
-  if (!clean.length || !fs.existsSync(dbPath)) {
-    return new Map();
-  }
-
-  const out = new Map();
-  let db = null;
-  try {
-    db = new DatabaseSync(dbPath, {open: true, readOnly: true});
-    const chunkSize = 500;
-    for (let i = 0; i < clean.length; i += chunkSize) {
-      const chunk = clean.slice(i, i + chunkSize);
-      const placeholders = chunk.map(() => "?").join(",");
-      const sql =
-        "SELECT markethashname, name, collection, rarity, minfloat, maxfloat, isstattrak, wear_range " +
-        `FROM skin WHERE markethashname IN (${placeholders})`;
-      const stmt = db.prepare(sql);
-      const rows = stmt.all(...chunk);
-      for (const row of rows) {
-        const key = asString(row.markethashname).trim();
-        if (!key) {
-          continue;
-        }
-        out.set(key, {
-          name: asString(row.name).trim(),
-          collection: asString(row.collection).trim(),
-          rarity: asString(row.rarity).trim(),
-          minfloat: normalizeFloat(row.minfloat),
-          maxfloat: normalizeFloat(row.maxfloat),
-          isstattrak: toInt(row.isstattrak, 0),
-          wear_range: normalizeFloat(row.wear_range)
-        });
-      }
-    }
-  } catch (_) {
-    return new Map();
-  } finally {
-    try {
-      if (db) {
-        db.close();
-      }
-    } catch (_) {}
-  }
-  return out;
 }
 
 function enrichAlchemyMetadata(rows, hiddenRows, dbPath) {

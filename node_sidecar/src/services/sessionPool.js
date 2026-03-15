@@ -3,11 +3,14 @@ const {asString} = require("../utils");
 
 function createSessionPool({
   logger,
-  idleMs = 5 * 60 * 1000,
+  idleMs = 0,
   cleanupIntervalMs = 30 * 1000
 } = {}) {
   const entries = new Map();
   let cleanupTimer = null;
+  const idleTimeoutEnabled = Number.isFinite(Number(idleMs)) && Number(idleMs) > 0;
+  const idleTimeoutMs = idleTimeoutEnabled ? Number(idleMs) : 0;
+  const cleanupEnabled = idleTimeoutEnabled && Number.isFinite(Number(cleanupIntervalMs)) && Number(cleanupIntervalMs) > 0;
 
   function getEntry(username) {
     const key = asString(username).trim();
@@ -62,6 +65,9 @@ function createSessionPool({
   }
 
   function startCleanupLoop() {
+    if (!cleanupEnabled) {
+      return;
+    }
     if (cleanupTimer) {
       return;
     }
@@ -75,7 +81,7 @@ function createSessionPool({
           entries.delete(username);
           continue;
         }
-        if (now - (entry.lastUsed || 0) <= idleMs) {
+        if (now - (entry.lastUsed || 0) <= idleTimeoutMs) {
           continue;
         }
         disconnectEntry(username, "idle_timeout");
@@ -104,7 +110,7 @@ function createSessionPool({
       if (logger) {
         logger.info("session_pool", `reuse session: account=${account}`);
       }
-      return {csgo: existing.csgo, reused: true};
+      return {steam: existing.steam || null, csgo: existing.csgo, reused: true};
     }
 
     if (existing && existing.connectingPromise) {
@@ -113,7 +119,7 @@ function createSessionPool({
       }
       const shared = await existing.connectingPromise;
       touch(account);
-      return {csgo: shared.csgo, reused: true};
+      return {steam: shared.steam || null, csgo: shared.csgo, reused: true};
     }
 
     const session = new CS2Session({logger, tokenStore});
@@ -136,7 +142,15 @@ function createSessionPool({
           steam.on("disconnected", () => {
             disconnectEntry(account, "steam_disconnected");
           });
-          steam.on("error", () => {
+          steam.on("error", (err) => {
+            if (logger) {
+              const message = asString(err && err.message ? err.message : err);
+              const code = asString(err && (err.eresult || err.code || "")).trim();
+              logger.warn(
+                "session_pool",
+                `steam error: account=${account} message=${message || "-"}${code ? ` code=${code}` : ""}`
+              );
+            }
             disconnectEntry(account, "steam_error");
           });
         }
@@ -159,7 +173,7 @@ function createSessionPool({
     });
 
     const ready = await connectingPromise;
-    return {csgo: ready.csgo, reused: false};
+    return {steam: ready.steam || null, csgo: ready.csgo, reused: false};
   }
 
   function invalidate(username, reason = "") {

@@ -63,27 +63,16 @@
           <header class="topbar">
             <h1>库存总览</h1>
             <div class="topbar-meta">
-              <span class="status" id="statusText">连接状态：未连接</span>
               <span id="fetchTimeText">库存获取时间：-</span>
               <div class="account-tools">
                 <label for="accountSelect">账号</label>
                 <select id="accountSelect"></select>
-                <button id="useAccountBtn">设为当前</button>
+                <span class="status status-disconnected" id="statusText">未连接</span>
                 <button id="refreshBtn">连接并刷新库存信息</button>
+                <button id="disconnectBtn">断开连接</button>
               </div>
             </div>
           </header>
-
-          <section class="panel">
-            <div class="row">
-              <span id="summaryText">尚未加载库存</span>
-            </div>
-            <div class="row">
-              <label>搜索</label>
-              <input id="searchInput" placeholder="名称/中文名/英文名/market hash" />
-              <span class="muted">预热: 100（固定）</span>
-            </div>
-          </section>
 
           <section class="panel hidden" id="filterDrawer">
             <div class="filter-menu-shell">
@@ -132,19 +121,28 @@
                   <span id="modeToggleGlyph" class="mode-glyph mode-glyph-list" aria-hidden="true"></span>
                 </button>
               </div>
-              <label class="inline"><input type="checkbox" id="includeHidden" />包含被过滤条目</label>
+              <label class="component-toolbar-search-label">搜索</label>
+              <input id="searchInput" class="component-toolbar-search-input" placeholder="名称/中文名/英文名/market hash" />
               <label><span class="icon-box" aria-hidden="true"></span> 库存管理</label>
               <select id="componentSelect"></select>
               <button id="componentDepositBtn">存入组件</button>
               <button id="componentWithdrawBtn">取出选中</button>
-              <span id="componentHint">暂无可管理组件</span>
               <label id="showComponentItemsWrap" class="inline"><input type="checkbox" id="showComponentItems" />显示组件内物品</label>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="row">
-              <span id="snapshotPath"></span>
+              <div class="component-toolbar-right">
+                <span id="summaryText" class="summary-ghost" aria-live="polite">尚未加载库存</span>
+                <span id="componentHint" class="component-capacity-badge" title="库存容量">0/1000</span>
+                <div class="craft-settings-wrap component-craft-settings-wrap">
+                  <button id="componentCraftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">
+                    <span class="craft-gear-glyph" aria-hidden="true"></span>
+                  </button>
+                  <div id="componentCraftSettingsPanel" class="craft-settings-panel hidden">
+                    <label class="inline"><span>显示种子</span><input id="componentCraftShowSeed" type="checkbox" /></label>
+                    <label class="inline"><span>显示冷却时间</span><input id="componentCraftShowCoolingTime" type="checkbox" /></label>
+                    <label class="inline"><span>磨损偏移阈值(%)</span><input id="componentCraftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
+                    <div id="componentCraftCoolingHint" class="muted">冷却中可选：无</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -194,46 +192,77 @@
         <section class="page hidden" id="craftPage">
           <header class="topbar craft-topbar">
             <div class="topbar-meta">
-              <span class="status" id="craftTopStatusText">连接状态：未连接</span>
               <span id="craftTopFetchTimeText">库存获取时间：-</span>
               <div class="account-tools">
                 <label for="craftAccountSelect">账号</label>
                 <select id="craftAccountSelect"></select>
-                <button id="craftUseAccountBtn">设为当前</button>
+                <span class="status status-disconnected" id="craftTopStatusText">未连接</span>
                 <button id="craftRefreshBtn">连接并刷新库存信息</button>
+                <button id="craftDisconnectBtn">断开连接</button>
               </div>
             </div>
           </header>
-          <section class="panel craft-panel">
-            <div class="craft-head">
-              <h2>炼金汰换</h2>
-              <div class="craft-settings-wrap">
-                <button id="craftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">
-                  <span class="craft-gear-glyph" aria-hidden="true"></span>
-                </button>
-                <div id="craftSettingsPanel" class="craft-settings-panel hidden">
-                  <label class="inline"><span>使用冷却中的物品</span><input id="craftIncludeCooling" type="checkbox" /></label>
-                  <label class="inline"><span>显示种子</span><input id="craftShowSeed" type="checkbox" /></label>
-                  <div id="craftCoolingHint" class="muted">冷却中可选：无</div>
+          <div id="craftLayout" class="craft-layout">
+            <section id="craftLeftPanel" class="panel craft-left-panel">
+              <div class="row craft-left-head">
+                <span>主库存可炼金物品</span>
+                <div class="craft-settings-wrap">
+                  <button id="craftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">
+                    <span class="craft-gear-glyph" aria-hidden="true"></span>
+                  </button>
+                  <div id="craftSettingsPanel" class="craft-settings-panel hidden">
+                    <label class="inline"><span>使用冷却中的物品</span><input id="craftIncludeCooling" type="checkbox" /></label>
+                    <label class="inline"><span>显示种子</span><input id="craftShowSeed" type="checkbox" /></label>
+                    <label class="inline"><span>磨损偏移阈值(%)</span><input id="craftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
+                    <div id="craftCoolingHint" class="muted">冷却中可选：无</div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="row wrap craft-meta">
-              <span id="craftAccountText">账号：-</span>
-              <span id="craftConnectText">连接状态：未连接</span>
-              <span id="craftSelectedText">待添加：0/10，配方预览：0组</span>
-              <span id="craftRecipeText">配方：-</span>
-            </div>
-            <div class="row wrap craft-toolbar">
-              <span id="craftStatusText" class="muted">请在下方选择 10 件物品并添加配方</span>
-            </div>
-          </section>
-          <div id="craftLayout" class="craft-layout">
-            <section class="panel craft-left-panel">
-              <div class="row">
-                <span>主库存可炼金物品</span>
-              </div>
               <div id="craftSelectionList" class="craft-selection-list"></div>
+              <div id="craftAssistOverlay" class="craft-assist-overlay hidden" aria-live="polite" aria-label="辅助选材覆盖层">
+                <div id="craftAssistOverlayHandle" class="craft-assist-overlay-handle" title="拖拽调整辅助选材覆盖范围" aria-hidden="true"></div>
+                <button id="craftAssistCloseBtn" type="button" class="craft-assist-close craft-assist-close-floating" aria-label="关闭辅助选材">×</button>
+                <div id="craftAssistPanel" class="craft-assist-panel" aria-label="辅助选材面板">
+                  <div id="craftAssistContent" class="craft-assist-line craft-assist-content">
+                    <div class="craft-assist-main-col">
+                      <div class="craft-assist-main-tools">
+                        <label class="craft-assist-field craft-assist-target-field">
+                          <span>目标相对磨损</span>
+                          <input id="craftAssistTargetWear" type="text" inputmode="decimal" />
+                        </label>
+                        <div class="craft-assist-field craft-assist-filter-mode">
+                          <span>筛选磨损</span>
+                          <div class="craft-assist-mode-toggle" role="group" aria-label="筛选磨损模式">
+                            <label class="craft-assist-mode-option">
+                              <input id="craftAssistFilterModeRelative" type="radio" name="craftAssistFilterMode" value="relative" />
+                              <span>相对</span>
+                            </label>
+                            <label class="craft-assist-mode-option">
+                              <input id="craftAssistFilterModeAbsolute" type="radio" name="craftAssistFilterMode" value="absolute" />
+                              <span>绝对</span>
+                            </label>
+                          </div>
+                        </div>
+                        <button id="craftAssistPresetSaveBtn" class="btn-primary craft-assist-save-btn" type="button">保存当前</button>
+                        <button id="craftAssistApplyBtn" class="btn-primary craft-assist-apply-btn" type="button">按配置选材</button>
+                      </div>
+                      <button id="craftAssistSelectBox" class="craft-assist-select-box merged" type="button" aria-label="悬停选择父类材料">
+                        <span id="craftAssistSelectText">尚未选择父类材料</span>
+                        <span id="craftAssistRoleSplit" class="craft-assist-role-split hidden" aria-hidden="true">
+                          <span class="role-main">主料</span>
+                          <span class="role-aux">辅料</span>
+                        </span>
+                      </button>
+                      <div id="craftAssistPicker" class="craft-assist-picker hidden"></div>
+                      <div id="craftAssistList" class="craft-assist-list"></div>
+                    </div>
+                    <div id="craftAssistSplitBar" class="craft-assist-split-bar" title="拖拽调整配置区宽度" aria-hidden="true"></div>
+                    <aside id="craftAssistPresetPanel" class="craft-assist-preset-panel" aria-label="辅助选材方案列表">
+                      <div id="craftAssistPresetList" class="craft-assist-preset-list"></div>
+                    </aside>
+                  </div>
+                </div>
+              </div>
             </section>
             <div id="craftSplitBar" class="craft-split-bar" title="拖拽调整左右区域宽度" aria-hidden="true"></div>
             <section id="craftRightPanel" class="panel craft-right-panel">
@@ -246,9 +275,32 @@
                 <button id="craftExecuteQueueBtn" class="btn-primary" type="button">执行</button>
                 <button id="craftClearQueueBtn" type="button">清空</button>
               </div>
+              <div class="row craft-assist-entry">
+                <button id="craftAssistToggleBtn" class="icon-btn craft-assist-toggle-btn" type="button" title="辅助选材" aria-label="辅助选材">
+                  <span class="craft-assist-glyph" aria-hidden="true"></span>
+                  <span class="craft-assist-toggle-text">辅助选材</span>
+                </button>
+              </div>
             </section>
           </div>
         </section>
+
+        <div id="craftAssistPresetModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="craftAssistPresetModalTitle">
+          <div class="modal-card craft-assist-preset-modal-card">
+            <div class="modal-header">
+              <h3 id="craftAssistPresetModalTitle">保存辅助配置</h3>
+              <button id="craftAssistPresetModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="form-row">
+              <label for="craftAssistPresetModalInput">配置名称</label>
+              <input id="craftAssistPresetModalInput" type="text" maxlength="24" placeholder="请输入配置名称" />
+            </div>
+            <div class="row modal-actions">
+              <button id="craftAssistPresetModalSaveBtn" type="button">保存配置</button>
+              <button id="craftAssistPresetModalCancelBtn" type="button">取消</button>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
 

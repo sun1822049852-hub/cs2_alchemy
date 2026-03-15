@@ -13,7 +13,6 @@ const {createSessionPool} = require("./services/sessionPool");
 const {createComponentOpsService} = require("./services/componentOpsService");
 const {createComponentTaskQueue} = require("./services/componentTaskQueue");
 const {createCraftService} = require("./services/craftService");
-const {fillMissingWearBounds} = require("./skinMetaStore");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
 const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./constants");
@@ -142,15 +141,13 @@ function listProcessedSnapshots() {
 function loadSnapshotRows(snapshotPath) {
   const text = fs.readFileSync(snapshotPath, "utf8");
   const obj = JSON.parse(text);
-  const rows = Array.isArray(obj.items) ? obj.items : [];
-  return fillMissingWearBounds(rows);
+  return Array.isArray(obj.items) ? obj.items : [];
 }
 
 async function loadSnapshotRowsAsync(snapshotPath) {
   const text = await fs.promises.readFile(snapshotPath, "utf8");
   const obj = JSON.parse(text);
-  const rows = Array.isArray(obj.items) ? obj.items : [];
-  return fillMissingWearBounds(rows);
+  return Array.isArray(obj.items) ? obj.items : [];
 }
 
 function loadSnapshotSafe(snapshotPath) {
@@ -179,161 +176,6 @@ async function loadSnapshotSafeAsync(snapshotPath) {
     },
     rows: await loadSnapshotRowsAsync(full)
   };
-}
-
-function normalizeAvatarHash(value) {
-  if (!value) return "";
-  if (Buffer.isBuffer(value)) return value.toString("hex");
-  if (typeof value === "object" && value.type === "Buffer" && Array.isArray(value.data)) {
-    return Buffer.from(value.data).toString("hex");
-  }
-  const text = asString(value).trim();
-  if (!text) return "";
-  return /^[0-9a-fA-F]{40}$/.test(text) ? text.toLowerCase() : text;
-}
-
-async function resolveAccountProfile({username, password = ""} = {}) {
-  const accountStore = new AccountStore();
-  const account = username ? accountStore.get(username) : accountStore.getActive();
-  if (!account) {
-    throw new Error(`account not found: ${username || "(active)"}`);
-  }
-  const accountName = asString(account.username).trim();
-  const tokenStore = new TokenStore();
-  const refreshToken = tokenStore.get(accountName);
-  const accountPassword = asString(password || account.password || "").trim();
-  logger.info("ui_server", `profile resolve start: account=${accountName}`);
-
-  const acquired = await sessionPool.acquire({
-    username: accountName,
-    password: accountPassword,
-    refreshToken,
-    tokenStore
-  });
-  const steam = acquired && acquired.steam ? acquired.steam : null;
-  const csgo = acquired && acquired.csgo ? acquired.csgo : null;
-  logger.info(
-    "ui_server",
-    `profile session: account=${accountName} reused=${acquired && acquired.reused ? "true" : "false"} steam=${steam ? "yes" : "no"} csgo=${csgo ? "yes" : "no"} token=${refreshToken ? "yes" : "no"} password=${accountPassword ? "yes" : "no"}`
-  );
-
-  let steamId64 = "";
-  let steamId3 = "";
-  if (steam && steam.steamID) {
-    try {
-      steamId64 = asString(
-        typeof steam.steamID.getSteamID64 === "function" ? steam.steamID.getSteamID64() : steam.steamID
-      ).trim();
-    } catch (_) {
-      steamId64 = "";
-    }
-    try {
-      steamId3 = asString(
-        typeof steam.steamID.getSteam3RenderedID === "function" ? steam.steamID.getSteam3RenderedID() : ""
-      ).trim();
-    } catch (_) {
-      steamId3 = "";
-    }
-  }
-  if (!steamId64) {
-    logger.warn("ui_server", `profile steamid missing: account=${accountName}`);
-  } else {
-    logger.info("ui_server", `profile steamid resolved: account=${accountName} steamid=${steamId64}`);
-  }
-
-  let persona = null;
-  let personaSource = "";
-  if (steam && steamId64 && typeof steam.getPersonas === "function") {
-    logger.info("ui_server", `profile persona request: account=${accountName} source=steam.getPersonas steamid=${steamId64}`);
-    try {
-      const result = await steam.getPersonas([steamId64]);
-      const personas = result && result.personas && typeof result.personas === "object" ? result.personas : null;
-      if (personas && personas[steamId64]) {
-        persona = personas[steamId64];
-        personaSource = "steam.getPersonas";
-        logger.info(
-          "ui_server",
-          `profile persona loaded: account=${accountName} source=${personaSource} avatar=${persona && (persona.avatar_url_full || persona.avatar_url_medium || persona.avatar_url_icon) ? "yes" : "no"}`
-        );
-      } else {
-        const personaCount = personas ? Object.keys(personas).length : 0;
-        logger.warn(
-          "ui_server",
-          `profile persona empty: account=${accountName} source=steam.getPersonas returned=${personaCount}`
-        );
-      }
-    } catch (err) {
-      const msg = asString(err && err.message ? err.message : err).trim();
-      logger.warn(
-        "ui_server",
-        `profile persona error: account=${accountName} source=steam.getPersonas message=${msg || "-"}`
-      );
-      // fall back to users cache
-    }
-  }
-  if (!persona && steam && steamId64 && steam.users && typeof steam.users === "object" && steam.users[steamId64]) {
-    persona = steam.users[steamId64];
-    personaSource = "steam.users_cache";
-    logger.info(
-      "ui_server",
-      `profile persona loaded: account=${accountName} source=${personaSource} avatar=${persona && (persona.avatar_url_full || persona.avatar_url_medium || persona.avatar_url_icon) ? "yes" : "no"}`
-    );
-  }
-  if (!persona) {
-    const usersSize = steam && steam.users && typeof steam.users === "object" ? Object.keys(steam.users).length : 0;
-    logger.warn(
-      "ui_server",
-      `profile persona unavailable: account=${accountName} steamid=${steamId64 || "-"} users_cache_size=${usersSize}`
-    );
-  }
-
-  const accountData = csgo && csgo.accountData && typeof csgo.accountData === "object" ? csgo.accountData : null;
-  const gcAccountId = toInt(accountData && accountData.account_id, 0);
-  const gcPlayerLevel = toInt(accountData && accountData.player_level, 0);
-  const gcPlayerCurXp = toInt(accountData && accountData.player_cur_xp, 0);
-  const steamId64FromGc = gcAccountId > 0 ? (76561197960265728n + BigInt(gcAccountId)).toString() : "";
-  const finalSteamId64 = steamId64 || steamId64FromGc;
-  const finalSteamId3 = steamId3 || (gcAccountId > 0 ? `[U:1:${gcAccountId}]` : "");
-  if (!steamId64 && steamId64FromGc) {
-    logger.info("ui_server", `profile steamid fallback: account=${accountName} source=gc account_id=${gcAccountId}`);
-  }
-
-  const profile = {
-    username: accountName,
-    steam_id64: finalSteamId64,
-    steam_id3: finalSteamId3,
-    persona_name: asString(
-      (persona && persona.player_name) || (steam && steam.accountInfo && steam.accountInfo.name) || accountName
-    ).trim() || accountName,
-    avatar_hash: normalizeAvatarHash(persona && persona.avatar_hash),
-    avatar_url_icon: asString(persona && persona.avatar_url_icon).trim(),
-    avatar_url_medium: asString(persona && persona.avatar_url_medium).trim(),
-    avatar_url_full: asString(persona && persona.avatar_url_full).trim(),
-    avatar_source: personaSource || "unavailable",
-    gc_account_id: gcAccountId > 0 ? String(gcAccountId) : "",
-    gc_player_level: gcPlayerLevel > 0 ? gcPlayerLevel : 0,
-    gc_player_cur_xp: gcPlayerCurXp > 0 ? gcPlayerCurXp : 0
-  };
-  const avatarReady = Boolean(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon);
-  if (!avatarReady) {
-    logger.warn(
-      "ui_server",
-      `profile avatar missing: account=${accountName} steamid=${profile.steam_id64 || "-"} source=${profile.avatar_source}`
-    );
-  } else {
-    logger.info(
-      "ui_server",
-      `profile avatar resolved: account=${accountName} steamid=${profile.steam_id64 || "-"} source=${profile.avatar_source}`
-    );
-  }
-  return profile;
-}
-
-function pickProfileAvatarUrl(profile) {
-  if (!profile || typeof profile !== "object") {
-    return "";
-  }
-  return asString(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon || "").trim();
 }
 
 function resolveRefreshTarget(username) {
@@ -434,15 +276,6 @@ async function enqueueComponentMoveJob({
           first_failed_reason: Array.isArray(payload && payload.op ? payload.op.failed : []) && payload.op.failed[0]
             ? asString(payload.op.failed[0].reason || "").trim()
             : "",
-          success_ids: Array.isArray(payload && payload.op ? payload.op.success_ids : [])
-            ? payload.op.success_ids.map((id) => asString(id).trim()).filter(Boolean)
-            : [],
-          failed_items: Array.isArray(payload && payload.op ? payload.op.failed : [])
-            ? payload.op.failed.map((entry) => ({
-              item_id: asString(entry && entry.item_id ? entry.item_id : "").trim(),
-              reason: asString(entry && entry.reason ? entry.reason : "").trim()
-            }))
-            : [],
           message: asString(payload && payload.message ? payload.message : "").trim(),
           snapshot_path: asString(payload && payload.snapshot_path ? payload.snapshot_path : "").trim(),
           fetch_time: asString(payload && payload.fetch_time ? payload.fetch_time : "").trim()
@@ -519,61 +352,6 @@ async function handleApi(req, res, urlObj) {
     return true;
   }
 
-  if (pathname === "/api/accounts/profile" && req.method === "GET") {
-    const username = asString(urlObj.searchParams.get("username") || "").trim();
-    try {
-      const profile = await resolveAccountProfile({username});
-      try {
-        const accountStore = new AccountStore();
-        const existed = accountStore.get(profile.username);
-        if (existed) {
-          const nextSteamId = asString(profile.steam_id64 || "").trim();
-          const nextSteamName = asString(profile.persona_name || "").trim();
-          const nextAvatarUrl = pickProfileAvatarUrl(profile);
-          const saveSteamName = nextSteamName || asString(existed.steam_name || "").trim();
-          const saveSteamId = nextSteamId || asString(existed.steam_id || "").trim();
-          const saveAvatarUrl = nextAvatarUrl || asString(existed.avatar_url || "").trim();
-          if (
-            saveSteamName !== asString(existed.steam_name || "").trim() ||
-            saveSteamId !== asString(existed.steam_id || "").trim() ||
-            saveAvatarUrl !== asString(existed.avatar_url || "").trim()
-          ) {
-            accountStore.upsert({
-              username: profile.username,
-              password: asString(existed.password || ""),
-              remark: asString(existed.remark || "").trim(),
-              steamName: saveSteamName,
-              steamId: saveSteamId,
-              avatarUrl: saveAvatarUrl
-            });
-            logger.info(
-              "ui_server",
-              `account profile saved: account=${profile.username} steam=${saveSteamName || "-"} steamid=${saveSteamId || "-"} avatar=${saveAvatarUrl ? "yes" : "no"}`
-            );
-          }
-        }
-      } catch (saveErr) {
-        logger.warn(
-          "ui_server",
-          `account profile save skipped: account=${profile.username} message=${asString(saveErr && saveErr.message ? saveErr.message : saveErr)}`
-        );
-      }
-      logger.info(
-        "ui_server",
-        `account profile: account=${profile.username} steamid=${profile.steam_id64 || "-"} avatar=${profile.avatar_url_full ? "yes" : "no"} source=${profile.avatar_source}`
-      );
-      writeJson(res, 200, {ok: true, profile});
-    } catch (err) {
-      const message = asString(err && err.message ? err.message : err);
-      logger.warn("ui_server", `account profile failed: account=${username || "(active)"} message=${message || "-"}`);
-      const status = /account not found|password missing|password required when no refresh_token|username is required/i.test(message)
-        ? 400
-        : 500;
-      writeJson(res, status, {ok: false, message});
-    }
-    return true;
-  }
-
   if (pathname === "/api/ui-state" && req.method === "GET") {
     const uiState = new UiStateStore();
     writeJson(res, 200, {
@@ -589,27 +367,6 @@ async function handleApi(req, res, urlObj) {
     const uiState = new UiStateStore();
     uiState.setLastSelected(username);
     writeJson(res, 200, {ok: true, last_selected_username: uiState.getLastSelected()});
-    return true;
-  }
-
-  if (pathname === "/api/ui-state/craft-assist-presets" && req.method === "GET") {
-    const uiState = new UiStateStore();
-    writeJson(res, 200, {
-      ok: true,
-      presets: uiState.getCraftAssistPresets()
-    });
-    return true;
-  }
-
-  if (pathname === "/api/ui-state/craft-assist-presets" && req.method === "POST") {
-    const body = await readJsonBody(req);
-    const presets = Array.isArray(body && body.presets) ? body.presets : [];
-    const uiState = new UiStateStore();
-    uiState.setCraftAssistPresets(presets);
-    writeJson(res, 200, {
-      ok: true,
-      presets: uiState.getCraftAssistPresets()
-    });
     return true;
   }
 
@@ -657,39 +414,11 @@ async function handleApi(req, res, urlObj) {
 
       const accountStore = new AccountStore();
       const existed = accountStore.get(username);
-      const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
-
       accountStore.upsert({
         username,
         password,
-        remark: finalRemark,
-        steamName: existed ? existed.steam_name : "",
-        steamId: existed ? existed.steam_id : "",
-        avatarUrl: existed ? existed.avatar_url : ""
+        remark: asString(body.remark).trim() || (existed ? existed.remark : username)
       });
-
-      let profile = null;
-      try {
-        profile = await resolveAccountProfile({username, password});
-      } catch (profileErr) {
-        logger.warn(
-          "ui_server",
-          `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`
-        );
-      }
-      if (profile) {
-        const nextSteamName = asString(profile.persona_name || "").trim();
-        const nextSteamId = asString(profile.steam_id64 || "").trim();
-        const nextAvatarUrl = pickProfileAvatarUrl(profile);
-        accountStore.upsert({
-          username,
-          password,
-          remark: finalRemark,
-          steamName: nextSteamName || (existed ? existed.steam_name : ""),
-          steamId: nextSteamId || (existed ? existed.steam_id : ""),
-          avatarUrl: nextAvatarUrl || (existed ? existed.avatar_url : "")
-        });
-      }
 
       const uiState = new UiStateStore();
       uiState.setLastSelected(username);
@@ -716,7 +445,7 @@ async function handleApi(req, res, urlObj) {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const password = asString(body.password).trim();
-    const remark = asString(body.remark || "").trim();
+    const remark = asString(body.remark || username).trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
@@ -730,7 +459,7 @@ async function handleApi(req, res, urlObj) {
       writeJson(res, 400, {ok: false, message: "password is required"});
       return true;
     }
-    const finalRemark = remark || asString(existed && existed.remark ? existed.remark : "").trim();
+    const finalRemark = remark || asString(existed && existed.remark ? existed.remark : username).trim() || username;
     store.upsert({username, password: finalPassword, remark: finalRemark});
     const uiState = new UiStateStore();
     uiState.setLastSelected(username);
@@ -752,7 +481,7 @@ async function handleApi(req, res, urlObj) {
     }
 
     const store = new AccountStore();
-    const ok = store.updateRemark(username, remark);
+    const ok = store.updateRemark(username, remark || username);
     if (!ok) {
       writeJson(res, 404, {ok: false, message: `account not found: ${username}`});
       return true;
@@ -959,8 +688,6 @@ async function handleApi(req, res, urlObj) {
       const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
       const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
       const hasRecipes = Array.isArray(body.recipes) && body.recipes.length > 0;
-      const recipeCount = hasRecipes ? body.recipes.length : (Array.isArray(body.item_ids) && body.item_ids.length ? 1 : 0);
-      logger.info("ui_server", `craft request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0}`);
       const payload = hasRecipes
         ? await craftService.runTradeUpBatch({
           username,
@@ -974,10 +701,6 @@ async function handleApi(req, res, urlObj) {
           itemIds: body.item_ids,
           allowCooling
         });
-      logger.info(
-        "ui_server",
-        `craft success: account=${username} recipes=${toInt(payload && payload.recipe_count, 0)} steps=${Array.isArray(payload && payload.steps) ? payload.steps.length : 0} gained=${Array.isArray(payload && payload.gained_ids) ? payload.gained_ids.length : 0}`
-      );
       writeJson(res, 200, {
         ok: true,
         ...payload,
@@ -986,10 +709,6 @@ async function handleApi(req, res, urlObj) {
     } catch (err) {
       if (err && err.craft_payload) {
         const payload = err.craft_payload;
-        logger.warn(
-          "ui_server",
-          `craft partial: account=${username} completed=${Array.isArray(payload && payload.completed_steps) ? payload.completed_steps.length : 0} failed_step=${toInt(payload && payload.failed_step, 0)} msg=${asString(err && err.message ? err.message : err)}`
-        );
         writeJson(res, 409, {
           ok: false,
           ...payload,
@@ -999,7 +718,6 @@ async function handleApi(req, res, urlObj) {
         return true;
       }
       const status = err && err.code === "bad_request" ? 400 : 500;
-      logger.warn("ui_server", `craft failed: account=${username} status=${status} msg=${asString(err && err.message ? err.message : err)}`);
       writeJson(res, status, {
         ok: false,
         message: asString(err && err.message ? err.message : err)

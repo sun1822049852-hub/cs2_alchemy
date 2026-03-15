@@ -1,16 +1,19 @@
 ﻿const GlobalOffensive = require("globaloffensive");
+const fs = require("fs");
 const {AccountStore} = require("../accountStore");
 const {TokenStore} = require("../tokenStore");
 const {UiStateStore} = require("../uiStateStore");
 const {SchemaStore} = require("../schemaStore");
 const {parseInventory, decodeCasketId} = require("../inventoryParser");
 const {saveProcessedSnapshot} = require("../snapshotStore");
+const {fillMissingWearBounds} = require("../skinMetaStore");
 const {preloadComponentContents} = require("../componentLoader");
 const {STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("../constants");
 const {asString, nowString, toInt, sleep, withTimeout} = require("../utils");
 
 const NOTIFICATION = GlobalOffensive.ItemCustomizationNotification || {};
 const ACTION_TEXT = {deposit: "存入", withdraw: "取出"};
+const MAIN_INVENTORY_CAPACITY = 1000;
 
 const HARD_BLOCKED_MARKET_HASHES = new Set([
   "global offensive badge",
@@ -357,6 +360,56 @@ function ensureCanOperateItemByRules(row, targetComponentId) {
   return {ok: true, reason: ""};
 }
 
+function rowWearValueForSort(row) {
+  const wear = Number(row && row.float_value);
+  return Number.isFinite(wear) ? wear : Number.POSITIVE_INFINITY;
+}
+
+function compareRowsByWearAsc(a, b) {
+  const wa = rowWearValueForSort(a);
+  const wb = rowWearValueForSort(b);
+  if (wa !== wb) return wa - wb;
+  return toInt(a && a.asset_id, 0) - toInt(b && b.asset_id, 0);
+}
+
+function buildWithdrawCapacityContext({rows, componentId, requestedItemIds}) {
+  const componentKey = asString(componentId).trim();
+  const list = Array.isArray(rows) ? rows : [];
+  const requestedIds = new Set((Array.isArray(requestedItemIds) ? requestedItemIds : []).map((id) => asString(id).trim()).filter(Boolean));
+
+  const mainRows = list.filter((row) => !asString(row && row.casket_id || "").trim());
+  const hiddenCount = mainRows.filter((row) => asString(row && row.hidden_reason || "").trim()).length;
+  const coolingCount = mainRows.filter((row) => isCoolingRow(row)).length;
+  const occupiedSlots = Math.max(0, mainRows.length - hiddenCount - coolingCount);
+  const freeSlots = Math.max(0, MAIN_INVENTORY_CAPACITY - occupiedSlots);
+
+  const requestedRowsInComponent = list
+    .filter((row) =>
+      asString(row && row.casket_id || "").trim() === componentKey &&
+      requestedIds.has(asString(row && row.asset_id || "").trim())
+    )
+    .sort(compareRowsByWearAsc);
+
+  const allowedIds = requestedRowsInComponent
+    .slice(0, freeSlots)
+    .map((row) => asString(row && row.asset_id || "").trim())
+    .filter(Boolean);
+  const clippedIds = requestedRowsInComponent
+    .slice(freeSlots)
+    .map((row) => asString(row && row.asset_id || "").trim())
+    .filter(Boolean);
+
+  return {
+    capacity: MAIN_INVENTORY_CAPACITY,
+    occupiedSlots,
+    freeSlots,
+    hiddenCount,
+    coolingCount,
+    allowedSet: new Set(allowedIds),
+    clippedSet: new Set(clippedIds)
+  };
+}
+
 function createComponentOpsService({sessionPool, logger}) {
   if (!sessionPool) throw new Error("sessionPool is required");
 
@@ -448,6 +501,63 @@ function createComponentOpsService({sessionPool, logger}) {
     return summary;
   }
 
+  function readRowsFromProcessedSnapshot(snapshotPath) {
+    const full = asString(snapshotPath).trim();
+    if (!full || !fs.existsSync(full)) {
+      return [];
+    }
+    try {
+      const text = fs.readFileSync(full, "utf8");
+      const payload = JSON.parse(text);
+      const rows = Array.isArray(payload && payload.items) ? payload.items : [];
+      return fillMissingWearBounds(rows);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function sortRowsByAssetId(rows) {
+    rows.sort((a, b) => toInt(a && a.asset_id, 0) - toInt(b && b.asset_id, 0));
+    return rows;
+  }
+
+  function isAffectedRow(row, affectedComponentIds, affectedItemIds) {
+    const assetId = asString(row && row.asset_id || "").trim();
+    const casketId = asString(row && row.casket_id || "").trim();
+    if (assetId && affectedItemIds.has(assetId)) {
+      return true;
+    }
+    if (casketId && affectedComponentIds.has(casketId)) {
+      return true;
+    }
+    if (assetId && affectedComponentIds.has(assetId)) {
+      return true;
+    }
+    return false;
+  }
+
+  function mergeRowsWithPreviousSnapshot({accountName, currentRows, affectedComponentIds, affectedItemIds, logger}) {
+    const uiState = new UiStateStore();
+    const accountCache = uiState.getAccount(accountName);
+    const snapshotPath = asString(accountCache && accountCache.snapshot_path ? accountCache.snapshot_path : "").trim();
+    const prevRows = readRowsFromProcessedSnapshot(snapshotPath);
+    if (!prevRows.length) {
+      return null;
+    }
+    const preserved = prevRows.filter((row) => !isAffectedRow(row, affectedComponentIds, affectedItemIds));
+    const patched = (Array.isArray(currentRows) ? currentRows : []).filter((row) =>
+      isAffectedRow(row, affectedComponentIds, affectedItemIds)
+    );
+    const merged = sortRowsByAssetId([...preserved, ...patched]);
+    if (logger) {
+      logger.info(
+        "component_ops",
+        `snapshot merge: base=${prevRows.length} preserved=${preserved.length} patched=${patched.length} merged=${merged.length}`
+      );
+    }
+    return merged;
+  }
+
   async function listDepositCandidates({username, password, componentId, includeExcluded = false}) {
     const componentKey = asString(componentId).trim();
     if (!componentKey || !/^\d+$/.test(componentKey)) throw new Error("component_id 无效");
@@ -508,8 +618,9 @@ function createComponentOpsService({sessionPool, logger}) {
     const opAction = action === "withdraw" ? "withdraw" : "deposit";
     const componentKey = asString(componentId).trim();
     if (!componentKey || !/^\d+$/.test(componentKey)) throw new Error("component_id 无效");
-    const items = normalizeItemIds(itemIds);
-    if (!items.length) throw new Error("item_ids 不能为空");
+    const requestedItems = normalizeItemIds(itemIds);
+    if (!requestedItems.length) throw new Error("item_ids 不能为空");
+    const totalRequested = requestedItems.length;
     const progressCb = typeof onProgress === "function" ? onProgress : null;
 
     const {accountName, csgo} = await acquireContext({username, password});
@@ -522,240 +633,7 @@ function createComponentOpsService({sessionPool, logger}) {
             account: accountName,
             action: opAction,
             component_id: componentKey,
-            total: items.length,
-            ...payload
-          });
-        } catch (_) {
-          // ignore progress callback errors
-        }
-      }
-
-      const schemaStore = new SchemaStore();
-      await ensureComponentItemsLoaded(csgo, componentKey);
-      let rows = await makeParsedRowsWithComponentPreload(csgo, schemaStore, logger);
-      const componentItem = getInventoryItem(csgo, componentKey);
-      if (!componentItem || toInt(componentItem.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) {
-        throw new Error(`component not found: ${componentKey}`);
-      }
-
-      let depositContext = null;
-      if (opAction === "deposit") {
-        depositContext = buildDepositCandidateContext({rows, componentId: componentKey});
-      }
-
-      const successIds = [];
-      const failed = [];
-      let remainFreeSlots = depositContext ? depositContext.freeSlots : 0;
-      let processed = 0;
-
-      emitProgress({
-        phase: "start",
-        processed,
-        success: 0,
-        failed: 0
-      });
-
-      for (const itemId of items) {
-        const item = getInventoryItem(csgo, itemId);
-        if (!item) {
-          failed.push({item_id: itemId, reason: "物品不存在或未加载"});
-          processed += 1;
-          emitProgress({
-            phase: "item",
-            processed,
-            success: successIds.length,
-            failed: failed.length,
-            item_id: itemId,
-            item_status: "failed",
-            reason: "item_missing"
-          });
-          continue;
-        }
-
-        if (opAction === "deposit") {
-          if (remainFreeSlots <= 0) {
-            failed.push({item_id: itemId, reason: "组件空间已满"});
-            processed += 1;
-            emitProgress({
-              phase: "item",
-              processed,
-              success: successIds.length,
-              failed: failed.length,
-              item_id: itemId,
-              item_status: "failed",
-              reason: "component_full"
-            });
-            continue;
-          }
-          if (!depositContext.candidateSet.has(itemId)) {
-            failed.push({item_id: itemId, reason: "不满足可存入规则"});
-            processed += 1;
-            emitProgress({
-              phase: "item",
-              processed,
-              success: successIds.length,
-              failed: failed.length,
-              item_id: itemId,
-              item_status: "failed",
-              reason: "rule_blocked"
-            });
-            continue;
-          }
-
-          const sourceCasketId = getItemCasketId(item);
-          try {
-            if (sourceCasketId && sourceCasketId !== componentKey) {
-              await waitForCasketMove({
-                csgo,
-                action: "withdraw",
-                componentId: sourceCasketId,
-                itemId
-              });
-              await sleep(80);
-            }
-
-            await waitForCasketMove({
-              csgo,
-              action: "deposit",
-              componentId: componentKey,
-              itemId
-            });
-            successIds.push(itemId);
-            remainFreeSlots = Math.max(0, remainFreeSlots - 1);
-            processed += 1;
-            emitProgress({
-              phase: "item",
-              processed,
-              success: successIds.length,
-              failed: failed.length,
-              item_id: itemId,
-              item_status: "success"
-            });
-          } catch (err) {
-            const reason = asString(err && err.message ? err.message : err) || "未知错误";
-            failed.push({item_id: itemId, reason});
-            processed += 1;
-            emitProgress({
-              phase: "item",
-              processed,
-              success: successIds.length,
-              failed: failed.length,
-              item_id: itemId,
-              item_status: "failed",
-              reason
-            });
-          }
-          await sleep(80);
-          continue;
-        }
-
-        const casketId = getItemCasketId(item);
-        if (casketId !== componentKey) {
-          failed.push({item_id: itemId, reason: "物品不在当前组件内"});
-          processed += 1;
-          emitProgress({
-            phase: "item",
-            processed,
-            success: successIds.length,
-            failed: failed.length,
-            item_id: itemId,
-            item_status: "failed",
-            reason: "not_in_component"
-          });
-          continue;
-        }
-
-        try {
-          await waitForCasketMove({
-            csgo,
-            action: "withdraw",
-            componentId: componentKey,
-            itemId
-          });
-          successIds.push(itemId);
-          processed += 1;
-          emitProgress({
-            phase: "item",
-            processed,
-            success: successIds.length,
-            failed: failed.length,
-            item_id: itemId,
-            item_status: "success"
-          });
-        } catch (err) {
-          const reason = asString(err && err.message ? err.message : err) || "未知错误";
-          failed.push({item_id: itemId, reason});
-          processed += 1;
-          emitProgress({
-            phase: "item",
-            processed,
-            success: successIds.length,
-            failed: failed.length,
-            item_id: itemId,
-            item_status: "failed",
-            reason
-          });
-        }
-        await sleep(80);
-      }
-
-      const finalRows = await makeParsedRowsWithComponentPreload(csgo, schemaStore, logger);
-      const snapshot = saveRowsSnapshot({accountName, rows: finalRows});
-
-      const actionText = ACTION_TEXT[opAction] || "组件操作";
-      const message = `${actionText}完成：成功${successIds.length}，失败${failed.length}`;
-      if (logger) {
-        logger.info(
-          "component_ops",
-          `${opAction} done: account=${accountName} component=${componentKey} success=${successIds.length} failed=${failed.length}`
-        );
-      }
-
-      emitProgress({
-        phase: "done",
-        processed: items.length,
-        success: successIds.length,
-        failed: failed.length
-      });
-
-      return {
-        ok: true,
-        account: accountName,
-        fetch_time: snapshot.fetchTime,
-        snapshot_path: snapshot.snapshotPath,
-        rows: finalRows,
-        component: buildComponentSummary(finalRows),
-        message,
-        op: {
-          action: opAction,
-          component_id: componentKey,
-          requested: items.length,
-          success_ids: successIds,
-          failed
-        }
-      };
-    });
-  }
-
-  async function runMove({action, username, password, componentId, itemIds, onProgress}) {
-    const opAction = action === "withdraw" ? "withdraw" : "deposit";
-    const componentKey = asString(componentId).trim();
-    if (!componentKey || !/^\d+$/.test(componentKey)) throw new Error("component_id 无效");
-    const items = normalizeItemIds(itemIds);
-    if (!items.length) throw new Error("item_ids 不能为空");
-    const progressCb = typeof onProgress === "function" ? onProgress : null;
-
-    const {accountName, csgo} = await acquireContext({username, password});
-
-    return withAccountLock(accountName, async () => {
-      function emitProgress(payload) {
-        if (!progressCb) return;
-        try {
-          progressCb({
-            account: accountName,
-            action: opAction,
-            component_id: componentKey,
-            total: items.length,
+            total: totalRequested,
             ...payload
           });
         } catch (_) {
@@ -768,17 +646,31 @@ function createComponentOpsService({sessionPool, logger}) {
       if (!componentItem || toInt(componentItem.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) {
         throw new Error(`component not found: ${componentKey}`);
       }
+      if (opAction === "withdraw") {
+        await ensureComponentItemsLoaded(csgo, componentKey);
+      }
 
       let depositContext = null;
+      let withdrawCapacityContext = null;
       if (opAction === "deposit") {
         const rows = await buildRowsForSnapshot(csgo, schemaStore, logger, {forceComponentPreload: false});
         depositContext = buildDepositCandidateContext({rows, componentId: componentKey});
+      } else {
+        const rows = makeParsedRows(csgo, schemaStore);
+        withdrawCapacityContext = buildWithdrawCapacityContext({
+          rows,
+          componentId: componentKey,
+          requestedItemIds: requestedItems
+        });
       }
 
       const successIds = [];
       const failed = [];
       let remainFreeSlots = depositContext ? depositContext.freeSlots : 0;
       let processed = 0;
+      let withdrawReloadAttempted = false;
+      const touchedComponentIds = new Set([componentKey]);
+      const clippedByCapacityCount = withdrawCapacityContext ? withdrawCapacityContext.clippedSet.size : 0;
 
       emitProgress({
         phase: "start",
@@ -787,8 +679,34 @@ function createComponentOpsService({sessionPool, logger}) {
         failed: 0
       });
 
-      for (const itemId of items) {
-        const item = getInventoryItem(csgo, itemId);
+      for (const itemId of requestedItems) {
+        if (opAction === "withdraw" && withdrawCapacityContext && withdrawCapacityContext.clippedSet.has(itemId)) {
+          failed.push({
+            item_id: itemId,
+            reason: `主库存空间不足（服务端预裁剪，仅允许前${withdrawCapacityContext.freeSlots}件）`
+          });
+          processed += 1;
+          emitProgress({
+            phase: "item",
+            processed,
+            success: successIds.length,
+            failed: failed.length,
+            item_id: itemId,
+            item_status: "failed",
+            reason: "main_inventory_capacity_clip"
+          });
+          continue;
+        }
+        let item = getInventoryItem(csgo, itemId);
+        if (!item && opAction === "withdraw" && !withdrawReloadAttempted) {
+          withdrawReloadAttempted = true;
+          try {
+            await ensureComponentItemsLoaded(csgo, componentKey);
+            item = getInventoryItem(csgo, itemId);
+          } catch (_) {
+            // ignore fallback preload errors
+          }
+        }
         if (!item) {
           failed.push({item_id: itemId, reason: "物品不存在或未加载"});
           processed += 1;
@@ -835,6 +753,9 @@ function createComponentOpsService({sessionPool, logger}) {
           }
 
           const sourceCasketId = getItemCasketId(item);
+          if (sourceCasketId && sourceCasketId !== componentKey) {
+            touchedComponentIds.add(sourceCasketId);
+          }
           try {
             if (sourceCasketId && sourceCasketId !== componentKey) {
               await waitForCasketMove({
@@ -931,23 +852,47 @@ function createComponentOpsService({sessionPool, logger}) {
         await sleep(80);
       }
 
-      const finalRows = await buildRowsForSnapshot(csgo, schemaStore, logger, {forceComponentPreload: false});
+      for (const cid of touchedComponentIds) {
+        try {
+          await ensureComponentItemsLoaded(csgo, cid);
+        } catch (err) {
+          if (logger) {
+            logger.warn(
+              "component_ops",
+              `post-op component reload failed: id=${cid} err=${asString(err && err.message ? err.message : err)}`
+            );
+          }
+        }
+      }
+
+      const currentRows = makeParsedRows(csgo, schemaStore);
+      const affectedComponentIds = new Set(touchedComponentIds);
+      const affectedItemIds = new Set(requestedItems.map((id) => asString(id).trim()).filter(Boolean));
+      const mergedRows = mergeRowsWithPreviousSnapshot({
+        accountName,
+        currentRows,
+        affectedComponentIds,
+        affectedItemIds,
+        logger
+      });
+      const finalRows = mergedRows || (await buildRowsForSnapshot(csgo, schemaStore, logger, {forceComponentPreload: false}));
       const snapshot = saveRowsSnapshot({accountName, rows: finalRows});
 
       const actionText = ACTION_TEXT[opAction] || "组件操作";
       const firstFailed = failed.length ? `${failed[0].item_id}:${failed[0].reason}` : "";
       const reasonSummary = summarizeFailedReasons(failed);
-      const message = `${actionText}完成：成功${successIds.length}，失败${failed.length}${firstFailed ? `，首个失败 ${firstFailed}` : ""}`;
+      const clipTail = clippedByCapacityCount > 0 ? `，服务端预裁剪${clippedByCapacityCount}件` : "";
+      const message = `${actionText}完成：成功${successIds.length}，失败${failed.length}${clipTail}${firstFailed ? `，首个失败 ${firstFailed}` : ""}`;
       if (logger) {
         logger.info(
           "component_ops",
-          `${opAction} done: account=${accountName} component=${componentKey} requested=${items.length} selected=${previewIds(items)} success=${successIds.length} failed=${failed.length} first_failed=${firstFailed || "-"} failed_reasons=${JSON.stringify(reasonSummary)}`
+          `${opAction} done: account=${accountName} component=${componentKey} requested=${totalRequested} selected=${previewIds(requestedItems)} success=${successIds.length} failed=${failed.length} clipped=${clippedByCapacityCount} first_failed=${firstFailed || "-"} failed_reasons=${JSON.stringify(reasonSummary)}`
         );
       }
 
       emitProgress({
         phase: "done",
-        processed: items.length,
+        processed: totalRequested,
         success: successIds.length,
         failed: failed.length
       });
@@ -963,7 +908,8 @@ function createComponentOpsService({sessionPool, logger}) {
         op: {
           action: opAction,
           component_id: componentKey,
-          requested: items.length,
+          requested: totalRequested,
+          clipped_count: clippedByCapacityCount,
           success_ids: successIds,
           failed
         }

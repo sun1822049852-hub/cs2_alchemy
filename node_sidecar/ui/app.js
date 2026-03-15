@@ -2,22 +2,35 @@
 const QUALITY_MAP = {1: "Genuine", 4: "Normal", 9: "StatTrak", 11: "Souvenir"};
 const RARITY_VALUES = Object.keys(RARITY_MAP).map(Number).sort((a, b) => a - b).map((k) => RARITY_MAP[k]);
 const STORAGE_UNIT_CAPACITY = 1000;
+const MAIN_INVENTORY_CAPACITY = 1000;
 const STORAGE_UNIT_DEF_INDEX = 1201;
+const WEAR_INPUT_DECIMALS = 6;
+const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
+const WEAR_SUFFIX_RANGES = [
+  {keys: ["崭新出厂", "崭新", "factory new", "factorynew"], min: 0, max: 0.07},
+  {keys: ["略有磨损", "略磨", "minimal wear", "minimalwear"], min: 0.07, max: 0.15},
+  {keys: ["久经沙场", "久经", "field tested", "field-tested", "fieldtested"], min: 0.15, max: 0.38},
+  {keys: ["破损不堪", "破损", "well worn", "well-worn", "wellworn"], min: 0.38, max: 0.45},
+  {keys: ["战痕累累", "战痕", "battle scarred", "battle-scarred", "battlescarred"], min: 0.45, max: 1}
+];
 
 const state = {
   currentPage: "accountPage", accounts: [], activeAccount: "", accountSelectedUsername: "",
-  currentAccountUsername: "", connectedUsername: "", rows: [], mode: "grouped", includeHidden: false, searchText: "",
+  currentAccountUsername: "", connectedUsername: "", rows: [], mode: "grouped", searchText: "",
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
-  wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc",
+  wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
-  craftSelectedItemIds: new Set(), craftBusy: false, craftStatusText: "", craftIncludeCooling: false, craftShowSeed: false, craftSettingsOpen: false, craftRecipeQueue: [], craftRightPanelWidth: 360,
+  craftSelectedItemIds: new Set(), craftBusy: false, craftStatusText: "", craftIncludeCooling: false, craftShowSeed: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftRightPanelWidth: 360,
+  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false,
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
   targetDrawerOpen: false, targetComponentChoices: [], targetComponentSelectedId: "", targetComponentExcludeId: "",
   component: {summary_map: {}, item_map: {}}, snapshotPath: "", fetchTime: "", refreshing: false,
+  snapshotDirty: false, snapshotDirtyReason: "", lastDirtyFallbackTs: 0, dirtyFallbackCooldownMs: 60 * 1000,
   refreshPhaseText: "", lastRefreshClickTs: 0, emptyHint: "请选用一个账号", filterPanel: "wear",
   rowsVersion: 0, filterCacheKey: "", filterCacheAllRows: [], filterCacheFilteredRows: [],
-  groupCacheKey: "", groupCacheRows: [], lastPersistedSelected: ""
+  groupCacheKey: "", groupCacheRows: [], lastPersistedSelected: "",
+  profileHydratingUsernames: new Set(), profileHydratedUsernames: new Set()
 };
 
 const ui = {
@@ -25,12 +38,12 @@ const ui = {
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
   loginSaveBtn: document.getElementById("loginSaveBtn"), clearAccountBtn: document.getElementById("clearAccountBtn"), accountStatus: document.getElementById("accountStatus"), savedAccountsWrap: document.getElementById("savedAccountsWrap"),
-  currentAccountText: document.getElementById("currentAccountText"), fetchTimeText: document.getElementById("fetchTimeText"), statusText: document.getElementById("statusText"),
-  accountSelect: document.getElementById("accountSelect"), useAccountBtn: document.getElementById("useAccountBtn"), refreshBtn: document.getElementById("refreshBtn"), summaryText: document.getElementById("summaryText"),
+  fetchTimeText: document.getElementById("fetchTimeText"), statusText: document.getElementById("statusText"),
+  accountSelect: document.getElementById("accountSelect"), refreshBtn: document.getElementById("refreshBtn"), disconnectBtn: document.getElementById("disconnectBtn"), summaryText: document.getElementById("summaryText"),
   craftTopFetchTimeText: document.getElementById("craftTopFetchTimeText"), craftTopStatusText: document.getElementById("craftTopStatusText"),
-  craftAccountSelect: document.getElementById("craftAccountSelect"), craftUseAccountBtn: document.getElementById("craftUseAccountBtn"), craftRefreshBtn: document.getElementById("craftRefreshBtn"),
+  craftAccountSelect: document.getElementById("craftAccountSelect"), craftRefreshBtn: document.getElementById("craftRefreshBtn"), craftDisconnectBtn: document.getElementById("craftDisconnectBtn"),
   modeToggleBtn: document.getElementById("modeToggleBtn"), modeToggleGlyph: document.getElementById("modeToggleGlyph"),
-  includeHidden: document.getElementById("includeHidden"), searchInput: document.getElementById("searchInput"), toggleFilterBtn: document.getElementById("toggleFilterBtn"), filterDrawer: document.getElementById("filterDrawer"),
+  searchInput: document.getElementById("searchInput"), toggleFilterBtn: document.getElementById("toggleFilterBtn"), filterDrawer: document.getElementById("filterDrawer"),
   filterNavWear: document.getElementById("filterNavWear"), filterNavRarity: document.getElementById("filterNavRarity"), filterNavCollection: document.getElementById("filterNavCollection"),
   filterPanelWear: document.getElementById("filterPanelWear"), filterPanelRarity: document.getElementById("filterPanelRarity"), filterPanelCollection: document.getElementById("filterPanelCollection"),
   wearMin: document.getElementById("wearMin"), wearMax: document.getElementById("wearMax"), wearHint: document.getElementById("wearHint"),
@@ -40,6 +53,9 @@ const ui = {
   componentPanel: document.getElementById("componentPanel"), componentSelect: document.getElementById("componentSelect"), componentHint: document.getElementById("componentHint"),
   showComponentItemsWrap: document.getElementById("showComponentItemsWrap"), showComponentItems: document.getElementById("showComponentItems"),
   componentDepositBtn: document.getElementById("componentDepositBtn"), componentWithdrawBtn: document.getElementById("componentWithdrawBtn"),
+  componentCraftSettingsBtn: document.getElementById("componentCraftSettingsBtn"), componentCraftSettingsPanel: document.getElementById("componentCraftSettingsPanel"),
+  componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
+  componentCraftCoolingHint: document.getElementById("componentCraftCoolingHint"),
   componentTaskFloat: document.getElementById("componentTaskFloat"), componentTaskQueueList: document.getElementById("componentTaskQueueList"),
   componentTaskCancelBtn: document.getElementById("componentTaskCancelBtn"), componentTaskInfo: document.getElementById("componentTaskInfo"),
   targetComponentDrawer: document.getElementById("targetComponentDrawer"), targetComponentDrawerClose: document.getElementById("targetComponentDrawerClose"),
@@ -48,13 +64,24 @@ const ui = {
   remarkModal: document.getElementById("remarkModal"), remarkModalTitle: document.getElementById("remarkModalTitle"), remarkModalInput: document.getElementById("remarkModalInput"),
   remarkModalClose: document.getElementById("remarkModalClose"), remarkModalSaveBtn: document.getElementById("remarkModalSaveBtn"), remarkModalCancelBtn: document.getElementById("remarkModalCancelBtn"),
   snapshotPath: document.getElementById("snapshotPath"), listWrap: document.getElementById("listWrap"),
-  craftAccountText: document.getElementById("craftAccountText"), craftConnectText: document.getElementById("craftConnectText"),
+  craftConnectText: document.getElementById("craftConnectText"),
   craftSelectedText: document.getElementById("craftSelectedText"), craftRecipeText: document.getElementById("craftRecipeText"),
   craftStatusText: document.getElementById("craftStatusText"), craftCoolingHint: document.getElementById("craftCoolingHint"),
-  craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
-  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"),
+  craftLeftPanel: document.getElementById("craftLeftPanel"), craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
+  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
   craftAddRecipeBtn: document.getElementById("craftAddRecipeBtn"), craftExecuteQueueBtn: document.getElementById("craftExecuteQueueBtn"),
   craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftQueueList: document.getElementById("craftQueueList"),
+  craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
+  craftAssistOverlayHandle: document.getElementById("craftAssistOverlayHandle"), craftAssistPanel: document.getElementById("craftAssistPanel"), craftAssistCloseBtn: document.getElementById("craftAssistCloseBtn"),
+  craftAssistTargetWear: document.getElementById("craftAssistTargetWear"),
+  craftAssistFilterModeRelative: document.getElementById("craftAssistFilterModeRelative"), craftAssistFilterModeAbsolute: document.getElementById("craftAssistFilterModeAbsolute"),
+  craftAssistApplyBtn: document.getElementById("craftAssistApplyBtn"),
+  craftAssistMainCount: document.getElementById("craftAssistMainCount"), craftAssistAuxCount: document.getElementById("craftAssistAuxCount"),
+  craftAssistSelectBox: document.getElementById("craftAssistSelectBox"), craftAssistSelectText: document.getElementById("craftAssistSelectText"), craftAssistContent: document.getElementById("craftAssistContent"), craftAssistSplitBar: document.getElementById("craftAssistSplitBar"),
+  craftAssistRoleSplit: document.getElementById("craftAssistRoleSplit"), craftAssistPicker: document.getElementById("craftAssistPicker"), craftAssistList: document.getElementById("craftAssistList"),
+  craftAssistPresetPanel: document.getElementById("craftAssistPresetPanel"), craftAssistPresetSaveBtn: document.getElementById("craftAssistPresetSaveBtn"), craftAssistPresetList: document.getElementById("craftAssistPresetList"),
+  craftAssistPresetModal: document.getElementById("craftAssistPresetModal"), craftAssistPresetModalInput: document.getElementById("craftAssistPresetModalInput"),
+  craftAssistPresetModalClose: document.getElementById("craftAssistPresetModalClose"), craftAssistPresetModalSaveBtn: document.getElementById("craftAssistPresetModalSaveBtn"), craftAssistPresetModalCancelBtn: document.getElementById("craftAssistPresetModalCancelBtn"),
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel")
 };
 
@@ -63,11 +90,23 @@ let inventoryEventSource = null;
 let inventoryEventUsername = "";
 let remarkModalResolver = null;
 let remarkModalAccount = "";
+let craftAssistPresetModalResolver = null;
 let targetDrawerDrag = {active: false, offsetX: 0, offsetY: 0};
 let craftSplitDrag = {active: false, startX: 0, startWidth: 360};
+let craftAssistOverlayDrag = {active: false, startY: 0, startHeight: 0};
+let craftAssistSplitDrag = {active: false, startX: 0, startWidth: 0};
 let lazyLoadTickPending = false;
 let lazyLoadAutoFillPending = false;
+let craftAssistPickerCloseTimer = null;
+let craftAssistPresetDraggingId = "";
+let errorToastNode = null;
+let errorToastTextNode = null;
+let errorToastHideTimer = null;
+let lastErrorToastText = "";
+let lastErrorToastTs = 0;
 const CRAFT_UI_PREFS_KEY = "craft_ui_prefs_v2";
+const CRAFT_ASSIST_PRESETS_KEY = "craft_assist_presets_v1";
+const ERROR_TOAST_DURATION_MS = 2800;
 
 async function api(path, options = {}) {
   const r = await fetch(path, {headers: {"Content-Type": "application/json"}, ...options});
@@ -89,6 +128,141 @@ function parseEventData(raw) {
   }
 }
 
+function markSnapshotDirty(reason = "") {
+  state.snapshotDirty = true;
+  state.snapshotDirtyReason = String(reason || "").trim();
+}
+
+function clearSnapshotDirty() {
+  state.snapshotDirty = false;
+  state.snapshotDirtyReason = "";
+}
+
+function normalizeItemIdList(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).map((x) => String(x || "").trim()).filter(Boolean)));
+}
+
+function buildComponentSummaryFromRows(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const itemMap = {};
+  const summaryMap = {};
+  for (const row of list) {
+    const cid = String(row && row.casket_id || "").trim();
+    if (!cid) continue;
+    if (!itemMap[cid]) itemMap[cid] = [];
+    itemMap[cid].push(row);
+  }
+  for (const row of list) {
+    if (Number(row && row.def_index || 0) !== STORAGE_UNIT_DEF_INDEX) continue;
+    const id = rowAssetId(row);
+    if (!id) continue;
+    const expected = Math.max(0, Number(row && row.casket_contained_item_count || 0) || 0);
+    const loaded = Math.max(Array.isArray(itemMap[id]) ? itemMap[id].length : 0, expected);
+    summaryMap[id] = {
+      component_id: id,
+      name: String(row && (row.alchemy_name || row.name) || `Component ${id}`),
+      expected_count: Math.max(STORAGE_UNIT_CAPACITY, expected),
+      loaded_count: loaded
+    };
+  }
+  return {summary_map: summaryMap, item_map: itemMap};
+}
+
+function applyComponentMoveDelta({
+  action,
+  componentId,
+  successIds,
+  successCount = 0,
+  snapshotPath = "",
+  fetchTime = ""
+}) {
+  const actionKey = String(action || "").trim();
+  if (actionKey !== "withdraw" && actionKey !== "deposit") {
+    return {ok: false, reason: "invalid_action", applied: 0};
+  }
+  const componentKey = String(componentId || "").trim();
+  if (!componentKey) {
+    return {ok: false, reason: "missing_component_id", applied: 0};
+  }
+  const ids = normalizeItemIdList(successIds);
+  const expectedSuccess = Math.max(0, Number(successCount || 0) || 0);
+  if (expectedSuccess > 0 && !ids.length) {
+    return {ok: false, reason: "missing_success_ids", applied: 0};
+  }
+  if (expectedSuccess > ids.length) {
+    return {ok: false, reason: "success_count_mismatch", applied: 0};
+  }
+  const nextFetchTime = String(fetchTime || "").trim();
+  if (!ids.length) {
+    if (nextFetchTime) state.fetchTime = nextFetchTime;
+    syncInventoryTop();
+    return {ok: true, reason: "", applied: 0};
+  }
+
+  const indexById = new Map();
+  state.rows.forEach((row, idx) => {
+    const id = rowAssetId(row);
+    if (id) indexById.set(id, idx);
+  });
+
+  const missing = [];
+  const nextRows = state.rows.map((row) => (row && typeof row === "object" ? {...row} : row));
+  let applied = 0;
+  for (const itemId of ids) {
+    const idx = indexById.get(itemId);
+    if (idx == null) {
+      missing.push(itemId);
+      continue;
+    }
+    const row = nextRows[idx];
+    if (!row || typeof row !== "object") {
+      missing.push(itemId);
+      continue;
+    }
+    if (actionKey === "withdraw") {
+      row.casket_id = "";
+      // 组件内行通常携带 attr#272/273 的隐藏标记，取出后需同步清除以便炼金候选即时可见。
+      row.hidden_reason = null;
+    } else {
+      row.casket_id = componentKey;
+    }
+    applied += 1;
+  }
+
+  if (missing.length) {
+    const preview = missing.slice(0, 3).join(",");
+    return {ok: false, reason: `missing_rows:${preview}`, applied};
+  }
+
+  const nextComponent = buildComponentSummaryFromRows(nextRows);
+  const keepSelectedIds = new Set(state.selectedComponentItemIds);
+  const nextSnapshotPath = String(snapshotPath || state.snapshotPath || "").trim();
+  setRows(nextRows, nextComponent, nextSnapshotPath, {keepSelectedIds});
+  if (nextFetchTime) state.fetchTime = nextFetchTime;
+  syncInventoryTop();
+  return {ok: true, reason: "", applied};
+}
+
+async function fallbackSnapshotForDirty(username, reason = "") {
+  markSnapshotDirty(reason);
+  const key = String(username || "").trim();
+  if (!key) return false;
+  const now = Date.now();
+  const cooldownMs = Math.max(0, Number(state.dirtyFallbackCooldownMs || 0) || 0);
+  const lastTs = Math.max(0, Number(state.lastDirtyFallbackTs || 0) || 0);
+  if (cooldownMs > 0 && now - lastTs < cooldownMs) {
+    return false;
+  }
+  state.lastDirtyFallbackTs = now;
+  try {
+    await loadSnapshotForAccount(key);
+    clearSnapshotDirty();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function clampCraftRightPanelWidth(width) {
   const min = 280;
   const maxByWindow = Math.max(min, Math.floor((window.innerWidth || 1600) * 0.7));
@@ -103,6 +277,7 @@ function applyCraftLayoutWidth() {
   state.craftRightPanelWidth = clampCraftRightPanelWidth(state.craftRightPanelWidth);
   ui.craftLayout.style.setProperty("--craft-right-width", `${state.craftRightPanelWidth}px`);
   updateCraftActionLayout();
+  applyCraftAssistOverlayHeight();
 }
 
 function updateCraftActionLayout() {
@@ -111,14 +286,116 @@ function updateCraftActionLayout() {
   ui.craftRightPanel.classList.toggle("compact-actions", width > 0 && width < 390);
 }
 
+function clampCraftAssistPresetWidth(width) {
+  const min = 220;
+  const contentWidth = Number(ui.craftAssistContent && ui.craftAssistContent.clientWidth || 0);
+  const effective = contentWidth > 0 ? Math.max(0, contentWidth - 8) : 0;
+  const auto = effective > 0 ? Math.round(effective * 0.28) : 240;
+  const maxByPanel = effective > 0 ? Math.max(min, Math.floor(effective * 0.62)) : 460;
+  const max = Math.min(520, maxByPanel);
+  const value = Number(width);
+  if (!Number.isFinite(value) || value <= 0) return Math.max(min, Math.min(auto, max));
+  return Math.max(min, Math.min(Math.round(value), max));
+}
+
+function applyCraftAssistPresetWidth() {
+  if (!ui.craftAssistContent) return;
+  state.craftAssistPresetWidth = clampCraftAssistPresetWidth(state.craftAssistPresetWidth);
+  ui.craftAssistContent.style.setProperty("--craft-assist-preset-width", `${state.craftAssistPresetWidth}px`);
+}
+
+function clampCraftAssistOverlayHeight(height) {
+  const min = 180;
+  const panelHeight = Number(ui.craftLeftPanel && ui.craftLeftPanel.clientHeight || 0);
+  const maxByPanel = panelHeight > 0 ? Math.max(min, panelHeight - 16) : 760;
+  const max = Math.min(760, maxByPanel);
+  const value = Number(height);
+  if (!Number.isFinite(value) || value <= 0) {
+    if (panelHeight > 0) {
+      const preferred = Math.round(panelHeight - 24);
+      return Math.max(min, Math.min(preferred, max));
+    }
+    return 560;
+  }
+  return Math.max(min, Math.min(Math.round(value), max));
+}
+
+function applyCraftAssistOverlayHeight() {
+  if (!ui.craftAssistOverlay) return;
+  state.craftAssistOverlayHeight = clampCraftAssistOverlayHeight(state.craftAssistOverlayHeight);
+  ui.craftAssistOverlay.style.setProperty("--craft-assist-overlay-height", `${state.craftAssistOverlayHeight}px`);
+  applyCraftAssistPresetWidth();
+}
+function expandCraftAssistOverlayToBottom() {
+  const panelHeight = Number(ui.craftLeftPanel && ui.craftLeftPanel.clientHeight || 0);
+  if (!(panelHeight > 0)) return;
+  state.craftAssistOverlayHeight = clampCraftAssistOverlayHeight(panelHeight - 24);
+}
+
+function startCraftAssistOverlayDrag(evt) {
+  if (evt.button !== 0) return;
+  if (isCraftAssistPresetEditing()) return;
+  if (!state.craftAssistOpen || !ui.craftAssistOverlayHandle || !ui.craftAssistOverlay) return;
+  craftAssistOverlayDrag.active = true;
+  craftAssistOverlayDrag.startY = evt.clientY;
+  craftAssistOverlayDrag.startHeight = clampCraftAssistOverlayHeight(state.craftAssistOverlayHeight);
+  document.body.classList.add("craft-assist-overlay-dragging");
+  evt.preventDefault();
+}
+
+function moveCraftAssistOverlayDrag(evt) {
+  if (!craftAssistOverlayDrag.active) return;
+  const deltaY = craftAssistOverlayDrag.startY - evt.clientY;
+  state.craftAssistOverlayHeight = clampCraftAssistOverlayHeight(craftAssistOverlayDrag.startHeight + deltaY);
+  applyCraftAssistOverlayHeight();
+}
+
+function stopCraftAssistOverlayDrag() {
+  if (!craftAssistOverlayDrag.active) return;
+  craftAssistOverlayDrag.active = false;
+  document.body.classList.remove("craft-assist-overlay-dragging");
+  saveCraftUiPrefs();
+}
+
+function startCraftAssistSplitDrag(evt) {
+  if (evt.button !== 0) return;
+  if (isCraftAssistPresetEditing()) return;
+  if (!state.craftAssistOpen || !ui.craftAssistSplitBar || !ui.craftAssistContent) return;
+  craftAssistSplitDrag.active = true;
+  craftAssistSplitDrag.startX = evt.clientX;
+  craftAssistSplitDrag.startWidth = clampCraftAssistPresetWidth(state.craftAssistPresetWidth);
+  document.body.classList.add("craft-assist-split-dragging");
+  evt.preventDefault();
+}
+
+function moveCraftAssistSplitDrag(evt) {
+  if (!craftAssistSplitDrag.active) return;
+  const deltaX = evt.clientX - craftAssistSplitDrag.startX;
+  // 与配方预览分割条保持同方向：向左拖大右侧，向右拖小右侧。
+  state.craftAssistPresetWidth = clampCraftAssistPresetWidth(craftAssistSplitDrag.startWidth - deltaX);
+  applyCraftAssistPresetWidth();
+}
+
+function stopCraftAssistSplitDrag() {
+  if (!craftAssistSplitDrag.active) return;
+  craftAssistSplitDrag.active = false;
+  document.body.classList.remove("craft-assist-split-dragging");
+  saveCraftUiPrefs();
+}
+
 function saveCraftUiPrefs() {
   try {
+    const overlayHeight = Number(state.craftAssistOverlayHeight);
     localStorage.setItem(
       CRAFT_UI_PREFS_KEY,
       JSON.stringify({
         craft_include_cooling: !!state.craftIncludeCooling,
         craft_show_seed: !!state.craftShowSeed,
-        craft_right_width: Number(state.craftRightPanelWidth) || 360
+        craft_show_cooling_time: !!state.craftShowCoolingTime,
+        craft_assist_wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
+        craft_right_width: Number(state.craftRightPanelWidth) || 360,
+        craft_assist_overlay_height: Number.isFinite(overlayHeight) ? overlayHeight : 0,
+        craft_assist_preset_width: Number(state.craftAssistPresetWidth) || 240
       })
     );
   } catch (_) {
@@ -133,7 +410,17 @@ function loadCraftUiPrefs() {
     const prefs = JSON.parse(raw);
     if (typeof prefs.craft_include_cooling === "boolean") state.craftIncludeCooling = prefs.craft_include_cooling;
     if (typeof prefs.craft_show_seed === "boolean") state.craftShowSeed = prefs.craft_show_seed;
+    if (typeof prefs.craft_show_cooling_time === "boolean") state.craftShowCoolingTime = prefs.craft_show_cooling_time;
+    if (Number.isFinite(Number(prefs.craft_assist_wear_offset_pct))) {
+      state.craftAssistWearOffsetPct = normalizeCraftAssistWearOffsetPct(prefs.craft_assist_wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+    }
     if (Number.isFinite(Number(prefs.craft_right_width))) state.craftRightPanelWidth = Number(prefs.craft_right_width);
+    if (Number.isFinite(Number(prefs.craft_assist_overlay_height))) {
+      const savedOverlayHeight = Number(prefs.craft_assist_overlay_height);
+      // 兼容旧默认值 320：迁移为自动高度（贴近底部），减少中间空白。
+      state.craftAssistOverlayHeight = savedOverlayHeight === 320 ? 0 : savedOverlayHeight;
+    }
+    if (Number.isFinite(Number(prefs.craft_assist_preset_width))) state.craftAssistPresetWidth = Number(prefs.craft_assist_preset_width);
   } catch (_) {
     // ignore storage errors
   }
@@ -177,7 +464,7 @@ function closeRemarkModal(value = null) {
 
 function openRemarkModal(username, currentRemark = "") {
   const account = String(username || "").trim();
-  const initValue = String(currentRemark || account).trim() || account;
+  const initValue = String(currentRemark || "").trim();
   return new Promise((resolve) => {
     remarkModalResolver = resolve;
     remarkModalAccount = account;
@@ -188,6 +475,32 @@ function openRemarkModal(username, currentRemark = "") {
       if (ui.remarkModalInput) {
         ui.remarkModalInput.focus();
         ui.remarkModalInput.select();
+      }
+    });
+  });
+}
+
+function closeCraftAssistPresetModal(value = null) {
+  if (!ui.craftAssistPresetModal) return;
+  ui.craftAssistPresetModal.classList.add("hidden");
+  const resolver = craftAssistPresetModalResolver;
+  craftAssistPresetModalResolver = null;
+  if (typeof resolver === "function") {
+    resolver(value);
+  }
+}
+
+function openCraftAssistPresetModal(initialName = "") {
+  const initValue = String(initialName || "").trim();
+  if (!ui.craftAssistPresetModal) return Promise.resolve(initValue || null);
+  return new Promise((resolve) => {
+    craftAssistPresetModalResolver = resolve;
+    if (ui.craftAssistPresetModalInput) ui.craftAssistPresetModalInput.value = initValue;
+    ui.craftAssistPresetModal.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      if (ui.craftAssistPresetModalInput) {
+        ui.craftAssistPresetModalInput.focus();
+        ui.craftAssistPresetModalInput.select();
       }
     });
   });
@@ -395,18 +708,37 @@ function startInventoryEventStream(username) {
     const firstFailedItem = String(data.first_failed_item_id || "").trim();
     const firstFailedReason = String(data.first_failed_reason || "").trim();
     const doneMessage = String(data.message || "").trim();
+    const successIds = normalizeItemIdList(data.success_ids);
+    let fallbackTriggered = false;
     try {
-      await loadSnapshotForAccount(eventUsername);
+      const deltaResult = applyComponentMoveDelta({
+        action: String(data.action || "").trim(),
+        componentId: String(data.component_id || "").trim(),
+        successIds,
+        successCount: success,
+        snapshotPath: String(data.snapshot_path || "").trim(),
+        fetchTime: String(data.fetch_time || "").trim()
+      });
+      if (!deltaResult.ok) {
+        fallbackTriggered = await fallbackSnapshotForDirty(eventUsername, deltaResult.reason || "delta_apply_failed");
+      } else {
+        clearSnapshotDirty();
+      }
+    } catch (_) {
+      fallbackTriggered = await fallbackSnapshotForDirty(eventUsername, "delta_apply_exception");
+    }
+    try {
       await loadComponentTaskQueue();
     } catch (_) {
-      // ignore snapshot refresh errors in SSE path
+      // ignore queue refresh errors in SSE path
     }
+    const reconcileTag = fallbackTriggered ? "（已回退校准）" : (state.snapshotDirty ? "（本地脏标，等待校准）" : "");
     if (doneMessage) {
-      setSummary(doneMessage);
+      setSummary(`${doneMessage}${reconcileTag}`);
       return;
     }
     const tail = firstFailedReason ? `，首个失败 ${firstFailedItem || "-"}: ${firstFailedReason}` : "";
-    setSummary(`组件${action}完成：${requested}件（成功${success}，失败${failed}）${tail}`);
+    setSummary(`组件${action}完成：${requested}件（成功${success}，失败${failed}）${tail}${reconcileTag}`);
   });
 
   stream.addEventListener("component_move_failed", async (evt) => {
@@ -417,12 +749,15 @@ function startInventoryEventStream(username) {
     if (jobId) delete state.componentTaskProgressMap[jobId];
     const action = String(data.action || "").trim() === "withdraw" ? "取出" : "存入";
     const msg = String(data.message || "未知错误");
+    let fallbackTriggered = false;
+    fallbackTriggered = await fallbackSnapshotForDirty(eventUsername, "component_move_failed");
     try {
       await loadComponentTaskQueue();
     } catch (_) {
       // ignore queue refresh errors
     }
-    setSummary(`组件${action}失败：${msg}`);
+    const reconcileTag = fallbackTriggered ? "（已回退校准）" : (state.snapshotDirty ? "（本地脏标，等待校准）" : "");
+    setSummary(`组件${action}失败：${msg}${reconcileTag}`);
   });
 
   stream.onerror = () => {
@@ -430,18 +765,181 @@ function startInventoryEventStream(username) {
   };
 }
 
-function setSummary(text) { ui.summaryText.textContent = String(text || ""); }
-function setAccountStatus(text, isError = false) { ui.accountStatus.textContent = String(text || ""); ui.accountStatus.classList.toggle("error", !!isError); }
+function ensureErrorToastNode() {
+  if (errorToastNode && errorToastTextNode) return;
+  const node = document.createElement("div");
+  node.id = "globalErrorToast";
+  node.className = "error-toast";
+  node.setAttribute("role", "status");
+  node.setAttribute("aria-live", "assertive");
+  node.setAttribute("aria-atomic", "true");
+  const icon = document.createElement("span");
+  icon.className = "error-toast-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "X";
+  const text = document.createElement("span");
+  text.className = "error-toast-text";
+  node.append(icon, text);
+  document.body.append(node);
+  errorToastNode = node;
+  errorToastTextNode = text;
+}
+function showErrorToast(message) {
+  const msg = String(message || "").trim();
+  if (!msg) return;
+  const now = Date.now();
+  if (msg === lastErrorToastText && now - lastErrorToastTs < 900) return;
+  lastErrorToastText = msg;
+  lastErrorToastTs = now;
+  ensureErrorToastNode();
+  if (!errorToastNode || !errorToastTextNode) return;
+  errorToastTextNode.textContent = `错误：${msg}`;
+  errorToastNode.classList.remove("show");
+  // Force reflow so same message can replay animation.
+  void errorToastNode.offsetWidth;
+  errorToastNode.classList.add("show");
+  if (errorToastHideTimer != null) {
+    clearTimeout(errorToastHideTimer);
+    errorToastHideTimer = null;
+  }
+  errorToastHideTimer = setTimeout(() => {
+    if (errorToastNode) errorToastNode.classList.remove("show");
+    errorToastHideTimer = null;
+  }, ERROR_TOAST_DURATION_MS);
+}
+function isSummaryErrorMessage(text) {
+  const msg = String(text || "").trim();
+  if (!msg) return false;
+  // 成功播报里可能包含“失败0”，不应作为错误浮层。
+  if (/失败\s*0/.test(msg) || /成功\d+，失败0/.test(msg)) return false;
+  const patterns = [
+    /^请先/,
+    /^请选用/,
+    /失败[:：]/,
+    /错误/,
+    /无法/,
+    /不能/,
+    /已满/,
+    /不足/,
+    /不存在/,
+    /未连接/,
+    /中断/,
+    /不满足/,
+    /重复/,
+    /过于频繁/,
+    /空间已满/,
+    /暂无可执行/,
+    /暂无可用/,
+    /无可编辑/
+  ];
+  return patterns.some((pattern) => pattern.test(msg));
+}
+function setSummary(text, {isError = null} = {}) {
+  const msg = String(text || "");
+  if (ui.summaryText) ui.summaryText.textContent = msg;
+  const shouldToast = isError == null ? isSummaryErrorMessage(msg) : !!isError;
+  if (shouldToast && msg.trim()) showErrorToast(msg);
+}
+function setAccountStatus(text, isError = false) {
+  const msg = String(text || "");
+  ui.accountStatus.textContent = msg;
+  ui.accountStatus.classList.toggle("error", !!isError);
+  if (isError && msg.trim()) showErrorToast(msg);
+}
 function setRefreshPhase(text) { state.refreshPhaseText = String(text || "").trim(); syncInventoryTop(); }
 function clearRefreshPhase() { state.refreshPhaseText = ""; syncInventoryTop(); }
 const selectedAccount = () => state.accounts.find((x) => x.username === String(state.accountSelectedUsername || "").trim()) || null;
 const accountByUsername = (username) => state.accounts.find((x) => x.username === String(username || "").trim()) || null;
+function pickAvatarUrlFromProfile(profile) {
+  if (!profile || typeof profile !== "object") return "";
+  return String(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon || "").trim();
+}
+function mergeAccountIdentity(username, {steamName = "", steamId = "", avatarUrl = ""} = {}) {
+  const key = String(username || "").trim();
+  if (!key) return false;
+  const nextSteamName = String(steamName || "").trim();
+  const nextSteamId = String(steamId || "").trim();
+  const nextAvatarUrl = String(avatarUrl || "").trim();
+  let changed = false;
+  state.accounts = state.accounts.map((row) => {
+    if (String(row && row.username || "").trim() !== key) return row;
+    const currentSteamName = String(row && row.steam_name || "").trim();
+    const currentSteamId = String(row && row.steam_id || "").trim();
+    const currentAvatarUrl = String(row && row.avatar_url || "").trim();
+    const mergedSteamName = nextSteamName || currentSteamName;
+    const mergedSteamId = nextSteamId || currentSteamId;
+    const mergedAvatarUrl = nextAvatarUrl || currentAvatarUrl;
+    if (
+      mergedSteamName === currentSteamName &&
+      mergedSteamId === currentSteamId &&
+      mergedAvatarUrl === currentAvatarUrl
+    ) return row;
+    changed = true;
+    return {...row, steam_name: mergedSteamName, steam_id: mergedSteamId, avatar_url: mergedAvatarUrl};
+  });
+  return changed;
+}
+async function ensureAccountProfile(username, {force = false} = {}) {
+  const key = String(username || "").trim();
+  if (!key) return false;
+  if (state.profileHydratingUsernames.has(key)) return false;
+  const row = accountByUsername(key);
+  if (!row) return false;
+  const hasSteamName = Boolean(String(row.steam_name || "").trim());
+  const hasSteamId = Boolean(String(row.steam_id || "").trim());
+  const hasAvatar = Boolean(String(row.avatar_url || "").trim());
+  if (!force && state.profileHydratedUsernames.has(key)) return false;
+  if (!force && hasSteamName && hasSteamId && hasAvatar) {
+    state.profileHydratedUsernames.add(key);
+    return false;
+  }
+  state.profileHydratingUsernames.add(key);
+  try {
+    const data = await api(`/api/accounts/profile?username=${encodeURIComponent(key)}`);
+    const profile = data && data.profile && typeof data.profile === "object" ? data.profile : null;
+    const changed = mergeAccountIdentity(key, {
+      steamName: String(profile && profile.persona_name || "").trim(),
+      steamId: String(profile && profile.steam_id64 || "").trim(),
+      avatarUrl: pickAvatarUrlFromProfile(profile)
+    });
+    state.profileHydratedUsernames.add(key);
+    if (changed) {
+      syncInventoryAccountSelect();
+      if (String(state.accountSelectedUsername || "").trim() === key) syncAccountFormBySelection();
+      renderSavedAccounts();
+    }
+    return changed;
+  } catch (_) {
+    return false;
+  } finally {
+    state.profileHydratingUsernames.delete(key);
+  }
+}
+async function hydrateAccountsProfileIfNeeded() {
+  const targets = state.accounts
+    .map((row) => String(row && row.username || "").trim())
+    .filter(Boolean)
+    .filter((username) => {
+      if (state.profileHydratedUsernames.has(username)) return false;
+      const row = accountByUsername(username);
+      if (!row) return false;
+      const hasSteamName = Boolean(String(row.steam_name || "").trim());
+      const hasSteamId = Boolean(String(row.steam_id || "").trim());
+      const hasAvatar = Boolean(String(row.avatar_url || "").trim());
+      return !hasSteamName || !hasSteamId || !hasAvatar;
+    });
+  for (const username of targets) {
+    await ensureAccountProfile(username);
+  }
+}
 function displayAccountName(row) {
   if (!row) return "";
   const username = String(row.username || "").trim();
+  const steamName = String(row.steam_name || "").trim();
   const remark = String(row.remark || "").trim();
+  if (steamName) return steamName;
   if (!remark || remark === username) return username;
-  return `${remark}（${username}）`;
+  return remark;
 }
 function optionAccountLabel(row) {
   return displayAccountName(row);
@@ -451,47 +949,52 @@ const isCurrentAccountConnected = () => {
   if (!current) return false;
   return String(state.connectedUsername || "").trim() === current;
 };
-
-function syncUseAccountButtonState() {
-  const hasAccount = state.accounts.length > 0;
-  const active = String(state.activeAccount || "").trim();
-  const applyButton = (btn, selectEl) => {
-    if (!btn) return;
-    const selected = String((selectEl && selectEl.value) || state.accountSelectedUsername || "").trim();
-    const isActive = Boolean(selected) && selected === active;
-    btn.textContent = isActive ? "当前账号" : "设为当前";
-    btn.disabled = !hasAccount || state.refreshing || !selected || isActive;
-  };
-  applyButton(ui.useAccountBtn, ui.accountSelect);
-  applyButton(ui.craftUseAccountBtn, ui.craftAccountSelect);
+const normalizeTopStatusText = (text, fallbackConnected = false) => {
+  const raw = String(text || "").trim();
+  if (!raw) return fallbackConnected ? "已连接" : "未连接";
+  return raw.replace(/^连接状态[:：]?\s*/, "");
+};
+const isConnectedPhaseText = (text) => {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  if (value.includes("未连接")) return false;
+  return value.includes("已连接");
+};
+function setConnectionStatusTone(el, connected) {
+  if (!el) return;
+  const isConnected = !!connected;
+  el.classList.toggle("status-connected", isConnected);
+  el.classList.toggle("status-disconnected", !isConnected);
 }
 
 function syncInventoryTop() {
-  const applyTop = (fetchEl, statusEl, refreshBtn) => {
+  const applyTop = (fetchEl, statusEl, refreshBtn, disconnectBtn) => {
     if (!fetchEl || !statusEl || !refreshBtn) return;
     if (!state.currentAccountUsername) {
       fetchEl.textContent = "库存获取时间：-";
-      statusEl.textContent = "连接状态：未连接";
+      statusEl.textContent = "未连接";
+      setConnectionStatusTone(statusEl, false);
       refreshBtn.textContent = "连接并刷新库存信息";
+      if (disconnectBtn) disconnectBtn.disabled = true;
       return;
     }
     fetchEl.textContent = `库存获取时间：${state.fetchTime || "-"}`;
-    if (state.refreshPhaseText) statusEl.textContent = state.refreshPhaseText;
-    else if (isCurrentAccountConnected()) statusEl.textContent = "连接状态：已连接";
-    else statusEl.textContent = "连接状态：未连接";
+    if (state.refreshPhaseText) statusEl.textContent = normalizeTopStatusText(state.refreshPhaseText, false);
+    else if (isCurrentAccountConnected()) statusEl.textContent = "已连接";
+    else statusEl.textContent = "未连接";
+    const connected = isCurrentAccountConnected() || isConnectedPhaseText(state.refreshPhaseText);
+    setConnectionStatusTone(statusEl, connected);
     refreshBtn.textContent = isCurrentAccountConnected() ? "刷新库存信息" : "连接并刷新库存信息";
+    if (disconnectBtn) disconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   };
 
   if (!state.currentAccountUsername) {
-    if (ui.currentAccountText) ui.currentAccountText.textContent = "当前账号：未选择";
-    applyTop(ui.fetchTimeText, ui.statusText, ui.refreshBtn);
-    applyTop(ui.craftTopFetchTimeText, ui.craftTopStatusText, ui.craftRefreshBtn);
+    applyTop(ui.fetchTimeText, ui.statusText, ui.refreshBtn, ui.disconnectBtn);
+    applyTop(ui.craftTopFetchTimeText, ui.craftTopStatusText, ui.craftRefreshBtn, ui.craftDisconnectBtn);
     return;
   }
-  const current = accountByUsername(state.currentAccountUsername);
-  if (ui.currentAccountText) ui.currentAccountText.textContent = `当前账号：${displayAccountName(current) || state.currentAccountUsername}`;
-  applyTop(ui.fetchTimeText, ui.statusText, ui.refreshBtn);
-  applyTop(ui.craftTopFetchTimeText, ui.craftTopStatusText, ui.craftRefreshBtn);
+  applyTop(ui.fetchTimeText, ui.statusText, ui.refreshBtn, ui.disconnectBtn);
+  applyTop(ui.craftTopFetchTimeText, ui.craftTopStatusText, ui.craftRefreshBtn, ui.craftDisconnectBtn);
 }
 
 function setAccountForm({username = "", password = "", totp = "", remark = ""} = {}) {
@@ -504,7 +1007,7 @@ function setAccountForm({username = "", password = "", totp = "", remark = ""} =
 function syncAccountFormBySelection() {
   const row = selectedAccount();
   if (!row) return;
-  setAccountForm({username: row.username, password: row.password || "", totp: "", remark: row.remark || row.username});
+  setAccountForm({username: row.username, password: row.password || "", totp: "", remark: row.remark || ""});
 }
 
 function showPage(pageId) {
@@ -538,7 +1041,6 @@ function syncInventoryAccountSelect() {
   const hasAccount = state.accounts.length > 0;
   ui.refreshBtn.disabled = !hasAccount || state.refreshing;
   if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = !hasAccount || state.refreshing;
-  syncUseAccountButtonState();
 }
 function renderSavedAccounts() {
   ui.savedAccountsWrap.replaceChildren();
@@ -556,31 +1058,68 @@ function renderSavedAccounts() {
   }
 
   for (const row of rows) {
-    const active = row.username === state.activeAccount;
     const selected = row.username === state.accountSelectedUsername;
+    const connected = row.username === state.connectedUsername;
+    const accountName = String(row.username || "").trim();
+    const steamName = String(row.steam_name || "").trim();
+    const displayName = steamName || accountName || "-";
+    const avatarUrl = String(row.avatar_url || "").trim();
     const card = document.createElement("div");
-    card.className = `account-card${active ? " active" : ""}${selected ? " selected" : ""}`;
-    const header = document.createElement("div");
-    header.className = "account-card-header";
+    card.className = `account-card${connected ? " connected" : ""}${selected ? " selected" : ""}`;
+    const main = document.createElement("div");
+    main.className = "account-card-main";
+    const avatar = document.createElement("div");
+    avatar.className = "account-card-avatar";
+    const applyAvatarFallback = () => {
+      const fallback = document.createElement("span");
+      fallback.className = "account-card-avatar-fallback";
+      fallback.textContent = (displayName || accountName || "?").slice(0, 1).toUpperCase();
+      avatar.replaceChildren(fallback);
+    };
+    if (avatarUrl) {
+      const img = document.createElement("img");
+      img.src = avatarUrl;
+      img.alt = `${displayName} avatar`;
+      img.loading = "lazy";
+      img.onerror = applyAvatarFallback;
+      avatar.append(img);
+    } else {
+      applyAvatarFallback();
+    }
+    const info = document.createElement("div");
+    info.className = "account-card-info";
+    const titleRow = document.createElement("div");
+    titleRow.className = "account-card-title-row";
     const title = document.createElement("div");
     title.className = "account-card-title";
-    title.textContent = `${row.remark || row.username}${active ? "（当前）" : ""}`;
+    title.textContent = displayName;
+    const stateBadge = document.createElement("span");
+    stateBadge.className = `account-card-state status ${connected ? "status-connected" : "status-disconnected"}`;
+    stateBadge.textContent = connected ? "已连接" : "未连接";
     const actions = document.createElement("div");
     actions.className = "account-card-actions";
 
-    const useBtn = document.createElement("button");
-    useBtn.textContent = active ? "使用中" : "使用该账号";
-    useBtn.disabled = active || state.refreshing;
-    useBtn.onclick = async (e) => { e.stopPropagation(); await useAccount(row.username); };
+    const connectBtn = document.createElement("button");
+    connectBtn.textContent = connected ? "刷新库存" : "连接并刷新";
+    connectBtn.disabled = state.refreshing;
+    connectBtn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await switchAccountView(row.username);
+        await doRefresh({usernameOverride: row.username, force: true, silentRateLimit: true});
+      } catch (err) {
+        setAccountStatus(`连接失败：${err.message}`, true);
+      }
+    };
 
     const remarkBtn = document.createElement("button");
     remarkBtn.textContent = "修改备注";
     remarkBtn.disabled = state.refreshing;
     remarkBtn.onclick = async (e) => {
       e.stopPropagation();
-      const next = await openRemarkModal(row.username, row.remark || row.username);
+      const next = await openRemarkModal(row.username, row.remark || "");
       if (next === null) return;
-      const remark = String(next || "").trim() || row.username;
+      const remark = String(next || "").trim();
       try {
         await api("/api/accounts/remark", {method: "POST", body: JSON.stringify({username: row.username, remark})});
         await loadAccounts({preferUsername: row.username});
@@ -599,19 +1138,21 @@ function renderSavedAccounts() {
     delBtn.disabled = state.refreshing;
     delBtn.onclick = async (e) => { e.stopPropagation(); await deleteAccount(row); };
 
-    actions.append(useBtn, remarkBtn, delBtn);
-    header.append(title, actions);
+    actions.append(connectBtn, remarkBtn, delBtn);
+    titleRow.append(title, stateBadge);
     const sub = document.createElement("div");
     sub.className = "account-card-sub";
-    sub.textContent = row.username;
+    sub.textContent = `账号：${accountName || "-"}`;
     card.onclick = () => {
       state.accountSelectedUsername = row.username;
       syncInventoryAccountSelect();
       syncAccountFormBySelection();
-      setAccountStatus(`已选中账号：${row.remark || row.username}（${row.username}）`);
+      setAccountStatus(`已选中账号：${displayAccountName(row) || row.username}`);
       renderSavedAccounts();
     };
-    card.append(header, sub);
+    info.append(titleRow, sub, actions);
+    main.append(avatar, info);
+    card.append(main);
     ui.savedAccountsWrap.append(card);
   }
 }
@@ -638,6 +1179,7 @@ async function loadAccounts({preferUsername = ""} = {}) {
   syncInventoryAccountSelect();
   syncAccountFormBySelection();
   renderSavedAccounts();
+  void hydrateAccountsProfileIfNeeded();
 }
 
 function makeCollectionSourceKey() {
@@ -660,7 +1202,7 @@ function makeFilterCacheKey() {
   return [
     state.rowsVersion,
     String(state.selectedComponentId || "").trim(),
-    state.includeHidden ? 1 : 0,
+    0,
     String(state.searchText || "").trim().toLowerCase(),
     state.wearMin == null ? "" : state.wearMin,
     state.wearMax == null ? "" : state.wearMax,
@@ -686,7 +1228,7 @@ function getFilterResult() {
 }
 
 function getGroupedRows(filteredRows, filterKey) {
-  const key = `${filterKey}|${state.wearSort}|${state.raritySort}|${makeRowsStamp(filteredRows)}`;
+  const key = `${filterKey}|${state.wearSort}|${state.raritySort}|${state.quantitySort}|${state.collectionSort}|${makeRowsStamp(filteredRows)}`;
   if (key === state.groupCacheKey) return state.groupCacheRows;
   const rows = buildGroupRows(filteredRows);
   state.groupCacheKey = key;
@@ -718,7 +1260,9 @@ function setRows(rows, component, snapshotPath = "", options = {}) {
   state.groupCacheRows = [];
   state.collectionSourceKey = "";
   state.expandedGroups.clear();
-  ui.snapshotPath.textContent = state.snapshotPath ? `快照：${state.snapshotPath}` : "快照：未选择";
+  if (ui.snapshotPath) {
+    ui.snapshotPath.textContent = state.snapshotPath ? `快照：${state.snapshotPath}` : "快照：未选择";
+  }
   refreshComponentControls();
   refreshCollectionMenu(rowsForComponentScope(), {force: true, sourceKey: makeCollectionSourceKey()});
   render();
@@ -735,6 +1279,7 @@ async function loadSnapshotForAccount(username) {
   else if (state.connectedUsername === key) state.connectedUsername = "";
   state.fetchTime = String(data.fetch_time || "").trim();
   setRows(rows, data.component || {summary_map: {}, item_map: {}}, data.snapshot && data.snapshot.path ? data.snapshot.path : "");
+  clearSnapshotDirty();
   syncInventoryTop();
   if (rows.length) setSummary(`已显示该账号上次库存，共 ${rows.length} 条`);
   else { state.emptyHint = "当前账号未连接"; setSummary("当前账号未连接（暂无上次库存信息）"); }
@@ -744,17 +1289,39 @@ async function loadSnapshotForAccount(username) {
 async function switchAccountView(username) {
   const key = String(username || "").trim();
   if (!key) return;
+  clearSnapshotDirty();
+  state.lastDirtyFallbackTs = 0;
   state.craftSelectedItemIds.clear();
   state.craftBusy = false;
   state.craftStatusText = "";
   state.craftRecipeQueue = [];
+  state.craftActiveRecipeId = "";
   state.craftSettingsOpen = false;
+  state.craftAssistOpen = false;
+  state.craftAssistPickerOpen = false;
+  state.craftAssistRoleChooserOpen = false;
+  state.craftAssistPickRole = "main";
+  state.craftAssistUseAbsoluteWear = false;
+  state.craftAssistTargetWear = null;
+  state.craftAssistMainCount = 5;
+  state.craftAssistAuxCount = 5;
+  state.craftAssistMaterials = [];
+  state.craftAssistPresetApplyCountMap = {};
+  state.craftAssistPresetEditingId = "";
+  state.craftAssistPresetEditingName = "";
+  state.craftAssistPresetEditingBackup = null;
+  state.craftAssistPresetEditingInitialSnapshot = null;
+  if (craftAssistPickerCloseTimer != null) {
+    clearTimeout(craftAssistPickerCloseTimer);
+    craftAssistPickerCloseTimer = null;
+  }
   state.accountSelectedUsername = key;
   syncInventoryAccountSelect();
   renderSavedAccounts();
   await persistLastSelected(key);
   await loadSnapshotForAccount(key);
   startInventoryEventStream(key);
+  void ensureAccountProfile(key);
   await loadComponentTaskQueue();
 }
 async function useAccount(username) {
@@ -768,7 +1335,7 @@ async function useAccount(username) {
     await switchAccountView(key);
     await doRefresh({usernameOverride: key, force: true, silentRateLimit: true});
     const info = accountByUsername(key);
-    setAccountStatus(`已设为当前账号：${info ? info.remark || key : key}（${key}）`);
+    setAccountStatus(`已设为当前账号：${info ? displayAccountName(info) : key}`);
   } catch (err) {
     setAccountStatus(`切换账号失败：${err.message}`, true);
   }
@@ -794,7 +1361,7 @@ async function loginAndSave() {
   const username = String(ui.accountUsername.value || "").trim();
   const password = String(ui.accountPassword.value || "").trim();
   const totp = String(ui.accountTotp.value || "").trim();
-  const remark = String(ui.accountRemark.value || "").trim() || username;
+  const remark = String(ui.accountRemark.value || "").trim();
   if (!username) { setAccountStatus("请输入 Steam 账号", true); return; }
   if (!password) { setAccountStatus("请输入密码", true); return; }
   if (!totp) { setAccountStatus("请输入令牌码", true); return; }
@@ -821,9 +1388,11 @@ function clearAccountForm() {
   renderSavedAccounts();
 }
 
-function setNoAccountState() {
+function setNoAccountState({silentSummary = false} = {}) {
   stopInventoryEventStream();
   closeTargetComponentDrawer();
+  clearSnapshotDirty();
+  state.lastDirtyFallbackTs = 0;
   state.currentAccountUsername = "";
   state.fetchTime = "";
   state.rows = [];
@@ -839,13 +1408,33 @@ function setNoAccountState() {
   state.craftBusy = false;
   state.craftStatusText = "";
   state.craftRecipeQueue = [];
+  state.craftActiveRecipeId = "";
   state.craftSettingsOpen = false;
+  state.craftAssistOpen = false;
+  state.craftAssistPickerOpen = false;
+  state.craftAssistRoleChooserOpen = false;
+  state.craftAssistPickRole = "main";
+  state.craftAssistUseAbsoluteWear = false;
+  state.craftAssistTargetWear = null;
+  state.craftAssistMainCount = 5;
+  state.craftAssistAuxCount = 5;
+  state.craftAssistMaterials = [];
+  state.craftAssistPresetApplyCountMap = {};
+  state.craftAssistPresetEditingId = "";
+  state.craftAssistPresetEditingName = "";
+  state.craftAssistPresetEditingBackup = null;
+  state.craftAssistPresetEditingInitialSnapshot = null;
+  if (craftAssistPickerCloseTimer != null) {
+    clearTimeout(craftAssistPickerCloseTimer);
+    craftAssistPickerCloseTimer = null;
+  }
   state.emptyHint = "请选用一个账号";
   ui.showComponentItems.checked = false;
   setRows([], {summary_map: {}, item_map: {}}, "");
   renderTaskQueueControls();
   syncInventoryTop();
-  setSummary("请选用一个账号");
+  if (silentSummary) setSummary("");
+  else setSummary("请选用一个账号");
 }
 
 function qualityName(row) { const v = String(row.quality_name || "").trim(); if (v) return v; const id = Number(row.quality || 0); return QUALITY_MAP[id] || `Unknown(${id})`; }
@@ -853,6 +1442,121 @@ function rarityName(row) { const e = String(row.alchemy_rarity || "").trim(); if
 const collectionName = (row) => String(row.collection || "").trim();
 const itemDisplayName = (row) => String(row.alchemy_name || "").trim() || String(row.name || "").trim();
 const itemSearchText = (row) => [row.name, row.market_hash_name, row.alchemy_name, row.collection, row.collection_en].map((x) => String(x || "").toLowerCase()).join(" ").trim();
+function normalizeWearToken(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[\s_\-（）()]/g, "");
+}
+function parseOptionalWear01(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const clamped = Math.max(0, Math.min(1, n));
+  return Math.round(clamped * (10 ** WEAR_INPUT_DECIMALS)) / (10 ** WEAR_INPUT_DECIMALS);
+}
+function inferWearSuffixRangeByName(name) {
+  const normalized = normalizeWearToken(name);
+  if (!normalized) return null;
+  for (const rule of WEAR_SUFFIX_RANGES) {
+    if (rule.keys.some((key) => normalized.includes(normalizeWearToken(key)))) {
+      return {min: rule.min, max: rule.max};
+    }
+  }
+  return null;
+}
+function getCraftMaterialFloatBoundsByName(name, rows = null) {
+  const key = String(name || "").trim();
+  if (!key) return null;
+  const sourceRows = Array.isArray(rows) ? rows : getMainInventoryCraftableRows();
+  let min = null;
+  let max = null;
+  for (const row of sourceRows) {
+    if (itemDisplayName(row) !== key) continue;
+    const rowMin = Number(row && row.minfloat);
+    const rowMax = Number(row && row.maxfloat);
+    if (!Number.isFinite(rowMin) || !Number.isFinite(rowMax) || rowMax <= rowMin) continue;
+    const nextMin = Math.max(0, Math.min(1, rowMin));
+    const nextMax = Math.max(0, Math.min(1, rowMax));
+    min = min == null ? nextMin : Math.min(min, nextMin);
+    max = max == null ? nextMax : Math.max(max, nextMax);
+  }
+  if (min == null || max == null || max < min) return null;
+  return {min, max};
+}
+function resolveCraftMaterialWearConstraintByName(name, {useRelative = true, rows = null} = {}) {
+  const suffixRange = inferWearSuffixRangeByName(name);
+  const floatBounds = getCraftMaterialFloatBoundsByName(name, rows);
+  let min = 0;
+  let max = 1;
+  if (suffixRange && floatBounds) {
+    const interMin = Math.max(suffixRange.min, floatBounds.min);
+    const interMax = Math.min(suffixRange.max, floatBounds.max);
+    if (interMax >= interMin) {
+      min = interMin;
+      max = interMax;
+    } else {
+      // 交集异常时优先使用物品自身 minfloat/maxfloat 约束，避免不可选。
+      min = floatBounds.min;
+      max = floatBounds.max;
+    }
+  } else if (suffixRange) {
+    min = suffixRange.min;
+    max = suffixRange.max;
+  } else if (floatBounds) {
+    min = floatBounds.min;
+    max = floatBounds.max;
+  }
+  if (useRelative) {
+    if (floatBounds && floatBounds.max > floatBounds.min) {
+      const denom = floatBounds.max - floatBounds.min;
+      min = (min - floatBounds.min) / denom;
+      max = (max - floatBounds.min) / denom;
+    }
+    min = Math.max(0, Math.min(1, min));
+    max = Math.max(0, Math.min(1, max));
+  } else {
+    min = Math.max(0, Math.min(1, min));
+    max = Math.max(0, Math.min(1, max));
+  }
+  if (max < min) {
+    const tmp = min;
+    min = max;
+    max = tmp;
+  }
+  return {min, max, suffixRange, floatBounds};
+}
+function clampWearToRange(value, min, max, fallback = min) {
+  const lo = Math.max(0, Math.min(1, Number(min)));
+  const hi = Math.max(lo, Math.min(1, Number(max)));
+  const n = Number(value);
+  const base = Number.isFinite(n) ? n : Number(fallback);
+  if (!Number.isFinite(base)) return lo;
+  return Math.max(lo, Math.min(hi, base));
+}
+function resolveCraftAssistMaterialEffectiveRange(material, {useRelative = true, rows = null} = {}) {
+  const name = String(material && material.name || "").trim();
+  const constraint = resolveCraftMaterialWearConstraintByName(name, {useRelative, rows});
+  let wearMin = constraint.min;
+  let wearMax = constraint.max;
+  const custom = !!(material && material.custom_range);
+  if (custom) {
+    wearMin = clampWearToRange(material && material.wear_min, constraint.min, constraint.max, constraint.min);
+    wearMax = clampWearToRange(material && material.wear_max, constraint.min, constraint.max, constraint.max);
+    if (wearMax < wearMin) {
+      const tmp = wearMin;
+      wearMin = wearMax;
+      wearMax = tmp;
+    }
+  }
+  return {
+    wear_min: wearMin,
+    wear_max: wearMax,
+    constraint_min: constraint.min,
+    constraint_max: constraint.max,
+    custom_range: custom
+  };
+}
 function isComponentRow(row) { if (!row || typeof row !== "object") return false; const defIndex = Number(row.def_index || 0); if (defIndex === STORAGE_UNIT_DEF_INDEX) return true; const name = String(row.name || row.alchemy_name || "").toLowerCase(); return name.includes("storage unit"); }
 function isInventoryRowSelectable(row) { return !isComponentRow(row); }
 function itemHasWear(row) { if (row.minfloat != null && row.maxfloat != null) return true; const n = String(row.name || "").toLowerCase(); return ["(factory new)", "(minimal wear)", "(field-tested)", "(well-worn)", "(battle-scarred)"].some((x) => n.includes(x)); }
@@ -917,13 +1621,300 @@ function getCraftCoolingRows(rows) {
 }
 function getQueuedCraftItemIds() {
   const out = new Set();
-  for (const entry of Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : []) {
+  for (const entry of getCraftQueuePendingEntries()) {
     for (const id of Array.isArray(entry && entry.item_ids) ? entry.item_ids : []) {
       const key = String(id || "").trim();
       if (key) out.add(key);
     }
   }
   return out;
+}
+function getCraftQueuePendingEntries() {
+  return (Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : []).filter((entry) => {
+    const done = String(entry && entry.status || "").trim() === "done";
+    return !done;
+  });
+}
+function getCraftQueuePendingCount() {
+  return getCraftQueuePendingEntries().length;
+}
+function pruneCompletedCraftRecipeEntries() {
+  const list = Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [];
+  if (!list.length) return 0;
+  const next = list.filter((entry) => String(entry && entry.status || "").trim() !== "done");
+  const removed = list.length - next.length;
+  if (removed <= 0) return 0;
+  state.craftRecipeQueue = next;
+  const activeId = String(state.craftActiveRecipeId || "").trim();
+  const activeExists = activeId && next.some((entry) => String(entry && entry.id || "").trim() === activeId);
+  if (!activeExists) {
+    state.craftActiveRecipeId = "";
+    state.craftSelectedItemIds.clear();
+  }
+  return removed;
+}
+function normalizeCraftRecipeItemIds(ids) {
+  return Array.from(new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean)));
+}
+function createEmptyCraftRecipeEntry({activate = true} = {}) {
+  pruneCompletedCraftRecipeEntries();
+  const entry = {
+    id: `craftq_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+    item_ids: [],
+    recipe: 0,
+    recipe_text: "",
+    status: "pending",
+    result_text: "",
+    spent_ids: [],
+    gained_ids: []
+  };
+  state.craftRecipeQueue.push(entry);
+  if (activate) {
+    state.craftActiveRecipeId = entry.id;
+  }
+  return entry;
+}
+function findCraftRecipeById(recipeId) {
+  const key = String(recipeId || "").trim();
+  if (!key) return null;
+  return (Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : []).find((entry) => String(entry && entry.id || "").trim() === key) || null;
+}
+function syncCraftSelectedIdsFromActiveRecipe() {
+  state.craftSelectedItemIds.clear();
+  const active = findCraftRecipeById(state.craftActiveRecipeId);
+  if (!active || String(active.status || "").trim() === "done") return;
+  for (const id of normalizeCraftRecipeItemIds(active.item_ids)) {
+    state.craftSelectedItemIds.add(id);
+  }
+}
+function ensureActiveCraftRecipe({createIfMissing = false} = {}) {
+  const active = findCraftRecipeById(state.craftActiveRecipeId);
+  if (active && String(active.status || "").trim() !== "done") {
+    syncCraftSelectedIdsFromActiveRecipe();
+    return active;
+  }
+  const pending = getCraftQueuePendingEntries();
+  if (pending.length) {
+    state.craftActiveRecipeId = String(pending[pending.length - 1].id || "").trim();
+    syncCraftSelectedIdsFromActiveRecipe();
+    return pending[pending.length - 1];
+  }
+  if (createIfMissing) {
+    const created = createEmptyCraftRecipeEntry({activate: true});
+    syncCraftSelectedIdsFromActiveRecipe();
+    return created;
+  }
+  state.craftActiveRecipeId = "";
+  state.craftSelectedItemIds.clear();
+  return null;
+}
+function setActiveCraftRecipe(recipeId) {
+  const entry = findCraftRecipeById(recipeId);
+  if (!entry || String(entry.status || "").trim() === "done") return;
+  state.craftActiveRecipeId = String(entry.id || "").trim();
+  syncCraftSelectedIdsFromActiveRecipe();
+}
+function reconcileCraftQueueWithInventory() {
+  const rows = getMainInventoryCraftableRows();
+  const validIds = new Set(rows.map((row) => rowAssetId(row)).filter(Boolean));
+  const claimed = new Set();
+  for (const entry of getCraftQueuePendingEntries()) {
+    const nextIds = [];
+    for (const id of normalizeCraftRecipeItemIds(entry.item_ids)) {
+      if (!validIds.has(id)) continue;
+      if (claimed.has(id)) continue;
+      claimed.add(id);
+      nextIds.push(id);
+    }
+    entry.item_ids = nextIds;
+  }
+  ensureActiveCraftRecipe({createIfMissing: false});
+}
+function findPendingRecipeByItemId(itemId, {excludeRecipeId = ""} = {}) {
+  const targetId = String(itemId || "").trim();
+  if (!targetId) return null;
+  const skipId = String(excludeRecipeId || "").trim();
+  for (const entry of getCraftQueuePendingEntries()) {
+    const entryId = String(entry && entry.id || "").trim();
+    if (skipId && entryId === skipId) continue;
+    const ids = normalizeCraftRecipeItemIds(entry && entry.item_ids);
+    if (ids.includes(targetId)) return entry;
+  }
+  return null;
+}
+function getCraftExecutableEntries() {
+  return getCraftQueuePendingEntries().filter((entry) => normalizeCraftRecipeItemIds(entry && entry.item_ids).length === 10);
+}
+function buildRowsByAssetId(rows) {
+  const out = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = rowAssetId(row);
+    if (id && !out.has(id)) out.set(id, row);
+  }
+  return out;
+}
+function getAbsoluteWearValue(row) {
+  if (!row || typeof row !== "object") return null;
+  const wear = Number(row.float_value);
+  if (!Number.isFinite(wear)) return null;
+  return Math.max(0, Math.min(1, wear));
+}
+function getRelativeWearValue(row) {
+  if (!row || typeof row !== "object") return null;
+  const wear = getAbsoluteWearValue(row);
+  const min = Number(row.minfloat);
+  const max = Number(row.maxfloat);
+  if (wear == null || !Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
+  const value = (wear - min) / (max - min);
+  if (!Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+}
+function absoluteWearLabel(row, {prefix = true} = {}) {
+  const value = getAbsoluteWearValue(row);
+  const text = value == null ? "-" : value.toFixed(6);
+  return prefix ? `绝对磨损 ${text}` : text;
+}
+function relativeWearLabel(row, {prefix = true} = {}) {
+  const value = getRelativeWearValue(row);
+  const text = value == null ? "-" : value.toFixed(6);
+  return prefix ? `相对磨损 ${text}` : text;
+}
+function averageRelativeWearText(rows) {
+  const values = (Array.isArray(rows) ? rows : [])
+    .map((row) => getRelativeWearValue(row))
+    .filter((value) => value != null && Number.isFinite(value));
+  if (!values.length) return "-";
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return (total / values.length).toFixed(6);
+}
+function buildCraftResultText(step, rowsById) {
+  const gainedIds = Array.isArray(step && step.gained_ids)
+    ? step.gained_ids.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  if (!gainedIds.length) return "产物：未返回";
+  const rowsMap = rowsById instanceof Map ? rowsById : new Map();
+  const parts = [];
+  for (const id of gainedIds) {
+    const row = rowsMap.get(id);
+    if (row) {
+      parts.push(`${itemDisplayName(row)}（${absoluteWearLabel(row)}）`);
+    } else {
+      parts.push("产物待同步");
+    }
+  }
+  const missing = Array.isArray(step && step.missing_gained_ids)
+    ? step.missing_gained_ids.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  const pendingTail = missing.length ? `（待同步${missing.length}件）` : "";
+  return `产物：${parts.join("，")}${pendingTail}`;
+}
+function applyCraftStepResultsToQueue({steps, pendingIndexes, rows}) {
+  const list = Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [];
+  const stepList = Array.isArray(steps) ? steps : [];
+  const indexList = Array.isArray(pendingIndexes) ? pendingIndexes : [];
+  const rowsById = buildRowsByAssetId(rows);
+  for (let i = 0; i < stepList.length; i += 1) {
+    const queueIndex = Number(indexList[i]);
+    if (!Number.isFinite(queueIndex) || queueIndex < 0 || queueIndex >= list.length) continue;
+    const entry = list[queueIndex];
+    if (!entry || typeof entry !== "object") continue;
+    const step = stepList[i] || {};
+    entry.status = "done";
+    entry.spent_ids = Array.isArray(step.spent_ids)
+      ? step.spent_ids.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+    entry.gained_ids = Array.isArray(step.gained_ids)
+      ? step.gained_ids.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+    entry.result_text = buildCraftResultText(step, rowsById);
+    // 执行完成后释放占位，允许继续选择新配方。
+    entry.item_ids = [];
+    entry.updated_at = Date.now();
+  }
+  ensureActiveCraftRecipe({createIfMissing: false});
+  syncCraftSelectedIdsFromActiveRecipe();
+}
+function formatCraftSlotWear(row) {
+  return relativeWearLabel(row, {prefix: false});
+}
+function makeCraftSlotNode({row = null, rawId = "", onRemove = null}) {
+  const slot = document.createElement("div");
+  slot.className = "craft-slot";
+  if (!row && !rawId) {
+    slot.classList.add("empty");
+    slot.textContent = "空槽位";
+    slot.title = "空槽位";
+    return slot;
+  }
+  const assetId = row ? rowAssetId(row) : String(rawId || "").trim();
+  const wearText = row ? formatCraftSlotWear(row) : "-";
+  slot.classList.add("filled");
+  const wear = document.createElement("div");
+  wear.className = "craft-slot-wear";
+  wear.textContent = `相对磨损 ${wearText}`;
+  slot.append(wear);
+  slot.title = `相对磨损：${wearText}`;
+  if (typeof onRemove === "function") {
+    const removeRight = document.createElement("button");
+    removeRight.type = "button";
+    removeRight.className = "craft-slot-remove right";
+    removeRight.title = "移除该槽位物品";
+    removeRight.setAttribute("aria-label", "移除该槽位物品");
+    removeRight.textContent = "×";
+    removeRight.onclick = (evt) => {
+      evt.stopPropagation();
+      onRemove(assetId);
+    };
+    slot.append(removeRight);
+  }
+  return slot;
+}
+function renderCraftQueueSlots({
+  title,
+  itemIds,
+  rowsById,
+  removable = false,
+  onRemove = null,
+  onRemoveItem = null,
+  active = false,
+  extraClass = ""
+}) {
+  const wrap = document.createElement("div");
+  wrap.className = `craft-queue-group${active ? " active" : ""}${extraClass ? ` ${extraClass}` : ""}`;
+  const head = document.createElement("div");
+  head.className = "craft-queue-group-head";
+  const titleEl = document.createElement("div");
+  titleEl.className = "craft-queue-group-title";
+  titleEl.textContent = String(title || "").trim() || "配方";
+  head.append(titleEl);
+  if (active) {
+    const badge = document.createElement("span");
+    badge.className = "craft-queue-active-badge";
+    badge.textContent = "当前编辑";
+    head.append(badge);
+  }
+  if (removable) {
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "移除";
+    removeBtn.disabled = state.craftBusy;
+    removeBtn.onclick = () => {
+      if (typeof onRemove === "function") onRemove();
+    };
+    head.append(removeBtn);
+  }
+  wrap.append(head);
+
+  const grid = document.createElement("div");
+  grid.className = "craft-slot-grid";
+  const ids = Array.isArray(itemIds) ? itemIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+  for (let i = 0; i < 10; i += 1) {
+    const id = ids[i] || "";
+    const row = id ? rowsById.get(id) || null : null;
+    grid.append(makeCraftSlotNode({row, rawId: id, onRemove: id && typeof onRemoveItem === "function" ? onRemoveItem : null}));
+  }
+  wrap.append(grid);
+  return wrap;
 }
 function getCraftCandidates() {
   const allRows = getMainInventoryCraftableRows();
@@ -945,20 +1936,18 @@ function craftGroupCooldownLabel(row) {
   if (coolingCount <= 0) return "无";
   return `${coolingCount}件冷却中`;
 }
-function syncCraftSelection(candidates) {
-  const queuedIds = getQueuedCraftItemIds();
-  const validIds = new Set(
-    (Array.isArray(candidates) ? candidates : [])
-      .map((x) => rowAssetId(x))
-      .filter((id) => id && !queuedIds.has(id))
-  );
-  for (const id of [...state.craftSelectedItemIds]) {
-    if (!validIds.has(id)) state.craftSelectedItemIds.delete(id);
-  }
+function syncCraftSelection() {
+  syncCraftSelectedIdsFromActiveRecipe();
 }
-function getCraftSelectedRows(candidates) {
-  syncCraftSelection(candidates);
-  return (Array.isArray(candidates) ? candidates : []).filter((row) => state.craftSelectedItemIds.has(rowAssetId(row)));
+function getCraftSelectedRows() {
+  syncCraftSelection();
+  const rowMap = buildRowsByAssetId(getMainInventoryCraftableRows());
+  const rows = [];
+  for (const id of state.craftSelectedItemIds) {
+    const row = rowMap.get(id);
+    if (row) rows.push(row);
+  }
+  return rows;
 }
 function getTradeUpRecipeFromRows(rows) {
   const list = Array.isArray(rows) ? rows : [];
@@ -990,24 +1979,53 @@ function getTradeUpRecipeFromRows(rows) {
     text: `配方：${prefix}${rarityLabel} -> ${prefix}${nextLabel}（recipe ${recipe}）`
   };
 }
+function craftRarityValue(row) {
+  const n = Number(row && row.rarity);
+  if (!Number.isFinite(n)) return 0;
+  return Math.trunc(n);
+}
+function craftRarityLabel(value) {
+  const rarity = Math.trunc(Number(value) || 0);
+  return RARITY_MAP[rarity] || `R${rarity || 0}`;
+}
 function toggleCraftItemSelection(itemId) {
   const key = String(itemId || "").trim();
   if (!key) return;
-  const queuedIds = getQueuedCraftItemIds();
-  if (queuedIds.has(key)) {
-    setCraftStatus("该物品已在配方预览中，不能重复选择", true);
+  const active = ensureActiveCraftRecipe({createIfMissing: true});
+  if (!active) return;
+  const activeId = String(active.id || "").trim();
+  const currentIds = normalizeCraftRecipeItemIds(active.item_ids);
+  const rowMap = buildRowsByAssetId(getCraftCandidates());
+  const nextRow = rowMap.get(key) || null;
+  if (currentIds.includes(key)) {
+    setCraftStatus("该物品已在当前配方槽位中，可在槽位角标移除", true);
     return;
   }
-  if (state.craftSelectedItemIds.has(key)) {
-    state.craftSelectedItemIds.delete(key);
-    state.craftStatusText = "";
+  const occupied = findPendingRecipeByItemId(key, {excludeRecipeId: activeId});
+  if (occupied) {
+    setCraftStatus("该物品已在其他配方槽位中，不能重复添加", true);
     return;
   }
-  if (state.craftSelectedItemIds.size >= 10) {
-    setCraftStatus("最多选择 10 件物品", true);
+  if (currentIds.length >= 10) {
+    setCraftStatus("当前配方已满 10 件，请先新增配方或移除槽位物品", true);
     return;
   }
-  state.craftSelectedItemIds.add(key);
+  if (nextRow && currentIds.length > 0) {
+    const currentRows = currentIds.map((id) => rowMap.get(id)).filter(Boolean);
+    if (currentRows.length > 0) {
+      const currentRarity = craftRarityValue(currentRows[0]);
+      const nextRarity = craftRarityValue(nextRow);
+      if (currentRarity > 0 && nextRarity > 0 && currentRarity !== nextRarity) {
+        setCraftStatus(
+          `当前配方已使用 ${craftRarityLabel(currentRarity)}，不能混入 ${craftRarityLabel(nextRarity)}（单配方需同一稀有度）`,
+          true
+        );
+        return;
+      }
+    }
+  }
+  active.item_ids = [...currentIds, key];
+  syncCraftSelectedIdsFromActiveRecipe();
   state.craftStatusText = "";
 }
 function buildCraftGroupRows(candidates) {
@@ -1042,8 +2060,8 @@ function renderCraftGrouped(candidates) {
   const headers = [
     "<th><div class=\"th-sort-wrap\"><span>稀有度</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"asc\" title=\"稀有度由低到高\" aria-label=\"稀有度由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"desc\" title=\"稀有度由高到低\" aria-label=\"稀有度由高到低\"></button></span></div></th>",
     "<th>名称</th>",
-    "<th>收藏品</th>",
-    `<th>${quantityTitle}</th>`
+    "<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>",
+    `<th><div class="th-sort-wrap"><span>${quantityTitle}</span><span class="sort-stack"><button type="button" class="arrow-tri up col-sort-btn" data-sort-key="quantity" data-sort-dir="asc" title="数量由低到高" aria-label="数量由低到高"></button><button type="button" class="arrow-tri down col-sort-btn" data-sort-key="quantity" data-sort-dir="desc" title="数量由高到低" aria-label="数量由高到低"></button></span></div></th>`
   ];
   if (showSeed) headers.push("<th>种子</th>");
   headers.push("<th><div class=\"th-sort-wrap\"><span>磨损</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"asc\" title=\"磨损由低到高\" aria-label=\"磨损由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"desc\" title=\"磨损由高到低\" aria-label=\"磨损由高到低\"></button></span></div></th>");
@@ -1055,9 +2073,11 @@ function renderCraftGrouped(candidates) {
       evt.stopPropagation();
       const key = String(btn.dataset.sortKey || "");
       const dir = String(btn.dataset.sortDir || "");
-      if ((key !== "wear" && key !== "rarity") || (dir !== "asc" && dir !== "desc")) return;
+      if ((key !== "wear" && key !== "rarity" && key !== "quantity" && key !== "collection") || (dir !== "asc" && dir !== "desc")) return;
       if (key === "wear") state.wearSort = dir;
-      else state.raritySort = dir;
+      else if (key === "rarity") state.raritySort = dir;
+      else if (key === "collection") state.collectionSort = dir;
+      else state.quantitySort = dir;
       renderCraftPage();
     };
   }
@@ -1067,7 +2087,9 @@ function renderCraftGrouped(candidates) {
     const groupKey = `craft::${row.name}`;
     const expanded = state.expandedGroups.has(groupKey);
     const selectableRows = row.child_rows.filter((x) => !isComponentRow(x) && !queuedIds.has(rowAssetId(x)));
-    const groupIds = [...new Set(selectableRows.map((x) => rowAssetId(x)).filter(Boolean))];
+    const selectableGroupIds = [...new Set(selectableRows.map((x) => rowAssetId(x)).filter(Boolean))];
+    const groupRows = row.child_rows.filter((x) => !isComponentRow(x));
+    const groupIds = [...new Set(groupRows.map((x) => rowAssetId(x)).filter(Boolean))];
     const selectedCount = groupIds.reduce((acc, id) => acc + (state.craftSelectedItemIds.has(id) ? 1 : 0), 0);
     const componentGroup = row.items.some((x) => isComponentRow(x));
     const parentRarityText = componentGroup ? "" : row.parent_rarity;
@@ -1085,19 +2107,23 @@ function renderCraftGrouped(candidates) {
     if (showCooling) parentCells.push(`<td>${parentCooldownText}</td>`);
     parent.innerHTML = parentCells.join("");
     parent.onclick = () => {
-      if (!groupIds.length) {
+      if (expanded) {
+        state.expandedGroups.delete(groupKey);
+        renderCraftPage();
+        return;
+      }
+      if (row.craft_expandable) {
+        state.expandedGroups.add(groupKey);
+        renderCraftPage();
+        return;
+      }
+      if (!selectableGroupIds.length) {
         if (row.child_rows.some((x) => queuedIds.has(rowAssetId(x)))) {
           setCraftStatus("该组物品已在配方预览中，不能重复选择", true);
         }
         return;
       }
-      if (groupIds.length === 1) {
-        toggleCraftItemSelection(groupIds[0]);
-        renderCraftPage();
-        return;
-      }
-      if (expanded) state.expandedGroups.delete(groupKey);
-      else state.expandedGroups.add(groupKey);
+      toggleCraftItemSelection(selectableGroupIds[0]);
       renderCraftPage();
     };
     tbody.append(parent);
@@ -1107,12 +2133,12 @@ function renderCraftGrouped(candidates) {
       const componentRow = isComponentRow(item);
       const locked = queuedIds.has(itemId);
       const selectable = !componentRow && !locked;
-      const selected = selectable && state.craftSelectedItemIds.has(itemId);
+      const selected = state.craftSelectedItemIds.has(itemId);
       const child = document.createElement("tr");
       child.className = `group-child${selectable ? " selectable" : ""}${selected ? " selected" : ""}${locked ? " locked" : ""}${!componentRow && coolingUnlockTs(item) > 0 ? " cooling" : ""}`;
       const childCells = [
         "<td></td>",
-        `<td>Asset ${itemId || "-"}</td>`,
+        `<td>${relativeWearLabel(item)}</td>`,
         "<td></td>",
         "<td></td>"
       ];
@@ -1137,33 +2163,1954 @@ function renderCraftGrouped(candidates) {
 }
 function setCraftStatus(text, isError = false) {
   state.craftStatusText = String(text || "").trim();
+  if (isError && state.craftStatusText) showErrorToast(state.craftStatusText);
   if (!ui.craftStatusText) return;
-  ui.craftStatusText.textContent = state.craftStatusText || "请在下方选择 10 件符合炼金规则的主库存物品";
+  ui.craftStatusText.textContent = state.craftStatusText || "点击左侧物品可填充当前编辑配方槽位";
   ui.craftStatusText.classList.toggle("error", !!isError);
+}
+function syncCraftSettingsControls(allCraftRows = null) {
+  const includeCooling = !!state.craftIncludeCooling;
+  const showSeed = !!state.craftShowSeed;
+  const showCoolingTime = !!state.craftShowCoolingTime;
+  const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  state.craftAssistWearOffsetPct = wearOffsetPct;
+  if (ui.craftIncludeCooling) ui.craftIncludeCooling.checked = includeCooling;
+  if (ui.componentCraftIncludeCooling) ui.componentCraftIncludeCooling.checked = includeCooling;
+  if (ui.craftShowSeed) ui.craftShowSeed.checked = showSeed;
+  if (ui.componentCraftShowSeed) ui.componentCraftShowSeed.checked = showSeed;
+  if (ui.craftShowCoolingTime) ui.craftShowCoolingTime.checked = showCoolingTime;
+  if (ui.componentCraftShowCoolingTime) ui.componentCraftShowCoolingTime.checked = showCoolingTime;
+  if (ui.craftAssistWearOffsetPct && document.activeElement !== ui.craftAssistWearOffsetPct) {
+    ui.craftAssistWearOffsetPct.value = craftAssistWearOffsetPctText(wearOffsetPct);
+  }
+  if (ui.componentCraftAssistWearOffsetPct && document.activeElement !== ui.componentCraftAssistWearOffsetPct) {
+    ui.componentCraftAssistWearOffsetPct.value = craftAssistWearOffsetPctText(wearOffsetPct);
+  }
+  const rows = Array.isArray(allCraftRows) ? allCraftRows : getMainInventoryCraftableRows();
+  const hintText = getCraftCoolingHintText(rows);
+  if (ui.craftCoolingHint) ui.craftCoolingHint.textContent = hintText;
+  if (ui.componentCraftCoolingHint) ui.componentCraftCoolingHint.textContent = hintText;
 }
 function setCraftSettingsPanelOpen(open) {
   state.craftSettingsOpen = !!open;
   if (ui.craftSettingsPanel) ui.craftSettingsPanel.classList.toggle("hidden", !state.craftSettingsOpen);
+  if (ui.componentCraftSettingsPanel) ui.componentCraftSettingsPanel.classList.toggle("hidden", !state.craftSettingsOpen);
   if (ui.craftSettingsBtn) ui.craftSettingsBtn.classList.toggle("active", state.craftSettingsOpen);
+  if (ui.componentCraftSettingsBtn) ui.componentCraftSettingsBtn.classList.toggle("active", state.craftSettingsOpen);
+  if (state.craftSettingsOpen) syncCraftSettingsControls();
+}
+function clampWear01(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return Math.max(0, Math.min(1, Number(fallback) || 0));
+  return Math.max(0, Math.min(1, n));
+}
+function wearText2(value) {
+  return clampWear01(value, 0).toFixed(2);
+}
+function wearText6(value) {
+  return clampWear01(value, 0).toFixed(WEAR_INPUT_DECIMALS);
+}
+function normalizeCraftAssistCount(value, fallback = 0) {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return Math.max(0, Math.min(10, Math.trunc(Number(fallback) || 0)));
+  return Math.max(0, Math.min(10, n));
+}
+function normalizeCraftAssistEntryCount(value, fallback = 1) {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return Math.max(1, Math.min(10, Math.trunc(Number(fallback) || 1)));
+  return Math.max(1, Math.min(10, n));
+}
+function normalizeCraftAssistApplyCount(value, fallback = 1) {
+  return normalizeCraftAssistEntryCount(value, fallback);
+}
+function normalizeCraftAssistWearOffsetPct(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT) {
+  const fallbackNum = Number(fallback);
+  const safeFallback = Number.isFinite(fallbackNum)
+    ? Math.max(0, Math.min(100, fallbackNum))
+    : DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return safeFallback;
+  const clamped = Math.max(0, Math.min(100, n));
+  return Math.round(clamped * 100) / 100;
+}
+function craftAssistWearOffsetPctText(value) {
+  const n = normalizeCraftAssistWearOffsetPct(value, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  return Number.isInteger(n) ? String(n) : String(n.toFixed(2)).replace(/\.?0+$/, "");
+}
+function getCraftAssistWearOffsetByTarget(targetValue) {
+  const pct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  const target = Number(targetValue);
+  if (!Number.isFinite(target) || target <= 0 || pct <= 0) return 0;
+  return target * (pct / 100);
+}
+function getCraftAssistOffsetSettingHintText() {
+  const pctText = craftAssistWearOffsetPctText(state.craftAssistWearOffsetPct);
+  return `当前偏移阈值 ${pctText}%（可在炼金设置中调整）`;
+}
+function normalizeCraftAssistFilterMode(mode) {
+  return String(mode || "").trim() === "absolute" ? "absolute" : "relative";
+}
+function getCraftAssistFilterMode() {
+  return state.craftAssistUseAbsoluteWear ? "absolute" : "relative";
+}
+function getCraftAssistFilterUseRelative() {
+  return getCraftAssistFilterMode() !== "absolute";
+}
+function normalizeCraftAssistRole(role) {
+  return String(role || "").trim() === "aux" ? "aux" : "main";
+}
+function craftAssistTargetCountFromMaterials(materials) {
+  const list = Array.isArray(materials) ? materials : [];
+  if (!list.length) return 10;
+  // TODO: 未来根据第一个材料索引规则自动判定 5 合 1 / 10 合 1。
+  return 10;
+}
+function normalizeCraftAssistDirection(role, direction) {
+  const defaultDirection = normalizeCraftAssistRole(role) === "aux" ? "lt" : "gt";
+  const value = String(direction || "").trim();
+  if (value === "lt" || value === "gt") return value;
+  return defaultDirection;
+}
+function craftAssistDirectionText(direction) {
+  return String(direction || "").trim() === "lt" ? "小于相对磨损" : "大于相对磨损";
+}
+function makeCraftAssistUid(prefix = "assist") {
+  return `${String(prefix || "assist").trim() || "assist"}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+function makeCraftAssistDefaultRange(name, {useRelative = getCraftAssistFilterUseRelative(), rows = null} = {}) {
+  const range = resolveCraftMaterialWearConstraintByName(name, {useRelative, rows});
+  return {wear_min: range.min, wear_max: range.max};
+}
+function normalizeCraftAssistMaterialEntry(entry, {targetWear = state.craftAssistTargetWear, idPrefix = "assist", useRelative = getCraftAssistFilterUseRelative(), rows = null} = {}) {
+  const name = String(entry && entry.name || "").trim();
+  if (!name) return null;
+  const role = normalizeCraftAssistRole(entry && entry.role);
+  const count = normalizeCraftAssistEntryCount(entry && entry.count, 1);
+  const defaultRange = makeCraftAssistDefaultRange(name, {useRelative, rows});
+  const customRange = !!(entry && entry.custom_range);
+  let wearMin = customRange
+    ? clampWearToRange(entry && entry.wear_min, defaultRange.wear_min, defaultRange.wear_max, defaultRange.wear_min)
+    : defaultRange.wear_min;
+  let wearMax = customRange
+    ? clampWearToRange(entry && entry.wear_max, defaultRange.wear_min, defaultRange.wear_max, defaultRange.wear_max)
+    : defaultRange.wear_max;
+  if (wearMax < wearMin) {
+    const tmp = wearMin;
+    wearMin = wearMax;
+    wearMax = tmp;
+  }
+  return {
+    id: makeCraftAssistUid(idPrefix),
+    name,
+    role,
+    count,
+    direction: normalizeCraftAssistDirection(role, entry && entry.direction),
+    disable_direction_limit: !!(entry && entry.disable_direction_limit),
+    wear_min: wearMin,
+    wear_max: wearMax,
+    custom_range: customRange
+  };
+}
+function normalizeCraftAssistMaterialList(entries, {targetWear = state.craftAssistTargetWear, idPrefix = "assist", useRelative = getCraftAssistFilterUseRelative(), rows = null} = {}) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(entries) ? entries : []) {
+    const normalized = normalizeCraftAssistMaterialEntry(raw, {targetWear, idPrefix, useRelative, rows});
+    if (!normalized) continue;
+    if (seen.has(normalized.name)) continue;
+    seen.add(normalized.name);
+    out.push(normalized);
+  }
+  return out;
+}
+function syncCraftAssistAutoDirectionLimit() {
+  const materials = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [];
+  if (materials.length !== 1) return;
+  const first = materials[0];
+  if (!first) return;
+  if (normalizeCraftAssistRole(first.role) !== "main") {
+    if (first.disable_direction_limit) {
+      state.craftAssistMaterials = [{...first, disable_direction_limit: false}];
+    }
+    return;
+  }
+  const shouldEnable = normalizeCraftAssistEntryCount(first.count, 1) === 10;
+  if (shouldEnable && !first.disable_direction_limit) {
+    state.craftAssistMaterials = [{...first, disable_direction_limit: true}];
+    return;
+  }
+  if (!shouldEnable && first.disable_direction_limit) {
+    state.craftAssistMaterials = [{...first, disable_direction_limit: false}];
+  }
+}
+function refreshCraftAssistMaterialRanges({rows = null, useRelative = getCraftAssistFilterUseRelative()} = {}) {
+  state.craftAssistMaterials = (Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
+    .map((entry) => {
+      const normalized = normalizeCraftAssistMaterialEntry(entry, {
+        targetWear: state.craftAssistTargetWear,
+        idPrefix: "assist",
+        useRelative,
+        rows
+      });
+      if (!normalized) return null;
+      return {
+        ...normalized,
+        id: String(entry && entry.id || normalized.id || "").trim() || normalized.id
+      };
+    })
+    .filter(Boolean);
+  syncCraftAssistAutoDirectionLimit();
+}
+function setCraftAssistFilterMode(mode, {refreshRanges = true, renderPanel = true} = {}) {
+  const nextMode = normalizeCraftAssistFilterMode(mode);
+  const nextUseAbsolute = nextMode === "absolute";
+  const changed = state.craftAssistUseAbsoluteWear !== nextUseAbsolute;
+  state.craftAssistUseAbsoluteWear = nextUseAbsolute;
+  if (refreshRanges && (changed || Array.isArray(state.craftAssistMaterials) && state.craftAssistMaterials.length > 0)) {
+    refreshCraftAssistMaterialRanges({useRelative: nextMode !== "absolute"});
+  }
+  if (renderPanel) {
+    renderCraftAssistPanel();
+  }
+}
+function sanitizeCraftAssistPresetPayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const name = String(source.name || "").trim();
+  if (!name) return null;
+  const filterMode = normalizeCraftAssistFilterMode(source.wear_filter_mode);
+  const useRelativeFilter = filterMode !== "absolute";
+  const targetWear = clampWear01(source.target_wear, 0.5);
+  const materials = normalizeCraftAssistMaterialList(source.materials, {
+    targetWear,
+    idPrefix: "preset_material",
+    useRelative: useRelativeFilter
+  })
+    .map((entry) => ({
+      name: entry.name,
+      role: entry.role,
+      count: entry.count,
+      direction: entry.direction,
+      disable_direction_limit: !!entry.disable_direction_limit,
+      wear_min: entry.wear_min,
+      wear_max: entry.wear_max,
+      custom_range: !!entry.custom_range
+    }))
+    .filter((entry) => entry.count > 0);
+  if (!materials.length) return null;
+  const createdAt = Math.max(0, Number(source.created_at || 0) || 0);
+  const updatedAt = Math.max(createdAt, Math.max(0, Number(source.updated_at || 0) || 0));
+  return {
+    id: String(source.id || makeCraftAssistUid("preset")).trim() || makeCraftAssistUid("preset"),
+    name,
+    target_wear: targetWear,
+    wear_filter_mode: filterMode,
+    use_absolute_wear: filterMode === "absolute",
+    materials,
+    created_at: createdAt || Date.now(),
+    updated_at: updatedAt || Date.now()
+  };
+}
+function normalizeCraftAssistPresetList(values) {
+  return (Array.isArray(values) ? values : [])
+    .map((entry) => sanitizeCraftAssistPresetPayload(entry))
+    .filter(Boolean)
+    .slice(0, 40);
+}
+function readCraftAssistPresetsFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(CRAFT_ASSIST_PRESETS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return normalizeCraftAssistPresetList(arr);
+  } catch (_) {
+    return [];
+  }
+}
+function writeCraftAssistPresetsToLocalStorage(presets) {
+  try {
+    localStorage.setItem(CRAFT_ASSIST_PRESETS_KEY, JSON.stringify(Array.isArray(presets) ? presets : []));
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+async function saveCraftAssistPresetsToServer(presets) {
+  try {
+    await api("/api/ui-state/craft-assist-presets", {
+      method: "POST",
+      body: JSON.stringify({
+        presets: Array.isArray(presets) ? presets : []
+      })
+    });
+  } catch (_) {
+    // ignore server sync errors
+  }
+}
+async function loadCraftAssistPresetsFromServer() {
+  try {
+    const data = await api("/api/ui-state/craft-assist-presets");
+    return normalizeCraftAssistPresetList(data && data.presets);
+  } catch (_) {
+    return null;
+  }
+}
+function saveCraftAssistPresetsToStorage() {
+  const payload = normalizeCraftAssistPresetList(state.craftAssistPresets);
+  state.craftAssistPresets = payload;
+  writeCraftAssistPresetsToLocalStorage(payload);
+  void saveCraftAssistPresetsToServer(payload);
+}
+async function loadCraftAssistPresetsFromStorage() {
+  const localPresets = readCraftAssistPresetsFromLocalStorage();
+  const serverPresets = await loadCraftAssistPresetsFromServer();
+  if (Array.isArray(serverPresets)) {
+    if (serverPresets.length > 0) {
+      state.craftAssistPresets = serverPresets;
+      writeCraftAssistPresetsToLocalStorage(serverPresets);
+      return;
+    }
+    if (localPresets.length > 0) {
+      state.craftAssistPresets = localPresets;
+      await saveCraftAssistPresetsToServer(localPresets);
+      return;
+    }
+    state.craftAssistPresets = [];
+    return;
+  }
+  state.craftAssistPresets = localPresets;
+}
+function formatCraftAssistPresetTime(value) {
+  const ts = Number(value);
+  if (!Number.isFinite(ts) || ts <= 0) return "-";
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return "-";
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${mm}-${dd} ${hh}:${mi}`;
+}
+function buildCurrentCraftAssistPresetSnapshot(name) {
+  const presetName = String(name || "").trim();
+  if (!presetName) return null;
+  const filterMode = getCraftAssistFilterMode();
+  const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
+  if (targetWear == null) return null;
+  const materials = normalizeCraftAssistMaterialList(state.craftAssistMaterials, {
+    targetWear,
+    idPrefix: "preset_material",
+    useRelative: filterMode !== "absolute"
+  })
+    .filter((entry) => entry.count > 0)
+    .map((entry) => ({
+      name: entry.name,
+      role: entry.role,
+      count: entry.count,
+      direction: entry.direction,
+      disable_direction_limit: !!entry.disable_direction_limit,
+      wear_min: entry.wear_min,
+      wear_max: entry.wear_max,
+      custom_range: !!entry.custom_range
+    }));
+  if (!materials.length) return null;
+  return sanitizeCraftAssistPresetPayload({
+    id: makeCraftAssistUid("preset"),
+    name: presetName,
+    target_wear: targetWear,
+    wear_filter_mode: filterMode,
+    use_absolute_wear: filterMode === "absolute",
+    materials,
+    created_at: Date.now(),
+    updated_at: Date.now()
+  });
+}
+function buildCraftAssistParentGroups() {
+  const groups = buildCraftGroupRows(getCraftCandidates());
+  return groups
+    .map((group) => ({
+      key: String(group && group.name || "").trim(),
+      name: String(group && group.name || "").trim(),
+      count: Array.isArray(group && group.items) ? group.items.length : 0,
+      rarity: String(group && group.parent_rarity || "").trim(),
+      collection: String(group && group.collection || "").trim()
+    }))
+    .filter((entry) => entry.key)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+function createCraftAssistMaterial(name, role = "main") {
+  const key = String(name || "").trim();
+  if (!key) return null;
+  return normalizeCraftAssistMaterialEntry({
+    name: key,
+    role: normalizeCraftAssistRole(role),
+    count: 1,
+    direction: "",
+    disable_direction_limit: false,
+    custom_range: false
+  }, {targetWear: state.craftAssistTargetWear, idPrefix: "assist", useRelative: getCraftAssistFilterUseRelative()});
+}
+function setCraftAssistPanelOpen(open) {
+  const nextOpen = !!open;
+  const closingWithEdit = !nextOpen && isCraftAssistPresetEditing();
+  state.craftAssistOpen = nextOpen;
+  if (state.craftAssistOpen) {
+    expandCraftAssistOverlayToBottom();
+  }
+  if (!state.craftAssistOpen) {
+    stopCraftAssistOverlayDrag();
+    stopCraftAssistSplitDrag();
+    if (craftAssistPickerCloseTimer != null) {
+      clearTimeout(craftAssistPickerCloseTimer);
+      craftAssistPickerCloseTimer = null;
+    }
+    state.craftAssistPickerOpen = false;
+    state.craftAssistRoleChooserOpen = false;
+    if (closingWithEdit) {
+      cancelCraftAssistPresetEditingSession();
+    }
+  }
+  renderCraftAssistPanel();
+}
+function setCraftAssistRoleChooserOpen(open) {
+  if (!state.craftAssistOpen) return;
+  const next = !!open;
+  if (next) {
+    state.craftAssistPickerOpen = false;
+    if (craftAssistPickerCloseTimer != null) {
+      clearTimeout(craftAssistPickerCloseTimer);
+      craftAssistPickerCloseTimer = null;
+    }
+  }
+  if (state.craftAssistRoleChooserOpen === next) return;
+  state.craftAssistRoleChooserOpen = next;
+  renderCraftAssistPanel();
+}
+function openCraftAssistPicker() {
+  if (!state.craftAssistOpen) return;
+  if (craftAssistPickerCloseTimer != null) {
+    clearTimeout(craftAssistPickerCloseTimer);
+    craftAssistPickerCloseTimer = null;
+  }
+  state.craftAssistRoleChooserOpen = false;
+  if (!state.craftAssistPickerOpen) {
+    state.craftAssistPickerOpen = true;
+    renderCraftAssistPanel();
+  }
+}
+function scheduleCloseCraftAssistPicker(delayMs = 140) {
+  if (craftAssistPickerCloseTimer != null) {
+    clearTimeout(craftAssistPickerCloseTimer);
+    craftAssistPickerCloseTimer = null;
+  }
+  craftAssistPickerCloseTimer = setTimeout(() => {
+    craftAssistPickerCloseTimer = null;
+    if (!state.craftAssistPickerOpen) return;
+    state.craftAssistPickerOpen = false;
+    renderCraftAssistPanel();
+  }, Math.max(0, Number(delayMs) || 0));
+}
+function updateCraftAssistMaterial(materialId, updater) {
+  const key = String(materialId || "").trim();
+  if (!key || typeof updater !== "function") return;
+  state.craftAssistMaterials = state.craftAssistMaterials.map((entry) => {
+    if (String(entry && entry.id || "").trim() !== key) return entry;
+    const next = updater(entry);
+    return next && typeof next === "object" ? next : entry;
+  });
+}
+function addCraftAssistMaterialByName(name) {
+  const key = String(name || "").trim();
+  if (!key) return;
+  const parentGroups = buildCraftAssistParentGroups();
+  const rarityByName = new Map(parentGroups.map((group) => [String(group && group.name || "").trim(), String(group && group.rarity || "").trim()]));
+  const nextRarity = String(rarityByName.get(key) || "").trim();
+  const existingRarities = new Set(
+    (Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
+      .map((entry) => String(rarityByName.get(String(entry && entry.name || "").trim()) || "").trim())
+      .filter(Boolean)
+  );
+  if (nextRarity && existingRarities.size && !existingRarities.has(nextRarity)) {
+    const currentRarity = [...existingRarities][0];
+    setCraftStatus(`单配方需同一稀有度：当前为 ${currentRarity}，不能添加 ${nextRarity}`, true);
+    return;
+  }
+  if (state.craftAssistMaterials.some((entry) => String(entry && entry.name || "").trim() === key)) {
+    state.craftAssistPickerOpen = false;
+    state.craftAssistRoleChooserOpen = false;
+    renderCraftAssistPanel();
+    return;
+  }
+  const mode = craftAssistMaterialLimitFor(state.craftAssistMaterials);
+  const totalCount = calcCraftAssistLiveTotalCount(state.craftAssistMaterials);
+  if (totalCount >= mode) {
+    setCraftStatus(`材料数量已达 ${mode}，不能继续添加父类材料`, true);
+    return;
+  }
+  const next = createCraftAssistMaterial(key, state.craftAssistPickRole);
+  if (!next) return;
+  const remain = Math.max(0, mode - totalCount);
+  next.count = Math.max(1, Math.min(remain, normalizeCraftAssistEntryCount(next.count, 1)));
+  state.craftAssistMaterials = [...state.craftAssistMaterials, next];
+  syncCraftAssistAutoDirectionLimit();
+  state.craftAssistPickerOpen = false;
+  state.craftAssistRoleChooserOpen = false;
+  renderCraftAssistPanel();
+}
+function removeCraftAssistMaterial(materialId) {
+  const key = String(materialId || "").trim();
+  if (!key) return;
+  state.craftAssistMaterials = state.craftAssistMaterials.filter((entry) => String(entry && entry.id || "").trim() !== key);
+  syncCraftAssistAutoDirectionLimit();
+  renderCraftAssistPanel();
+}
+function renderCraftAssistPicker() {
+  if (!ui.craftAssistPicker) return;
+  const open = !!state.craftAssistPickerOpen && !!state.craftAssistOpen;
+  ui.craftAssistPicker.classList.toggle("hidden", !open);
+  ui.craftAssistPicker.replaceChildren();
+  if (!open) return;
+
+  const tip = document.createElement("div");
+  tip.className = "craft-assist-picker-empty";
+  tip.textContent = "点击左侧添加主料，右侧添加辅料";
+  ui.craftAssistPicker.append(tip);
+
+  const selected = new Set(state.craftAssistMaterials.map((entry) => String(entry && entry.name || "").trim()).filter(Boolean));
+  const groups = buildCraftAssistParentGroups();
+  const groupsByName = new Map(groups.map((group) => [String(group && group.name || "").trim(), group]));
+  const selectedRarities = new Set(
+    (Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
+      .map((entry) => {
+        const group = groupsByName.get(String(entry && entry.name || "").trim());
+        return String(group && group.rarity || "").trim();
+      })
+      .filter(Boolean)
+  );
+  const lockedRarity = selectedRarities.size ? [...selectedRarities][0] : "";
+  const mode = craftAssistMaterialLimitFor(state.craftAssistMaterials);
+  const totalCount = calcCraftAssistLiveTotalCount(state.craftAssistMaterials);
+  const limitReached = totalCount >= mode;
+  if (!groups.length) {
+    const empty = document.createElement("div");
+    empty.className = "craft-assist-picker-empty";
+    empty.textContent = "当前炼金页无可选父类材料";
+    ui.craftAssistPicker.append(empty);
+    return;
+  }
+  for (const group of groups) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "craft-assist-picker-item";
+    const used = selected.has(group.name);
+    const groupRarity = String(group && group.rarity || "").trim();
+    const blockedByRarity = !used && lockedRarity && groupRarity && groupRarity !== lockedRarity;
+    const blockedByLimit = !used && limitReached;
+    btn.disabled = used || blockedByLimit || blockedByRarity;
+    const blockedTag = blockedByLimit
+      ? ` 已满${mode}`
+      : (blockedByRarity ? ` 稀有度需 ${lockedRarity}` : "");
+    btn.textContent = `${group.name}（${group.count}）${used ? " 已添加" : blockedTag}`;
+    btn.title = group.collection ? `${group.rarity || "-"} | ${group.collection}` : (group.rarity || "-");
+    btn.onclick = () => {
+      addCraftAssistMaterialByName(group.name);
+    };
+    ui.craftAssistPicker.append(btn);
+  }
+}
+function parseCraftAssistRangeInputValue(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+function seedCraftAssistDecimalInput(input) {
+  if (!input) return;
+  if (String(input.value || "").trim()) return;
+  input.value = "0.";
+  input.dataset.seeded = "1";
+  requestAnimationFrame(() => {
+    try {
+      input.setSelectionRange(2, 2);
+    } catch (_) {
+      // ignore
+    }
+  });
+}
+function commitCraftAssistTargetWearInput(input) {
+  if (!input) return null;
+  const raw = String(input.value || "").trim();
+  if (input.dataset.seeded === "1" && raw === "0.") {
+    input.value = "";
+    delete input.dataset.seeded;
+    return null;
+  }
+  delete input.dataset.seeded;
+  const parsed = parseOptionalWear01(raw);
+  if (parsed == null) {
+    if (raw) input.value = "";
+    return null;
+  }
+  input.value = wearText6(parsed);
+  return parsed;
+}
+function renderCraftAssistList() {
+  if (!ui.craftAssistList) return;
+  syncCraftAssistAutoDirectionLimit();
+  ui.craftAssistList.replaceChildren();
+  const materials = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [];
+  if (!materials.length) {
+    const empty = document.createElement("div");
+    empty.className = "craft-assist-list-empty";
+    empty.textContent = "悬停上方“尚未选择父类材料”行后，点击主料/辅料开始添加";
+    ui.craftAssistList.append(empty);
+    return;
+  }
+  const filterUseRelative = getCraftAssistFilterUseRelative();
+  const wearLabel = filterUseRelative ? "相对磨损范围" : "绝对磨损范围";
+  const minText = "Minwear";
+  const maxText = "Maxwear";
+  for (const material of materials) {
+    const materialId = String(material && material.id || "").trim();
+    const resolvedRange = resolveCraftAssistMaterialEffectiveRange(material, {
+      useRelative: filterUseRelative
+    });
+    const constraintMin = Number(resolvedRange.constraint_min);
+    const constraintMax = Number(resolvedRange.constraint_max);
+    const customRange = !!(material && material.custom_range);
+    const role = normalizeCraftAssistRole(material && material.role);
+    const roleText = role === "main" ? "主料" : "辅料";
+    const disableLimit = !!(material && material.disable_direction_limit);
+    const item = document.createElement("div");
+    item.className = "craft-assist-item";
+
+    const head = document.createElement("div");
+    head.className = "craft-assist-item-head";
+    const title = document.createElement("div");
+    title.className = "craft-assist-item-title";
+    title.textContent = String(material && material.name || "-");
+    const badge = document.createElement("span");
+    badge.className = `craft-assist-role-tag ${role}`;
+    badge.textContent = roleText;
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "craft-assist-item-remove";
+    removeBtn.title = "删除该材料";
+    removeBtn.setAttribute("aria-label", "删除该材料");
+    removeBtn.textContent = "×";
+    removeBtn.onclick = () => {
+      removeCraftAssistMaterial(materialId);
+    };
+    const actions = document.createElement("div");
+    actions.className = "craft-assist-item-actions";
+    actions.append(badge, removeBtn);
+    head.append(title, actions);
+
+    const configRow = document.createElement("div");
+    configRow.className = "craft-assist-item-config";
+    const qtyLabel = document.createElement("label");
+    qtyLabel.className = "craft-assist-field qty";
+    const qtyText = document.createElement("span");
+    qtyText.textContent = "数量";
+    const qtyInput = document.createElement("input");
+    qtyInput.type = "number";
+    qtyInput.min = "1";
+    qtyInput.max = "10";
+    qtyInput.step = "1";
+    const qtyFallback = 1;
+    qtyInput.value = String(normalizeCraftAssistEntryCount(material && material.count, qtyFallback));
+    qtyInput.onchange = () => {
+      const mode = craftAssistMaterialLimitFor(state.craftAssistMaterials);
+      const currentId = String(materialId || "").trim();
+      const otherTotal = calcCraftAssistLiveTotalCount(
+        (Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
+          .filter((entry) => String(entry && entry.id || "").trim() !== currentId)
+      );
+      const maxAllowed = Math.max(0, mode - otherTotal);
+      if (maxAllowed <= 0) {
+        qtyInput.value = String(normalizeCraftAssistEntryCount(material && material.count, 1));
+        setCraftStatus(`材料数量上限 ${mode}，请先调整其他词条数量`, true);
+        return;
+      }
+      const requested = normalizeCraftAssistEntryCount(qtyInput.value, material && material.count);
+      const nextCount = Math.max(1, Math.min(requested, maxAllowed));
+      if (requested > maxAllowed) {
+        setCraftStatus(`材料数量上限 ${mode}，该项最多可填 ${maxAllowed}`, true);
+      }
+      updateCraftAssistMaterial(materialId, (entry) => ({...entry, count: nextCount}));
+      syncCraftAssistAutoDirectionLimit();
+      renderCraftAssistPanel();
+    };
+    qtyLabel.append(qtyText, qtyInput);
+    configRow.append(qtyLabel);
+
+    const rangeLabel = document.createElement("label");
+    rangeLabel.className = "craft-assist-field range";
+    const rangeText = document.createElement("span");
+    rangeText.textContent = wearLabel;
+    const rangeWrap = document.createElement("div");
+    rangeWrap.className = "craft-assist-range-wrap";
+    const minLabel = document.createElement("span");
+    minLabel.className = "craft-assist-range-label";
+    minLabel.textContent = minText;
+    const minInput = document.createElement("input");
+    minInput.type = "text";
+    minInput.inputMode = "decimal";
+    minInput.placeholder = wearText2(constraintMin);
+    minInput.value = customRange ? wearText2(resolvedRange.wear_min) : "";
+    minInput.setAttribute("aria-label", `${minText} 输入`);
+    const dash = document.createElement("span");
+    dash.textContent = "-";
+    const maxLabel = document.createElement("span");
+    maxLabel.className = "craft-assist-range-label";
+    maxLabel.textContent = maxText;
+    const maxInput = document.createElement("input");
+    maxInput.type = "text";
+    maxInput.inputMode = "decimal";
+    maxInput.placeholder = wearText2(constraintMax);
+    maxInput.value = customRange ? wearText2(resolvedRange.wear_max) : "";
+    maxInput.setAttribute("aria-label", `${maxText} 输入`);
+    const commitRange = () => {
+      if (minInput.dataset.seeded === "1" && String(minInput.value || "").trim() === "0.") {
+        minInput.value = "";
+      }
+      if (maxInput.dataset.seeded === "1" && String(maxInput.value || "").trim() === "0.") {
+        maxInput.value = "";
+      }
+      delete minInput.dataset.seeded;
+      delete maxInput.dataset.seeded;
+
+      const minRaw = parseCraftAssistRangeInputValue(minInput.value);
+      const maxRaw = parseCraftAssistRangeInputValue(maxInput.value);
+      const minBlank = String(minInput.value || "").trim() === "";
+      const maxBlank = String(maxInput.value || "").trim() === "";
+      if (minBlank && maxBlank) {
+        updateCraftAssistMaterial(materialId, (entry) => ({
+          ...entry,
+          wear_min: constraintMin,
+          wear_max: constraintMax,
+          custom_range: false
+        }));
+        renderCraftAssistPanel();
+        return;
+      }
+
+      let nextMin = minBlank
+        ? constraintMin
+        : clampWearToRange(minRaw, constraintMin, constraintMax, constraintMin);
+      let nextMax = maxBlank
+        ? constraintMax
+        : clampWearToRange(maxRaw, constraintMin, constraintMax, constraintMax);
+      if (nextMax < nextMin) {
+        if (!minBlank && maxBlank) nextMax = nextMin;
+        else if (minBlank && !maxBlank) nextMin = nextMax;
+        else nextMax = nextMin;
+      }
+      updateCraftAssistMaterial(materialId, (entry) => ({
+        ...entry,
+        wear_min: nextMin,
+        wear_max: nextMax,
+        custom_range: true
+      }));
+      renderCraftAssistPanel();
+    };
+    minInput.onfocus = () => seedCraftAssistDecimalInput(minInput);
+    maxInput.onfocus = () => seedCraftAssistDecimalInput(maxInput);
+    minInput.oninput = () => { delete minInput.dataset.seeded; };
+    maxInput.oninput = () => { delete maxInput.dataset.seeded; };
+    minInput.onblur = commitRange;
+    maxInput.onblur = commitRange;
+    minInput.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      commitRange();
+      maxInput.focus();
+    };
+    maxInput.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      commitRange();
+      maxInput.blur();
+    };
+    rangeWrap.append(minLabel, minInput, dash, maxLabel, maxInput);
+    rangeLabel.append(rangeText, rangeWrap);
+    configRow.append(rangeLabel);
+
+    const limitRow = document.createElement("label");
+    limitRow.className = "craft-assist-item-limit";
+    const limitCheck = document.createElement("input");
+    limitCheck.type = "checkbox";
+    limitCheck.checked = disableLimit;
+    const limitText = document.createElement("span");
+    limitText.textContent = "可小于相对磨损";
+    limitCheck.onchange = () => {
+      updateCraftAssistMaterial(materialId, (entry) => ({
+        ...entry,
+        direction: normalizeCraftAssistDirection(role, entry && entry.direction),
+        disable_direction_limit: !!limitCheck.checked
+      }));
+      syncCraftAssistAutoDirectionLimit();
+      renderCraftAssistPanel();
+    };
+    limitRow.append(limitCheck, limitText);
+    configRow.append(limitRow);
+
+    item.append(head, configRow);
+    ui.craftAssistList.append(item);
+  }
+}
+function calcCraftAssistMaterialTotalCount(materials) {
+  return (Array.isArray(materials) ? materials : [])
+    .reduce((sum, item) => sum + normalizeCraftAssistEntryCount(item && item.count, 1), 0);
+}
+function calcCraftAssistLiveTotalCount(materials = state.craftAssistMaterials) {
+  return (Array.isArray(materials) ? materials : [])
+    .reduce((sum, item) => sum + normalizeCraftAssistEntryCount(item && item.count, 1), 0);
+}
+function craftAssistMaterialLimitFor(materials = state.craftAssistMaterials) {
+  return craftAssistTargetCountFromMaterials(Array.isArray(materials) ? materials : []);
+}
+
+function validateCraftAssistPresetSnapshot(snapshot) {
+  if (!snapshot) {
+    return {ok: false, message: "当前无可保存的辅助选材配置"};
+  }
+  const materials = Array.isArray(snapshot.materials) ? snapshot.materials : [];
+  const mode = craftAssistTargetCountFromMaterials(materials);
+  const totalCount = calcCraftAssistMaterialTotalCount(materials);
+  if (totalCount !== mode) {
+    return {ok: false, message: `保存失败：材料数量需等于 ${mode}，当前 ${totalCount}`};
+  }
+  return {ok: true, mode, totalCount};
+}
+
+function validateCurrentCraftAssistPresetBeforeNaming() {
+  const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
+  if (targetWear == null) {
+    return {ok: false, message: "请先填写目标相对磨损"};
+  }
+  const probe = buildCurrentCraftAssistPresetSnapshot("__precheck__");
+  return validateCraftAssistPresetSnapshot(probe);
+}
+
+function isCraftAssistPresetEditing() {
+  return !!String(state.craftAssistPresetEditingId || "").trim();
+}
+
+function buildCraftAssistDraftSnapshotFromState() {
+  const filterMode = getCraftAssistFilterMode();
+  const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
+  return {
+    panel_open: !!state.craftAssistOpen,
+    target_wear: targetWear,
+    wear_filter_mode: filterMode,
+    materials: normalizeCraftAssistMaterialList(state.craftAssistMaterials, {
+      targetWear,
+      idPrefix: "assist",
+      useRelative: filterMode !== "absolute"
+    }).map((entry) => ({...entry})),
+    pick_role: normalizeCraftAssistRole(state.craftAssistPickRole)
+  };
+}
+
+function buildCraftAssistPresetComparableSnapshot({targetWear = null, wearFilterMode = "relative", materials = []} = {}) {
+  const filterMode = normalizeCraftAssistFilterMode(wearFilterMode);
+  const parsedTargetWear = parseOptionalWear01(targetWear);
+  const normalizedMaterials = normalizeCraftAssistMaterialList(materials, {
+    targetWear: parsedTargetWear,
+    idPrefix: "assist",
+    useRelative: filterMode !== "absolute"
+  }).map((entry) => ({
+    name: String(entry && entry.name || "").trim(),
+    role: normalizeCraftAssistRole(entry && entry.role),
+    count: normalizeCraftAssistEntryCount(entry && entry.count, 1),
+    direction: normalizeCraftAssistDirection(entry && entry.role, entry && entry.direction),
+    disable_direction_limit: !!(entry && entry.disable_direction_limit),
+    wear_min: clampWear01(entry && entry.wear_min, 0),
+    wear_max: clampWear01(entry && entry.wear_max, 1),
+    custom_range: !!(entry && entry.custom_range)
+  }));
+  return {
+    target_wear: parsedTargetWear,
+    wear_filter_mode: filterMode,
+    materials: normalizedMaterials
+  };
+}
+
+function getCurrentCraftAssistPresetComparableSnapshot() {
+  const filterMode = getCraftAssistFilterMode();
+  return buildCraftAssistPresetComparableSnapshot({
+    targetWear: state.craftAssistTargetWear,
+    wearFilterMode: filterMode,
+    materials: state.craftAssistMaterials
+  });
+}
+
+function isCraftAssistPresetEditingDirty() {
+  if (!isCraftAssistPresetEditing()) return false;
+  const baseline = state.craftAssistPresetEditingInitialSnapshot;
+  if (!baseline || typeof baseline !== "object") return false;
+  const current = getCurrentCraftAssistPresetComparableSnapshot();
+  return JSON.stringify(baseline) !== JSON.stringify(current);
+}
+
+function restoreCraftAssistDraftSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  const filterMode = normalizeCraftAssistFilterMode(snapshot.wear_filter_mode);
+  state.craftAssistTargetWear = parseOptionalWear01(snapshot.target_wear);
+  setCraftAssistFilterMode(filterMode, {refreshRanges: false, renderPanel: false});
+  state.craftAssistMaterials = normalizeCraftAssistMaterialList(snapshot.materials, {
+    targetWear: state.craftAssistTargetWear,
+    idPrefix: "assist",
+    useRelative: filterMode !== "absolute"
+  });
+  syncCraftAssistAutoDirectionLimit();
+  state.craftAssistPickRole = normalizeCraftAssistRole(snapshot.pick_role);
+  state.craftAssistPickerOpen = false;
+  state.craftAssistRoleChooserOpen = false;
+}
+
+function clearCraftAssistPresetEditingState({restoreDraft = false} = {}) {
+  if (restoreDraft && state.craftAssistPresetEditingBackup) {
+    restoreCraftAssistDraftSnapshot(state.craftAssistPresetEditingBackup);
+  }
+  state.craftAssistPresetEditingId = "";
+  state.craftAssistPresetEditingName = "";
+  state.craftAssistPresetEditingBackup = null;
+  state.craftAssistPresetEditingInitialSnapshot = null;
+}
+
+function loadCraftAssistPresetIntoDraft(preset) {
+  const normalized = sanitizeCraftAssistPresetPayload(preset);
+  if (!normalized) return null;
+  const filterMode = normalizeCraftAssistFilterMode(normalized.wear_filter_mode);
+  state.craftAssistTargetWear = parseOptionalWear01(normalized.target_wear);
+  setCraftAssistFilterMode(filterMode, {refreshRanges: false, renderPanel: false});
+  state.craftAssistMaterials = normalizeCraftAssistMaterialList(normalized.materials, {
+    targetWear: state.craftAssistTargetWear,
+    idPrefix: "assist",
+    useRelative: filterMode !== "absolute"
+  });
+  syncCraftAssistAutoDirectionLimit();
+  state.craftAssistPickRole = "main";
+  state.craftAssistPickerOpen = false;
+  state.craftAssistRoleChooserOpen = false;
+  return normalized;
+}
+
+function saveCurrentCraftAssistPreset(nameInput) {
+  const name = String(nameInput || "").trim();
+  if (!name) {
+    setCraftStatus("请先输入配置名称", true);
+    return false;
+  }
+  const snapshot = buildCurrentCraftAssistPresetSnapshot(name);
+  const check = validateCraftAssistPresetSnapshot(snapshot);
+  if (!check.ok) {
+    setCraftStatus(check.message, true);
+    return false;
+  }
+  const list = Array.isArray(state.craftAssistPresets) ? [...state.craftAssistPresets] : [];
+  const idx = list.findIndex((entry) => String(entry && entry.name || "").trim() === name);
+  if (idx >= 0) {
+    const existed = list[idx];
+    const next = {
+      ...snapshot,
+      id: String(existed && existed.id || snapshot.id || "").trim() || makeCraftAssistUid("preset"),
+      created_at: Math.max(0, Number(existed && existed.created_at || 0) || 0) || snapshot.created_at,
+      updated_at: Date.now()
+    };
+    list[idx] = next;
+  } else {
+    list.unshift(snapshot);
+  }
+  state.craftAssistPresets = list
+    .map((entry) => sanitizeCraftAssistPresetPayload(entry))
+    .filter(Boolean)
+    .slice(0, 40);
+  saveCraftAssistPresetsToStorage();
+  setCraftStatus(`已保存辅助配置：${name}`);
+  renderCraftAssistPanel();
+  return true;
+}
+
+async function promptAndSaveCurrentCraftAssistPreset() {
+  const preCheck = validateCurrentCraftAssistPresetBeforeNaming();
+  if (!preCheck.ok) {
+    setCraftStatus(preCheck.message, true);
+    return false;
+  }
+  const presetName = await openCraftAssistPresetModal("");
+  if (presetName == null) return false;
+  return saveCurrentCraftAssistPreset(presetName);
+}
+function applyCraftAssistPreset(presetId, {autoSelect = true, applyCount = 1} = {}) {
+  const id = String(presetId || "").trim();
+  if (!id) return;
+  const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
+  const idx = list.findIndex((entry) => String(entry && entry.id || "").trim() === id);
+  if (idx < 0) return;
+  if (isCraftAssistPresetEditing()) {
+    clearCraftAssistPresetEditingState({restoreDraft: true});
+  }
+  const preset = loadCraftAssistPresetIntoDraft(list[idx]);
+  if (!preset) return;
+  const now = Date.now();
+  state.craftAssistPresets[idx] = {
+    ...preset,
+    updated_at: now
+  };
+  saveCraftAssistPresetsToStorage();
+  renderCraftAssistPanel();
+  if (autoSelect) {
+    const repeatCount = normalizeCraftAssistApplyCount(applyCount, 1);
+    applyCraftAssistAutoSelectionBatch({sourcePresetName: preset.name, repeatCount});
+    return;
+  }
+  setCraftStatus(`已应用配置：${preset.name}`);
+}
+
+function saveCraftAssistPresetEditingSession() {
+  const editingId = String(state.craftAssistPresetEditingId || "").trim();
+  if (!editingId) return false;
+  const backupPanelOpen = !!(state.craftAssistPresetEditingBackup && state.craftAssistPresetEditingBackup.panel_open);
+  const list = Array.isArray(state.craftAssistPresets) ? [...state.craftAssistPresets] : [];
+  const idx = list.findIndex((entry) => String(entry && entry.id || "").trim() === editingId);
+  if (idx < 0) {
+    clearCraftAssistPresetEditingState({restoreDraft: true});
+    setCraftAssistPanelOpen(backupPanelOpen);
+    setCraftStatus("编辑目标不存在，已退出独立编辑", true);
+    return false;
+  }
+  const existed = sanitizeCraftAssistPresetPayload(list[idx]);
+  if (!existed) {
+    clearCraftAssistPresetEditingState({restoreDraft: true});
+    setCraftAssistPanelOpen(backupPanelOpen);
+    setCraftStatus("编辑目标无效，已退出独立编辑", true);
+    return false;
+  }
+  const snapshot = buildCurrentCraftAssistPresetSnapshot(String(existed.name || "").trim());
+  const check = validateCraftAssistPresetSnapshot(snapshot);
+  if (!check.ok) {
+    setCraftStatus(check.message, true);
+    return false;
+  }
+  const next = {
+    ...snapshot,
+    id: String(existed.id || "").trim() || editingId,
+    name: String(existed.name || "").trim(),
+    created_at: Math.max(0, Number(existed.created_at || 0) || 0) || snapshot.created_at,
+    updated_at: Date.now()
+  };
+  list[idx] = next;
+  state.craftAssistPresets = normalizeCraftAssistPresetList(list);
+  saveCraftAssistPresetsToStorage();
+  const presetName = String(next.name || "").trim() || "未命名配置";
+  clearCraftAssistPresetEditingState({restoreDraft: true});
+  setCraftAssistPanelOpen(backupPanelOpen);
+  setCraftStatus(`已保存配置：${presetName}（独立编辑）`);
+  renderCraftAssistPanel();
+  return true;
+}
+
+function applyCraftAssistPresetForEdit(presetId) {
+  const id = String(presetId || "").trim();
+  if (!id) return;
+  const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
+  const idx = list.findIndex((entry) => String(entry && entry.id || "").trim() === id);
+  if (idx < 0) return;
+  const preset = sanitizeCraftAssistPresetPayload(list[idx]);
+  if (!preset) return;
+  if (isCraftAssistPresetEditing()) {
+    const sameId = String(state.craftAssistPresetEditingId || "").trim() === id;
+    if (sameId) {
+      setCraftAssistPanelOpen(true);
+      return;
+    }
+    const dirty = isCraftAssistPresetEditingDirty();
+    if (dirty) {
+      const saveThenSwitch = window.confirm(
+        `当前编辑存在未保存修改。\n` +
+        `确定：保存并切换到【${String(preset.name || "").trim() || "目标配置"}】\n` +
+        `取消：不保存并切换到【${String(preset.name || "").trim() || "目标配置"}】`
+      );
+      if (saveThenSwitch) {
+        const saved = saveCraftAssistPresetEditingSession();
+        if (!saved) return;
+      } else {
+        clearCraftAssistPresetEditingState({restoreDraft: true});
+      }
+    } else {
+      clearCraftAssistPresetEditingState({restoreDraft: true});
+    }
+  }
+  state.craftAssistPresetEditingBackup = buildCraftAssistDraftSnapshotFromState();
+  state.craftAssistPresetEditingInitialSnapshot = buildCraftAssistPresetComparableSnapshot({
+    targetWear: preset.target_wear,
+    wearFilterMode: preset.wear_filter_mode,
+    materials: preset.materials
+  });
+  state.craftAssistPresetEditingId = String(preset.id || "").trim();
+  state.craftAssistPresetEditingName = String(preset.name || "").trim();
+  loadCraftAssistPresetIntoDraft(preset);
+  setCraftAssistPanelOpen(true);
+  setCraftStatus(`正在独立编辑配置：${preset.name}。点击“保存修改”生效，关闭则取消`, false);
+}
+
+function cancelCraftAssistPresetEditingSession() {
+  if (!isCraftAssistPresetEditing()) return;
+  const backupPanelOpen = !!(state.craftAssistPresetEditingBackup && state.craftAssistPresetEditingBackup.panel_open);
+  clearCraftAssistPresetEditingState({restoreDraft: true});
+  setCraftAssistPanelOpen(backupPanelOpen);
+  setCraftStatus("已取消独立编辑，当前配方配置未变");
+}
+function reorderCraftAssistPresets(sourceId, targetId, {after = false} = {}) {
+  const fromId = String(sourceId || "").trim();
+  const toId = String(targetId || "").trim();
+  if (!fromId || !toId || fromId === toId) return false;
+  const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
+  const moving = list.find((entry) => String(entry && entry.id || "").trim() === fromId);
+  if (!moving) return false;
+  const remaining = list.filter((entry) => String(entry && entry.id || "").trim() !== fromId);
+  const targetIndex = remaining.findIndex((entry) => String(entry && entry.id || "").trim() === toId);
+  if (targetIndex < 0) return false;
+  const insertIndex = after ? targetIndex + 1 : targetIndex;
+  remaining.splice(insertIndex, 0, moving);
+  state.craftAssistPresets = remaining;
+  saveCraftAssistPresetsToStorage();
+  return true;
+}
+function clearCraftAssistPresetDragMarkers() {
+  if (!ui.craftAssistPresetList) return;
+  for (const node of ui.craftAssistPresetList.querySelectorAll(".craft-assist-preset-item")) {
+    node.classList.remove("dragging", "drag-over-before", "drag-over-after");
+  }
+}
+function removeCraftAssistPreset(presetId) {
+  const id = String(presetId || "").trim();
+  if (!id) return;
+  const wasEditing = String(state.craftAssistPresetEditingId || "").trim() === id;
+  const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
+  const target = list.find((entry) => String(entry && entry.id || "").trim() === id);
+  state.craftAssistPresets = list.filter((entry) => String(entry && entry.id || "").trim() !== id);
+  if (state.craftAssistPresetApplyCountMap && typeof state.craftAssistPresetApplyCountMap === "object") {
+    delete state.craftAssistPresetApplyCountMap[id];
+  }
+  if (wasEditing) {
+    clearCraftAssistPresetEditingState({restoreDraft: true});
+  }
+  saveCraftAssistPresetsToStorage();
+  if (target) setCraftStatus(`已删除配置：${String(target.name || "").trim()}`);
+  renderCraftAssistPanel();
+}
+function renderCraftAssistPresetPanel() {
+  if (!ui.craftAssistPresetPanel || !ui.craftAssistPresetList) return;
+  if (ui.craftAssistPresetSaveBtn) {
+    ui.craftAssistPresetSaveBtn.disabled = state.refreshing || state.craftBusy;
+  }
+  ui.craftAssistPresetList.replaceChildren();
+  const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "craft-assist-preset-empty";
+    empty.textContent = "暂无配置，保存后可一键复用";
+    ui.craftAssistPresetList.append(empty);
+    return;
+  }
+  craftAssistPresetDraggingId = "";
+  const applyCountMap = state.craftAssistPresetApplyCountMap && typeof state.craftAssistPresetApplyCountMap === "object"
+    ? state.craftAssistPresetApplyCountMap
+    : {};
+  state.craftAssistPresetApplyCountMap = applyCountMap;
+  const livePresetIds = new Set(list.map((entry) => String(entry && entry.id || "").trim()).filter(Boolean));
+  for (const key of Object.keys(applyCountMap)) {
+    if (!livePresetIds.has(String(key || "").trim())) {
+      delete applyCountMap[key];
+    }
+  }
+  const activeEditingId = String(state.craftAssistPresetEditingId || "").trim();
+  const inEditingMode = !!activeEditingId;
+  for (const preset of list) {
+    const item = document.createElement("div");
+    item.className = "craft-assist-preset-item";
+    const presetId = String(preset && preset.id || "").trim();
+    const isEditingItem = inEditingMode && presetId === activeEditingId;
+    item.classList.toggle("editing", isEditingItem);
+    item.draggable = !(state.refreshing || state.craftBusy || inEditingMode);
+    const applyCountValue = normalizeCraftAssistApplyCount(applyCountMap[presetId], 1);
+    if (presetId) applyCountMap[presetId] = applyCountValue;
+    item.ondragstart = (evt) => {
+      craftAssistPresetDraggingId = presetId;
+      item.classList.add("dragging");
+      if (evt && evt.dataTransfer) {
+        evt.dataTransfer.effectAllowed = "move";
+        evt.dataTransfer.setData("text/plain", presetId);
+      }
+    };
+    item.ondragend = () => {
+      craftAssistPresetDraggingId = "";
+      clearCraftAssistPresetDragMarkers();
+    };
+    item.ondragover = (evt) => {
+      const dragging = String(craftAssistPresetDraggingId || "").trim();
+      if (!dragging || dragging === presetId) return;
+      evt.preventDefault();
+      const rect = item.getBoundingClientRect();
+      const after = evt.clientY > rect.top + rect.height / 2;
+      item.classList.toggle("drag-over-before", !after);
+      item.classList.toggle("drag-over-after", after);
+    };
+    item.ondragleave = () => {
+      item.classList.remove("drag-over-before", "drag-over-after");
+    };
+    item.ondrop = (evt) => {
+      evt.preventDefault();
+      const dragging = String(craftAssistPresetDraggingId || "").trim();
+      item.classList.remove("drag-over-before", "drag-over-after");
+      if (!dragging || dragging === presetId) return;
+      const rect = item.getBoundingClientRect();
+      const after = evt.clientY > rect.top + rect.height / 2;
+      const changed = reorderCraftAssistPresets(dragging, presetId, {after});
+      craftAssistPresetDraggingId = "";
+      clearCraftAssistPresetDragMarkers();
+      if (changed) renderCraftAssistPanel();
+    };
+
+    const name = document.createElement("div");
+    name.className = "craft-assist-preset-name";
+    name.textContent = String(preset && preset.name || "未命名配置");
+
+    const count = (Array.isArray(preset && preset.materials) ? preset.materials : [])
+      .reduce((sum, material) => sum + normalizeCraftAssistEntryCount(material && material.count, 1), 0);
+    const meta = document.createElement("div");
+    meta.className = "craft-assist-preset-meta";
+    const metaTop = document.createElement("div");
+    metaTop.className = "craft-assist-preset-meta-top";
+    metaTop.textContent = `材料 ${(preset && preset.materials && preset.materials.length) || 0} 项 / ${count} 件 | ${formatCraftAssistPresetTime(preset && preset.updated_at)}`;
+    const metaWear = document.createElement("div");
+    metaWear.className = "craft-assist-preset-meta-wear";
+    metaWear.textContent = `wear: ${wearText6(preset && preset.target_wear)}`;
+    meta.append(metaTop, metaWear);
+
+    const actions = document.createElement("div");
+    actions.className = "craft-assist-preset-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "craft-assist-preset-edit";
+    editBtn.textContent = "编辑";
+    editBtn.disabled = state.refreshing || state.craftBusy || (inEditingMode && !isEditingItem);
+    editBtn.onclick = () => {
+      applyCraftAssistPresetForEdit(preset.id);
+    };
+    const applyCountWrap = document.createElement("label");
+    applyCountWrap.className = "craft-assist-preset-apply-count";
+    const applyCountInput = document.createElement("input");
+    applyCountInput.type = "number";
+    applyCountInput.min = "1";
+    applyCountInput.max = "10";
+    applyCountInput.step = "1";
+    applyCountInput.value = String(applyCountValue);
+    applyCountInput.setAttribute("aria-label", "应用数量");
+    applyCountInput.disabled = inEditingMode || state.refreshing || state.craftBusy;
+    applyCountInput.onchange = () => {
+      const next = normalizeCraftAssistApplyCount(applyCountInput.value, applyCountMap[presetId]);
+      applyCountInput.value = String(next);
+      if (presetId) applyCountMap[presetId] = next;
+    };
+    applyCountWrap.append(applyCountInput);
+    const applyBtn = document.createElement("button");
+    applyBtn.type = "button";
+    applyBtn.textContent = "应用";
+    applyBtn.disabled = inEditingMode || state.refreshing || state.craftBusy;
+    applyBtn.onclick = () => {
+      const countValue = normalizeCraftAssistApplyCount(applyCountInput.value, applyCountMap[presetId]);
+      applyCountInput.value = String(countValue);
+      if (presetId) applyCountMap[presetId] = countValue;
+      applyCraftAssistPreset(preset.id, {autoSelect: true, applyCount: countValue});
+    };
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "×";
+    removeBtn.className = "craft-assist-preset-remove";
+    removeBtn.title = "删除该配置";
+    removeBtn.setAttribute("aria-label", "删除该配置");
+    removeBtn.disabled = inEditingMode || state.refreshing || state.craftBusy;
+    removeBtn.onclick = () => {
+      const ok = window.confirm(`确认删除配置【${String(preset && preset.name || "").trim()}】？`);
+      if (!ok) return;
+      removeCraftAssistPreset(preset.id);
+    };
+    actions.append(editBtn, applyCountWrap, applyBtn);
+
+    item.append(name, meta, actions, removeBtn);
+    ui.craftAssistPresetList.append(item);
+  }
+}
+function craftAssistRelativeValueOfRow(row) {
+  if (!row || typeof row !== "object") return null;
+  return getRelativeWearValue(row);
+}
+function craftAssistValueOfRow(row) {
+  return craftAssistRelativeValueOfRow(row);
+}
+function buildCraftAssistRowsByName(rows) {
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const id = rowAssetId(row);
+    if (!id) continue;
+    const name = itemDisplayName(row);
+    if (!name) continue;
+    if (!map.has(name)) map.set(name, []);
+    map.get(name).push(row);
+  }
+  return map;
+}
+function normalizeCraftAssistMaterialsForRun() {
+  const normalized = (Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
+    .map((entry) => {
+      const name = String(entry && entry.name || "").trim();
+      const role = normalizeCraftAssistRole(entry && entry.role);
+      const countFallback = 1;
+      const count = normalizeCraftAssistEntryCount(entry && entry.count, countFallback);
+      let wearMin = clampWear01(entry && entry.wear_min, 0);
+      let wearMax = clampWear01(entry && entry.wear_max, 1);
+      if (wearMax < wearMin) {
+        const tmp = wearMin;
+        wearMin = wearMax;
+        wearMax = tmp;
+      }
+      return {
+        id: String(entry && entry.id || "").trim(),
+        name,
+        role,
+        count,
+        direction: normalizeCraftAssistDirection(role, entry && entry.direction),
+        disable_direction_limit: !!(entry && entry.disable_direction_limit),
+        wear_min: wearMin,
+        wear_max: wearMax
+      };
+    })
+    .filter((entry) => entry.name && entry.count > 0);
+  const totalCount = normalized.reduce((sum, entry) => sum + Number(entry && entry.count || 0), 0);
+  if (normalized.length === 1 && totalCount === 10) {
+    const single = normalized[0];
+    if (single && single.role === "main" && single.direction === "gt") {
+      normalized[0] = {
+        ...single,
+        disable_direction_limit: true
+      };
+    }
+  }
+  return normalized;
+}
+function craftAssistCandidateComparator(a, b, target) {
+  const da = Math.abs(Number(a && a.value) - target);
+  const db = Math.abs(Number(b && b.value) - target);
+  if (da !== db) return da - db;
+  const va = Number(a && a.value);
+  const vb = Number(b && b.value);
+  if (va !== vb) return va - vb;
+  return String(a && a.id || "").localeCompare(String(b && b.id || ""));
+}
+function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedIds, targetValue) {
+  const rows = rowsByName.get(String(material && material.name || "").trim()) || [];
+  const useRelativeFilter = getCraftAssistFilterUseRelative();
+  const offset = getCraftAssistWearOffsetByTarget(targetValue);
+  const upperTarget = Number(targetValue) + offset;
+  const lowerTarget = Number(targetValue) - offset;
+  const unique = new Map();
+  for (const row of rows) {
+    const id = rowAssetId(row);
+    if (!id || blockedIds.has(id)) continue;
+    if (unique.has(id)) continue;
+    const relativeValue = craftAssistRelativeValueOfRow(row);
+    const rangeValue = useRelativeFilter ? relativeValue : getAbsoluteWearValue(row);
+    const value = craftAssistValueOfRow(row);
+    if (relativeValue == null || rangeValue == null || value == null) continue;
+    if (rangeValue < Number(material.wear_min) - 1e-9 || rangeValue > Number(material.wear_max) + 1e-9) continue;
+    if (!material.disable_direction_limit) {
+      if (material.direction === "gt" && !(value > upperTarget + 1e-9)) continue;
+      if (material.direction === "lt" && !(value < lowerTarget - 1e-9)) continue;
+    }
+    unique.set(id, {id, row, value, relative_value: relativeValue});
+  }
+  const list = [...unique.values()];
+  list.sort((a, b) => craftAssistCandidateComparator(a, b, targetValue));
+  return list;
+}
+function pickCraftAssistClosest(candidates, count, targetValue) {
+  return [...(Array.isArray(candidates) ? candidates : [])]
+    .sort((a, b) => craftAssistCandidateComparator(a, b, targetValue))
+    .slice(0, Math.max(0, Number(count) || 0));
+}
+function pickCraftAssistBySplit(candidates, count, targetValue) {
+  const need = Math.max(0, Number(count) || 0);
+  const list = Array.isArray(candidates) ? candidates : [];
+  if (need <= 0 || !list.length) return [];
+  if (need === 1) return pickCraftAssistClosest(list, 1, targetValue);
+
+  const above = list.filter((x) => Number(x.value) > targetValue + 1e-9)
+    .sort((a, b) => craftAssistCandidateComparator(a, b, targetValue));
+  const below = list.filter((x) => Number(x.value) < targetValue - 1e-9)
+    .sort((a, b) => craftAssistCandidateComparator(a, b, targetValue));
+
+  const makeOption = (upCount, downCount) => {
+    const selected = [];
+    const used = new Set();
+    const pushFrom = (arr, n) => {
+      for (const item of arr) {
+        if (selected.length >= need || n <= 0) break;
+        if (used.has(item.id)) continue;
+        used.add(item.id);
+        selected.push(item);
+        n -= 1;
+      }
+      return n;
+    };
+    let remainUp = Math.max(0, Math.min(need, Number(upCount) || 0));
+    let remainDown = Math.max(0, Math.min(need - remainUp, Number(downCount) || 0));
+    remainUp = pushFrom(above, remainUp);
+    remainDown = pushFrom(below, remainDown);
+    const rest = list
+      .filter((item) => !used.has(item.id))
+      .sort((a, b) => craftAssistCandidateComparator(a, b, targetValue));
+    for (const item of rest) {
+      if (selected.length >= need) break;
+      selected.push(item);
+    }
+    return selected.slice(0, need);
+  };
+
+  const low = Math.floor(need / 2);
+  const high = Math.ceil(need / 2);
+  const options = [makeOption(high, low)];
+  if (high !== low) options.push(makeOption(low, high));
+
+  let best = [];
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const option of options) {
+    if (option.length !== need) continue;
+    const avg = option.reduce((sum, item) => sum + Number(item.value), 0) / need;
+    const score = Math.abs(avg - targetValue) + (avg >= targetValue ? 1e-8 : 0);
+    if (score < bestScore) {
+      bestScore = score;
+      best = option;
+    }
+  }
+  if (best.length === need) return best;
+  return pickCraftAssistClosest(list, need, targetValue);
+}
+function applyCraftAssistDeficitCorrection({selected, candidates, targetValue, count}) {
+  const need = Math.max(0, Number(count) || 0);
+  const chosen = Array.isArray(selected) ? [...selected] : [];
+  if (need <= 0 || chosen.length !== need) return chosen;
+  const threshold = Number(targetValue) - 1e-9;
+  const pool = Array.isArray(candidates) ? candidates : [];
+  if (!pool.length) return chosen;
+
+  const calcAvg = (list) => list.reduce((sum, item) => sum + Number(item && item.value || 0), 0) / need;
+  let avg = calcAvg(chosen);
+  if (!(avg < threshold)) return chosen;
+
+  let iterations = 0;
+  const maxIterations = 80;
+  while (avg < threshold && iterations < maxIterations) {
+    const gap = threshold - avg;
+    const selectedIds = new Set(chosen.map((item) => String(item && item.id || "").trim()).filter(Boolean));
+    let bestMove = null;
+    for (let idx = 0; idx < chosen.length; idx += 1) {
+      const oldItem = chosen[idx];
+      const oldValue = Number(oldItem && oldItem.value);
+      if (!Number.isFinite(oldValue)) continue;
+      for (const candidate of pool) {
+        const nextId = String(candidate && candidate.id || "").trim();
+        if (!nextId || selectedIds.has(nextId)) continue;
+        const nextValue = Number(candidate && candidate.value);
+        if (!Number.isFinite(nextValue) || !(nextValue > oldValue + 1e-9)) continue;
+        const deltaAvg = (nextValue - oldValue) / need;
+        if (!(deltaAvg > 1e-12) || deltaAvg > gap + 1e-12) continue;
+        if (!bestMove || deltaAvg > bestMove.deltaAvg) {
+          bestMove = {idx, next: candidate, deltaAvg};
+        }
+      }
+    }
+    if (!bestMove) break;
+    chosen[bestMove.idx] = bestMove.next;
+    avg = calcAvg(chosen);
+    iterations += 1;
+  }
+  return chosen;
+}
+function applyCraftAssistOverflowCorrection({materialResults, targetValue, maxIterations = 80}) {
+  const entries = Array.isArray(materialResults) ? materialResults : [];
+  if (!entries.length) return entries;
+  const threshold = Number(targetValue) - 1e-9;
+  let overall = calcCraftAssistOverallMean(entries);
+  if (overall == null) return entries;
+  let iterations = 0;
+  while (!(overall < threshold) && iterations < Math.max(1, Number(maxIterations) || 80)) {
+    const needDrop = overall - threshold;
+    const totalMaterials = entries.length;
+    const moves = [];
+    for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+      const entry = entries[entryIndex];
+      const selected = Array.isArray(entry && entry.selected) ? entry.selected : [];
+      const available = Array.isArray(entry && entry.available) ? entry.available : [];
+      if (!selected.length || !available.length) continue;
+      const selectedIds = new Set(selected.map((item) => String(item && item.id || "").trim()).filter(Boolean));
+      const pool = available.filter((cand) => !selectedIds.has(String(cand && cand.id || "").trim()));
+      if (!pool.length) continue;
+      for (const oldItem of selected) {
+        const oldValue = Number(oldItem && oldItem.value);
+        if (!Number.isFinite(oldValue)) continue;
+        for (const candidate of pool) {
+          const nextValue = Number(candidate && candidate.value);
+          if (!Number.isFinite(nextValue)) continue;
+          if (!(nextValue < oldValue - 1e-9)) continue;
+          const deltaMaterial = (oldValue - nextValue) / selected.length;
+          const deltaOverall = deltaMaterial / totalMaterials;
+          if (!(deltaOverall > 1e-12)) continue;
+          moves.push({
+            entryIndex,
+            oldId: String(oldItem && oldItem.id || "").trim(),
+            next: candidate,
+            drop: deltaOverall
+          });
+        }
+      }
+    }
+    if (!moves.length) break;
+    const underMoves = moves.filter((move) => move.drop <= needDrop + 1e-12);
+    let chosen = null;
+    if (underMoves.length) {
+      underMoves.sort((a, b) => Number(b.drop) - Number(a.drop));
+      chosen = underMoves[0];
+    } else {
+      moves.sort((a, b) => Number(a.drop) - Number(b.drop));
+      chosen = moves[0];
+    }
+    if (!chosen) break;
+    const entry = entries[chosen.entryIndex];
+    entry.selected = (Array.isArray(entry.selected) ? entry.selected : []).map((item) => {
+      const id = String(item && item.id || "").trim();
+      return id === chosen.oldId ? chosen.next : item;
+    });
+    overall = calcCraftAssistOverallMean(entries);
+    if (overall == null) break;
+    iterations += 1;
+  }
+  return entries;
+}
+function calcCraftAssistOverallMean(materialResults) {
+  const means = [];
+  for (const item of Array.isArray(materialResults) ? materialResults : []) {
+    const picks = Array.isArray(item && item.selected) ? item.selected : [];
+    if (!picks.length) continue;
+    const avg = picks.reduce((sum, pick) => sum + Number(pick.value), 0) / picks.length;
+    means.push(avg);
+  }
+  if (!means.length) return null;
+  return means.reduce((sum, value) => sum + value, 0) / means.length;
+}
+function runCraftAssistSelectionForRecipe({materials, rowsByName, blockedIds, targetValue}) {
+  const blocked = blockedIds instanceof Set ? blockedIds : new Set();
+  const offsetHintText = getCraftAssistOffsetSettingHintText();
+  const prepared = materials.map((material) => {
+    const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, targetValue);
+    const estimate = pickCraftAssistClosest(cands, material.count, targetValue);
+    const estimateDiff = estimate.length
+      ? Math.abs(estimate.reduce((sum, item) => sum + Number(item.value), 0) / estimate.length - targetValue)
+      : Number.POSITIVE_INFINITY;
+    return {material, candidates: cands, estimateDiff};
+  });
+  const feasibleRaritySets = prepared.map((item) => {
+    const countByRarity = new Map();
+    for (const cand of item.candidates) {
+      const rarity = craftRarityValue(cand.row);
+      if (rarity <= 0) continue;
+      countByRarity.set(rarity, (countByRarity.get(rarity) || 0) + 1);
+    }
+    const feasible = new Set(
+      [...countByRarity.entries()]
+        .filter(([, count]) => count >= Number(item.material && item.material.count || 0))
+        .map(([rarity]) => rarity)
+    );
+    return {material: item.material, feasible, candidateCount: item.candidates.length};
+  });
+  let sharedRaritySet = null;
+  for (const item of feasibleRaritySets) {
+    if (!item.feasible.size) {
+      const materialName = String(item.material && item.material.name || "-");
+      const requiredCount = Number(item.material && item.material.count || 0);
+      const candidateCount = Math.max(0, Number(item.candidateCount || 0));
+      if (candidateCount <= 0) {
+        return {ok: false, message: `父类材料【${materialName}】无可用材料，${offsetHintText}`};
+      }
+      if (requiredCount > 0 && candidateCount < requiredCount) {
+        return {ok: false, message: `父类材料【${materialName}】可用数量不足：需${requiredCount}，仅${candidateCount}，${offsetHintText}`};
+      }
+      return {ok: false, message: `父类材料【${materialName}】在当前条件下无法满足同稀有度数量要求`};
+    }
+    if (sharedRaritySet == null) {
+      sharedRaritySet = new Set(item.feasible);
+      continue;
+    }
+    sharedRaritySet = new Set([...sharedRaritySet].filter((rarity) => item.feasible.has(rarity)));
+  }
+  if (!sharedRaritySet || !sharedRaritySet.size) {
+    return {ok: false, message: "父类材料稀有度不一致，单个配方必须使用同一稀有度材料"};
+  }
+  const pickRarityScores = [...sharedRaritySet].map((rarity) => {
+    let score = 0;
+    for (const item of prepared) {
+      const sameRarity = item.candidates.filter((cand) => craftRarityValue(cand.row) === rarity);
+      const estimate = pickCraftAssistClosest(sameRarity, item.material.count, targetValue);
+      if (estimate.length !== item.material.count) {
+        score = Number.POSITIVE_INFINITY;
+        break;
+      }
+      const avg = estimate.reduce((sum, cand) => sum + Number(cand.value), 0) / estimate.length;
+      score += Math.abs(avg - targetValue);
+    }
+    return {rarity, score};
+  });
+  pickRarityScores.sort((a, b) => {
+    const diff = Number(a.score) - Number(b.score);
+    if (diff !== 0) return diff;
+    return Number(a.rarity) - Number(b.rarity);
+  });
+  const selectedRarity = Number(pickRarityScores[0] && pickRarityScores[0].rarity || 0);
+  if (!Number.isFinite(selectedRarity) || selectedRarity <= 0) {
+    return {ok: false, message: "辅助选材未命中可用稀有度，请调整材料约束"};
+  }
+  prepared.sort((a, b) => {
+    const diff = Number(a.estimateDiff) - Number(b.estimateDiff);
+    if (diff !== 0) return diff;
+    const sizeDiff = Number(a.candidates.length) - Number(b.candidates.length);
+    if (sizeDiff !== 0) return sizeDiff;
+    return String(a.material.name || "").localeCompare(String(b.material.name || ""));
+  });
+
+  const usedIds = new Set();
+  const materialResults = [];
+  for (const item of prepared) {
+    const material = item.material;
+    const available = item.candidates.filter((cand) => !usedIds.has(cand.id) && craftRarityValue(cand.row) === selectedRarity);
+    if (available.length < material.count) {
+      return {
+        ok: false,
+        message: `父类材料【${material.name}】可用数量不足：需${material.count}，仅${available.length}（稀有度 ${craftRarityLabel(selectedRarity)}），${offsetHintText}`
+      };
+    }
+    let picked = pickCraftAssistBySplit(available, material.count, targetValue);
+    picked = applyCraftAssistDeficitCorrection({
+      selected: picked,
+      candidates: available,
+      targetValue,
+      count: material.count
+    });
+    if (picked.length !== material.count) {
+      return {ok: false, message: `父类材料【${material.name}】选材失败`};
+    }
+    for (const choice of picked) {
+      if (usedIds.has(choice.id)) {
+        return {ok: false, message: `辅助选材出现重复物品：${choice.id}`};
+      }
+      usedIds.add(choice.id);
+    }
+    materialResults.push({material, selected: picked, available});
+  }
+
+  const overallBeforeRetry = calcCraftAssistOverallMean(materialResults);
+  if (overallBeforeRetry != null && !(overallBeforeRetry < targetValue - 1e-9)) {
+    applyCraftAssistOverflowCorrection({
+      materialResults,
+      targetValue
+    });
+  }
+  const overall = calcCraftAssistOverallMean(materialResults);
+  if (overall == null) {
+    return {ok: false, message: "辅助选材未得到有效结果"};
+  }
+  if (!(overall < targetValue - 1e-9)) {
+    const retried = overallBeforeRetry != null && !(overallBeforeRetry < targetValue - 1e-9);
+    const retryPrefix = retried ? "已执行下探重试，" : "";
+    return {ok: false, message: `${retryPrefix}结果均值需小于目标磨损：当前 ${overall.toFixed(6)}，目标 ${targetValue.toFixed(6)}`};
+  }
+
+  const resultIds = [];
+  for (const entry of materialResults) {
+    for (const choice of entry.selected) {
+      resultIds.push(choice.id);
+    }
+  }
+  return {
+    ok: true,
+    itemIds: normalizeCraftRecipeItemIds(resultIds),
+    overall,
+    rarity: selectedRarity
+  };
+}
+function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
+  if (state.craftBusy) {
+    setCraftStatus("汰换执行中，请稍后再试", true);
+    return false;
+  }
+  if (state.refreshing) {
+    setCraftStatus("库存刷新中，请稍后再试", true);
+    return false;
+  }
+  const materials = normalizeCraftAssistMaterialsForRun();
+  if (!materials.length) {
+    setCraftStatus("请先添加父类材料并设置数量", true);
+    return false;
+  }
+  const mode = craftAssistTargetCountFromMaterials(materials);
+  const totalCount = materials.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  if (totalCount > mode) {
+    setCraftStatus(`材料数量之和不能超过 ${mode}，当前 ${totalCount}`, true);
+    return false;
+  }
+  const targetValue = parseOptionalWear01(state.craftAssistTargetWear);
+  if (targetValue == null) {
+    setCraftStatus("请先输入目标相对磨损", true);
+    return false;
+  }
+  const candidateRows = getCraftCandidates();
+  if (!candidateRows.length) {
+    setCraftStatus("主库存无可选炼金物品", true);
+    return false;
+  }
+  const pendingCount = getCraftQueuePendingCount();
+  if (pendingCount >= 50) {
+    setCraftStatus("配方预览最多 50 组配方", true);
+    return false;
+  }
+
+  // 每次点击只新增并填充 1 组配方，不覆盖当前编辑中的配方。
+  const created = createEmptyCraftRecipeEntry({activate: false});
+  if (!created) {
+    setCraftStatus("当前无可编辑配方槽位", true);
+    return false;
+  }
+  const createdId = String(created.id || "").trim();
+  const removeCreatedEntry = () => {
+    state.craftRecipeQueue = (Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [])
+      .filter((entry) => String(entry && entry.id || "").trim() !== createdId);
+  };
+
+  const pendingEntries = getCraftQueuePendingEntries();
+  const pendingOrder = new Map();
+  for (let i = 0; i < pendingEntries.length; i += 1) {
+    const entry = pendingEntries[i];
+    const key = String(entry && entry.id || "").trim();
+    if (!key) continue;
+    pendingOrder.set(key, i + 1);
+  }
+  const recipeNo = pendingOrder.get(createdId) || pendingEntries.length;
+  const activeRecipeId = String(state.craftActiveRecipeId || "").trim();
+  const blockedIds = new Set();
+  for (const entry of pendingEntries) {
+    const entryId = String(entry && entry.id || "").trim();
+    if (entryId === createdId) continue;
+    // 当前正在编辑且未满 10 件时，不参与屏蔽，避免“新增一组”时把候选过度裁掉。
+    if (activeRecipeId && entryId === activeRecipeId && normalizeCraftRecipeItemIds(entry && entry.item_ids).length < mode) {
+      continue;
+    }
+    for (const id of normalizeCraftRecipeItemIds(entry && entry.item_ids)) {
+      blockedIds.add(id);
+    }
+  }
+
+  const rowsByName = buildCraftAssistRowsByName(candidateRows);
+  const run = runCraftAssistSelectionForRecipe({
+    materials,
+    rowsByName,
+    blockedIds,
+    targetValue
+  });
+  if (!run.ok) {
+    removeCreatedEntry();
+    setCraftStatus(`配方#${recipeNo}：${run.message}`, true);
+    renderCraftPage();
+    return false;
+  }
+
+  created.item_ids = normalizeCraftRecipeItemIds(run.itemIds);
+  const rowsById = buildRowsByAssetId(candidateRows);
+  const selectedRows = created.item_ids.map((id) => rowsById.get(id)).filter(Boolean);
+  const recipeInfo = getTradeUpRecipeFromRows(selectedRows);
+  const sourceText = String(sourcePresetName || "").trim();
+  const sourceSuffix = sourceText ? `（${sourceText}）` : "";
+  state.craftStatusText = "";
+  if (!recipeInfo.ok) {
+    setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，但不满足炼金规则：${recipeInfo.reason || "请调整材料"}`, true);
+    renderCraftPage();
+    return false;
+  }
+
+  const raritySuffix = Number(run && run.rarity || 0) > 0 ? `，稀有度 ${craftRarityLabel(run.rarity)}` : "";
+  setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${created.item_ids.length}/${mode}${raritySuffix}，均值 ${Number(run.overall).toFixed(6)} < 目标 ${targetValue.toFixed(6)}`);
+  renderCraftPage();
+  return true;
+}
+function applyCraftAssistAutoSelectionBatch({sourcePresetName = "", repeatCount = 1} = {}) {
+  const total = normalizeCraftAssistApplyCount(repeatCount, 1);
+  let successCount = 0;
+  for (let i = 0; i < total; i += 1) {
+    const ok = applyCraftAssistAutoSelection({sourcePresetName});
+    if (!ok) break;
+    successCount += 1;
+  }
+  if (successCount <= 0) return false;
+  if (successCount < total) {
+    const current = String(state.craftStatusText || "").trim();
+    setCraftStatus(`批量完成 ${successCount}/${total} 组。${current || "已到可用上限"}`, successCount < total);
+  } else if (total > 1) {
+    setCraftStatus(`批量完成 ${successCount}/${total} 组配方`);
+  }
+  renderCraftPage();
+  return true;
+}
+function renderCraftAssistPanel() {
+  if (!ui.craftAssistPanel || !ui.craftAssistOverlay) return;
+  const open = !!state.craftAssistOpen;
+  const editingPreset = isCraftAssistPresetEditing();
+  ui.craftAssistOverlay.classList.toggle("hidden", !open);
+  ui.craftAssistOverlay.classList.toggle("preset-edit-popup", !!editingPreset);
+  if (ui.craftAssistContent) {
+    ui.craftAssistContent.classList.toggle("preset-edit-main-only", !!editingPreset);
+  }
+  if (editingPreset) {
+    const cutWidth = Math.max(0, clampCraftAssistPresetWidth(state.craftAssistPresetWidth) + 18);
+    ui.craftAssistOverlay.style.setProperty("--craft-assist-edit-cut-width", `${cutWidth}px`);
+  } else {
+    ui.craftAssistOverlay.style.removeProperty("--craft-assist-edit-cut-width");
+  }
+  if (ui.craftAssistToggleBtn) {
+    ui.craftAssistToggleBtn.classList.toggle("active", open);
+    ui.craftAssistToggleBtn.setAttribute("aria-pressed", open ? "true" : "false");
+  }
+  if (!open) return;
+  applyCraftAssistOverlayHeight();
+
+  if (ui.craftAssistTargetWear) {
+    ui.craftAssistTargetWear.placeholder = "0.000000";
+  }
+  if (ui.craftAssistTargetWear && document.activeElement !== ui.craftAssistTargetWear) {
+    const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
+    ui.craftAssistTargetWear.value = targetWear == null ? "" : wearText6(targetWear);
+  }
+  const filterMode = getCraftAssistFilterMode();
+  if (ui.craftAssistFilterModeRelative) {
+    ui.craftAssistFilterModeRelative.checked = filterMode === "relative";
+  }
+  if (ui.craftAssistFilterModeAbsolute) {
+    ui.craftAssistFilterModeAbsolute.checked = filterMode === "absolute";
+  }
+  if (ui.craftAssistMainCount && document.activeElement !== ui.craftAssistMainCount) {
+    ui.craftAssistMainCount.value = String(normalizeCraftAssistCount(state.craftAssistMainCount, 5));
+  }
+  if (ui.craftAssistAuxCount && document.activeElement !== ui.craftAssistAuxCount) {
+    ui.craftAssistAuxCount.value = String(normalizeCraftAssistCount(state.craftAssistAuxCount, 5));
+  }
+  if (ui.craftAssistApplyBtn) {
+    ui.craftAssistApplyBtn.textContent = editingPreset ? "编辑中" : "按配置选材";
+    ui.craftAssistApplyBtn.disabled = editingPreset || state.refreshing || state.craftBusy;
+  }
+  if (ui.craftAssistPresetSaveBtn) {
+    ui.craftAssistPresetSaveBtn.textContent = editingPreset ? "保存修改" : "保存当前";
+    ui.craftAssistPresetSaveBtn.title = editingPreset
+      ? `保存对配置【${String(state.craftAssistPresetEditingName || "").trim() || "-"}】的修改`
+      : "";
+  }
+  if (ui.craftAssistSelectBox) {
+    const count = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials.length : 0;
+    const text = count > 0 ? `悬停继续添加父类材料（已选 ${count}）` : "尚未选择父类材料";
+    if (ui.craftAssistSelectText) ui.craftAssistSelectText.textContent = text;
+    else ui.craftAssistSelectBox.textContent = text;
+    ui.craftAssistSelectBox.setAttribute("aria-label", text);
+    ui.craftAssistSelectBox.classList.toggle("split", !!state.craftAssistRoleChooserOpen);
+  }
+  if (ui.craftAssistRoleSplit) {
+    ui.craftAssistRoleSplit.classList.toggle("hidden", !state.craftAssistRoleChooserOpen);
+  }
+  renderCraftAssistPicker();
+  renderCraftAssistList();
+  renderCraftAssistPresetPanel();
 }
 function renderCraftQueue() {
   if (!ui.craftQueueList) return;
+  const prevScrollTop = Math.max(0, Number(ui.craftQueueList.scrollTop || 0) || 0);
   ui.craftQueueList.replaceChildren();
   const list = Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [];
+  const rowsById = buildRowsByAssetId(state.rows);
   if (!list.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "配方预览为空";
+    empty.textContent = "暂无配方，点击“添加配方”创建";
     ui.craftQueueList.append(empty);
+    ui.craftQueueList.scrollTop = 0;
     return;
   }
+
+  let pendingIndex = 0;
   for (let i = 0; i < list.length; i += 1) {
     const entry = list[i];
-    const row = document.createElement("div");
-    row.className = "craft-queue-item";
-    const text = document.createElement("div");
-    text.className = "craft-queue-text";
-    text.textContent = `#${i + 1} ${entry.recipe_text}（${entry.item_ids.length}件）`;
+    const done = String(entry && entry.status || "").trim() === "done";
+    const itemIds = normalizeCraftRecipeItemIds(entry && entry.item_ids);
+    if (!done) {
+      pendingIndex += 1;
+      const entryId = String(entry && entry.id || "").trim();
+      const count = itemIds.length;
+      const recipeRows = itemIds.map((id) => rowsById.get(id)).filter(Boolean);
+      const title = `配方#${pendingIndex} ${count}/10 | 平均相对磨损 ${averageRelativeWearText(recipeRows)}`;
+      const isActive = entryId && entryId === String(state.craftActiveRecipeId || "").trim();
+      ui.craftQueueList.append(
+        renderCraftQueueSlots({
+          title,
+          itemIds,
+          rowsById,
+          active: isActive,
+          removable: true,
+          onRemoveItem: (assetId) => {
+            entry.item_ids = normalizeCraftRecipeItemIds(entry.item_ids).filter((id) => id !== String(assetId || "").trim());
+            if (isActive) syncCraftSelectedIdsFromActiveRecipe();
+            state.craftStatusText = "";
+            renderCraftPage();
+          },
+          onRemove: () => {
+            state.craftRecipeQueue = state.craftRecipeQueue.filter((x) => x.id !== entry.id);
+            if (isActive) state.craftActiveRecipeId = "";
+            ensureActiveCraftRecipe({createIfMissing: false});
+            syncCraftSelectedIdsFromActiveRecipe();
+            state.craftStatusText = "";
+            renderCraftPage();
+          }
+        })
+      );
+      continue;
+    }
+
+    const doneRow = document.createElement("div");
+    doneRow.className = "craft-queue-item done";
+    const resultWrap = document.createElement("div");
+    resultWrap.className = "craft-queue-result";
+    const gainedIds = normalizeCraftRecipeItemIds(entry && entry.gained_ids);
+    const names = [];
+    const wears = [];
+    for (const id of gainedIds) {
+      const row = rowsById.get(id);
+      if (!row) continue;
+      names.push(itemDisplayName(row));
+      wears.push(absoluteWearLabel(row, {prefix: false}));
+    }
+    const resultTitle = document.createElement("div");
+    resultTitle.className = "craft-queue-result-title";
+    resultTitle.textContent = names.length ? `产物：${names.join("，")}` : "产物：待确认";
+    const wearLine = document.createElement("div");
+    wearLine.className = "craft-queue-result-wear";
+    wearLine.textContent = `wear: ${wears.length ? wears.join("，") : "-"}`;
+    resultWrap.append(resultTitle, wearLine);
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.textContent = "移除";
@@ -1173,9 +4120,11 @@ function renderCraftQueue() {
       state.craftStatusText = "";
       renderCraftPage();
     };
-    row.append(text, removeBtn);
-    ui.craftQueueList.append(row);
+    doneRow.append(resultWrap, removeBtn);
+    ui.craftQueueList.append(doneRow);
   }
+  const maxScrollTop = Math.max(0, ui.craftQueueList.scrollHeight - ui.craftQueueList.clientHeight);
+  ui.craftQueueList.scrollTop = Math.min(prevScrollTop, maxScrollTop);
 }
 function addCurrentSelectionToCraftQueue() {
   const connected = isCurrentAccountConnected();
@@ -1184,89 +4133,82 @@ function addCurrentSelectionToCraftQueue() {
     return;
   }
   if (state.craftBusy || state.refreshing) return;
-  if (state.craftRecipeQueue.length >= 50) {
+  if (getCraftQueuePendingCount() >= 50) {
     setCraftStatus("配方预览最多 50 组配方", true);
     return;
   }
-  const candidates = getCraftCandidates();
-  const selectedRows = getCraftSelectedRows(candidates);
-  const recipeInfo = getTradeUpRecipeFromRows(selectedRows);
-  if (!recipeInfo.ok) {
-    setCraftStatus(recipeInfo.reason || "所选物品不满足炼金规则", true);
-    return;
-  }
-  const itemIds = selectedRows.map((x) => rowAssetId(x)).filter(Boolean);
-  if (itemIds.length !== 10) {
-    setCraftStatus(`需选择 10 件，当前 ${itemIds.length} 件`, true);
-    return;
-  }
-  const queuedIds = getQueuedCraftItemIds();
-  const duplicate = itemIds.find((id) => queuedIds.has(id));
-  if (duplicate) {
-    setCraftStatus(`存在重复物品：${duplicate}`, true);
-    return;
-  }
-  const queueItem = {
-    id: `craftq_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
-    item_ids: itemIds,
-    recipe: recipeInfo.recipe,
-    recipe_text: String(recipeInfo.text || "").replace(/^配方：/, "").trim() || `recipe ${recipeInfo.recipe}`
-  };
-  state.craftRecipeQueue.push(queueItem);
-  state.craftSelectedItemIds.clear();
+  const created = createEmptyCraftRecipeEntry({activate: true});
+  syncCraftSelectedIdsFromActiveRecipe();
   state.craftStatusText = "";
-  setCraftStatus(`已添加配方：${queueItem.recipe_text}`);
+  const pending = getCraftQueuePendingEntries();
+  const idx = pending.findIndex((x) => String(x && x.id || "").trim() === String(created && created.id || "").trim());
+  setCraftStatus(`已新增配方#${Math.max(0, idx) + 1}，点击左侧物品可填充该配方槽位`);
   renderCraftPage();
 }
 function clearCraftQueue() {
   if (!state.craftRecipeQueue.length) return;
   if (state.craftBusy) return;
   state.craftRecipeQueue = [];
+  state.craftActiveRecipeId = "";
+  state.craftSelectedItemIds.clear();
   state.craftStatusText = "";
   setCraftStatus("已清空配方预览");
   renderCraftPage();
 }
 function renderCraftPage() {
   if (!ui.craftPage) return;
-  const username = String(state.currentAccountUsername || "").trim();
   const connected = isCurrentAccountConnected();
-  const account = accountByUsername(username);
-  if (ui.craftAccountText) ui.craftAccountText.textContent = `账号：${displayAccountName(account) || username || "-"}`;
-  if (ui.craftConnectText) ui.craftConnectText.textContent = `连接状态：${connected ? "已连接" : "未连接"}`;
-  if (ui.craftIncludeCooling) ui.craftIncludeCooling.checked = !!state.craftIncludeCooling;
-  if (ui.craftShowSeed) ui.craftShowSeed.checked = !!state.craftShowSeed;
+  if (ui.craftConnectText) {
+    ui.craftConnectText.textContent = `连接状态：${connected ? "已连接" : "未连接"}`;
+    setConnectionStatusTone(ui.craftConnectText, connected);
+  }
+  const allCraftRows = getMainInventoryCraftableRows();
+  syncCraftSettingsControls(allCraftRows);
   setCraftSettingsPanelOpen(state.craftSettingsOpen);
   updateCraftActionLayout();
+  if (connected) {
+    reconcileCraftQueueWithInventory();
+    ensureActiveCraftRecipe({createIfMissing: false});
+  } else {
+    state.craftActiveRecipeId = "";
+    state.craftSelectedItemIds.clear();
+  }
 
-  const allCraftRows = getMainInventoryCraftableRows();
-  if (ui.craftCoolingHint) ui.craftCoolingHint.textContent = getCraftCoolingHintText(allCraftRows);
   const candidates = getCraftCandidates();
-  const selectedRows = getCraftSelectedRows(candidates);
+  const selectedRows = getCraftSelectedRows();
   const recipeInfo = getTradeUpRecipeFromRows(selectedRows);
   const queueCount = state.craftRecipeQueue.length;
+  const pendingQueueCount = getCraftQueuePendingCount();
+  const executableCount = getCraftExecutableEntries().length;
 
-  if (ui.craftSelectedText) ui.craftSelectedText.textContent = `待添加：${selectedRows.length}/10，配方预览：${queueCount}组`;
+  if (ui.craftSelectedText) ui.craftSelectedText.textContent = `当前槽位：${selectedRows.length}/10，可执行：${executableCount}组`;
   if (ui.craftRecipeText) ui.craftRecipeText.textContent = recipeInfo.text;
   renderCraftQueue();
   if (ui.craftAddRecipeBtn) {
-    ui.craftAddRecipeBtn.disabled = !connected || state.refreshing || state.craftBusy || !recipeInfo.ok;
+    ui.craftAddRecipeBtn.disabled = !connected || state.refreshing || state.craftBusy || pendingQueueCount >= 50;
   }
   if (ui.craftExecuteQueueBtn) {
     ui.craftExecuteQueueBtn.textContent = state.craftBusy ? "执行中..." : "执行";
-    ui.craftExecuteQueueBtn.disabled = !connected || state.refreshing || state.craftBusy || queueCount <= 0;
+    ui.craftExecuteQueueBtn.disabled = !connected || state.refreshing || state.craftBusy || executableCount <= 0;
   }
   if (ui.craftClearQueueBtn) {
     ui.craftClearQueueBtn.disabled = state.craftBusy || queueCount <= 0;
   }
+  if (ui.craftAssistToggleBtn) {
+    ui.craftAssistToggleBtn.disabled = state.refreshing || state.craftBusy;
+  }
+  renderCraftAssistPanel();
 
   if (!state.craftStatusText) {
     if (!connected) setCraftStatus("请先连接并刷新库存");
     else if (!candidates.length) setCraftStatus("主库存中没有符合炼金规则的物品");
-    else if (queueCount > 0) setCraftStatus(`配方预览已有 ${queueCount} 组，可执行`);
-    else if (selectedRows.length !== 10) setCraftStatus("请在下方选择 10 件物品并添加配方");
+    else if (selectedRows.length >= 10 && recipeInfo.ok) setCraftStatus("当前配方已满10件，可执行，或先新增配方继续填充");
+    else if (pendingQueueCount > 0) setCraftStatus(`当前有 ${pendingQueueCount} 组配方槽位，点击左侧物品会填充到“当前编辑”配方`);
+    else if (queueCount > 0) setCraftStatus("本轮产物已回写到预览，可继续添加新配方");
+    else if (selectedRows.length !== 10) setCraftStatus("可随时新增配方；点击左侧物品会填充到当前编辑配方槽位");
     else if (!recipeInfo.ok) setCraftStatus(recipeInfo.reason || "所选物品不满足炼金规则", true);
     else setCraftStatus("已满足炼金条件，可添加配方");
-  } else if (!ui.craftStatusText.classList.contains("error") && recipeInfo.ok && connected && !state.craftBusy) {
+  } else if (ui.craftStatusText && !ui.craftStatusText.classList.contains("error") && recipeInfo.ok && connected && !state.craftBusy) {
     // keep external success message until next change; no-op
   }
 
@@ -1278,24 +4220,38 @@ async function runCraftTradeUpQueue() {
     setCraftStatus("请先连接并刷新库存", true);
     return;
   }
+  reconcileCraftQueueWithInventory();
   const queue = Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [];
-  if (!queue.length) {
-    setCraftStatus("配方预览为空，请先添加配方", true);
+  const pendingIndexes = [];
+  const pendingEntries = [];
+  for (let i = 0; i < queue.length; i += 1) {
+    const entry = queue[i];
+    const done = String(entry && entry.status || "").trim() === "done";
+    const itemIds = normalizeCraftRecipeItemIds(entry && entry.item_ids);
+    if (done || itemIds.length !== 10) {
+      continue;
+    }
+    entry.item_ids = itemIds;
+    pendingIndexes.push(i);
+    pendingEntries.push(entry);
+  }
+  if (!pendingEntries.length) {
+    setCraftStatus("暂无可执行配方：每组需凑满10件", true);
     return;
   }
   const dedup = new Set();
-  for (const entry of queue) {
-    for (const id of Array.isArray(entry.item_ids) ? entry.item_ids : []) {
+  for (const entry of pendingEntries) {
+    for (const id of normalizeCraftRecipeItemIds(entry.item_ids)) {
       const key = String(id || "").trim();
       if (!key) continue;
       if (dedup.has(key)) {
-        setCraftStatus(`配方预览存在重复物品：${key}`, true);
+        setCraftStatus("配方预览存在重复物品，请调整后再执行", true);
         return;
       }
       dedup.add(key);
     }
   }
-  const recipes = queue.map((entry) => ({item_ids: [...entry.item_ids]}));
+  const recipes = pendingEntries.map((entry) => ({item_ids: [...normalizeCraftRecipeItemIds(entry.item_ids)]}));
   if (!recipes.length) {
     setCraftStatus("配方预览为空，请先添加配方", true);
     return;
@@ -1324,11 +4280,17 @@ async function runCraftTradeUpQueue() {
       state.fetchTime = String(data.fetch_time).trim();
       syncInventoryTop();
     }
-    state.craftSelectedItemIds.clear();
-    state.craftRecipeQueue = [];
+    applyCraftStepResultsToQueue({
+      steps: Array.isArray(data.steps) ? data.steps : [],
+      pendingIndexes,
+      rows: Array.isArray(data.rows) ? data.rows : []
+    });
+    syncCraftSelectedIdsFromActiveRecipe();
     state.craftStatusText = "";
-    setCraftStatus(String(data.message || "汰换成功"));
-    setSummary(String(data.message || "汰换成功"));
+    const doneMsg = String(data.message || "汰换成功");
+    const doneCount = Array.isArray(data.steps) ? data.steps.length : 0;
+    setCraftStatus(`${doneMsg}，已回写${doneCount}组产物`);
+    setSummary(doneMsg);
   } catch (err) {
     const payload = err && err.data && typeof err.data === "object" ? err.data : null;
     if (payload && Array.isArray(payload.rows)) {
@@ -1346,13 +4308,15 @@ async function runCraftTradeUpQueue() {
     }
 
     if (payload && payload.partial) {
-      const completedSteps = Array.isArray(payload.completed_steps) ? payload.completed_steps.length : 0;
-      if (completedSteps > 0) {
-        state.craftRecipeQueue = state.craftRecipeQueue.slice(completedSteps);
-      }
-      state.craftSelectedItemIds.clear();
+      const completedSteps = Array.isArray(payload.completed_steps) ? payload.completed_steps : [];
+      applyCraftStepResultsToQueue({
+        steps: completedSteps,
+        pendingIndexes,
+        rows: Array.isArray(payload.rows) ? payload.rows : state.rows
+      });
+      syncCraftSelectedIdsFromActiveRecipe();
       const failedStep = Math.max(0, Number(payload.failed_step || 0) || 0);
-      const msg = `汰换中断：已完成${completedSteps}组${failedStep > 0 ? `，失败于第${failedStep}组` : ""}，${err.message}`;
+      const msg = `汰换中断：已完成${completedSteps.length}组${failedStep > 0 ? `，失败于第${failedStep}组` : ""}，${err.message}`;
       setCraftStatus(msg, true);
       setSummary(msg);
     } else {
@@ -1440,10 +4404,18 @@ function refreshSortArrowStyles(scope = null) {
     const wearDown = root.querySelector("[data-sort-key=\"wear\"][data-sort-dir=\"desc\"]");
     const rarityUp = root.querySelector("[data-sort-key=\"rarity\"][data-sort-dir=\"asc\"]");
     const rarityDown = root.querySelector("[data-sort-key=\"rarity\"][data-sort-dir=\"desc\"]");
+    const quantityUp = root.querySelector("[data-sort-key=\"quantity\"][data-sort-dir=\"asc\"]");
+    const quantityDown = root.querySelector("[data-sort-key=\"quantity\"][data-sort-dir=\"desc\"]");
+    const collectionUp = root.querySelector("[data-sort-key=\"collection\"][data-sort-dir=\"asc\"]");
+    const collectionDown = root.querySelector("[data-sort-key=\"collection\"][data-sort-dir=\"desc\"]");
     if (wearUp) wearUp.classList.toggle("active", state.wearSort === "asc");
     if (wearDown) wearDown.classList.toggle("active", state.wearSort === "desc");
     if (rarityUp) rarityUp.classList.toggle("active", state.raritySort === "asc");
     if (rarityDown) rarityDown.classList.toggle("active", state.raritySort === "desc");
+    if (quantityUp) quantityUp.classList.toggle("active", state.quantitySort === "asc");
+    if (quantityDown) quantityDown.classList.toggle("active", state.quantitySort === "desc");
+    if (collectionUp) collectionUp.classList.toggle("active", state.collectionSort === "asc");
+    if (collectionDown) collectionDown.classList.toggle("active", state.collectionSort === "desc");
   }
   if (ui.wearSortUp) ui.wearSortUp.classList.toggle("active", state.wearSort === "asc");
   if (ui.wearSortDown) ui.wearSortDown.classList.toggle("active", state.wearSort === "desc");
@@ -1546,7 +4518,10 @@ function refreshComponentControls() {
     ui.componentSelect.value = "";
     state.selectedComponentId = "";
     state.selectedComponentItemIds.clear();
-    ui.componentHint.textContent = "0/1000";
+    if (ui.componentHint) {
+      ui.componentHint.textContent = "0/1000";
+      ui.componentHint.title = "主库存可见 0/1000";
+    }
     state.showComponentItems = false;
     if (ui.showComponentItems) ui.showComponentItems.checked = false;
     if (ui.showComponentItemsWrap) ui.showComponentItemsWrap.classList.add("hidden");
@@ -1568,11 +4543,18 @@ function refreshComponentControls() {
   syncComponentActionState();
 }
 function updateComponentHint(visibleCount = null) {
+  if (!ui.componentHint) return;
   const count = visibleCount == null ? rowsForComponentScope().length : Math.max(0, Number(visibleCount) || 0);
   const selected = selectedComponentId();
-  const totalCapacity = 1000;
-  const tail = selected ? `，已选${getSelectedRows().length}件` : "";
-  ui.componentHint.textContent = `${count}/${totalCapacity}${tail}`;
+  if (selected) {
+    const totalCapacity = 1000;
+    ui.componentHint.textContent = `${count}/${totalCapacity}`;
+    ui.componentHint.title = `组件可见 ${count}/${totalCapacity}，当前选中 ${getSelectedRows().length} 件`;
+    return;
+  }
+  const slotEstimate = estimateMainInventoryFreeSlots();
+  ui.componentHint.textContent = `${count}/${slotEstimate.capacity}`;
+  ui.componentHint.title = `主库存可见 ${count}/${slotEstimate.capacity} | 占槽 ${slotEstimate.occupiedSlots} | 隐藏 ${slotEstimate.hiddenCount} | 交易保护 ${slotEstimate.coolingCount}`;
 }
 function getSelectedRows() {
   if (!state.selectedComponentItemIds.size) return [];
@@ -1627,6 +4609,24 @@ function estimateComponentFreeSlots(componentId) {
     ? state.component.item_map[key].length
     : Math.max(0, Number(summary && summary.loaded_count != null ? summary.loaded_count : 0) || 0);
   return Math.max(0, capacity - loadedFromMap);
+}
+function estimateMainInventoryFreeSlots() {
+  const rows = Array.isArray(state.rows) ? state.rows : [];
+  const mainRows = rows.filter((row) => !String(row && row.casket_id || "").trim());
+  const hiddenCount = mainRows.filter((row) => String(row && row.hidden_reason || "").trim()).length;
+  const coolingCount = mainRows.filter((row) => coolingUnlockTs(row) > 0).length;
+  const occupiedSlots = Math.max(0, mainRows.length - hiddenCount - coolingCount);
+  const capacity = MAIN_INVENTORY_CAPACITY;
+  const freeSlots = Math.max(0, capacity - occupiedSlots);
+  return {
+    freeSlots,
+    capacity,
+    occupiedSlots,
+    totalMainItems: mainRows.length,
+    hiddenCount,
+    coolingCount,
+    reliable: true
+  };
 }
 function closeTargetComponentDrawer() {
   state.targetDrawerOpen = false;
@@ -1732,6 +4732,9 @@ function syncComponentActionState() {
   const selectedRows = getSelectedRows();
   const hasTargetComponent = listComponentChoices().length > 0;
   const blocked = !connected || state.componentOpBusy || state.refreshing;
+  if (ui.componentWithdrawBtn) {
+    ui.componentWithdrawBtn.classList.toggle("hidden", !currentComponent);
+  }
   ui.componentDepositBtn.disabled = blocked;
   ui.componentWithdrawBtn.disabled = blocked;
   if (blocked) {
@@ -1744,9 +4747,56 @@ function syncComponentActionState() {
     : (!hasTargetComponent ? "暂无可用目标组件" : "存入组件");
   ui.componentWithdrawBtn.title = !currentComponent
     ? "请先选择组件"
-    : "取出选中";
+    : "取出选中（优先低磨损）";
 }
-function applyFilter() { const keyword = String(state.searchText || "").trim().toLowerCase(); const allRows = rowsForComponentScope(), selected = selectedComponentId(); if (selected) state.emptyHint = allRows.length ? "该组件在当前条件下无物品" : "该组件暂无已缓存物品，请先刷新库存"; else state.emptyHint = "主库存在当前条件下无物品（组件内物品已隐藏）"; const wearCheck = validateWearFilter({autoFix: false}); const wearRows = allRows.filter(itemHasWear), noWearRows = allRows.filter((x) => !itemHasWear(x)); let rows = wearRows; if (!state.includeHidden) rows = rows.filter((x) => !x.hidden_reason || String(x.casket_id || "").trim()); if (keyword) rows = rows.filter((x) => itemSearchText(x).includes(keyword)); if (state.raritySelected.size && state.raritySelected.size < RARITY_VALUES.length) rows = rows.filter((x) => state.raritySelected.has(rarityName(x))); if (state.collectionSelected.size) rows = rows.filter((x) => state.collectionSelected.has(collectionName(x))); if (wearCheck.valid) { if (wearCheck.minValue !== null) rows = rows.filter((x) => Number(x.float_value || 0) >= wearCheck.minValue); if (wearCheck.maxValue !== null) rows = rows.filter((x) => Number(x.float_value || 0) <= wearCheck.maxValue); } rows.sort((a, b) => { const ra = Number(a.rarity || 0), rb = Number(b.rarity || 0); if (ra !== rb) return state.raritySort === "desc" ? rb - ra : ra - rb; const wa = Number(a.float_value || 0), wb = Number(b.float_value || 0); if (wa !== wb) return state.wearSort === "desc" ? wb - wa : wa - wb; return assetIdNumber(a) - assetIdNumber(b); }); noWearRows.sort((a, b) => assetIdNumber(a) - assetIdNumber(b)); return {allRows, filteredRows: rows.concat(noWearRows)}; }
+function applyFilter() {
+  const keyword = String(state.searchText || "").trim().toLowerCase();
+  const allRows = rowsForComponentScope();
+  const selected = selectedComponentId();
+  if (selected) {
+    if (allRows.length > 0) {
+      state.emptyHint = "该组件在当前条件下无物品";
+    } else {
+      const summary = state.component && state.component.summary_map
+        ? state.component.summary_map[selected]
+        : null;
+      const loadedCount = Math.max(0, Number(summary && summary.loaded_count != null ? summary.loaded_count : 0) || 0);
+      state.emptyHint = loadedCount > 0
+        ? "该组件暂无已缓存物品，请先刷新库存"
+        : "该组件当前无物品";
+    }
+  } else {
+    state.emptyHint = "主库存在当前条件下无物品（隐藏条目默认不显示）";
+  }
+
+  const wearCheck = validateWearFilter({autoFix: false});
+  const wearRows = allRows.filter(itemHasWear);
+  const noWearRows = allRows.filter((x) => !itemHasWear(x));
+  let rows = wearRows;
+  rows = rows.filter((x) => !x.hidden_reason || String(x.casket_id || "").trim());
+  if (keyword) rows = rows.filter((x) => itemSearchText(x).includes(keyword));
+  if (state.raritySelected.size && state.raritySelected.size < RARITY_VALUES.length) {
+    rows = rows.filter((x) => state.raritySelected.has(rarityName(x)));
+  }
+  if (state.collectionSelected.size) {
+    rows = rows.filter((x) => state.collectionSelected.has(collectionName(x)));
+  }
+  if (wearCheck.valid) {
+    if (wearCheck.minValue !== null) rows = rows.filter((x) => Number(x.float_value || 0) >= wearCheck.minValue);
+    if (wearCheck.maxValue !== null) rows = rows.filter((x) => Number(x.float_value || 0) <= wearCheck.maxValue);
+  }
+  rows.sort((a, b) => {
+    const ra = Number(a.rarity || 0);
+    const rb = Number(b.rarity || 0);
+    if (ra !== rb) return state.raritySort === "desc" ? rb - ra : ra - rb;
+    const wa = Number(a.float_value || 0);
+    const wb = Number(b.float_value || 0);
+    if (wa !== wb) return state.wearSort === "desc" ? wb - wa : wa - wb;
+    return assetIdNumber(a) - assetIdNumber(b);
+  });
+  noWearRows.sort((a, b) => assetIdNumber(a) - assetIdNumber(b));
+  return {allRows, filteredRows: rows.concat(noWearRows)};
+}
 function resetRenderWindow() {
   state.renderWindowKey = "";
   state.renderVisibleCount = 0;
@@ -1912,6 +4962,8 @@ function renderCards(filteredRows, totalRows, filterKey = "") {
   }
   const grid = document.createElement("div");
   grid.className = "grid";
+  const showSeed = !!state.craftShowSeed;
+  const showCoolingTime = !!state.craftShowCoolingTime;
   for (const row of visibleRows) {
     const itemId = rowAssetId(row);
     const componentRow = isComponentRow(row);
@@ -1926,7 +4978,8 @@ function renderCards(filteredRows, totalRows, filterKey = "") {
     meta.className = "meta";
     const lines = [];
     lines.push(`Asset: ${itemId || "-"}`);
-    lines.push(`皮肤编号: ${Number(row.paint_index || 0)}  种子: ${Number(row.paint_seed || 0)}`);
+    if (showSeed) lines.push(`皮肤编号: ${Number(row.paint_index || 0)}  种子: ${Number(row.paint_seed || 0)}`);
+    else lines.push(`皮肤编号: ${Number(row.paint_index || 0)}`);
     if (!componentRow) {
       lines.push(`品质/稀有度: ${qualityName(row)}(${Number(row.quality || 0)}) / ${rarityName(row)}(${Number(row.rarity || 0)})`);
     }
@@ -1937,12 +4990,15 @@ function renderCards(filteredRows, totalRows, filterKey = "") {
     if (componentRow) {
       meta.style.color = "#57606a";
       lines.push(prefix || "");
-    } else if (unlock > 0) {
-      meta.style.color = "#c28f00";
-      lines.push(`${prefix} （冷却中 ${cooldownEndText(unlock)} 结束）`.trim());
     } else {
-      meta.style.color = "#57606a";
-      lines.push(prefix || "冷却: 无");
+      if (showCoolingTime && unlock > 0) {
+        meta.style.color = "#c28f00";
+        lines.push(`${prefix} （冷却中 ${cooldownEndText(unlock)} 结束）`.trim());
+      } else {
+        meta.style.color = "#57606a";
+        if (prefix) lines.push(prefix);
+        else if (showCoolingTime) lines.push("冷却: 无");
+      }
     }
     meta.textContent = lines.filter(Boolean).join("\n");
     if (selectable) {
@@ -1973,13 +5029,40 @@ function buildGroupRows(filteredRows) {
     (items.some(itemHasWear) ? wearGroups : noWearGroups).push([name, items]);
   }
 
+  const compareGroupQuantity = (a, b) => {
+    const aCooling = a[1].filter((x) => coolingUnlockTs(x) > 0).length;
+    const bCooling = b[1].filter((x) => coolingUnlockTs(x) > 0).length;
+    const aAvailable = a[1].length - aCooling;
+    const bAvailable = b[1].length - bCooling;
+    if (aAvailable !== bAvailable) return state.quantitySort === "asc" ? aAvailable - bAvailable : bAvailable - aAvailable;
+    if (aCooling !== bCooling) return state.quantitySort === "asc" ? aCooling - bCooling : bCooling - aCooling;
+    return 0;
+  };
+  const compareGroupCollection = (a, b) => {
+    const ca = String(groupCollectionText(a[1]) || "").trim().toLowerCase();
+    const cb = String(groupCollectionText(b[1]) || "").trim().toLowerCase();
+    if (ca === cb) return 0;
+    const cmp = ca.localeCompare(cb);
+    return state.collectionSort === "desc" ? -cmp : cmp;
+  };
+
   wearGroups.sort((a, b) => {
+    const collectionDiff = compareGroupCollection(a, b);
+    if (collectionDiff !== 0) return collectionDiff;
+    const quantityDiff = compareGroupQuantity(a, b);
+    if (quantityDiff !== 0) return quantityDiff;
     const ar = Math.max(...a[1].map((x) => Number(x.rarity || 0)));
     const br = Math.max(...b[1].map((x) => Number(x.rarity || 0)));
     if (ar !== br) return state.raritySort === "desc" ? br - ar : ar - br;
     return a[0].toLowerCase().localeCompare(b[0].toLowerCase());
   });
-  noWearGroups.sort((a, b) => a[0].toLowerCase().localeCompare(b[0].toLowerCase()));
+  noWearGroups.sort((a, b) => {
+    const collectionDiff = compareGroupCollection(a, b);
+    if (collectionDiff !== 0) return collectionDiff;
+    const quantityDiff = compareGroupQuantity(a, b);
+    if (quantityDiff !== 0) return quantityDiff;
+    return a[0].toLowerCase().localeCompare(b[0].toLowerCase());
+  });
 
   const out = [];
   for (const [name, items] of wearGroups.concat(noWearGroups)) {
@@ -2032,16 +5115,30 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
   }
   const table = document.createElement("table");
   table.className = "group-table";
-  table.innerHTML = "<thead><tr><th class=\"select-col\"><input type=\"checkbox\" class=\"row-check group-check-all\" title=\"全选/全部取消\" aria-label=\"全选/全部取消\" /></th><th><div class=\"th-sort-wrap\"><span>稀有度</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"asc\" title=\"稀有度由低到高\" aria-label=\"稀有度由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"desc\" title=\"稀有度由高到低\" aria-label=\"稀有度由高到低\"></button></span></div></th><th>名称</th><th>收藏品</th><th>数量(可用/冷却中)</th><th>种子</th><th><div class=\"th-sort-wrap\"><span>磨损</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"asc\" title=\"磨损由低到高\" aria-label=\"磨损由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"desc\" title=\"磨损由高到低\" aria-label=\"磨损由高到低\"></button></span></div></th><th>冷却</th></tr></thead>";
+  const showSeed = !!state.craftShowSeed;
+  const showCoolingTime = !!state.craftShowCoolingTime;
+  const headCells = [
+    "<th class=\"select-col\"><input type=\"checkbox\" class=\"row-check group-check-all\" title=\"全选/全部取消\" aria-label=\"全选/全部取消\" /></th>",
+    "<th><div class=\"th-sort-wrap\"><span>稀有度</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"asc\" title=\"稀有度由低到高\" aria-label=\"稀有度由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"desc\" title=\"稀有度由高到低\" aria-label=\"稀有度由高到低\"></button></span></div></th>",
+    "<th>名称</th>",
+    "<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>",
+    "<th><div class=\"th-sort-wrap\"><span>数量(可用/冷却中)</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"asc\" title=\"数量由低到高\" aria-label=\"数量由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"desc\" title=\"数量由高到低\" aria-label=\"数量由高到低\"></button></span></div></th>"
+  ];
+  if (showSeed) headCells.push("<th>种子</th>");
+  headCells.push("<th><div class=\"th-sort-wrap\"><span>磨损</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"asc\" title=\"磨损由低到高\" aria-label=\"磨损由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"desc\" title=\"磨损由高到低\" aria-label=\"磨损由高到低\"></button></span></div></th>");
+  if (showCoolingTime) headCells.push("<th>冷却</th>");
+  table.innerHTML = `<thead><tr>${headCells.join("")}</tr></thead>`;
   refreshSortArrowStyles(table);
   for (const btn of table.querySelectorAll(".col-sort-btn")) {
     btn.onclick = (evt) => {
       evt.stopPropagation();
       const key = String(btn.dataset.sortKey || "");
       const dir = String(btn.dataset.sortDir || "");
-      if ((key !== "wear" && key !== "rarity") || (dir !== "asc" && dir !== "desc")) return;
+      if ((key !== "wear" && key !== "rarity" && key !== "quantity" && key !== "collection") || (dir !== "asc" && dir !== "desc")) return;
       if (key === "wear") state.wearSort = dir;
-      else state.raritySort = dir;
+      else if (key === "rarity") state.raritySort = dir;
+      else if (key === "collection") state.collectionSort = dir;
+      else state.quantitySort = dir;
       render();
     };
   }
@@ -2064,7 +5161,17 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
       : "";
     const parent = document.createElement("tr");
     parent.className = `group-parent${selectedCount > 0 ? " selected" : ""}${groupIds.length > 0 ? " selectable" : ""}`;
-    parent.innerHTML = `<td class="select-col">${parentSelectCell}</td><td>${parentRarityText}</td><td>${row.name}</td><td>${row.collection || ""}</td><td>${parentQuantityText}</td><td></td><td>${row.wear_range_text || ""}</td><td>${parentCooldownText}</td>`;
+    const parentCells = [
+      `<td class="select-col">${parentSelectCell}</td>`,
+      `<td>${parentRarityText}</td>`,
+      `<td>${row.name}</td>`,
+      `<td>${row.collection || ""}</td>`,
+      `<td>${parentQuantityText}</td>`
+    ];
+    if (showSeed) parentCells.push("<td></td>");
+    parentCells.push(`<td>${row.wear_range_text || ""}</td>`);
+    if (showCoolingTime) parentCells.push(`<td>${parentCooldownText}</td>`);
+    parent.innerHTML = parentCells.join("");
     const groupCheck = parent.querySelector(".group-check");
     if (groupCheck && selectedCount > 0 && selectedCount < groupIds.length) {
       groupCheck.indeterminate = true;
@@ -2089,8 +5196,18 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
       const componentRow = isComponentRow(item);
       const selected = selectable && state.selectedComponentItemIds.has(itemId);
       const child = document.createElement("tr");
-      child.className = `group-child${selectable ? " selectable" : ""}${selected ? " selected" : ""}${!componentRow && coolingUnlockTs(item) > 0 ? " cooling" : ""}`;
-      child.innerHTML = `<td class="select-col"></td><td></td><td>Asset ${itemId || "-"}</td><td></td><td></td><td>${Number(item.paint_seed || 0)}</td><td>${itemHasWear(item) ? Number(item.float_value || 0).toFixed(6) : ""}</td><td>${componentRow ? "" : cooldownText(item)}</td>`;
+      child.className = `group-child${selectable ? " selectable" : ""}${selected ? " selected" : ""}${showCoolingTime && !componentRow && coolingUnlockTs(item) > 0 ? " cooling" : ""}`;
+      const childCells = [
+        "<td class=\"select-col\"></td>",
+        "<td></td>",
+        `<td>Asset ${itemId || "-"}</td>`,
+        "<td></td>",
+        "<td></td>"
+      ];
+      if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
+      childCells.push(`<td>${itemHasWear(item) ? Number(item.float_value || 0).toFixed(6) : ""}</td>`);
+      if (showCoolingTime) childCells.push(`<td>${componentRow ? "" : cooldownText(item)}</td>`);
+      child.innerHTML = childCells.join("");
       if (selectable) {
         child.onclick = (evt) => {
           evt.stopPropagation();
@@ -2138,14 +5255,58 @@ function render() {
   if (state.mode === "grouped") renderGrouped(filteredRows, allRows, filterKey);
   else renderCards(filteredRows, allRows, filterKey);
   syncComponentActionState();
+  syncCraftSettingsControls(allRows);
   scheduleAutoFillIfNeeded();
 }
+
+async function disconnectCurrentSession({usernameOverride = ""} = {}) {
+  if (state.refreshing) {
+    setSummary("库存刷新中，请稍后再断开");
+    return;
+  }
+  const username = String(
+    usernameOverride ||
+    state.currentAccountUsername ||
+    (ui.accountSelect && ui.accountSelect.value) ||
+    (ui.craftAccountSelect && ui.craftAccountSelect.value) ||
+    state.connectedUsername
+  ).trim();
+  if (!username) {
+    setSummary("请先选择账号");
+    return;
+  }
+  if (!state.connectedUsername || state.connectedUsername !== username) {
+    setSummary("当前账号未连接");
+    return;
+  }
+  try {
+    const data = await api("/api/session/disconnect", {
+      method: "POST",
+      body: JSON.stringify({username})
+    });
+    if (state.connectedUsername === username) {
+      state.connectedUsername = "";
+    }
+    syncInventoryTop();
+    try {
+      await loadComponentTaskQueue();
+    } catch (_) {
+      // ignore queue refresh errors
+    }
+    const cancelled = Math.max(0, Number(data.cancelled_tasks || 0) || 0);
+    setSummary(cancelled > 0 ? `连接已断开，已取消${cancelled}个排队任务` : "连接已断开");
+  } catch (err) {
+    setSummary(`断开连接失败：${err.message}`);
+  }
+}
+
 function setRefreshBusy(busy) {
   state.refreshing = !!busy;
   const disabled = state.refreshing || state.accounts.length <= 0;
   ui.refreshBtn.disabled = disabled;
   if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = disabled;
-  syncUseAccountButtonState();
+  if (ui.disconnectBtn) ui.disconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
+  if (ui.craftDisconnectBtn) ui.craftDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   ui.loginSaveBtn.disabled = state.refreshing;
   syncComponentActionState();
   renderSavedAccounts();
@@ -2178,11 +5339,12 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
     setRefreshPhase(state.connectedUsername === username ? "连接状态：已连接（刷新中）" : "连接状态：连接中");
     setSummary(state.connectedUsername === username ? "已连接，正在刷新库存..." : "正在建立连接并刷新库存...");
 
-    const data = await api("/api/refresh", {method: "POST", body: JSON.stringify({username, include_hidden: String(state.includeHidden)})});
+    const data = await api("/api/refresh", {method: "POST", body: JSON.stringify({username, include_hidden: "false"})});
     const result = data.result || {}, rows = Array.isArray(data.rows) ? data.rows : [];
     state.connectedUsername = username;
     state.fetchTime = String(data.fetch_time || "").trim();
     setRows(rows, data.component || {summary_map: {}, item_map: {}}, result.snapshot_path || "");
+    clearSnapshotDirty();
     clearRefreshPhase();
     syncInventoryTop();
     await loadComponentTaskQueue();
@@ -2218,9 +5380,13 @@ function bindEvents() {
   }, true);
   document.addEventListener("mousemove", (evt) => {
     moveCraftSplitDrag(evt);
+    moveCraftAssistOverlayDrag(evt);
+    moveCraftAssistSplitDrag(evt);
   });
   document.addEventListener("mouseup", () => {
     stopCraftSplitDrag();
+    stopCraftAssistOverlayDrag();
+    stopCraftAssistSplitDrag();
   });
   document.addEventListener("click", (evt) => {
     const target = evt.target;
@@ -2236,12 +5402,27 @@ function bindEvents() {
       }
     }
     if (state.craftSettingsOpen) {
-      const settingsPanel = ui.craftSettingsPanel;
-      const settingsBtn = ui.craftSettingsBtn;
-      const inPanel = settingsPanel && settingsPanel.contains(target);
-      const inBtn = settingsBtn && settingsBtn.contains(target);
+      const craftPanel = ui.craftSettingsPanel;
+      const craftBtn = ui.craftSettingsBtn;
+      const componentPanel = ui.componentCraftSettingsPanel;
+      const componentBtn = ui.componentCraftSettingsBtn;
+      const inPanel = (craftPanel && craftPanel.contains(target)) || (componentPanel && componentPanel.contains(target));
+      const inBtn = (craftBtn && craftBtn.contains(target)) || (componentBtn && componentBtn.contains(target));
       if (!inPanel && !inBtn) {
         setCraftSettingsPanelOpen(false);
+      }
+    }
+    if (state.craftAssistPickerOpen || state.craftAssistRoleChooserOpen) {
+      const picker = ui.craftAssistPicker;
+      const selectBox = ui.craftAssistSelectBox;
+      const toggleBtn = ui.craftAssistToggleBtn;
+      const inPicker = picker && picker.contains(target);
+      const inSelect = selectBox && selectBox.contains(target);
+      const inToggle = toggleBtn && toggleBtn.contains(target);
+      if (!inPicker && !inSelect && !inToggle) {
+        state.craftAssistPickerOpen = false;
+        state.craftAssistRoleChooserOpen = false;
+        renderCraftAssistPanel();
       }
     }
   });
@@ -2278,6 +5459,46 @@ function bindEvents() {
       }
     });
   }
+  const confirmCraftAssistPresetModal = () => {
+    const value = String(ui.craftAssistPresetModalInput ? ui.craftAssistPresetModalInput.value : "").trim();
+    if (!value) {
+      setCraftStatus("请先输入配置名称", true);
+      if (ui.craftAssistPresetModalInput) ui.craftAssistPresetModalInput.focus();
+      return;
+    }
+    closeCraftAssistPresetModal(value);
+  };
+  if (ui.craftAssistPresetModalClose) {
+    ui.craftAssistPresetModalClose.onclick = () => closeCraftAssistPresetModal(null);
+  }
+  if (ui.craftAssistPresetModalCancelBtn) {
+    ui.craftAssistPresetModalCancelBtn.onclick = () => closeCraftAssistPresetModal(null);
+  }
+  if (ui.craftAssistPresetModalSaveBtn) {
+    ui.craftAssistPresetModalSaveBtn.onclick = () => {
+      confirmCraftAssistPresetModal();
+    };
+  }
+  if (ui.craftAssistPresetModalInput) {
+    ui.craftAssistPresetModalInput.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter") {
+        evt.preventDefault();
+        confirmCraftAssistPresetModal();
+        return;
+      }
+      if (evt.key === "Escape") {
+        evt.preventDefault();
+        closeCraftAssistPresetModal(null);
+      }
+    });
+  }
+  if (ui.craftAssistPresetModal) {
+    ui.craftAssistPresetModal.addEventListener("click", (evt) => {
+      if (evt.target === ui.craftAssistPresetModal) {
+        closeCraftAssistPresetModal(null);
+      }
+    });
+  }
   ui.navAccount.onclick = () => showPage("accountPage");
   ui.navInventory.onclick = () => showPage("inventoryPage");
   ui.navCraft.onclick = () => showPage("craftPage");
@@ -2300,29 +5521,24 @@ function bindEvents() {
     };
   }
 
-  ui.useAccountBtn.onclick = async () => {
-    const username = String(ui.accountSelect.value || "").trim();
-    if (!username) { setSummary("请先选择账号"); return; }
-    await useAccount(username);
-    syncInventoryAccountSelect();
-  };
-  if (ui.craftUseAccountBtn) {
-    ui.craftUseAccountBtn.onclick = async () => {
-      const username = String((ui.craftAccountSelect && ui.craftAccountSelect.value) || "").trim();
-      if (!username) { setSummary("请先选择账号"); return; }
-      await useAccount(username);
-      syncInventoryAccountSelect();
-    };
-  }
   ui.refreshBtn.onclick = () => doRefresh({force: false});
+  if (ui.disconnectBtn) {
+    ui.disconnectBtn.onclick = () => disconnectCurrentSession({
+      usernameOverride: String((ui.accountSelect && ui.accountSelect.value) || "").trim()
+    });
+  }
   if (ui.craftRefreshBtn) {
     ui.craftRefreshBtn.onclick = () => doRefresh({
       force: false,
       usernameOverride: String((ui.craftAccountSelect && ui.craftAccountSelect.value) || "").trim()
     });
   }
+  if (ui.craftDisconnectBtn) {
+    ui.craftDisconnectBtn.onclick = () => disconnectCurrentSession({
+      usernameOverride: String((ui.craftAccountSelect && ui.craftAccountSelect.value) || "").trim()
+    });
+  }
 
-  ui.includeHidden.onchange = () => { state.includeHidden = !!ui.includeHidden.checked; resetRenderWindow(); render(); };
   ui.searchInput.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.searchText = String(ui.searchInput.value || "").trim(); resetRenderWindow(); render(); }, 180); };
   ui.modeToggleBtn.onclick = () => { state.mode = state.mode === "cards" ? "grouped" : "cards"; resetRenderWindow(); render(); };
   ui.toggleFilterBtn.onclick = toggleFilterDrawer;
@@ -2437,15 +5653,37 @@ function bindEvents() {
       setSummary("请先连接并刷新库存");
       return;
     }
-    if (!selectedComponentId()) {
+    const currentComponentId = selectedComponentId();
+    if (!currentComponentId) {
       setSummary("请先选择组件");
       return;
     }
-    const itemIds = getSelectedIdsInComponent(selectedComponentId());
-    if (!itemIds.length) {
+    const selectedRows = getSelectedRows()
+      .filter((row) => String(row && row.casket_id || "").trim() === currentComponentId)
+      .sort(compareRowsByWearAsc);
+    if (!selectedRows.length) {
       setSummary("请先在组件列表中选择要取出的物品");
       return;
     }
+    const slotEstimate = estimateMainInventoryFreeSlots();
+    let submitRows = selectedRows;
+    const freeSlots = slotEstimate.freeSlots;
+    if (freeSlots <= 0) {
+      setSummary("主库存空间已满，无法取出");
+      return;
+    }
+    if (selectedRows.length > freeSlots) {
+      const ok = window.confirm(
+        `已选可取出 ${selectedRows.length} 件，但主库存仅剩 ${freeSlots} 个空间。\n` +
+        `是否继续，仅按磨损从低到高取出前 ${freeSlots} 件？`
+      );
+      if (!ok) {
+        setSummary("已取消取出");
+        return;
+      }
+      submitRows = selectedRows.slice(0, freeSlots);
+    }
+    const itemIds = submitRows.map((row) => rowAssetId(row)).filter(Boolean);
     try {
       await runComponentMove("withdraw", itemIds, "");
       for (const id of itemIds) {
@@ -2457,24 +5695,109 @@ function bindEvents() {
       setSummary(`取出失败：${err.message}`);
     }
   };
+  const toggleCraftSettingsPanel = () => {
+    setCraftSettingsPanelOpen(!state.craftSettingsOpen);
+  };
   if (ui.craftSettingsBtn) {
     ui.craftSettingsBtn.onclick = () => {
-      setCraftSettingsPanelOpen(!state.craftSettingsOpen);
+      toggleCraftSettingsPanel();
     };
   }
+  if (ui.componentCraftSettingsBtn) {
+    ui.componentCraftSettingsBtn.onclick = () => {
+      toggleCraftSettingsPanel();
+    };
+  }
+  const applyCraftIncludeCooling = (checked) => {
+    state.craftIncludeCooling = !!checked;
+    saveCraftUiPrefs();
+    state.craftStatusText = "";
+    syncCraftSettingsControls();
+    renderCraftPage();
+  };
   if (ui.craftIncludeCooling) {
     ui.craftIncludeCooling.onchange = () => {
-      state.craftIncludeCooling = !!ui.craftIncludeCooling.checked;
-      saveCraftUiPrefs();
-      state.craftStatusText = "";
-      renderCraftPage();
+      applyCraftIncludeCooling(ui.craftIncludeCooling.checked);
     };
   }
+  if (ui.componentCraftIncludeCooling) {
+    ui.componentCraftIncludeCooling.onchange = () => {
+      applyCraftIncludeCooling(ui.componentCraftIncludeCooling.checked);
+    };
+  }
+  const applyCraftShowSeed = (checked) => {
+    state.craftShowSeed = !!checked;
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+    render();
+    renderCraftPage();
+  };
   if (ui.craftShowSeed) {
     ui.craftShowSeed.onchange = () => {
-      state.craftShowSeed = !!ui.craftShowSeed.checked;
-      saveCraftUiPrefs();
-      renderCraftPage();
+      applyCraftShowSeed(ui.craftShowSeed.checked);
+    };
+  }
+  if (ui.componentCraftShowSeed) {
+    ui.componentCraftShowSeed.onchange = () => {
+      applyCraftShowSeed(ui.componentCraftShowSeed.checked);
+    };
+  }
+  const applyCraftShowCoolingTime = (checked) => {
+    state.craftShowCoolingTime = !!checked;
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+    render();
+  };
+  if (ui.craftShowCoolingTime) {
+    ui.craftShowCoolingTime.onchange = () => {
+      applyCraftShowCoolingTime(ui.craftShowCoolingTime.checked);
+    };
+  }
+  if (ui.componentCraftShowCoolingTime) {
+    ui.componentCraftShowCoolingTime.onchange = () => {
+      applyCraftShowCoolingTime(ui.componentCraftShowCoolingTime.checked);
+    };
+  }
+  const applyCraftAssistWearOffsetPct = (inputNode) => {
+    if (!inputNode) return;
+    const nextValue = normalizeCraftAssistWearOffsetPct(inputNode.value, state.craftAssistWearOffsetPct);
+    state.craftAssistWearOffsetPct = nextValue;
+    inputNode.value = craftAssistWearOffsetPctText(nextValue);
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+  };
+  if (ui.craftAssistWearOffsetPct) {
+    ui.craftAssistWearOffsetPct.onfocus = () => {
+      ui.craftAssistWearOffsetPct.select();
+    };
+    ui.craftAssistWearOffsetPct.onchange = () => {
+      applyCraftAssistWearOffsetPct(ui.craftAssistWearOffsetPct);
+    };
+    ui.craftAssistWearOffsetPct.onblur = () => {
+      applyCraftAssistWearOffsetPct(ui.craftAssistWearOffsetPct);
+    };
+    ui.craftAssistWearOffsetPct.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      applyCraftAssistWearOffsetPct(ui.craftAssistWearOffsetPct);
+      ui.craftAssistWearOffsetPct.blur();
+    };
+  }
+  if (ui.componentCraftAssistWearOffsetPct) {
+    ui.componentCraftAssistWearOffsetPct.onfocus = () => {
+      ui.componentCraftAssistWearOffsetPct.select();
+    };
+    ui.componentCraftAssistWearOffsetPct.onchange = () => {
+      applyCraftAssistWearOffsetPct(ui.componentCraftAssistWearOffsetPct);
+    };
+    ui.componentCraftAssistWearOffsetPct.onblur = () => {
+      applyCraftAssistWearOffsetPct(ui.componentCraftAssistWearOffsetPct);
+    };
+    ui.componentCraftAssistWearOffsetPct.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      applyCraftAssistWearOffsetPct(ui.componentCraftAssistWearOffsetPct);
+      ui.componentCraftAssistWearOffsetPct.blur();
     };
   }
   if (ui.craftSplitBar) {
@@ -2482,9 +5805,127 @@ function bindEvents() {
       startCraftSplitDrag(evt);
     };
   }
+  if (ui.craftAssistOverlayHandle) {
+    ui.craftAssistOverlayHandle.onmousedown = (evt) => {
+      startCraftAssistOverlayDrag(evt);
+    };
+  }
+  if (ui.craftAssistSplitBar) {
+    ui.craftAssistSplitBar.onmousedown = (evt) => {
+      startCraftAssistSplitDrag(evt);
+    };
+  }
   if (ui.craftAddRecipeBtn) {
     ui.craftAddRecipeBtn.onclick = () => {
       addCurrentSelectionToCraftQueue();
+    };
+  }
+  if (ui.craftAssistToggleBtn) {
+    ui.craftAssistToggleBtn.onclick = () => {
+      setCraftAssistPanelOpen(!state.craftAssistOpen);
+    };
+  }
+  if (ui.craftAssistCloseBtn) {
+    ui.craftAssistCloseBtn.onclick = () => {
+      setCraftAssistPanelOpen(false);
+    };
+  }
+  if (ui.craftAssistTargetWear) {
+    const commitTargetWear = () => {
+      state.craftAssistTargetWear = commitCraftAssistTargetWearInput(ui.craftAssistTargetWear);
+      renderCraftAssistPanel();
+    };
+    ui.craftAssistTargetWear.onfocus = () => {
+      seedCraftAssistDecimalInput(ui.craftAssistTargetWear);
+    };
+    ui.craftAssistTargetWear.oninput = () => {
+      delete ui.craftAssistTargetWear.dataset.seeded;
+    };
+    ui.craftAssistTargetWear.onchange = commitTargetWear;
+    ui.craftAssistTargetWear.onblur = commitTargetWear;
+    ui.craftAssistTargetWear.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      commitTargetWear();
+      ui.craftAssistTargetWear.blur();
+    };
+  }
+  if (ui.craftAssistFilterModeRelative) {
+    ui.craftAssistFilterModeRelative.onchange = () => {
+      if (!ui.craftAssistFilterModeRelative.checked) return;
+      setCraftAssistFilterMode("relative");
+    };
+  }
+  if (ui.craftAssistFilterModeAbsolute) {
+    ui.craftAssistFilterModeAbsolute.onchange = () => {
+      if (!ui.craftAssistFilterModeAbsolute.checked) return;
+      setCraftAssistFilterMode("absolute");
+    };
+  }
+  if (ui.craftAssistPresetSaveBtn) {
+    ui.craftAssistPresetSaveBtn.onclick = async () => {
+      if (isCraftAssistPresetEditing()) {
+        saveCraftAssistPresetEditingSession();
+        return;
+      }
+      await promptAndSaveCurrentCraftAssistPreset();
+    };
+  }
+  if (ui.craftAssistMainCount) {
+    ui.craftAssistMainCount.onchange = () => {
+      state.craftAssistMainCount = normalizeCraftAssistCount(ui.craftAssistMainCount.value, state.craftAssistMainCount);
+      renderCraftAssistPanel();
+    };
+  }
+  if (ui.craftAssistAuxCount) {
+    ui.craftAssistAuxCount.onchange = () => {
+      state.craftAssistAuxCount = normalizeCraftAssistCount(ui.craftAssistAuxCount.value, state.craftAssistAuxCount);
+      renderCraftAssistPanel();
+    };
+  }
+  if (ui.craftAssistApplyBtn) {
+    ui.craftAssistApplyBtn.onclick = () => {
+      if (isCraftAssistPresetEditing()) {
+        setCraftStatus("正在独立编辑配置，请先保存修改或关闭编辑", true);
+        return;
+      }
+      applyCraftAssistAutoSelection();
+    };
+  }
+  if (ui.craftAssistSelectBox) {
+    ui.craftAssistSelectBox.onmouseenter = () => {
+      setCraftAssistRoleChooserOpen(true);
+    };
+    ui.craftAssistSelectBox.onmouseleave = () => {
+      setCraftAssistRoleChooserOpen(false);
+    };
+    ui.craftAssistSelectBox.onclick = (evt) => {
+      evt.preventDefault();
+      const rect = ui.craftAssistSelectBox.getBoundingClientRect();
+      const half = rect.left + rect.width / 2;
+      state.craftAssistPickRole = evt.clientX < half ? "main" : "aux";
+      setCraftAssistRoleChooserOpen(false);
+      openCraftAssistPicker();
+    };
+    ui.craftAssistSelectBox.onkeydown = (evt) => {
+      if (evt.key !== "Enter" && evt.key !== " ") return;
+      evt.preventDefault();
+      openCraftAssistPicker();
+    };
+    ui.craftAssistSelectBox.onfocus = () => {
+      setCraftAssistRoleChooserOpen(true);
+    };
+    ui.craftAssistSelectBox.onblur = () => {
+      setCraftAssistRoleChooserOpen(false);
+      scheduleCloseCraftAssistPicker();
+    };
+  }
+  if (ui.craftAssistPicker) {
+    ui.craftAssistPicker.onmouseenter = () => {
+      openCraftAssistPicker();
+    };
+    ui.craftAssistPicker.onmouseleave = () => {
+      scheduleCloseCraftAssistPicker();
     };
   }
   if (ui.craftExecuteQueueBtn) {
@@ -2501,6 +5942,7 @@ function bindEvents() {
 
 async function init() {
   loadCraftUiPrefs();
+  await loadCraftAssistPresetsFromStorage();
   bindEvents();
   initWearOptions();
   refreshRarityMenu();
@@ -2508,13 +5950,13 @@ async function init() {
   updateFilterDrawer();
   applyCraftLayoutWidth();
   setAccountStatus("准备就绪");
-  setNoAccountState();
+  setNoAccountState({silentSummary: true});
   try {
     const uiState = await api("/api/ui-state");
     const preferred = String(uiState.last_selected_username || "").trim();
     await loadAccounts({preferUsername: preferred});
     if (state.accountSelectedUsername) await switchAccountView(state.accountSelectedUsername);
-    else setNoAccountState();
+    else setNoAccountState({silentSummary: true});
   } catch (err) {
     setSummary(`初始化失败：${err.message}`);
     setAccountStatus(`初始化失败：${err.message}`, true);

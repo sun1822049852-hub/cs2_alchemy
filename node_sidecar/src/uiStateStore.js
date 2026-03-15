@@ -15,9 +15,11 @@ class UiStateStore {
     const raw = readJson(this.filePath, {});
     const accounts = raw && typeof raw.accounts === "object" && raw.accounts ? raw.accounts : {};
     const lastSelected = asString(raw && raw.last_selected_username ? raw.last_selected_username : "").trim();
+    const craftAssistPresets = Array.isArray(raw && raw.craft_assist_presets) ? raw.craft_assist_presets : [];
     return {
       accounts,
-      last_selected_username: lastSelected
+      last_selected_username: lastSelected,
+      craft_assist_presets: craftAssistPresets
     };
   }
 
@@ -123,6 +125,20 @@ class UiStateStore {
 
   getLastSelected() {
     return asString(this.data.last_selected_username || "").trim();
+  }
+
+  getCraftAssistPresets() {
+    try {
+      const list = Array.isArray(this.data.craft_assist_presets) ? this.data.craft_assist_presets : [];
+      return JSON.parse(JSON.stringify(list));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  setCraftAssistPresets(presets) {
+    this.data.craft_assist_presets = Array.isArray(presets) ? presets : [];
+    this.save();
   }
 }
 

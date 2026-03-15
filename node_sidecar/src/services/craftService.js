@@ -218,6 +218,91 @@ function buildRowMap(rows) {
   return map;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function dedupIds(ids) {
+  const out = new Set();
+  for (const raw of Array.isArray(ids) ? ids : []) {
+    const key = normalizeAssetId(raw);
+    if (key) {
+      out.add(key);
+    }
+  }
+  return [...out];
+}
+
+function analyzeCraftRows(rows, {spentIds, gainedIds}) {
+  const rowMap = buildRowMap(rows);
+  const spentRemaining = [];
+  const gainedPresent = [];
+  for (const id of Array.isArray(spentIds) ? spentIds : []) {
+    if (rowMap.has(id)) {
+      spentRemaining.push(id);
+    }
+  }
+  for (const id of Array.isArray(gainedIds) ? gainedIds : []) {
+    if (rowMap.has(id)) {
+      gainedPresent.push(id);
+    }
+  }
+  return {spentRemaining, gainedPresent};
+}
+
+async function waitRowsSettledAfterCraft({
+  csgo,
+  schemaStore,
+  spentIds,
+  gainedIds,
+  timeoutMs = 12000,
+  pollMs = 220
+}) {
+  const expectedSpent = dedupIds(spentIds);
+  const expectedGained = dedupIds(gainedIds);
+  const timeout = Math.max(1000, Number(timeoutMs) || 12000);
+  const interval = Math.max(80, Number(pollMs) || 220);
+  const deadline = Date.now() + timeout;
+  let attempts = 0;
+  let rows = [];
+  let state = {
+    spentRemaining: [...expectedSpent],
+    gainedPresent: []
+  };
+
+  while (true) {
+    attempts += 1;
+    rows = makeRows(csgo, schemaStore);
+    state = analyzeCraftRows(rows, {
+      spentIds: expectedSpent,
+      gainedIds: expectedGained
+    });
+    const spentSettled = state.spentRemaining.length === 0;
+    const gainedSettled = expectedGained.length === 0 || state.gainedPresent.length === expectedGained.length;
+    if (spentSettled && gainedSettled) {
+      return {
+        settled: true,
+        attempts,
+        rows,
+        spent_remaining_ids: state.spentRemaining,
+        gained_present_ids: state.gainedPresent,
+        missing_gained_ids: expectedGained.filter((id) => !state.gainedPresent.includes(id))
+      };
+    }
+    if (Date.now() >= deadline) {
+      return {
+        settled: false,
+        attempts,
+        rows,
+        spent_remaining_ids: state.spentRemaining,
+        gained_present_ids: state.gainedPresent,
+        missing_gained_ids: expectedGained.filter((id) => !state.gainedPresent.includes(id))
+      };
+    }
+    await sleep(interval);
+  }
+}
+
 function waitCraftingComplete(csgo, recipe, itemIds, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     let done = false;
@@ -356,13 +441,15 @@ function createCraftService({sessionPool, logger}) {
             throw err;
           }
 
-          rows = makeRows(csgo, schemaStore);
-          const spentSet = new Set(req.item_ids);
-          const stillExists = [];
-          for (const row of rows) {
-            const key = asString(row.asset_id).trim();
-            if (spentSet.has(key)) stillExists.push(key);
-          }
+          const settle = await waitRowsSettledAfterCraft({
+            csgo,
+            schemaStore,
+            spentIds: req.item_ids,
+            gainedIds: craftResult.gained_ids || [],
+            timeoutMs: 12000,
+            pollMs: 220
+          });
+          rows = settle.rows;
 
           const step = {
             index: req.index,
@@ -373,13 +460,23 @@ function createCraftService({sessionPool, logger}) {
             stattrak: recipeInfo.stattrak,
             spent_ids: [...req.item_ids],
             gained_ids: craftResult.gained_ids || [],
-            still_exists_ids: stillExists
+            still_exists_ids: settle.spent_remaining_ids || [],
+            gained_present_ids: settle.gained_present_ids || [],
+            missing_gained_ids: settle.missing_gained_ids || [],
+            inventory_settled: !!settle.settled,
+            settle_attempts: toInt(settle.attempts, 0)
           };
           steps.push(step);
+          if (logger && !step.inventory_settled) {
+            logger.warn(
+              "craft_ops",
+              `tradeup inventory not fully settled: account=${accountName} step=${req.index}/${recipeRequests.length} missing_gained=${step.missing_gained_ids.join(",")} still_exists=${step.still_exists_ids.join(",")} attempts=${step.settle_attempts}`
+            );
+          }
           if (logger) {
             logger.info(
               "craft_ops",
-              `tradeup done: account=${accountName} step=${req.index}/${recipeRequests.length} recipe=${recipeInfo.recipe} gained=${step.gained_ids.join(",")} still_exists=${stillExists.length}`
+              `tradeup done: account=${accountName} step=${req.index}/${recipeRequests.length} recipe=${recipeInfo.recipe} gained=${step.gained_ids.join(",")} gained_present=${step.gained_present_ids.length}/${step.gained_ids.length} still_exists=${step.still_exists_ids.length} settled=${step.inventory_settled} attempts=${step.settle_attempts}`
             );
           }
         } catch (err) {
