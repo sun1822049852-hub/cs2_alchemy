@@ -22,19 +22,19 @@
               <h2>账号管理</h2>
               <div class="form-row">
                 <label for="accountUsername">Steam 账号</label>
-                <input id="accountUsername" type="text" />
+                <input id="accountUsername" type="text" autocomplete="off" autocorrect="off" spellcheck="false" />
               </div>
               <div class="form-row">
                 <label for="accountPassword">密码</label>
-                <input id="accountPassword" type="password" />
+                <input id="accountPassword" type="password" autocomplete="new-password" />
               </div>
               <div class="form-row">
                 <label for="accountTotp">令牌码</label>
-                <input id="accountTotp" type="text" maxlength="6" />
+                <input id="accountTotp" type="text" maxlength="6" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" />
               </div>
               <div class="form-row">
                 <label for="accountRemark">备注名</label>
-                <input id="accountRemark" type="text" />
+                <input id="accountRemark" type="text" autocomplete="off" autocorrect="off" spellcheck="false" />
               </div>
               <div class="account-actions">
                 <button id="loginSaveBtn">登录并保存</button>
@@ -130,6 +130,7 @@
               <label id="showComponentItemsWrap" class="inline"><input type="checkbox" id="showComponentItems" />显示组件内物品</label>
               <div class="component-toolbar-right">
                 <span id="summaryText" class="summary-ghost" aria-live="polite">尚未加载库存</span>
+                <span id="componentAvailableHint" class="component-available-badge" title="主库存可用槽位">可用：1000</span>
                 <span id="componentHint" class="component-capacity-badge" title="库存容量">0/1000</span>
                 <div class="craft-settings-wrap component-craft-settings-wrap">
                   <button id="componentCraftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">

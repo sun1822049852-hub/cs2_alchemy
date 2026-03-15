@@ -102,6 +102,171 @@ function writeJson(res, status, payload) {
   res.end(body);
 }
 
+function normalizeLoginSaveError(err) {
+  const raw = asString(err && err.message ? err.message : err).trim();
+  const rawCode = asString(err && (err.eresult || err.code || err.result || "")).trim();
+  const lower = raw.toLowerCase();
+  const lowerCode = rawCode.toLowerCase();
+  const numericCode = Number(rawCode);
+  const includesAny = (parts) => parts.some((part) => lower.includes(String(part || "").toLowerCase()));
+  const codeIsAny = (codes) => codes.some((code) => lowerCode === String(code || "").toLowerCase());
+  const codeNumIsAny = (codes) => Number.isFinite(numericCode) && codes.some((code) => Number(code) === numericCode);
+  const textHasCode = (codes) => codes.some((code) => {
+    const value = String(code || "").trim();
+    if (!value) {
+      return false;
+    }
+    if (/^\d+$/.test(value)) {
+      return new RegExp(`\\b(code|eresult)=${value}\\b`, "i").test(raw);
+    }
+    return new RegExp(`\\b${value}\\b`, "i").test(raw);
+  });
+
+  if (!raw && !rawCode) {
+    return {
+      message: "登录失败：未知错误，请稍后重试",
+      reason: "unknown_error",
+      status: 500,
+      raw: ""
+    };
+  }
+
+  if (
+    includesAny(["steam auth api unreachable", "auth api precheck", "auth api precheck failed"]) ||
+    includesAny(["enotfound", "econnrefused", "econnreset", "ehostunreach", "enetunreach", "networkerror", "fetch failed"]) ||
+    codeIsAny(["ENOTFOUND", "ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH"])
+  ) {
+    return {
+      message: "无法连接 Steam 认证服务器，请检查网络或代理配置后重试",
+      reason: "auth_api_unreachable",
+      status: 503,
+      raw
+    };
+  }
+  if (includesAny(["refresh_token not received", "未获取到 refresh_token"]) || raw === "登录成功但未获取到 refresh_token") {
+    return {
+      message: "登录成功但未获取到 refresh_token，请稍后重试",
+      reason: "refresh_token_missing",
+      status: 502,
+      raw
+    };
+  }
+  if (
+    includesAny(["invalidpassword", "incorrect password", "account name or password"]) ||
+    textHasCode(["InvalidPassword", "5"]) ||
+    codeIsAny(["InvalidPassword"]) ||
+    codeNumIsAny([5])
+  ) {
+    return {
+      message: "账号或密码错误，请确认后重试",
+      reason: "invalid_password",
+      status: 401,
+      raw
+    };
+  }
+  if (
+    includesAny(["twofactorcodemismatch", "invalid authenticator code", "steam guard code"]) ||
+    textHasCode(["TwoFactorCodeMismatch", "88"]) ||
+    codeIsAny(["TwoFactorCodeMismatch"]) ||
+    codeNumIsAny([88])
+  ) {
+    return {
+      message: "令牌码错误，请输入当前有效的令牌码",
+      reason: "totp_mismatch",
+      status: 401,
+      raw
+    };
+  }
+  if (
+    includesAny(["invalidloginauthcode", "email code", "accountlogondenied"]) ||
+    textHasCode(["InvalidLoginAuthCode", "AccountLogonDenied", "65", "63"]) ||
+    codeIsAny(["InvalidLoginAuthCode", "AccountLogonDenied"]) ||
+    codeNumIsAny([65, 63])
+  ) {
+    return {
+      message: "邮箱验证码错误，请输入最新验证码",
+      reason: "email_code_mismatch",
+      status: 401,
+      raw
+    };
+  }
+  if (
+    includesAny(["ratelimit", "too many", "too_many_requests", "too many requests"]) ||
+    textHasCode(["RateLimitExceeded", "84"]) ||
+    codeIsAny(["RateLimitExceeded"]) ||
+    codeNumIsAny([84])
+  ) {
+    return {
+      message: "登录过于频繁，请稍后再试",
+      reason: "rate_limited",
+      status: 429,
+      raw
+    };
+  }
+  if (
+    includesAny(["accessdenied"]) ||
+    textHasCode(["AccessDenied", "15"]) ||
+    codeIsAny(["AccessDenied"]) ||
+    codeNumIsAny([15])
+  ) {
+    return {
+      message: "登录被 Steam 拒绝，请稍后重试，必要时先在官方客户端完成一次登录确认",
+      reason: "access_denied",
+      status: 403,
+      raw
+    };
+  }
+  if (
+    includesAny(["login timeout", "authenticate timeout", "start timeout", "submit guard timeout", "timeout("]) ||
+    codeIsAny(["ETIMEDOUT", "ESOCKETTIMEDOUT"]) ||
+    includesAny(["timeout"])
+  ) {
+    return {
+      message: "登录超时，请在 Steam 客户端完成确认后重试",
+      reason: "login_timeout",
+      status: 504,
+      raw
+    };
+  }
+  if (includesAny(["deviceconfirmation", "emailconfirmation", "waiting confirmation"])) {
+    return {
+      message: "需要在 Steam 手机端确认本次登录，请确认后重试",
+      reason: "device_confirmation_required",
+      status: 401,
+      raw
+    };
+  }
+  if (
+    includesAny(["totp required", "需要令牌码", "need two-factor"]) ||
+    textHasCode(["AccountLoginDeniedNeedTwoFactor", "85"]) ||
+    codeIsAny(["AccountLoginDeniedNeedTwoFactor"]) ||
+    codeNumIsAny([85])
+  ) {
+    return {
+      message: "缺少令牌码，请输入后重试",
+      reason: "totp_required",
+      status: 400,
+      raw
+    };
+  }
+  if (includesAny(["additional authentication is required", "guard action", "actionrequired"])) {
+    return {
+      message: "登录需要额外验证，请在 Steam 客户端完成验证后重试",
+      reason: "additional_auth_required",
+      status: 401,
+      raw
+    };
+  }
+
+  const fallbackMessage = raw || (rawCode ? `steam login failed (${rawCode})` : "登录失败：未知错误，请稍后重试");
+  return {
+    message: fallbackMessage,
+    reason: "login_failed",
+    status: 500,
+    raw: fallbackMessage
+  };
+}
+
 function guessContentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
   if (filePath.endsWith(".js")) return "application/javascript; charset=utf-8";
@@ -645,6 +810,7 @@ async function handleApi(req, res, urlObj) {
       return true;
     }
 
+    logger.info("ui_server", `login-save request: account=${username} totp=yes`);
     try {
       const tokenStore = new TokenStore();
       const result = await loginAndSaveToken({
@@ -693,6 +859,7 @@ async function handleApi(req, res, urlObj) {
 
       const uiState = new UiStateStore();
       uiState.setLastSelected(username);
+      logger.info("ui_server", `login-save success: account=${username} token_saved=${Boolean(result.refresh_token)}`);
       writeJson(res, 200, {
         ok: true,
         message: "登录成功，已获取并保存 token",
@@ -704,9 +871,16 @@ async function handleApi(req, res, urlObj) {
         accounts: accountStore.list()
       });
     } catch (err) {
-      writeJson(res, 500, {
+      const normalized = normalizeLoginSaveError(err);
+      logger.warn(
+        "ui_server",
+        `login-save failed: account=${username} reason=${normalized.reason} status=${normalized.status} message=${normalized.message} raw=${normalized.raw || "-"}`
+      );
+      writeJson(res, normalized.status, {
         ok: false,
-        message: asString(err && err.message ? err.message : err)
+        message: normalized.message,
+        reason: normalized.reason,
+        detail: normalized.raw
       });
     }
     return true;
@@ -855,6 +1029,55 @@ async function handleApi(req, res, urlObj) {
       username,
       cancelled_tasks: cancelledCount,
       connected: false
+    });
+    return true;
+  }
+
+  if (pathname === "/api/session/disconnect-others" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim() || resolveRefreshTarget("");
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+
+    const accountStore = new AccountStore();
+    const accountNames = accountStore.list()
+      .map((row) => asString(row && row.username ? row.username : "").trim())
+      .filter(Boolean);
+    const blocked = [];
+    for (const accountName of accountNames) {
+      if (accountName === username) continue;
+      if (!refreshRuntime.isConnected(accountName)) continue;
+      const queueSnapshot = componentTaskQueue.getSnapshot(accountName);
+      if (queueSnapshot.running && asString(queueSnapshot.running.username).trim() === accountName) {
+        blocked.push(accountName);
+      }
+    }
+    if (blocked.length) {
+      writeJson(res, 409, {
+        ok: false,
+        message: `账号 ${blocked[0]} 有任务正在执行，请稍后再切换连接`,
+        blocked_accounts: blocked
+      });
+      return true;
+    }
+
+    const disconnected = [];
+    let cancelledCount = 0;
+    for (const accountName of accountNames) {
+      if (accountName === username) continue;
+      if (!refreshRuntime.isConnected(accountName)) continue;
+      cancelledCount += componentTaskQueue.cancelByUsername(accountName);
+      sessionPool.invalidate(accountName, "switch_account");
+      refreshRuntime.removeAccount(accountName);
+      disconnected.push(accountName);
+    }
+    writeJson(res, 200, {
+      ok: true,
+      username,
+      disconnected,
+      cancelled_tasks: cancelledCount
     });
     return true;
   }

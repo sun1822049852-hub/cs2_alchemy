@@ -339,6 +339,16 @@ select.small {
   background: #fff5f6;
 }
 
+.status.status-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.14s ease, transform 0.14s ease;
+}
+
+.status.status-clickable:hover {
+  box-shadow: 0 0 0 2px rgba(224, 62, 94, 0.18);
+  transform: translateY(-1px);
+}
+
 .muted {
   color: #555;
   font-size: 13px;
@@ -605,18 +615,29 @@ select.small {
   margin-left: 0;
 }
 
+.component-available-badge,
 .component-capacity-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 30px;
   padding: 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.component-available-badge {
+  border: 1px solid #c9d6ec;
+  border-radius: 6px;
+  background: #f7fbff;
+  color: #1f4a86;
+}
+
+.component-capacity-badge {
   border: 1px solid #c8d5ee;
   border-radius: 6px;
   background: #f8fbff;
   color: #1d3557;
-  font-size: 13px;
-  font-weight: 700;
   box-shadow: 0 6px 12px rgba(15, 23, 42, 0.12);
 }
 
@@ -953,6 +974,10 @@ select.small {
   min-width: 0;
 }
 
+#accountTotp {
+  text-transform: uppercase;
+}
+
 .account-actions {
   display: flex;
   gap: 8px;
@@ -1187,7 +1212,7 @@ select.small {
   cursor: col-resize;
   background: transparent;
   border: none;
-  z-index: 8;
+  z-index: 18;
 }
 
 .craft-split-bar:hover {
@@ -1957,10 +1982,26 @@ select.small {
   align-items: center;
 }
 
+.craft-assist-item-add {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #9bc2f5;
+  border-radius: 50%;
+  background: #eef6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  line-height: 13px;
+  padding: 0;
+  cursor: pointer;
+}
+
 .craft-assist-item-title {
   font-size: 13px;
   font-weight: 600;
   color: #0f172a;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .craft-assist-item-remove {
@@ -2060,6 +2101,76 @@ select.small {
   color: #64748b;
 }
 
+.craft-assist-selected-wrap {
+  border: 1px dashed #d1deee;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 6px;
+  display: grid;
+  gap: 6px;
+}
+
+.craft-assist-selected-label {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1;
+}
+
+.craft-assist-selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.craft-assist-selected-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #bfd2ea;
+  border-radius: 8px;
+  background: #eaf3ff;
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.craft-assist-selected-tag-text {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.craft-assist-selected-tag-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #f1b5b5;
+  border-radius: 50%;
+  background: #fff5f5;
+  color: #b91c1c;
+  font-size: 11px;
+  line-height: 10px;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.craft-assist-selected-tag:hover .craft-assist-selected-tag-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.craft-assist-selected-empty {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
 #craftStatusText {
   min-height: 18px;
 }
@@ -2148,6 +2259,22 @@ select.small {
   padding: 8px;
   margin-bottom: 8px;
   background: #f8fbff;
+}
+
+.craft-queue-group.selectable {
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
+.craft-queue-group.selectable:hover {
+  border-color: #9fb9df;
+  background: #f1f7ff;
+}
+
+.craft-queue-group.selectable:focus-visible {
+  outline: none;
+  border-color: #7ea6d8;
+  box-shadow: 0 0 0 2px rgba(126, 166, 216, 0.28);
 }
 
 .craft-queue-group.draft {
@@ -2566,5 +2693,449 @@ body.craft-assist-split-dragging {
   .group-table td {
     font-size: 12px;
     padding: 6px;
+  }
+}
+
+/* UI refresh: keep structure unchanged, improve readability and spacing */
+:root {
+  --bg: #f3f6fb;
+  --panel: #ffffff;
+  --border: #d8e1ec;
+  --text: #0f172a;
+  --muted: #4b5563;
+  --accent: #1d4ed8;
+  --success: #15803d;
+  --danger: #be123c;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-strong: 0 16px 38px rgba(15, 23, 42, 0.14);
+  --focus-ring: 0 0 0 3px rgba(29, 78, 216, 0.16);
+}
+
+body {
+  line-height: 1.45;
+  font-family: "HarmonyOS Sans SC", "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.84) 0%, rgba(255, 255, 255, 0) 52%),
+    linear-gradient(180deg, #f8fbff 0%, #eef3fa 100%);
+}
+
+.layout {
+  grid-template-columns: 228px minmax(0, 1fr);
+}
+
+.sidebar {
+  padding: 18px 14px;
+  border-right: 1px solid #d7e0ec;
+  background: linear-gradient(180deg, #f2f7ff 0%, #edf3fb 100%);
+}
+
+.sidebar-title {
+  margin-bottom: 14px;
+  border: 1px solid #d6e1f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  font-size: 17px;
+}
+
+.nav-btn {
+  justify-content: flex-start;
+  margin: 0 0 8px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 600;
+  transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.nav-btn:hover {
+  transform: translateX(1px);
+  border-color: #9ab3d9;
+  background: #ffffff;
+}
+
+.nav-btn.active {
+  border-color: #8fb1e3;
+  background: linear-gradient(90deg, #e8f1ff 0%, #f5f9ff 100%);
+  color: #123a73;
+  box-shadow: inset 3px 0 0 #2463d6;
+}
+
+.workspace {
+  min-width: 0;
+  padding: 16px 18px 18px;
+}
+
+.page {
+  animation: page-fade-in 0.18s ease;
+}
+
+@keyframes page-fade-in {
+  from {
+    opacity: 0.62;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.panel {
+  border-radius: var(--radius-md);
+  border-color: #d5ddea;
+  padding: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
+.topbar {
+  border: 1px solid #d5ddea;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+.topbar h1 {
+  font-size: 24px;
+  letter-spacing: 0.2px;
+}
+
+.topbar-meta {
+  gap: 10px;
+}
+
+input,
+select,
+button,
+textarea {
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease, transform 0.08s ease;
+}
+
+input,
+select,
+textarea {
+  background: #fdfeff;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #7aa2ed;
+  box-shadow: var(--focus-ring);
+  background: #ffffff;
+}
+
+button:focus-visible {
+  outline: none;
+  border-color: #7aa2ed;
+  box-shadow: var(--focus-ring);
+}
+
+button:hover {
+  border-color: #8fa1b8;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+#refreshBtn,
+#craftRefreshBtn,
+#componentDepositBtn,
+#componentWithdrawBtn {
+  height: 32px;
+  border-color: #b7c8e5;
+  background: #f3f7ff;
+  font-weight: 600;
+}
+
+#refreshBtn:hover,
+#craftRefreshBtn:hover,
+#componentDepositBtn:hover,
+#componentWithdrawBtn:hover {
+  border-color: #90ade0;
+  background: #eaf2ff;
+}
+
+#disconnectBtn,
+#craftDisconnectBtn,
+#clearAccountBtn,
+.btn-danger {
+  background: #fff7f8;
+  border-color: #e8c0c8;
+  color: #9f1239;
+}
+
+#disconnectBtn:disabled,
+#craftDisconnectBtn:disabled {
+  background: #eef1f5;
+  border-color: #d3dbe6;
+  color: #97a3b3;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.account-tools {
+  gap: 8px;
+}
+
+.account-tools select {
+  min-width: 220px;
+}
+
+.account-tools .status,
+.account-card-state.status {
+  font-weight: 700;
+}
+
+#filterDrawer {
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(6px);
+}
+
+.filter-nav-item {
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.menu-list {
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.component-toolbar {
+  gap: 8px;
+}
+
+.component-toolbar .inline {
+  margin-right: 0;
+}
+
+.component-toolbar-search-label {
+  font-weight: 600;
+}
+
+.component-toolbar-search-input {
+  min-width: 260px;
+  width: min(420px, 48vw);
+}
+
+.component-toolbar-right {
+  gap: 10px;
+  margin-top: 0;
+  align-items: center;
+  align-self: center;
+}
+
+.component-available-badge,
+.component-capacity-badge {
+  border-radius: 999px;
+  padding: 0 12px;
+}
+
+.component-available-badge {
+  border-color: #bfd0ea;
+  background: #f4f8ff;
+  color: #1d4a84;
+}
+
+.component-capacity-badge {
+  border-color: #afc5e8;
+  background: #edf4ff;
+  box-shadow: none;
+}
+
+.list-wrap {
+  margin-top: 12px;
+}
+
+.card {
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.card.selectable:hover {
+  border-color: #7ea6eb;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(30, 64, 175, 0.14);
+}
+
+.card.selected {
+  border-color: #2563eb;
+  background: #ecf3ff;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.14);
+}
+
+.group-table {
+  border-radius: 10px;
+}
+
+.group-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+}
+
+.group-parent {
+  background: #f9fbff;
+}
+
+.group-parent.selected {
+  background: #e7f0ff;
+}
+
+.account-grid {
+  gap: 12px;
+  grid-template-columns: minmax(500px, 2fr) minmax(320px, 1fr);
+}
+
+.form-row {
+  grid-template-columns: 100px 1fr;
+}
+
+.account-actions button {
+  height: 32px;
+  font-weight: 600;
+}
+
+.tips {
+  border: 1px dashed #d5deed;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f9fbff;
+}
+
+.status-box {
+  border: 1px solid #e0e8f3;
+  border-radius: 10px;
+  background: #fafcff;
+  padding: 10px;
+}
+
+.saved-accounts {
+  max-height: calc(100vh - 190px);
+  padding-right: 6px;
+}
+
+.account-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.account-card.selected {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2), 0 8px 20px rgba(15, 23, 42, 0.1);
+}
+
+.account-card-actions button {
+  font-weight: 600;
+}
+
+.craft-layout > .panel {
+  border-radius: 12px;
+}
+
+.craft-right-panel {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.craft-queue-list {
+  border-radius: 10px;
+}
+
+.craft-assist-overlay {
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  border-radius: 12px;
+  box-shadow: var(--shadow-strong);
+}
+
+@media (max-width: 1120px) {
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+    flex-wrap: wrap;
+    padding: 10px;
+  }
+
+  .sidebar-title {
+    flex: 1 1 100%;
+    margin: 0 0 2px;
+    text-align: left;
+  }
+
+  .nav-btn {
+    flex: 1 1 calc(33.33% - 8px);
+    min-width: 108px;
+    justify-content: center;
+    margin: 0;
+  }
+
+  .workspace {
+    padding: 12px;
+  }
+
+  .topbar {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .account-tools {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .account-tools select {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .account-tools button {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .component-toolbar {
+    align-items: stretch;
+  }
+
+  .component-toolbar-search-label,
+  .component-toolbar-search-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .component-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .account-actions {
+    flex-wrap: wrap;
+  }
+
+  .account-actions button {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .saved-accounts {
+    max-height: none;
   }
 }
