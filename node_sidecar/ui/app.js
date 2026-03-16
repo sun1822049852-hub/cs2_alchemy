@@ -2015,6 +2015,43 @@ function averageRelativeWearText(rows) {
   const total = values.reduce((sum, value) => sum + value, 0);
   return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
 }
+function averageRelativeWearValue(rows) {
+  const values = (Array.isArray(rows) ? rows : [])
+    .map((row) => getRelativeWearValue(row))
+    .filter((value) => value != null && Number.isFinite(value));
+  if (!values.length) return null;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total / values.length;
+}
+function logCraftAssistPickedRows({recipeNo = 0, sourceText = "", targetValue = null, runOverall = null, mode = 10, selectedRows = []} = {}) {
+  const list = Array.isArray(selectedRows) ? selectedRows : [];
+  if (!list.length) return;
+  const prefix = `[craft-assist][recipe#${Math.max(1, Number(recipeNo) || 1)}${sourceText ? `|${sourceText}` : ""}]`;
+  const targetText = targetValue == null ? "-" : numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS);
+  const runOverallText = runOverall == null ? "-" : numberTextTrunc(runOverall, WEAR_INPUT_DECIMALS);
+  const rowOverallValue = averageRelativeWearValue(list);
+  const rowOverallText = rowOverallValue == null ? "-" : numberTextTrunc(rowOverallValue, WEAR_INPUT_DECIMALS);
+  const picked = list.map((row, index) => ({
+    index: index + 1,
+    asset_id: rowAssetId(row),
+    name: itemDisplayName(row),
+    relative_wear: numberTextTrunc(getRelativeWearValue(row), WEAR_INPUT_DECIMALS),
+    absolute_wear: numberTextTrunc(getAbsoluteWearValue(row), WEAR_INPUT_DECIMALS),
+    rarity: rarityName(row)
+  }));
+  if (typeof console.groupCollapsed === "function") {
+    console.groupCollapsed(`${prefix} picked ${picked.length}/${mode}, target=${targetText}, algorithm=${runOverallText}, row_avg=${rowOverallText}`);
+  } else {
+    console.info(`${prefix} picked ${picked.length}/${mode}, target=${targetText}, algorithm=${runOverallText}, row_avg=${rowOverallText}`);
+  }
+  if (Math.abs(Number(rowOverallValue) - Number(runOverall)) > 1e-9) {
+    console.warn(`${prefix} average mismatch: algorithm=${runOverallText}, row_avg=${rowOverallText}`);
+  }
+  console.info(`${prefix} picked_ids=${picked.map((item) => item.asset_id).join(",")}`);
+  if (typeof console.table === "function") console.table(picked);
+  else console.info(picked);
+  if (typeof console.groupEnd === "function") console.groupEnd();
+}
 function buildCraftResultText(step, rowsById) {
   const gainedIds = Array.isArray(step && step.gained_ids)
     ? step.gained_ids.map((id) => String(id || "").trim()).filter(Boolean)
@@ -2063,7 +2100,15 @@ function applyCraftStepResultsToQueue({steps, pendingIndexes, rows}) {
   syncCraftSelectedIdsFromActiveRecipe();
 }
 function formatCraftSlotWear(row) {
-  return relativeWearLabel(row, {prefix: false});
+  return absoluteWearLabel(row, {prefix: false});
+}
+function averageAbsoluteWearText(rows) {
+  const values = (Array.isArray(rows) ? rows : [])
+    .map((row) => getAbsoluteWearValue(row))
+    .filter((value) => value != null && Number.isFinite(value));
+  if (!values.length) return "-";
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
 }
 function makeCraftSlotNode({row = null, rawId = "", onRemove = null}) {
   const slot = document.createElement("div");
@@ -2079,9 +2124,9 @@ function makeCraftSlotNode({row = null, rawId = "", onRemove = null}) {
   slot.classList.add("filled");
   const wear = document.createElement("div");
   wear.className = "craft-slot-wear";
-  wear.textContent = `相对磨损 ${wearText}`;
+  wear.textContent = wearText;
   slot.append(wear);
-  slot.title = `相对磨损：${wearText}`;
+  slot.title = row ? (itemDisplayName(row) || "未命名物品") : (assetId || "未知物品");
   if (typeof onRemove === "function") {
     const removeRight = document.createElement("button");
     removeRight.type = "button";
@@ -2509,9 +2554,6 @@ function normalizeCraftAssistDirection(role, direction) {
   if (value === "lt" || value === "gt") return value;
   return defaultDirection;
 }
-function craftAssistDirectionText(direction) {
-  return String(direction || "").trim() === "lt" ? "小于相对磨损" : "大于相对磨损";
-}
 function makeCraftAssistUid(prefix = "assist") {
   return `${String(prefix || "assist").trim() || "assist"}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
@@ -2609,24 +2651,7 @@ function normalizeCraftAssistMaterialList(entries, {targetWear = state.craftAssi
   return out;
 }
 function syncCraftAssistAutoDirectionLimit() {
-  // 主料数量=10时自动勾选；下调后自动取消。
-  // 辅料保持用户手动选择。
-  const materials = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [];
-  if (!materials.length) return;
-  state.craftAssistMaterials = materials
-    .map((entry) => {
-      if (!entry) return null;
-      const role = normalizeCraftAssistRole(entry.role);
-      const count = normalizeCraftAssistEntryCount(entry.count, 1);
-      const autoDisableLimit = role === "main" && count === 10;
-      return {
-        ...entry,
-        disable_direction_limit: role === "main"
-          ? autoDisableLimit
-          : !!entry.disable_direction_limit
-      };
-    })
-    .filter(Boolean);
+  // 兼容旧调用：已移除“可大于/可小于相对磨损”机制。
 }
 function refreshCraftAssistMaterialRanges({rows = null, useRelative = getCraftAssistFilterUseRelative()} = {}) {
   state.craftAssistMaterials = (Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
@@ -3185,6 +3210,7 @@ function renderCraftAssistList() {
   const wearLabel = filterUseRelative ? "相对磨损范围" : "绝对磨损范围";
   const minText = "Minwear";
   const maxText = "Maxwear";
+  const formatRangeWear = wearText6;
   for (const material of materials) {
     const materialId = String(material && material.id || "").trim();
     const selectedNames = craftAssistMaterialNames(material);
@@ -3196,7 +3222,6 @@ function renderCraftAssistList() {
     const customRange = !!(material && material.custom_range);
     const role = normalizeCraftAssistRole(material && material.role);
     const roleText = role === "main" ? "主料" : "辅料";
-    const disableLimit = !!(material && material.disable_direction_limit);
     const item = document.createElement("div");
     item.className = "craft-assist-item";
 
@@ -3283,8 +3308,8 @@ function renderCraftAssistList() {
     const minInput = document.createElement("input");
     minInput.type = "text";
     minInput.inputMode = "decimal";
-    minInput.placeholder = wearText2(constraintMin);
-    minInput.value = customRange ? wearText2(resolvedRange.wear_min) : "";
+    minInput.placeholder = formatRangeWear(constraintMin);
+    minInput.value = customRange ? formatRangeWear(resolvedRange.wear_min) : "";
     minInput.setAttribute("aria-label", `${minText} 输入`);
     const dash = document.createElement("span");
     dash.textContent = "-";
@@ -3294,8 +3319,8 @@ function renderCraftAssistList() {
     const maxInput = document.createElement("input");
     maxInput.type = "text";
     maxInput.inputMode = "decimal";
-    maxInput.placeholder = wearText2(constraintMax);
-    maxInput.value = customRange ? wearText2(resolvedRange.wear_max) : "";
+    maxInput.placeholder = formatRangeWear(constraintMax);
+    maxInput.value = customRange ? formatRangeWear(resolvedRange.wear_max) : "";
     maxInput.setAttribute("aria-label", `${maxText} 输入`);
     const commitRange = () => {
       if (minInput.dataset.seeded === "1" && String(minInput.value || "").trim() === "0.") {
@@ -3362,25 +3387,6 @@ function renderCraftAssistList() {
     rangeWrap.append(minLabel, minInput, dash, maxLabel, maxInput);
     rangeLabel.append(rangeText, rangeWrap);
     configRow.append(rangeLabel);
-
-    const limitRow = document.createElement("label");
-    limitRow.className = "craft-assist-item-limit";
-    const limitCheck = document.createElement("input");
-    limitCheck.type = "checkbox";
-    limitCheck.checked = disableLimit;
-    const limitText = document.createElement("span");
-    limitText.textContent = "可小于相对磨损";
-    limitCheck.onchange = () => {
-      updateCraftAssistMaterial(materialId, (entry) => ({
-        ...entry,
-        direction: normalizeCraftAssistDirection(role, entry && entry.direction),
-        disable_direction_limit: !!limitCheck.checked
-      }));
-      syncCraftAssistAutoDirectionLimit();
-      renderCraftAssistPanel();
-    };
-    limitRow.append(limitCheck, limitText);
-    configRow.append(limitRow);
 
     const selectedWrap = document.createElement("div");
     selectedWrap.className = "craft-assist-selected-wrap";
@@ -3628,7 +3634,7 @@ async function promptAndSaveCurrentCraftAssistPreset() {
   if (presetName == null) return false;
   return saveCurrentCraftAssistPreset(presetName);
 }
-function applyCraftAssistPreset(presetId, {autoSelect = true, applyCount = 1} = {}) {
+async function applyCraftAssistPreset(presetId, {autoSelect = true, applyCount = 1} = {}) {
   const id = String(presetId || "").trim();
   if (!id) return;
   const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
@@ -3654,7 +3660,7 @@ function applyCraftAssistPreset(presetId, {autoSelect = true, applyCount = 1} = 
         materials: preset.materials,
         pick_role: draftBackup.pick_role
       });
-      return applyCraftAssistAutoSelectionBatch({sourcePresetName: preset.name, repeatCount});
+      return await applyCraftAssistAutoSelectionBatch({sourcePresetName: preset.name, repeatCount});
     } finally {
       restoreCraftAssistDraftSnapshot(draftBackup);
       state.craftAssistPresetEditingId = editingBackup.id;
@@ -3941,7 +3947,7 @@ function renderCraftAssistPresetPanel() {
       const countValue = normalizeCraftAssistApplyCount(applyCountInput.value, applyCountMap[presetId]);
       applyCountInput.value = String(countValue);
       if (presetId) applyCountMap[presetId] = countValue;
-      applyCraftAssistPreset(preset.id, {autoSelect: true, applyCount: countValue});
+      void applyCraftAssistPreset(preset.id, {autoSelect: true, applyCount: countValue});
     };
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
@@ -4029,7 +4035,6 @@ function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedId
     rows.push(...(rowsByName.get(name) || []));
   }
   const useRelativeFilter = getCraftAssistFilterUseRelative();
-  const target = Number(targetValue);
   const unique = new Map();
   for (const row of rows) {
     const id = rowAssetId(row);
@@ -4040,10 +4045,6 @@ function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedId
     const value = craftAssistValueOfRow(row);
     if (relativeValue == null || rangeValue == null || value == null) continue;
     if (rangeValue < Number(material.wear_min) - 1e-9 || rangeValue > Number(material.wear_max) + 1e-9) continue;
-    if (!material.disable_direction_limit) {
-      if (material.direction === "gt" && !(value > target + 1e-9)) continue;
-      if (material.direction === "lt" && !(value < target - 1e-9)) continue;
-    }
     unique.set(id, {id, row, value, relative_value: relativeValue});
   }
   const list = [...unique.values()];
@@ -4156,13 +4157,14 @@ function applyCraftAssistDeficitCorrection({selected, candidates, targetValue, c
 function applyCraftAssistOverflowCorrection({materialResults, targetValue, maxIterations = 80}) {
   const entries = Array.isArray(materialResults) ? materialResults : [];
   if (!entries.length) return entries;
+  const totalSelected = calcCraftAssistTotalSelectedCount(entries);
+  if (totalSelected <= 0) return entries;
   const threshold = Number(targetValue) - 1e-9;
   let overall = calcCraftAssistOverallMean(entries);
   if (overall == null) return entries;
   let iterations = 0;
   while (!(overall < threshold) && iterations < Math.max(1, Number(maxIterations) || 80)) {
     const needDrop = overall - threshold;
-    const totalMaterials = entries.length;
     const moves = [];
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
       const entry = entries[entryIndex];
@@ -4179,8 +4181,7 @@ function applyCraftAssistOverflowCorrection({materialResults, targetValue, maxIt
           const nextValue = Number(candidate && candidate.value);
           if (!Number.isFinite(nextValue)) continue;
           if (!(nextValue < oldValue - 1e-9)) continue;
-          const deltaMaterial = (oldValue - nextValue) / selected.length;
-          const deltaOverall = deltaMaterial / totalMaterials;
+          const deltaOverall = (oldValue - nextValue) / totalSelected;
           if (!(deltaOverall > 1e-12)) continue;
           moves.push({
             entryIndex,
@@ -4216,12 +4217,13 @@ function applyCraftAssistOverflowCorrection({materialResults, targetValue, maxIt
 function applyCraftAssistOffsetWindowCorrection({materialResults, targetValue, maxOffset, maxIterations = 120}) {
   const entries = Array.isArray(materialResults) ? materialResults : [];
   if (!entries.length) return entries;
+  const totalSelected = calcCraftAssistTotalSelectedCount(entries);
+  if (totalSelected <= 0) return entries;
   const target = Number(targetValue);
   const offset = Number(maxOffset);
   if (!Number.isFinite(target) || !Number.isFinite(offset) || offset <= 0) return entries;
   const lowerBound = target - offset;
   const cap = target - 1e-9;
-  const totalMaterials = entries.length;
   let overall = calcCraftAssistOverallMean(entries);
   if (overall == null) return entries;
   let iterations = 0;
@@ -4244,8 +4246,7 @@ function applyCraftAssistOffsetWindowCorrection({materialResults, targetValue, m
           const nextValue = Number(candidate && candidate.value);
           if (!Number.isFinite(nextValue)) continue;
           if (!(nextValue > oldValue + 1e-9)) continue;
-          const deltaMaterial = (nextValue - oldValue) / selected.length;
-          const deltaOverall = deltaMaterial / totalMaterials;
+          const deltaOverall = (nextValue - oldValue) / totalSelected;
           if (!(deltaOverall > 1e-12)) continue;
           const nextOverall = overall + deltaOverall;
           if (!(nextOverall < cap)) continue;
@@ -4331,7 +4332,6 @@ function solveCraftAssistMinCostAssignmentForRarity({prepared, rarity}) {
     const entry = entries[i];
     const materialNode = materialNodeStart + i;
     addEdge(sourceNode, materialNode, entry.need, 0);
-    const denom = Math.max(1, Number(entry.need) || 1);
     for (const cand of entry.available) {
       const candId = String(cand && cand.id || "").trim();
       const candIdx = candidateIndexMap.get(candId);
@@ -4339,7 +4339,7 @@ function solveCraftAssistMinCostAssignmentForRarity({prepared, rarity}) {
       const value = Number(cand && cand.value);
       if (!Number.isFinite(value)) continue;
       const candidateNode = candidateNodeStart + candIdx;
-      const unitCost = Math.round((value / denom) * COST_SCALE);
+      const unitCost = Math.round(value * COST_SCALE);
       const edge = addEdge(materialNode, candidateNode, 1, unitCost, {materialIndex: i, candidateId: candId});
       assignmentEdges.push(edge);
     }
@@ -4503,15 +4503,27 @@ function findCraftAssistFallbackBelowTargetSolution({prepared, raritySet, target
   };
 }
 function calcCraftAssistOverallMean(materialResults) {
-  const means = [];
+  let total = 0;
+  let count = 0;
   for (const item of Array.isArray(materialResults) ? materialResults : []) {
     const picks = Array.isArray(item && item.selected) ? item.selected : [];
-    if (!picks.length) continue;
-    const avg = picks.reduce((sum, pick) => sum + Number(pick.value), 0) / picks.length;
-    means.push(avg);
+    for (const pick of picks) {
+      const value = Number(pick && pick.value);
+      if (!Number.isFinite(value)) continue;
+      total += value;
+      count += 1;
+    }
   }
-  if (!means.length) return null;
-  return means.reduce((sum, value) => sum + value, 0) / means.length;
+  if (count <= 0) return null;
+  return total / count;
+}
+function calcCraftAssistTotalSelectedCount(materialResults) {
+  let count = 0;
+  for (const item of Array.isArray(materialResults) ? materialResults : []) {
+    const picks = Array.isArray(item && item.selected) ? item.selected : [];
+    count += picks.length;
+  }
+  return count;
 }
 function runCraftAssistSelectionForRecipe({materials, rowsByName, blockedIds, targetValue}) {
   const blocked = blockedIds instanceof Set ? blockedIds : new Set();
@@ -4562,17 +4574,25 @@ function runCraftAssistSelectionForRecipe({materials, rowsByName, blockedIds, ta
     return {ok: false, message: "父类材料稀有度不一致，单个配方必须使用同一稀有度材料"};
   }
   const pickRarityScores = [...sharedRaritySet].map((rarity) => {
-    let score = 0;
+    let sum = 0;
+    let count = 0;
     for (const item of prepared) {
       const sameRarity = item.candidates.filter((cand) => craftRarityValue(cand.row) === rarity);
       const estimate = pickCraftAssistClosest(sameRarity, item.material.count, targetValue);
       if (estimate.length !== item.material.count) {
-        score = Number.POSITIVE_INFINITY;
+        sum = Number.POSITIVE_INFINITY;
         break;
       }
-      const avg = estimate.reduce((sum, cand) => sum + Number(cand.value), 0) / estimate.length;
-      score += Math.abs(avg - targetValue);
+      for (const cand of estimate) {
+        const value = Number(cand && cand.value);
+        if (!Number.isFinite(value)) continue;
+        sum += value;
+        count += 1;
+      }
     }
+    const score = Number.isFinite(sum) && count > 0
+      ? Math.abs(sum / count - targetValue)
+      : Number.POSITIVE_INFINITY;
     return {rarity, score};
   });
   pickRarityScores.sort((a, b) => {
@@ -4695,7 +4715,7 @@ function runCraftAssistSelectionForRecipe({materials, rowsByName, blockedIds, ta
     rarity: selectedRarity
   };
 }
-function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
+async function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
   if (state.craftBusy) {
     setCraftStatus("汰换执行中，请稍后再试", true);
     return false;
@@ -4718,6 +4738,11 @@ function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
   const targetValue = parseOptionalWear01(state.craftAssistTargetWear);
   if (targetValue == null) {
     setCraftStatus("请先输入目标相对磨损", true);
+    return false;
+  }
+  const username = String(state.currentAccountUsername || state.accountSelectedUsername || "").trim();
+  if (!username) {
+    setCraftStatus("请先选择账号", true);
     return false;
   }
   const candidateRows = getCraftCandidates();
@@ -4766,29 +4791,72 @@ function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
     }
   }
 
-  const rowsByName = buildCraftAssistRowsByName(candidateRows);
-  const run = runCraftAssistSelectionForRecipe({
-    materials,
-    rowsByName,
-    blockedIds,
-    targetValue
-  });
-  if (!run.ok) {
+  const wearFilterMode = getCraftAssistFilterMode();
+  const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  let run = null;
+  try {
+    run = await api("/api/craft/assist-select", {
+      method: "POST",
+      body: JSON.stringify({
+        username,
+        target_wear: targetValue,
+        wear_filter_mode: wearFilterMode,
+        materials,
+        blocked_ids: [...blockedIds],
+        include_cooling: !!state.craftIncludeCooling,
+        wear_offset_pct: wearOffsetPct
+      })
+    });
+  } catch (err) {
     removeCreatedEntry();
-    setCraftStatus(`配方#${recipeNo}：${run.message}`, true);
+    setCraftStatus(`配方#${recipeNo}：${err.message}`, true);
     renderCraftPage();
     return false;
   }
 
-  created.item_ids = normalizeCraftRecipeItemIds(run.itemIds);
-  const rowsById = buildRowsByAssetId(candidateRows);
+  created.item_ids = normalizeCraftRecipeItemIds(run && (run.item_ids || run.itemIds));
+  if (created.item_ids.length !== mode) {
+    removeCreatedEntry();
+    setCraftStatus(`配方#${recipeNo}：辅助选材返回数量异常（${created.item_ids.length}/${mode}）`, true);
+    renderCraftPage();
+    return false;
+  }
+  const rowsById = buildRowsByAssetId(Array.isArray(state.rows) ? state.rows : []);
   const selectedRows = created.item_ids.map((id) => rowsById.get(id)).filter(Boolean);
-  const recipeInfo = getTradeUpRecipeFromRows(selectedRows);
   const sourceText = String(sourcePresetName || "").trim();
+  if (selectedRows.length) {
+    logCraftAssistPickedRows({
+      recipeNo,
+      sourceText,
+      targetValue,
+      runOverall: run && run.overall,
+      mode,
+      selectedRows
+    });
+  } else if (Array.isArray(run && run.picks) && run.picks.length) {
+    const prefix = `[craft-assist][recipe#${Math.max(1, Number(recipeNo) || 1)}${sourceText ? `|${sourceText}` : ""}]`;
+    const targetText = targetValue == null ? "-" : numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS);
+    const runOverallText = run && run.overall == null ? "-" : numberTextTrunc(run && run.overall, WEAR_INPUT_DECIMALS);
+    if (typeof console.groupCollapsed === "function") {
+      console.groupCollapsed(`${prefix} picked ${run.picks.length}/${mode}, target=${targetText}, algorithm=${runOverallText}`);
+    } else {
+      console.info(`${prefix} picked ${run.picks.length}/${mode}, target=${targetText}, algorithm=${runOverallText}`);
+    }
+    console.info(`${prefix} picked_ids=${run.picks.map((item) => item.asset_id).join(",")}`);
+    if (typeof console.table === "function") console.table(run.picks);
+    else console.info(run.picks);
+    if (typeof console.groupEnd === "function") console.groupEnd();
+  }
+  const localRecipeInfo = selectedRows.length === mode
+    ? getTradeUpRecipeFromRows(selectedRows)
+    : {ok: true, reason: ""};
+  const backendRecipeOk = run && run.recipe_ok !== false;
+  const backendRecipeReason = String(run && run.recipe_reason || "").trim();
   const sourceSuffix = sourceText ? `（${sourceText}）` : "";
   state.craftStatusText = "";
-  if (!recipeInfo.ok) {
-    setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，但不满足炼金规则：${recipeInfo.reason || "请调整材料"}`, true);
+  if (!backendRecipeOk || !localRecipeInfo.ok) {
+    const reason = backendRecipeReason || localRecipeInfo.reason || "请调整材料";
+    setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，但不满足炼金规则：${reason}`, true);
     renderCraftPage();
     return false;
   }
@@ -4798,11 +4866,11 @@ function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
   renderCraftPage();
   return true;
 }
-function applyCraftAssistAutoSelectionBatch({sourcePresetName = "", repeatCount = 1} = {}) {
+async function applyCraftAssistAutoSelectionBatch({sourcePresetName = "", repeatCount = 1} = {}) {
   const total = normalizeCraftAssistApplyCount(repeatCount, 1);
   let successCount = 0;
   for (let i = 0; i < total; i += 1) {
-    const ok = applyCraftAssistAutoSelection({sourcePresetName});
+    const ok = await applyCraftAssistAutoSelection({sourcePresetName});
     if (!ok) break;
     successCount += 1;
   }
@@ -4897,7 +4965,7 @@ function renderCraftQueue() {
       pendingIndex += 1;
       const entryId = String(entry && entry.id || "").trim();
       const recipeRows = itemIds.map((id) => rowsById.get(id)).filter(Boolean);
-      const title = `#${pendingIndex} | 平均相对磨损 ${averageRelativeWearText(recipeRows)}`;
+      const title = `#${pendingIndex} | 平均磨损 ${averageAbsoluteWearText(recipeRows)}`;
       const isActive = entryId && entryId === String(state.craftActiveRecipeId || "").trim();
       ui.craftQueueList.append(
         renderCraftQueueSlots({
@@ -6838,7 +6906,7 @@ function bindEvents() {
         cancelCraftAssistPresetEditingSession();
         return;
       }
-      applyCraftAssistAutoSelection();
+      void applyCraftAssistAutoSelection();
     };
   }
   if (ui.craftAssistSelectBox) {

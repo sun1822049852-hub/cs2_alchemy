@@ -13,6 +13,7 @@ const {createSessionPool} = require("./services/sessionPool");
 const {createComponentOpsService} = require("./services/componentOpsService");
 const {createComponentTaskQueue} = require("./services/componentTaskQueue");
 const {createCraftService} = require("./services/craftService");
+const {createCraftAssistService} = require("./services/craftAssistService");
 const {fillMissingWearBounds} = require("./skinMetaStore");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
@@ -23,6 +24,7 @@ const logger = new DedupLogger({windowMs: 800});
 const sessionPool = createSessionPool({logger});
 const componentOpsService = createComponentOpsService({sessionPool, logger});
 const craftService = createCraftService({sessionPool, logger});
+const craftAssistService = createCraftAssistService({logger});
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
 
@@ -1167,6 +1169,51 @@ async function handleApi(req, res, urlObj) {
         message: asString(err && err.message ? err.message : err)
       });
     }
+    return true;
+  }
+
+  if (pathname === "/api/craft/assist-select" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+
+    const uiState = new UiStateStore();
+    const accountCache = uiState.getAccount(username);
+    const snapshotPath = asString(accountCache && accountCache.snapshot_path ? accountCache.snapshot_path : "").trim();
+    if (!snapshotPath) {
+      writeJson(res, 409, {ok: false, message: "当前账号暂无库存快照，请先刷新库存"});
+      return true;
+    }
+
+    const loaded = loadSnapshotSafe(snapshotPath);
+    if (!loaded.snapshot) {
+      writeJson(res, 409, {ok: false, message: "库存快照不存在或已失效，请先刷新库存"});
+      return true;
+    }
+
+    const result = craftAssistService.selectForRecipe({
+      rows: loaded.rows,
+      targetWear: body.target_wear,
+      wearFilterMode: body.wear_filter_mode,
+      materials: body.materials,
+      blockedIds: body.blocked_ids,
+      includeCooling: body.include_cooling,
+      wearOffsetPct: body.wear_offset_pct
+    });
+    if (!result.ok) {
+      writeJson(res, 400, {
+        ok: false,
+        message: asString(result.message || "").trim() || "辅助选材失败"
+      });
+      return true;
+    }
+    writeJson(res, 200, {
+      ok: true,
+      ...result
+    });
     return true;
   }
 
