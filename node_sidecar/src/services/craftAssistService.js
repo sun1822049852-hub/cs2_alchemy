@@ -354,6 +354,33 @@ function pickCraftAssistClosest(candidates, count, targetValue) {
     .slice(0, Math.max(0, Number(count) || 0));
 }
 
+function pickCraftAssistByRolePriority(candidates, material, targetValue) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  const need = Math.max(0, Number(material && material.count || 0));
+  if (need <= 0 || !list.length) return [];
+  const role = normalizeCraftAssistRole(material && material.role);
+  const preferred = (role === "aux"
+    ? list.filter((item) => Number(item && item.value) < Number(targetValue) - EPSILON)
+    : list.filter((item) => Number(item && item.value) > Number(targetValue) + EPSILON))
+    .sort((a, b) => {
+      const va = Number(a && a.value || 0);
+      const vb = Number(b && b.value || 0);
+      if (va !== vb) return role === "aux" ? va - vb : vb - va;
+      return asString(a && a.id || "").localeCompare(asString(b && b.id || ""));
+    });
+  const selected = preferred.slice(0, need);
+  if (selected.length >= need) return selected;
+  const used = new Set(selected.map((item) => asString(item && item.id || "").trim()).filter(Boolean));
+  for (const item of list) {
+    if (selected.length >= need) break;
+    const id = asString(item && item.id || "").trim();
+    if (!id || used.has(id)) continue;
+    used.add(id);
+    selected.push(item);
+  }
+  return selected.slice(0, need);
+}
+
 function pickCraftAssistBySplit(candidates, count, targetValue) {
   const need = Math.max(0, Number(count) || 0);
   const list = Array.isArray(candidates) ? candidates : [];
@@ -440,6 +467,129 @@ function calcCraftAssistTotalSelectedCount(materialResults) {
     count += picks.length;
   }
   return count;
+}
+
+function craftAssistRoleOrderForOverall(materialResults, overall, targetValue) {
+  const roles = Array.from(new Set(
+    (Array.isArray(materialResults) ? materialResults : [])
+      .map((entry) => normalizeCraftAssistRole(entry && entry.material && entry.material.role))
+      .filter(Boolean)
+  ));
+  if (roles.length <= 1) return roles;
+  return Number(overall) > Number(targetValue) + EPSILON ? ["aux", "main"] : ["main", "aux"];
+}
+
+function buildCraftAssistSelectedIdSet(materialResults) {
+  const out = new Set();
+  for (const entry of Array.isArray(materialResults) ? materialResults : []) {
+    for (const item of Array.isArray(entry && entry.selected) ? entry.selected : []) {
+      const id = asString(item && item.id || "").trim();
+      if (id) out.add(id);
+    }
+  }
+  return out;
+}
+
+function craftAssistCandidateComparatorForBranch(branch, slotTarget, a, b) {
+  const ta = Number(slotTarget);
+  const va = Number(a && a.value);
+  const vb = Number(b && b.value);
+  const rankA = branch === "under"
+    ? (va <= ta + EPSILON ? 0 : 1)
+    : (va >= ta - EPSILON ? 0 : 1);
+  const rankB = branch === "under"
+    ? (vb <= ta + EPSILON ? 0 : 1)
+    : (vb >= ta - EPSILON ? 0 : 1);
+  if (rankA !== rankB) return rankA - rankB;
+  const distA = Math.abs(va - ta);
+  const distB = Math.abs(vb - ta);
+  if (distA !== distB) return distA - distB;
+  if (va !== vb) return branch === "under" ? vb - va : va - vb;
+  return asString(a && a.id || "").localeCompare(asString(b && b.id || ""));
+}
+
+function buildCraftAssistRoleReplacementPlan({materialResults, targetValue, role}) {
+  const entries = Array.isArray(materialResults) ? materialResults : [];
+  const overall = calcCraftAssistOverallMean(entries);
+  const totalSelected = calcCraftAssistTotalSelectedCount(entries);
+  if (overall == null || totalSelected <= 0) return {branch: "", replacements: []};
+  const target = Number(targetValue);
+  if (!Number.isFinite(target)) return {branch: "", replacements: []};
+  const branch = Number(overall) > target + EPSILON ? "over" : (Number(overall) < target - EPSILON ? "under" : "");
+  if (!branch) return {branch, replacements: []};
+  const diff = target - Number(overall);
+  const selectedIds = buildCraftAssistSelectedIdSet(entries);
+  const replacements = [];
+  let projectedOverall = Number(overall);
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+    const entry = entries[entryIndex];
+    if (normalizeCraftAssistRole(entry && entry.material && entry.material.role) !== role) continue;
+    const selected = Array.isArray(entry && entry.selected) ? entry.selected : [];
+    const available = Array.isArray(entry && entry.available) ? entry.available : [];
+    for (const oldItem of selected) {
+      const oldId = asString(oldItem && oldItem.id || "").trim();
+      const oldValue = Number(oldItem && oldItem.value);
+      if (!oldId || !Number.isFinite(oldValue)) continue;
+      const slotTarget = oldValue + diff;
+      const pool = available
+        .filter((cand) => {
+          const candId = asString(cand && cand.id || "").trim();
+          if (!candId || candId === oldId) return false;
+          return !selectedIds.has(candId);
+        })
+        .sort((a, b) => craftAssistCandidateComparatorForBranch(branch, slotTarget, a, b));
+      let chosen = null;
+      for (const cand of pool) {
+        const nextValue = Number(cand && cand.value);
+        if (!Number.isFinite(nextValue)) continue;
+        if (branch === "under" && !(nextValue > oldValue + EPSILON)) continue;
+        if (branch === "over" && !(nextValue < oldValue - EPSILON)) continue;
+        const nextOverall = projectedOverall + (nextValue - oldValue) / totalSelected;
+        if (branch === "under" && !(nextOverall < target - EPSILON)) continue;
+        chosen = {entryIndex, oldId, next: cand, nextOverall};
+        break;
+      }
+      if (!chosen) continue;
+      selectedIds.delete(oldId);
+      selectedIds.add(asString(chosen.next && chosen.next.id || "").trim());
+      replacements.push(chosen);
+      projectedOverall = chosen.nextOverall;
+    }
+  }
+  return {branch, replacements};
+}
+
+function applyCraftAssistRoleReplacementPlan(materialResults, plan) {
+  const replacements = Array.isArray(plan && plan.replacements) ? plan.replacements : [];
+  if (!replacements.length) return materialResults;
+  for (const item of replacements) {
+    const entry = materialResults[item.entryIndex];
+    if (!entry || !Array.isArray(entry.selected)) continue;
+    entry.selected = entry.selected.map((selectedItem) => {
+      const id = asString(selectedItem && selectedItem.id || "").trim();
+      return id === item.oldId ? item.next : selectedItem;
+    });
+  }
+  return materialResults;
+}
+
+function applyCraftAssistRoleAwareCorrection({materialResults, targetValue}) {
+  let overall = calcCraftAssistOverallMean(materialResults);
+  if (overall == null) return null;
+  const roles = craftAssistRoleOrderForOverall(materialResults, overall, targetValue);
+  for (const role of roles) {
+    const plan = buildCraftAssistRoleReplacementPlan({
+      materialResults,
+      targetValue,
+      role
+    });
+    if (!plan.replacements.length) continue;
+    applyCraftAssistRoleReplacementPlan(materialResults, plan);
+    overall = calcCraftAssistOverallMean(materialResults);
+    if (overall == null) return null;
+    if (plan.branch === "over" && overall < Number(targetValue) - EPSILON) break;
+  }
+  return overall;
 }
 
 function applyCraftAssistDeficitCorrection({selected, candidates, targetValue, count}) {
@@ -968,13 +1118,7 @@ function runCraftAssistSelectionForRecipe({
         message: `父类材料【${materialLabel}】可用数量不足：需${material.count}，仅${available.length}（稀有度 ${craftRarityLabel(selectedRarity)}），${offsetHintText}`
       };
     }
-    let picked = pickCraftAssistBySplit(available, material.count, targetValue);
-    picked = applyCraftAssistDeficitCorrection({
-      selected: picked,
-      candidates: available,
-      targetValue,
-      count: material.count
-    });
+    const picked = pickCraftAssistByRolePriority(available, material, targetValue);
     if (picked.length !== material.count) {
       return {ok: false, code: "pick_failed", message: `父类材料【${materialLabel}】选材失败`};
     }
@@ -988,13 +1132,16 @@ function runCraftAssistSelectionForRecipe({
   }
 
   const overallBeforeRetry = calcCraftAssistOverallMean(materialResults);
-  if (overallBeforeRetry != null && !(overallBeforeRetry < targetValue - EPSILON)) {
-    applyCraftAssistOverflowCorrection({
+  let overall = overallBeforeRetry;
+  if (overallBeforeRetry != null && Math.abs(Number(overallBeforeRetry) - Number(targetValue)) > EPSILON) {
+    overall = applyCraftAssistRoleAwareCorrection({
       materialResults,
       targetValue
     });
   }
-  let overall = calcCraftAssistOverallMean(materialResults);
+  if (overall == null) {
+    overall = calcCraftAssistOverallMean(materialResults);
+  }
   if (overall == null) {
     return {ok: false, code: "empty_result", message: "辅助选材未得到有效结果"};
   }
