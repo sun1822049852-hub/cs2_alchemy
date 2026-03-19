@@ -113,6 +113,73 @@ function runTests() {
     ]
   );
 
+  const {dbPath: familyDbPath, db: familyDb} = createTempSkinDb();
+  familyDb.exec(`
+    INSERT INTO skin (
+      markethashname, name, basemarkethashname, basename, collection, rarity,
+      wearlevel, minfloat, maxfloat, isstattrak, wear_range
+    )
+    VALUES
+      (
+        '★ Butterfly Knife | Blue Steel (Battle-Scarred)',
+        '★ Butterfly Knife | Blue Steel (Battle-Scarred)',
+        '★ Butterfly Knife | Blue Steel',
+        '★ Butterfly Knife | Blue Steel',
+        'Operation Breakout Weapon Case',
+        'Gold',
+        'Battle-Scarred',
+        0.00,
+        1.00,
+        0,
+        1.00
+      ),
+      (
+        '★ StatTrak™ Butterfly Knife | Blue Steel (Factory New)',
+        '★ StatTrak™ Butterfly Knife | Blue Steel (Factory New)',
+        '★ StatTrak™ Butterfly Knife | Blue Steel',
+        '★ StatTrak™ Butterfly Knife | Blue Steel',
+        '',
+        '',
+        'Factory New',
+        NULL,
+        NULL,
+        1,
+        NULL
+      )
+  `);
+  familyDb.close();
+
+  syncSkinDb({
+    dbPath: familyDbPath,
+    items: [
+      {
+        name: "★ Butterfly Knife | Blue Steel (Battle-Scarred)",
+        marketHashName: "★ Butterfly Knife | Blue Steel (Battle-Scarred)",
+        platformList: [{name: "BUFF", itemId: "201"}]
+      },
+      {
+        name: "★ StatTrak™ Butterfly Knife | Blue Steel (Factory New)",
+        marketHashName: "★ StatTrak™ Butterfly Knife | Blue Steel (Factory New)",
+        platformList: [{name: "BUFF", itemId: "202"}]
+      }
+    ],
+    rarityOrder: ["Restricted", "Covert", "Gold"]
+  });
+
+  const familyVerify = new DatabaseSync(familyDbPath, {open: true, readOnly: true});
+  const familyRow = familyVerify.prepare(`
+    SELECT collection, rarity, minfloat, maxfloat, wear_range
+    FROM skin
+    WHERE markethashname = ?
+  `).get("★ StatTrak™ Butterfly Knife | Blue Steel (Factory New)");
+  familyVerify.close();
+
+  assert.equal(familyRow.collection, "Operation Breakout Weapon Case");
+  assert.equal(familyRow.rarity, "Gold");
+  assert.equal(familyRow.minfloat, 0);
+  assert.equal(familyRow.maxfloat, 1);
+  assert.equal(familyRow.wear_range, 1);
+
   const latestDir = fs.mkdtempSync(path.join(os.tmpdir(), "steam-base-info-"));
   fs.writeFileSync(path.join(latestDir, "steam_base_info_20260315_232059.json"), "[]", "utf8");
   fs.writeFileSync(path.join(latestDir, "steam_base_info_20260318_101010.json"), "[]", "utf8");

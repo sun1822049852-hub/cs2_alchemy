@@ -237,6 +237,24 @@ function normalizeSkinHead(text) {
   return out;
 }
 
+function normalizeSkinFamily(text) {
+  let out = stripWearSuffix(text, WEAR_SUFFIX_MAP.map((x) => x.en));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const next = asString(out)
+      .trim()
+      .replace(/^\u2605\s+/, "")
+      .replace(/^(Souvenir|StatTrak(?:\u2122)?|Genuine)\s+/i, "")
+      .trim();
+    if (next !== out) {
+      out = next;
+      changed = true;
+    }
+  }
+  return asString(out).trim();
+}
+
 function isImportableSkin(item) {
   const marketHashName = asString(item && item.marketHashName).trim();
   const displayName = asString(item && item.name).trim();
@@ -305,21 +323,88 @@ function ensureAlchemyTypeColumn(db) {
   db.exec("ALTER TABLE skin ADD COLUMN alchemy_type TEXT DEFAULT '不能炼金'");
 }
 
-function loadExistingMetadataMap(db) {
+function joinCollectionNames(values) {
+  const out = [];
+  const seen = new Set();
+  for (const value of Array.isArray(values) ? values : []) {
+    for (const name of splitCollectionNames(value)) {
+      if (seen.has(name)) {
+        continue;
+      }
+      seen.add(name);
+      out.push(name);
+    }
+  }
+  return out.join(" / ");
+}
+
+function pickFirstNonNull(values) {
+  for (const value of Array.isArray(values) ? values : []) {
+    if (value !== null && value !== undefined) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function pickMostCommonNonEmpty(values) {
+  const counts = new Map();
+  for (const raw of Array.isArray(values) ? values : []) {
+    const value = asString(raw).trim();
+    if (!value) {
+      continue;
+    }
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  let bestValue = "";
+  let bestCount = -1;
+  for (const [value, count] of counts.entries()) {
+    if (count > bestCount) {
+      bestValue = value;
+      bestCount = count;
+    }
+  }
+  return bestValue;
+}
+
+function loadExistingMetadataMaps(db) {
   const rows = db.prepare(
-    "SELECT markethashname, collection, rarity, minfloat, maxfloat, wear_range FROM skin"
+    "SELECT markethashname, basemarkethashname, collection, rarity, minfloat, maxfloat, wear_range FROM skin"
   ).all();
-  const out = new Map();
+  const exact = new Map();
+  const familyBuckets = new Map();
   for (const row of rows) {
-    out.set(asString(row.markethashname).trim(), {
+    const metadata = {
       collection: asString(row.collection).trim(),
       rarity: asString(row.rarity).trim(),
       minfloat: normalizeFloat(row.minfloat),
       maxfloat: normalizeFloat(row.maxfloat),
       wear_range: normalizeFloat(row.wear_range)
+    };
+    const marketHashName = asString(row.markethashname).trim();
+    exact.set(marketHashName, metadata);
+
+    const familyKey = normalizeSkinFamily(asString(row.basemarkethashname).trim() || marketHashName);
+    if (!familyKey) {
+      continue;
+    }
+    if (!familyBuckets.has(familyKey)) {
+      familyBuckets.set(familyKey, []);
+    }
+    familyBuckets.get(familyKey).push(metadata);
+  }
+
+  const family = new Map();
+  for (const [familyKey, bucket] of familyBuckets.entries()) {
+    family.set(familyKey, {
+      collection: joinCollectionNames(bucket.map((row) => row.collection)),
+      rarity: pickMostCommonNonEmpty(bucket.map((row) => row.rarity)),
+      minfloat: pickFirstNonNull(bucket.map((row) => row.minfloat)),
+      maxfloat: pickFirstNonNull(bucket.map((row) => row.maxfloat)),
+      wear_range: pickFirstNonNull(bucket.map((row) => row.wear_range))
     });
   }
-  return out;
+  return {exact, family};
 }
 
 function splitCollectionNames(value) {
@@ -392,36 +477,48 @@ function assignAlchemyTypes(records, options = {}) {
   return out;
 }
 
-function reuseExistingMetadata(record, existingMap) {
-  const current = existingMap instanceof Map ? existingMap.get(record.markethashname) : null;
-  if (!current) {
-    return {
-      ...record,
-      collection: "",
-      rarity: "",
-      minfloat: null,
-      maxfloat: null,
-      wear_range: null
-    };
-  }
+function reuseExistingMetadata(record, existingMetadata) {
+  const exactMap = existingMetadata && existingMetadata.exact instanceof Map
+    ? existingMetadata.exact
+    : existingMetadata instanceof Map
+      ? existingMetadata
+      : new Map();
+  const familyMap = existingMetadata && existingMetadata.family instanceof Map
+    ? existingMetadata.family
+    : new Map();
+  const current = exactMap.get(record.markethashname) || null;
+  const familyKey = normalizeSkinFamily(record.basemarkethashname || record.markethashname);
+  const family = familyMap.get(familyKey) || null;
   return {
     ...record,
-    collection: asString(current.collection).trim(),
-    rarity: asString(current.rarity).trim(),
-    minfloat: current.minfloat ?? null,
-    maxfloat: current.maxfloat ?? null,
-    wear_range: current.wear_range ?? null
+    collection: asString((current && current.collection) || (family && family.collection)).trim(),
+    rarity: asString((current && current.rarity) || (family && family.rarity)).trim(),
+    minfloat: current && current.minfloat !== null && current.minfloat !== undefined
+      ? current.minfloat
+      : family && family.minfloat !== null && family.minfloat !== undefined
+        ? family.minfloat
+        : null,
+    maxfloat: current && current.maxfloat !== null && current.maxfloat !== undefined
+      ? current.maxfloat
+      : family && family.maxfloat !== null && family.maxfloat !== undefined
+        ? family.maxfloat
+        : null,
+    wear_range: current && current.wear_range !== null && current.wear_range !== undefined
+      ? current.wear_range
+      : family && family.wear_range !== null && family.wear_range !== undefined
+        ? family.wear_range
+        : null
   };
 }
 
 function buildTargetRecords(items, options = {}) {
-  const existingMap = options.existingMap instanceof Map ? options.existingMap : new Map();
+  const existingMetadata = options.existingMetadata || {exact: new Map(), family: new Map()};
   const parsed = [];
   for (const item of Array.isArray(items) ? items : []) {
     if (!isImportableSkin(item)) {
       continue;
     }
-    const row = reuseExistingMetadata(parseSkinRecord(item), existingMap);
+    const row = reuseExistingMetadata(parseSkinRecord(item), existingMetadata);
     row.wear_range = normalizeFloat(row.wear_range);
     if (row.wear_range === null) {
       row.wear_range = deriveWearRange(row);
@@ -435,9 +532,9 @@ function syncSkinDb({dbPath, items, rarityOrder} = {}) {
   const db = new DatabaseSync(dbPath);
   try {
     ensureAlchemyTypeColumn(db);
-    const existingMap = loadExistingMetadataMap(db);
-    const targetRows = buildTargetRecords(items, {existingMap, rarityOrder});
-    const existingKeys = [...existingMap.keys()];
+    const existingMetadata = loadExistingMetadataMaps(db);
+    const targetRows = buildTargetRecords(items, {existingMetadata, rarityOrder});
+    const existingKeys = [...existingMetadata.exact.keys()];
     const targetKeys = targetRows.map((row) => row.markethashname);
     const targetKeySet = new Set(targetKeys);
 
