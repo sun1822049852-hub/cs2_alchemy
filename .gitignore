@@ -20,3 +20,10 @@ schema_cache.json
 # node runtime
 node_sidecar/node_modules/
 node_sidecar/.npm-cache/
+
+# local skin-db rebuild artifacts
+csgo_skins.backup_before_rebuild_*.db
+csgo_skins.pre_strict_rebuild_*.db
+steam_skins.db
+data/skin_json/*.json
+!data/skin_json/.gitkeep
