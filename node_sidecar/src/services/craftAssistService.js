@@ -1,4 +1,5 @@
 const {asString} = require("../utils");
+const {compareScoreTuples, searchCraftAssistBestSolution} = require("./craftAssistSearch");
 
 const WEAR_INPUT_DECIMALS = 6;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
@@ -1067,115 +1068,60 @@ function runCraftAssistSelectionForRecipe({
   if (!sharedRaritySet || !sharedRaritySet.size) {
     return {ok: false, message: "父类材料稀有度不一致，单个配方必须使用同一稀有度材料"};
   }
-  const pickRarityScores = [...sharedRaritySet].map((rarity) => {
-    let sum = 0;
-    let count = 0;
-    for (const item of prepared) {
-      const sameRarity = item.candidates.filter((cand) => craftRarityValue(cand.row) === rarity);
-      const estimate = pickCraftAssistClosest(sameRarity, item.material.count, targetValue);
-      if (estimate.length !== item.material.count) {
-        sum = Number.POSITIVE_INFINITY;
-        break;
-      }
-      for (const cand of estimate) {
-        const value = Number(cand && cand.value);
-        if (!Number.isFinite(value)) continue;
-        sum += value;
-        count += 1;
-      }
-    }
-    const score = Number.isFinite(sum) && count > 0
-      ? Math.abs(sum / count - targetValue)
-      : Number.POSITIVE_INFINITY;
-    return {rarity, score};
-  });
-  pickRarityScores.sort((a, b) => {
-    const diff = Number(a.score) - Number(b.score);
-    if (diff !== 0) return diff;
-    return Number(a.rarity) - Number(b.rarity);
-  });
-  let selectedRarity = Number(pickRarityScores[0] && pickRarityScores[0].rarity || 0);
-  if (!Number.isFinite(selectedRarity) || selectedRarity <= 0) {
-    return {ok: false, code: "rarity_not_found", message: "辅助选材未命中可用稀有度，请调整材料约束"};
-  }
-  prepared.sort((a, b) => {
-    const diff = Number(a.estimateDiff) - Number(b.estimateDiff);
-    if (diff !== 0) return diff;
-    const sizeDiff = Number(a.candidates.length) - Number(b.candidates.length);
-    if (sizeDiff !== 0) return sizeDiff;
-    return craftAssistMaterialLabel(a.material).localeCompare(craftAssistMaterialLabel(b.material));
-  });
-
-  const usedIds = new Set();
-  let materialResults = [];
-  for (const item of prepared) {
-    const material = item.material;
-    const materialLabel = craftAssistMaterialLabel(material);
-    const available = item.candidates.filter((cand) => !usedIds.has(cand.id) && craftRarityValue(cand.row) === selectedRarity);
-    if (available.length < material.count) {
-      return {
-        ok: false,
-        message: `父类材料【${materialLabel}】可用数量不足：需${material.count}，仅${available.length}（稀有度 ${craftRarityLabel(selectedRarity)}），${offsetHintText}`
-      };
-    }
-    const picked = pickCraftAssistByRolePriority(available, material, targetValue);
-    if (picked.length !== material.count) {
-      return {ok: false, code: "pick_failed", message: `父类材料【${materialLabel}】选材失败`};
-    }
-    for (const choice of picked) {
-      if (usedIds.has(choice.id)) {
-        return {ok: false, code: "duplicate_item", message: `辅助选材出现重复物品：${choice.id}`};
-      }
-      usedIds.add(choice.id);
-    }
-    materialResults.push({material, selected: picked, available});
-  }
-
-  const overallBeforeRetry = calcCraftAssistOverallMean(materialResults);
-  let overall = overallBeforeRetry;
-  if (overallBeforeRetry != null && Math.abs(Number(overallBeforeRetry) - Number(targetValue)) > EPSILON) {
-    overall = applyCraftAssistRoleAwareCorrection({
-      materialResults,
+  let bestSolved = null;
+  const rarities = [...sharedRaritySet]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  for (const rarity of rarities) {
+    const groups = prepared.map((item, index) => ({
+      index,
+      material: item.material,
+      candidates: item.candidates.filter((cand) => craftRarityValue(cand.row) === rarity)
+    }));
+    if (groups.some((group) => group.candidates.length < Number(group.material && group.material.count || 0))) continue;
+    const solved = searchCraftAssistBestSolution({
+      groups,
       targetValue
     });
+    if (!solved || !Array.isArray(solved.materialResults) || solved.overall == null) continue;
+    if (!bestSolved
+      || compareScoreTuples(solved.scoreTuple, bestSolved.scoreTuple) < 0
+      || (
+        compareScoreTuples(solved.scoreTuple, bestSolved.scoreTuple) === 0
+        && Number(rarity) < Number(bestSolved.rarity)
+      )) {
+      bestSolved = {
+        rarity: Number(rarity),
+        materialResults: solved.materialResults,
+        overall: Number(solved.overall),
+        scoreTuple: solved.scoreTuple,
+        trace: solved.trace || null
+      };
+    }
   }
-  if (overall == null) {
-    overall = calcCraftAssistOverallMean(materialResults);
-  }
-  if (overall == null) {
-    return {ok: false, code: "empty_result", message: "辅助选材未得到有效结果"};
-  }
-  if (!(overall < targetValue - EPSILON)) {
-    const fallback = findCraftAssistFallbackBelowTargetSolution({
+  if (!bestSolved) {
+    const lowerBound = findCraftAssistBestFeasibleSolution({
       prepared,
-      raritySet: sharedRaritySet,
-      targetValue
+      raritySet: sharedRaritySet
     });
-    if (fallback) {
-      selectedRarity = Number(fallback.rarity || selectedRarity);
-      materialResults = Array.isArray(fallback.materialResults) ? fallback.materialResults : materialResults;
-      overall = Number(fallback.overall);
-    } else {
-      const retried = overallBeforeRetry != null && !(overallBeforeRetry < targetValue - EPSILON);
-      const retryPrefix = retried ? "已执行下探重试，" : "";
-      const lowerBound = findCraftAssistBestFeasibleSolution({
-        prepared,
-        raritySet: sharedRaritySet
-      });
-      const lowerBoundText = lowerBound && Number.isFinite(Number(lowerBound.overall))
-        ? `；当前条件下最低可达 ${numberTextTrunc(lowerBound.overall, WEAR_INPUT_DECIMALS)}（稀有度 ${craftRarityLabel(lowerBound.rarity)}）`
-        : "";
-      return {
-        ok: false,
-        code: "overall_not_below_target",
-        overall: Number(overall),
-        target: Number(targetValue),
-        lower_bound_overall: lowerBound && Number.isFinite(Number(lowerBound.overall)) ? Number(lowerBound.overall) : null,
-        lower_bound_rarity: lowerBound && Number.isFinite(Number(lowerBound.rarity)) ? Number(lowerBound.rarity) : null,
-        message: `${retryPrefix}结果均值需小于目标磨损：当前 ${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}${lowerBoundText}`
-      };
-    }
+    const lowerBoundText = lowerBound && Number.isFinite(Number(lowerBound.overall))
+      ? `；当前条件下最低可达 ${numberTextTrunc(lowerBound.overall, WEAR_INPUT_DECIMALS)}（稀有度 ${craftRarityLabel(lowerBound.rarity)}）`
+      : "";
+    return {
+      ok: false,
+      code: "overall_not_below_target",
+      overall: null,
+      target: Number(targetValue),
+      lower_bound_overall: lowerBound && Number.isFinite(Number(lowerBound.overall)) ? Number(lowerBound.overall) : null,
+      lower_bound_rarity: lowerBound && Number.isFinite(Number(lowerBound.rarity)) ? Number(lowerBound.rarity) : null,
+      message: `结果均值需小于目标磨损：目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}${lowerBoundText || `，${offsetHintText}`}`
+    };
   }
+  let selectedRarity = Number(bestSolved.rarity || 0);
+  let materialResults = Array.isArray(bestSolved.materialResults) ? bestSolved.materialResults : [];
+  let overall = Number(bestSolved.overall);
+  const selectionTrace = bestSolved.trace || null;
 
   const outputOffset = getCraftAssistWearOffsetByTarget(targetValue, wearOffsetPct);
   if (outputOffset > 0) {
@@ -1224,7 +1170,8 @@ function runCraftAssistSelectionForRecipe({
     ok: true,
     itemIds: normalizeCraftRecipeItemIds(resultIds),
     overall,
-    rarity: selectedRarity
+    rarity: selectedRarity,
+    selectionTrace
   };
 }
 
@@ -1317,6 +1264,7 @@ function selectCraftAssistForRecipe({
     item_ids: itemIds,
     overall: Number(run.overall),
     rarity: Number(run.rarity || 0),
+    selection_trace: run.selectionTrace || null,
     recipe_ok: !!recipeInfo.ok,
     recipe_reason: recipeInfo.ok ? "" : asString(recipeInfo.reason || "").trim(),
     recipe_text: asString(recipeInfo.text || "").trim(),
