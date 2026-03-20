@@ -39,7 +39,84 @@ function createTempSkinDb() {
   return {dbPath, db};
 }
 
-function runTests() {
+async function test_syncSkinDb_enriches_pending_rows_after_base_commit() {
+  const {dbPath, db} = createTempSkinDb();
+  db.close();
+
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "AK-47 | 红线 (久经沙场)",
+        marketHashName: "AK-47 | Redline (Field-Tested)",
+        platformList: [{name: "BUFF", itemId: "601"}]
+      }
+    ],
+    detailProvider: {
+      async fetchByGoodsId(goodsId) {
+        assert.equal(String(goodsId), "601");
+        return {
+          collection: "Gallery Case",
+          rarity: "受限",
+          detail_source: "buff"
+        };
+      }
+    }
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT markethashname, collection, rarity, detail_status, detail_source
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AK-47 | Redline (Field-Tested)");
+  verify.close();
+
+  assert.equal(result.importedItems, 1);
+  assert.equal(result.detailStats.families_ok, 1);
+  assert.equal(row.markethashname, "AK-47 | Redline (Field-Tested)");
+  assert.equal(row.collection, "Gallery Case");
+  assert.equal(row.rarity, "受限");
+  assert.equal(row.detail_status, "ok");
+  assert.equal(row.detail_source, "buff");
+}
+
+async function test_syncSkinDb_keeps_base_rows_when_enrichment_fails() {
+  const {dbPath, db} = createTempSkinDb();
+  db.close();
+
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "AK-47 | 红线 (久经沙场)",
+        marketHashName: "AK-47 | Redline (Field-Tested)",
+        platformList: [{name: "BUFF", itemId: "701"}]
+      }
+    ],
+    detailProvider: {
+      async fetchByGoodsId() {
+        throw new Error("detail api down");
+      }
+    }
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT markethashname, detail_status, detail_error
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AK-47 | Redline (Field-Tested)");
+  verify.close();
+
+  assert.equal(result.importedItems, 1);
+  assert.equal(result.detailStats.families_failed, 1);
+  assert.equal(row.markethashname, "AK-47 | Redline (Field-Tested)");
+  assert.equal(row.detail_status, "failed");
+  assert.equal(String(row.detail_error || "").includes("detail api down"), true);
+}
+
+async function runTests() {
   assert.equal(isImportableSkin({marketHashName: "AK-47 | Redline (Field-Tested)"}), true);
   assert.equal(isImportableSkin({marketHashName: "StatTrak™ AK-47 | Redline (Field-Tested)"}), true);
   assert.equal(isImportableSkin({marketHashName: "★ Bayonet | Autotronic (Factory New)"}), true);
@@ -75,7 +152,7 @@ function runTests() {
   `);
   db.close();
 
-  syncSkinDb({
+  await syncSkinDb({
     dbPath,
     items: [
       {
@@ -103,6 +180,7 @@ function runTests() {
 
   const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
   const rows = verify.prepare("SELECT markethashname FROM skin ORDER BY markethashname").all();
+  const columns = verify.prepare("PRAGMA table_info(skin)").all().map((row) => row.name);
   verify.close();
 
   assert.deepEqual(
@@ -112,6 +190,11 @@ function runTests() {
       "★ Bayonet | Autotronic (Factory New)"
     ]
   );
+  assert(columns.includes("detail_status"));
+  assert(columns.includes("detail_source"));
+  assert(columns.includes("detail_checked_at"));
+  assert(columns.includes("detail_error"));
+  assert(columns.includes("detail_attempts"));
 
   const {dbPath: familyDbPath, db: familyDb} = createTempSkinDb();
   familyDb.exec(`
@@ -149,7 +232,7 @@ function runTests() {
   `);
   familyDb.close();
 
-  syncSkinDb({
+  await syncSkinDb({
     dbPath: familyDbPath,
     items: [
       {
@@ -187,7 +270,16 @@ function runTests() {
     path.basename(findLatestSteamBaseInfoJson(latestDir)),
     "steam_base_info_20260318_101010.json"
   );
+  assert.equal(fs.existsSync(path.join(path.dirname(dbPath), "steam_skins.db")), false);
+
+  await test_syncSkinDb_enriches_pending_rows_after_base_commit();
+  await test_syncSkinDb_keeps_base_rows_when_enrichment_fails();
 }
 
-runTests();
-console.log("skinDbSync tests passed");
+(async () => {
+  await runTests();
+  console.log("skinDbSync tests passed");
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

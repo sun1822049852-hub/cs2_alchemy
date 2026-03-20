@@ -2,6 +2,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {DatabaseSync} = require("node:sqlite");
 const {asString} = require("./utils");
+const {
+  assignAlchemyTypes: assignAlchemyTypesShared,
+  splitCollectionNames: splitCollectionNamesShared
+} = require("./services/skinAlchemyRules");
+const {createSkinDetailEnrichmentService} = require("./services/skinDetailEnrichmentService");
+const {buildSkinFamilyKey} = require("./services/skinFamilyKey");
 
 const DEFAULT_JSON_DIR = "C:/Users/18220/Desktop/smelter/data";
 const DEFAULT_JSON_PATH = "C:/Users/18220/Desktop/smelter/data/steam_base_info_20260315_232059.json";
@@ -13,24 +19,6 @@ const WEAR_SUFFIX_MAP = [
   {cn: "破损不堪", en: "Well-Worn"},
   {cn: "战痕累累", en: "Battle-Scarred"}
 ];
-
-const DEFAULT_RARITY_RANKS = new Map([
-  ["消费级", 1],
-  ["白", 1],
-  ["工业级", 2],
-  ["浅蓝", 2],
-  ["军规级", 3],
-  ["蓝", 3],
-  ["受限", 4],
-  ["紫", 4],
-  ["保密", 5],
-  ["粉", 5],
-  ["隐秘", 6],
-  ["红", 6],
-  ["金", 7],
-  ["金色", 7],
-  ["违禁", 7]
-]);
 
 const ALLOWED_HEADS = new Set([
   "AK-47",
@@ -98,93 +86,6 @@ const ALLOWED_HEADS = new Set([
   "Sport Gloves"
 ]);
 
-const COLLECTION_NAME_ALIASES = new Map([
-  ["cs:go weapon case", "CS:GO Weapon Case"],
-  ["反恐精英武器箱", "CS:GO Weapon Case"],
-  ["cs:go weapon case 2", "CS:GO Weapon Case 2"],
-  ["反恐精英 2 号武器箱", "CS:GO Weapon Case 2"],
-  ["cs:go weapon case 3", "CS:GO Weapon Case 3"],
-  ["反恐精英 3 号武器箱", "CS:GO Weapon Case 3"],
-  ["operation bravo case", "Operation Bravo Case"],
-  ["“英勇大行动”武器箱", "Operation Bravo Case"],
-  ["operation phoenix weapon case", "Operation Phoenix Weapon Case"],
-  ["“凤凰大行动”武器箱", "Operation Phoenix Weapon Case"],
-  ["operation vanguard weapon case", "Operation Vanguard Weapon Case"],
-  ["“先锋大行动”武器箱", "Operation Vanguard Weapon Case"],
-  ["revolver case", "Revolver Case"],
-  ["左轮武器箱", "Revolver Case"],
-  ["winter offensive weapon case", "Winter Offensive Weapon Case"],
-  ["冬季攻势武器箱", "Winter Offensive Weapon Case"],
-  ["esports 2013 case", "eSports 2013 Case"],
-  ["电竞 2013 武器箱", "eSports 2013 Case"],
-  ["esports 2013 winter case", "eSports 2013 Winter Case"],
-  ["电竞 2013 冬季武器箱", "eSports 2013 Winter Case"],
-  ["esports 2014 summer case", "eSports 2014 Summer Case"],
-  ["电竞 2014 夏季武器箱", "eSports 2014 Summer Case"],
-  ["chroma case", "Chroma Case"],
-  ["幻彩武器箱", "Chroma Case"],
-  ["chroma 2 case", "Chroma 2 Case"],
-  ["幻彩 2 号武器箱", "Chroma 2 Case"],
-  ["chroma 3 case", "Chroma 3 Case"],
-  ["幻彩 3 号武器箱", "Chroma 3 Case"],
-  ["gamma case", "Gamma Case"],
-  ["伽玛武器箱", "Gamma Case"],
-  ["gamma 2 case", "Gamma 2 Case"],
-  ["伽玛 2 号武器箱", "Gamma 2 Case"],
-  ["spectrum case", "Spectrum Case"],
-  ["光谱武器箱", "Spectrum Case"],
-  ["spectrum 2 case", "Spectrum 2 Case"],
-  ["光谱 2 号武器箱", "Spectrum 2 Case"],
-  ["prisma case", "Prisma Case"],
-  ["棱彩武器箱", "Prisma Case"],
-  ["prisma 2 case", "Prisma 2 Case"],
-  ["棱彩2号武器箱", "Prisma 2 Case"],
-  ["horizon case", "Horizon Case"],
-  ["地平线武器箱", "Horizon Case"],
-  ["danger zone case", "Danger Zone Case"],
-  ["命悬一线武器箱", "Danger Zone Case"],
-  ["dreams & nightmares case", "Dreams & Nightmares Case"],
-  ["梦魇武器箱", "Dreams & Nightmares Case"],
-  ["operation riptide case", "Operation Riptide Case"],
-  ["“激流大行动”武器箱", "Operation Riptide Case"],
-  ["recoil case", "Recoil Case"],
-  ["反冲武器箱", "Recoil Case"],
-  ["snakebite case", "Snakebite Case"],
-  ["蛇噬武器箱", "Snakebite Case"],
-  ["operation broken fang case", "Operation Broken Fang Case"],
-  ["“狂牙大行动”武器箱", "Operation Broken Fang Case"],
-  ["fracture case", "Fracture Case"],
-  ["裂空武器箱", "Fracture Case"],
-  ["shattered web case", "Shattered Web Case"],
-  ["“裂网大行动”武器箱", "Shattered Web Case"],
-  ["clutch case", "Clutch Case"],
-  ["“头号特训”武器箱", "Clutch Case"],
-  ["revolution case", "Revolution Case"],
-  ["变革武器箱", "Revolution Case"],
-  ["glove case", "Glove Case"],
-  ["手套武器箱", "Glove Case"],
-  ["operation hydra case", "Operation Hydra Case"],
-  ["“九头蛇大行动”武器箱", "Operation Hydra Case"],
-  ["falchion case", "Falchion Case"],
-  ["弯曲猎手武器箱", "Falchion Case"],
-  ["huntsman weapon case", "Huntsman Weapon Case"],
-  ["猎杀者武器箱", "Huntsman Weapon Case"],
-  ["operation breakout weapon case", "Operation Breakout Weapon Case"],
-  ["“突围大行动”武器箱", "Operation Breakout Weapon Case"],
-  ["operation wildfire case", "Operation Wildfire Case"],
-  ["“野火大行动”武器箱", "Operation Wildfire Case"],
-  ["shadow case", "Shadow Case"],
-  ["暗影武器箱", "Shadow Case"],
-  ["cs20 case", "CS20 Case"],
-  ["反恐精英20周年武器箱", "CS20 Case"],
-  ["fever case", "Fever Case"],
-  ["热潮武器箱", "Fever Case"],
-  ["gallery case", "Gallery Case"],
-  ["画廊武器箱", "Gallery Case"],
-  ["kilowatt case", "Kilowatt Case"],
-  ["千瓦武器箱", "Kilowatt Case"]
-]);
-
 function stripWearSuffix(text, suffixes) {
   const raw = asString(text).trim();
   for (const suffix of suffixes) {
@@ -235,24 +136,6 @@ function normalizeSkinHead(text) {
     }
   }
   return out;
-}
-
-function normalizeSkinFamily(text) {
-  let out = stripWearSuffix(text, WEAR_SUFFIX_MAP.map((x) => x.en));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const next = asString(out)
-      .trim()
-      .replace(/^\u2605\s+/, "")
-      .replace(/^(Souvenir|StatTrak(?:\u2122)?|Genuine)\s+/i, "")
-      .trim();
-    if (next !== out) {
-      out = next;
-      changed = true;
-    }
-  }
-  return asString(out).trim();
 }
 
 function isImportableSkin(item) {
@@ -323,11 +206,80 @@ function ensureAlchemyTypeColumn(db) {
   db.exec("ALTER TABLE skin ADD COLUMN alchemy_type TEXT DEFAULT '不能炼金'");
 }
 
+function ensureSkinDetailColumns(db) {
+  const columns = new Set(
+    db.prepare("PRAGMA table_info(skin)").all().map((row) => asString(row.name).trim())
+  );
+  if (!columns.has("detail_status")) {
+    db.exec("ALTER TABLE skin ADD COLUMN detail_status TEXT DEFAULT 'pending'");
+  }
+  if (!columns.has("detail_source")) {
+    db.exec("ALTER TABLE skin ADD COLUMN detail_source TEXT DEFAULT ''");
+  }
+  if (!columns.has("detail_checked_at")) {
+    db.exec("ALTER TABLE skin ADD COLUMN detail_checked_at DATETIME");
+  }
+  if (!columns.has("detail_error")) {
+    db.exec("ALTER TABLE skin ADD COLUMN detail_error TEXT DEFAULT ''");
+  }
+  if (!columns.has("detail_attempts")) {
+    db.exec("ALTER TABLE skin ADD COLUMN detail_attempts INTEGER DEFAULT 0");
+  }
+}
+
+function summarizeError(err) {
+  const text = asString(err && err.message ? err.message : err).trim();
+  return text || "detail_enrichment_failed";
+}
+
+function createDetailStatsSnapshot(db, extra = {}) {
+  const missingRow = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM skin
+    WHERE TRIM(COALESCE(collection, '')) = '' OR TRIM(COALESCE(rarity, '')) = ''
+  `).get();
+  const noSupportedPlatformRow = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM skin
+    WHERE detail_status = 'failed' AND detail_error = 'no_supported_platform_id'
+  `).get();
+  return {
+    families_pending: 0,
+    families_ok: 0,
+    families_failed: 0,
+    rows_filled: 0,
+    rows_still_missing: Number(missingRow && missingRow.count || 0) || 0,
+    rows_no_supported_platform: Number(noSupportedPlatformRow && noSupportedPlatformRow.count || 0) || 0,
+    ...extra
+  };
+}
+
+function collectAlchemyStats(rows) {
+  return rows.reduce((acc, row) => {
+    const key = asString(row.alchemy_type).trim() || "不能炼金";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function readCurrentSkinStats(db) {
+  const rows = db.prepare(`
+    SELECT collection, rarity, alchemy_type
+    FROM skin
+  `).all();
+  return {
+    missingCollectionOrRarity: rows.filter(
+      (row) => !asString(row.collection).trim() || !asString(row.rarity).trim()
+    ).length,
+    alchemyStats: collectAlchemyStats(rows)
+  };
+}
+
 function joinCollectionNames(values) {
   const out = [];
   const seen = new Set();
   for (const value of Array.isArray(values) ? values : []) {
-    for (const name of splitCollectionNames(value)) {
+    for (const name of splitCollectionNamesShared(value)) {
       if (seen.has(name)) {
         continue;
       }
@@ -384,7 +336,7 @@ function loadExistingMetadataMaps(db) {
     const marketHashName = asString(row.markethashname).trim();
     exact.set(marketHashName, metadata);
 
-    const familyKey = normalizeSkinFamily(asString(row.basemarkethashname).trim() || marketHashName);
+    const familyKey = buildSkinFamilyKey(asString(row.basemarkethashname).trim() || marketHashName);
     if (!familyKey) {
       continue;
     }
@@ -407,76 +359,6 @@ function loadExistingMetadataMaps(db) {
   return {exact, family};
 }
 
-function splitCollectionNames(value) {
-  return asString(value)
-    .split("/")
-    .map((name) => normalizeCollectionKey(name))
-    .filter(Boolean);
-}
-
-function normalizeCollectionKey(name) {
-  const raw = asString(name).trim();
-  if (!raw) {
-    return "";
-  }
-  return COLLECTION_NAME_ALIASES.get(raw.toLowerCase()) || raw;
-}
-
-function assignAlchemyTypes(records, options = {}) {
-  const rarityOrder = Array.isArray(options.rarityOrder) ? options.rarityOrder : [];
-  const orderMap = rarityOrder.length
-    ? new Map(rarityOrder.map((name, index) => [asString(name).trim(), index + 1]))
-    : DEFAULT_RARITY_RANKS;
-  const out = records.map((row) => ({...row}));
-  const byCollection = new Map();
-
-  for (const row of out) {
-    const collections = splitCollectionNames(row.collection);
-    const rarity = asString(row.rarity).trim();
-    if (!collections.length || !rarity || !orderMap.has(rarity)) {
-      row.alchemy_type = "不能炼金";
-      continue;
-    }
-    for (const collection of collections) {
-      if (!byCollection.has(collection)) {
-        byCollection.set(collection, new Set());
-      }
-      byCollection.get(collection).add(rarity);
-    }
-  }
-
-  const collectionMeta = new Map();
-  for (const [collection, raritySet] of byCollection.entries()) {
-    const sorted = [...raritySet].sort((a, b) => orderMap.get(a) - orderMap.get(b));
-    collectionMeta.set(collection, {
-      top: sorted[sorted.length - 1] || "",
-      second: sorted.length > 1 ? sorted[sorted.length - 2] : "",
-      hasGoldTop: ["金", "金色", "违禁"].includes(sorted[sorted.length - 1] || "")
-    });
-  }
-
-  for (const row of out) {
-    const collections = splitCollectionNames(row.collection);
-    const rarity = asString(row.rarity).trim();
-    const metas = collections.map((collection) => collectionMeta.get(collection)).filter(Boolean);
-    if (!metas.length || !rarity) {
-      row.alchemy_type = "不能炼金";
-      continue;
-    }
-    if (metas.some((meta) => rarity === meta.top)) {
-      row.alchemy_type = "不能炼金";
-      continue;
-    }
-    if (metas.some((meta) => meta.hasGoldTop && rarity === meta.second)) {
-      row.alchemy_type = "5合1材料";
-      continue;
-    }
-    row.alchemy_type = "10合1";
-  }
-
-  return out;
-}
-
 function reuseExistingMetadata(record, existingMetadata) {
   const exactMap = existingMetadata && existingMetadata.exact instanceof Map
     ? existingMetadata.exact
@@ -487,7 +369,7 @@ function reuseExistingMetadata(record, existingMetadata) {
     ? existingMetadata.family
     : new Map();
   const current = exactMap.get(record.markethashname) || null;
-  const familyKey = normalizeSkinFamily(record.basemarkethashname || record.markethashname);
+  const familyKey = buildSkinFamilyKey(record.basemarkethashname || record.markethashname);
   const family = familyMap.get(familyKey) || null;
   return {
     ...record,
@@ -505,10 +387,39 @@ function reuseExistingMetadata(record, existingMetadata) {
         : null,
     wear_range: current && current.wear_range !== null && current.wear_range !== undefined
       ? current.wear_range
-      : family && family.wear_range !== null && family.wear_range !== undefined
-        ? family.wear_range
-        : null
+        : family && family.wear_range !== null && family.wear_range !== undefined
+          ? family.wear_range
+          : null
   };
+}
+
+function hasSupportedDetailId(record) {
+  return Boolean(asString(record && record.buffid).trim());
+}
+
+function applyInitialDetailState(record) {
+  const out = {
+    ...record,
+    detail_status: "pending",
+    detail_source: "",
+    detail_checked_at: null,
+    detail_error: "",
+    detail_attempts: 0
+  };
+  const hasCollection = Boolean(asString(record && record.collection).trim());
+  const hasRarity = Boolean(asString(record && record.rarity).trim());
+  if (hasCollection && hasRarity) {
+    out.detail_status = "ok";
+    out.detail_source = "existing_metadata";
+    return out;
+  }
+  if (hasSupportedDetailId(record)) {
+    out.detail_status = "pending";
+    return out;
+  }
+  out.detail_status = "failed";
+  out.detail_error = "no_supported_platform_id";
+  return out;
 }
 
 function buildTargetRecords(items, options = {}) {
@@ -523,15 +434,24 @@ function buildTargetRecords(items, options = {}) {
     if (row.wear_range === null) {
       row.wear_range = deriveWearRange(row);
     }
-    parsed.push(row);
+    parsed.push(applyInitialDetailState(row));
   }
-  return assignAlchemyTypes(parsed, options);
+  return assignAlchemyTypesShared(parsed, options);
 }
 
-function syncSkinDb({dbPath, items, rarityOrder} = {}) {
+async function syncSkinDb({
+  dbPath,
+  items,
+  rarityOrder,
+  detailProvider = null,
+  logger = null,
+  detailConcurrency = 1
+} = {}) {
   const db = new DatabaseSync(dbPath);
+  let baseStats = null;
   try {
     ensureAlchemyTypeColumn(db);
+    ensureSkinDetailColumns(db);
     const existingMetadata = loadExistingMetadataMaps(db);
     const targetRows = buildTargetRecords(items, {existingMetadata, rarityOrder});
     const existingKeys = [...existingMetadata.exact.keys()];
@@ -541,8 +461,9 @@ function syncSkinDb({dbPath, items, rarityOrder} = {}) {
     const upsert = db.prepare(`
       INSERT INTO skin (
         markethashname, name, basemarkethashname, basename, collection, rarity,
-        wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid, wear_range, alchemy_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid, wear_range, alchemy_type,
+        detail_status, detail_source, detail_checked_at, detail_error, detail_attempts
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(markethashname) DO UPDATE SET
         name = excluded.name,
         basemarkethashname = excluded.basemarkethashname,
@@ -557,7 +478,12 @@ function syncSkinDb({dbPath, items, rarityOrder} = {}) {
         c5id = excluded.c5id,
         youpinid = excluded.youpinid,
         wear_range = excluded.wear_range,
-        alchemy_type = excluded.alchemy_type
+        alchemy_type = excluded.alchemy_type,
+        detail_status = excluded.detail_status,
+        detail_source = excluded.detail_source,
+        detail_checked_at = excluded.detail_checked_at,
+        detail_error = excluded.detail_error,
+        detail_attempts = excluded.detail_attempts
     `);
 
     db.exec("BEGIN IMMEDIATE");
@@ -578,7 +504,12 @@ function syncSkinDb({dbPath, items, rarityOrder} = {}) {
           asString(row.c5id).trim(),
           asString(row.youpinid).trim(),
           normalizeFloat(row.wear_range),
-          asString(row.alchemy_type).trim() || "不能炼金"
+          asString(row.alchemy_type).trim() || "不能炼金",
+          asString(row.detail_status).trim() || "pending",
+          asString(row.detail_source).trim(),
+          row.detail_checked_at,
+          asString(row.detail_error).trim(),
+          Math.max(0, Math.trunc(Number(row.detail_attempts) || 0))
         );
       }
 
@@ -595,19 +526,53 @@ function syncSkinDb({dbPath, items, rarityOrder} = {}) {
       throw error;
     }
 
-    return {
+    baseStats = {
       totalItems: Array.isArray(items) ? items.length : 0,
       importedItems: targetRows.length,
-      deleted: existingKeys.filter((key) => !targetKeySet.has(key)).length,
-      missingCollectionOrRarity: targetRows.filter((row) => !asString(row.collection).trim() || !asString(row.rarity).trim()).length,
-      alchemyStats: targetRows.reduce((acc, row) => {
-        const key = asString(row.alchemy_type).trim() || "不能炼金";
-        acc[key] = (acc[key] || 0) + 1;
-        return acc;
-      }, {})
+      deleted: existingKeys.filter((key) => !targetKeySet.has(key)).length
     };
   } finally {
     db.close();
+  }
+
+  let detailStats;
+  if (detailProvider) {
+    const service = createSkinDetailEnrichmentService({
+      dbPath,
+      provider: detailProvider,
+      logger,
+      concurrency: detailConcurrency,
+      rarityOrder
+    });
+    try {
+      detailStats = await service.enrichMissingDetails();
+    } catch (error) {
+      const verifyDb = new DatabaseSync(dbPath, {open: true, readOnly: true});
+      try {
+        detailStats = createDetailStatsSnapshot(verifyDb, {error: summarizeError(error)});
+      } finally {
+        verifyDb.close();
+      }
+    }
+  } else {
+    const verifyDb = new DatabaseSync(dbPath, {open: true, readOnly: true});
+    try {
+      detailStats = createDetailStatsSnapshot(verifyDb);
+    } finally {
+      verifyDb.close();
+    }
+  }
+
+  const finalDb = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  try {
+    const finalStats = readCurrentSkinStats(finalDb);
+    return {
+      ...baseStats,
+      ...finalStats,
+      detailStats
+    };
+  } finally {
+    finalDb.close();
   }
 }
 
@@ -663,7 +628,7 @@ function findLatestSteamBaseInfoJson(dirPath = DEFAULT_JSON_DIR) {
 module.exports = {
   DEFAULT_JSON_PATH,
   isImportableSkin,
-  assignAlchemyTypes,
+  assignAlchemyTypes: assignAlchemyTypesShared,
   syncSkinDb,
   buildCliOptions,
   loadItemsFromJson,

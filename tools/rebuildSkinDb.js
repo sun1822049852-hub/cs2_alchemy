@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const {createBuffSkinDetailProvider} = require("../node_sidecar/src/services/buffSkinDetailProvider");
 const {
   buildCliOptions,
   loadItemsFromJson,
@@ -33,20 +34,58 @@ function printStats(stats) {
   console.log(`导入目标数: ${Number(stats.importedItems || 0)}`);
   console.log(`删除旧记录数: ${Number(stats.deleted || 0)}`);
   console.log(`缺少收藏品/品质数: ${Number(stats.missingCollectionOrRarity || 0)}`);
+  console.log("详情补齐统计:");
+  console.log(`  待补 family: ${Number(stats.detailStats && stats.detailStats.families_pending || 0)}`);
+  console.log(`  补齐成功 family: ${Number(stats.detailStats && stats.detailStats.families_ok || 0)}`);
+  console.log(`  补齐失败 family: ${Number(stats.detailStats && stats.detailStats.families_failed || 0)}`);
+  console.log(`  补齐行数: ${Number(stats.detailStats && stats.detailStats.rows_filled || 0)}`);
+  console.log(`  仍缺失行数: ${Number(stats.detailStats && stats.detailStats.rows_still_missing || 0)}`);
+  console.log(`  无可用平台ID行数: ${Number(stats.detailStats && stats.detailStats.rows_no_supported_platform || 0)}`);
+  if (stats.detailStats && stats.detailStats.error) {
+    console.log(`  补齐异常: ${stats.detailStats.error}`);
+  }
   console.log("炼金类型分布:");
   for (const [key, value] of Object.entries(stats.alchemyStats || {})) {
     console.log(`  ${key}: ${Number(value || 0)}`);
   }
 }
 
-const options = buildCliOptions(process.argv.slice(2));
-const backupPath = backupDbFile(options.dbPath);
-const items = loadItemsFromJson(options.jsonPath);
-const stats = syncSkinDb({
-  dbPath: options.dbPath,
-  items
-});
-if (backupPath) {
-  console.log(`备份文件: ${backupPath}`);
+async function runRebuildSkinDb(options = {}) {
+  const backupPath = backupDbFile(options.dbPath);
+  const items = loadItemsFromJson(options.jsonPath);
+  const stats = await syncSkinDb({
+    dbPath: options.dbPath,
+    items,
+    detailProvider: createBuffSkinDetailProvider(),
+    detailConcurrency: 1
+  });
+  return {
+    backupPath,
+    stats,
+    options
+  };
 }
-printStats(stats);
+
+async function main(argv = process.argv.slice(2)) {
+  const options = buildCliOptions(argv);
+  const result = await runRebuildSkinDb(options);
+  if (result.backupPath) {
+    console.log(`备份文件: ${result.backupPath}`);
+  }
+  printStats(result.stats);
+  return result;
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  backupDbFile,
+  printStats,
+  runRebuildSkinDb,
+  main
+};
