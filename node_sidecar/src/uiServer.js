@@ -14,7 +14,8 @@ const {createComponentOpsService} = require("./services/componentOpsService");
 const {createComponentTaskQueue} = require("./services/componentTaskQueue");
 const {createCraftService} = require("./services/craftService");
 const {createCraftAssistService} = require("./services/craftAssistService");
-const {fillMissingWearBounds} = require("./skinMetaStore");
+const {createCraftAssistWorkerPool} = require("./services/craftAssistWorkerPool");
+const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
 const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./constants");
@@ -25,31 +26,13 @@ const sessionPool = createSessionPool({logger});
 const componentOpsService = createComponentOpsService({sessionPool, logger});
 const craftService = createCraftService({sessionPool, logger});
 const craftAssistService = createCraftAssistService({logger});
+const CRAFT_ASSIST_USE_WORKER_POOL = process.env.CRAFT_ASSIST_USE_WORKER_POOL !== "0";
+const craftAssistWorkerPool = CRAFT_ASSIST_USE_WORKER_POOL
+  ? createCraftAssistWorkerPool({logger})
+  : null;
+const snapshotRowsLoader = createSnapshotRowsLoader({limit: 6});
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
-const SNAPSHOT_ROWS_CACHE_LIMIT = 6;
-const snapshotRowsCache = new Map();
-
-function trimSnapshotRowsCache() {
-  while (snapshotRowsCache.size > SNAPSHOT_ROWS_CACHE_LIMIT) {
-    const oldestKey = snapshotRowsCache.keys().next().value;
-    if (!oldestKey) break;
-    snapshotRowsCache.delete(oldestKey);
-  }
-}
-
-function snapshotRowsCacheStamp(stat) {
-  const size = Number(stat && stat.size || 0);
-  const mtimeMs = Number(stat && stat.mtimeMs || 0);
-  return `${size}:${mtimeMs}`;
-}
-
-function touchSnapshotRowsCache(fullPath, stamp, rows) {
-  snapshotRowsCache.delete(fullPath);
-  snapshotRowsCache.set(fullPath, {stamp, rows});
-  trimSnapshotRowsCache();
-  return rows;
-}
 
 function logEncodingEnvironment() {
   const locale = asString(process.env.LC_ALL || process.env.LANG || process.env.LC_CTYPE || "").trim();
@@ -85,6 +68,9 @@ function ensureRuntimeBootstrapped() {
     shutdownHooksInstalled = true;
     const shutdown = () => {
       sessionPool.shutdown();
+      if (craftAssistWorkerPool && typeof craftAssistWorkerPool.close === "function") {
+        void craftAssistWorkerPool.close();
+      }
     };
     process.once("exit", shutdown);
     process.once("SIGINT", () => {
@@ -330,33 +316,11 @@ function listProcessedSnapshots() {
 }
 
 function loadSnapshotRows(snapshotPath) {
-  const fullPath = path.resolve(snapshotPath);
-  const stat = fs.statSync(fullPath);
-  const stamp = snapshotRowsCacheStamp(stat);
-  const cached = snapshotRowsCache.get(fullPath);
-  if (cached && cached.stamp === stamp && Array.isArray(cached.rows)) {
-    touchSnapshotRowsCache(fullPath, cached.stamp, cached.rows);
-    return cached.rows;
-  }
-  const text = fs.readFileSync(fullPath, "utf8");
-  const obj = JSON.parse(text);
-  const rows = Array.isArray(obj.items) ? obj.items : [];
-  return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows));
+  return snapshotRowsLoader.loadSnapshotRows(snapshotPath);
 }
 
 async function loadSnapshotRowsAsync(snapshotPath) {
-  const fullPath = path.resolve(snapshotPath);
-  const stat = await fs.promises.stat(fullPath);
-  const stamp = snapshotRowsCacheStamp(stat);
-  const cached = snapshotRowsCache.get(fullPath);
-  if (cached && cached.stamp === stamp && Array.isArray(cached.rows)) {
-    touchSnapshotRowsCache(fullPath, cached.stamp, cached.rows);
-    return cached.rows;
-  }
-  const text = await fs.promises.readFile(fullPath, "utf8");
-  const obj = JSON.parse(text);
-  const rows = Array.isArray(obj.items) ? obj.items : [];
-  return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows));
+  return snapshotRowsLoader.loadSnapshotRowsAsync(snapshotPath);
 }
 
 function loadSnapshotSafe(snapshotPath) {
@@ -1226,22 +1190,27 @@ async function handleApi(req, res, urlObj) {
       writeJson(res, 409, {ok: false, message: "当前账号暂无库存快照，请先刷新库存"});
       return true;
     }
-
-    const loaded = loadSnapshotSafe(snapshotPath);
-    if (!loaded.snapshot) {
+    if (!fs.existsSync(snapshotPath)) {
       writeJson(res, 409, {ok: false, message: "库存快照不存在或已失效，请先刷新库存"});
       return true;
     }
-
-    const result = craftAssistService.selectForRecipe({
-      rows: loaded.rows,
+    const workerArgs = {
       targetWear: body.target_wear,
       wearFilterMode: body.wear_filter_mode,
       materials: body.materials,
       blockedIds: body.blocked_ids,
       includeCooling: body.include_cooling,
       wearOffsetPct: body.wear_offset_pct
-    });
+    };
+    const result = CRAFT_ASSIST_USE_WORKER_POOL && craftAssistWorkerPool
+      ? await craftAssistWorkerPool.selectForRecipe({
+        snapshotPath,
+        ...workerArgs
+      })
+      : craftAssistService.selectForRecipe({
+        rows: loadSnapshotRows(snapshotPath),
+        ...workerArgs
+      });
     if (!result.ok) {
       writeJson(res, 400, {
         ok: false,
