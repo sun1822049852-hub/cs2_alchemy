@@ -27,6 +27,29 @@ const craftService = createCraftService({sessionPool, logger});
 const craftAssistService = createCraftAssistService({logger});
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
+const SNAPSHOT_ROWS_CACHE_LIMIT = 6;
+const snapshotRowsCache = new Map();
+
+function trimSnapshotRowsCache() {
+  while (snapshotRowsCache.size > SNAPSHOT_ROWS_CACHE_LIMIT) {
+    const oldestKey = snapshotRowsCache.keys().next().value;
+    if (!oldestKey) break;
+    snapshotRowsCache.delete(oldestKey);
+  }
+}
+
+function snapshotRowsCacheStamp(stat) {
+  const size = Number(stat && stat.size || 0);
+  const mtimeMs = Number(stat && stat.mtimeMs || 0);
+  return `${size}:${mtimeMs}`;
+}
+
+function touchSnapshotRowsCache(fullPath, stamp, rows) {
+  snapshotRowsCache.delete(fullPath);
+  snapshotRowsCache.set(fullPath, {stamp, rows});
+  trimSnapshotRowsCache();
+  return rows;
+}
 
 function logEncodingEnvironment() {
   const locale = asString(process.env.LC_ALL || process.env.LANG || process.env.LC_CTYPE || "").trim();
@@ -307,17 +330,33 @@ function listProcessedSnapshots() {
 }
 
 function loadSnapshotRows(snapshotPath) {
-  const text = fs.readFileSync(snapshotPath, "utf8");
+  const fullPath = path.resolve(snapshotPath);
+  const stat = fs.statSync(fullPath);
+  const stamp = snapshotRowsCacheStamp(stat);
+  const cached = snapshotRowsCache.get(fullPath);
+  if (cached && cached.stamp === stamp && Array.isArray(cached.rows)) {
+    touchSnapshotRowsCache(fullPath, cached.stamp, cached.rows);
+    return cached.rows;
+  }
+  const text = fs.readFileSync(fullPath, "utf8");
   const obj = JSON.parse(text);
   const rows = Array.isArray(obj.items) ? obj.items : [];
-  return fillMissingWearBounds(rows);
+  return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows));
 }
 
 async function loadSnapshotRowsAsync(snapshotPath) {
-  const text = await fs.promises.readFile(snapshotPath, "utf8");
+  const fullPath = path.resolve(snapshotPath);
+  const stat = await fs.promises.stat(fullPath);
+  const stamp = snapshotRowsCacheStamp(stat);
+  const cached = snapshotRowsCache.get(fullPath);
+  if (cached && cached.stamp === stamp && Array.isArray(cached.rows)) {
+    touchSnapshotRowsCache(fullPath, cached.stamp, cached.rows);
+    return cached.rows;
+  }
+  const text = await fs.promises.readFile(fullPath, "utf8");
   const obj = JSON.parse(text);
   const rows = Array.isArray(obj.items) ? obj.items : [];
-  return fillMissingWearBounds(rows);
+  return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows));
 }
 
 function loadSnapshotSafe(snapshotPath) {

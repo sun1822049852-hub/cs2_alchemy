@@ -1,6 +1,9 @@
 const assert = require("node:assert/strict");
 
-const {selectCraftAssistForRecipe} = require("../node_sidecar/src/services/craftAssistService");
+const {
+  selectCraftAssistForRecipe,
+  buildCraftAssistSelectionContext
+} = require("../node_sidecar/src/services/craftAssistService");
 
 function makeRow({
   id,
@@ -34,6 +37,18 @@ function runSelect({rows, targetWear, materials}) {
     wearFilterMode: "relative",
     materials,
     blockedIds: [],
+    includeCooling: false,
+    wearOffsetPct: 100
+  });
+}
+
+function runSelectWithContext({selectionContext, targetWear, materials, blockedIds = []}) {
+  return selectCraftAssistForRecipe({
+    selectionContext,
+    targetWear,
+    wearFilterMode: "relative",
+    materials,
+    blockedIds,
     includeCooling: false,
     wearOffsetPct: 100
   });
@@ -449,6 +464,54 @@ function test_multi_material_returns_selection_trace() {
   );
 }
 
+function test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids() {
+  const rows = [
+    makeRow({id: "m1", name: "Main", relative: 0.24}),
+    makeRow({id: "m2", name: "Main", relative: 0.245}),
+    makeRow({id: "m3", name: "Main", relative: 0.246}),
+    makeRow({id: "a1", name: "Aux", relative: 0.209}),
+    makeRow({id: "a2", name: "Aux", relative: 0.208}),
+    makeRow({id: "a3", name: "Aux", relative: 0.207}),
+    makeRow({id: "a4", name: "Aux", relative: 0.206}),
+    makeRow({id: "a5", name: "Aux", relative: 0.205}),
+    makeRow({id: "a6", name: "Aux", relative: 0.204}),
+    makeRow({id: "a7", name: "Aux", relative: 0.203}),
+    makeRow({id: "a8", name: "Aux", relative: 0.202}),
+    makeRow({id: "a9", name: "Aux", relative: 0.201}),
+    makeRow({id: "a10", name: "Aux", relative: 0.200}),
+    makeRow({id: "a11", name: "Aux", relative: 0.199}),
+    makeRow({id: "a12", name: "Aux", relative: 0.198})
+  ];
+  const materials = [
+    {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
+    {name: "Aux", names: ["Aux"], role: "aux", count: 8, wear_min: 0, wear_max: 1}
+  ];
+  const blockedIds = ["m3"];
+  const direct = selectCraftAssistForRecipe({
+    rows,
+    targetWear: 0.21,
+    wearFilterMode: "relative",
+    materials,
+    blockedIds,
+    includeCooling: false,
+    wearOffsetPct: 100
+  });
+  const selectionContext = buildCraftAssistSelectionContext({rows, includeCooling: false});
+  const cached = runSelectWithContext({
+    selectionContext,
+    targetWear: 0.21,
+    materials,
+    blockedIds
+  });
+
+  assert.equal(direct.ok, true);
+  assert.equal(cached.ok, true);
+  assert.deepEqual(pickedIds(cached), pickedIds(direct));
+  assert.equal(cached.overall, direct.overall);
+  assert.equal(cached.rarity, direct.rarity);
+  assert.deepEqual(cached.selection_trace, direct.selection_trace);
+}
+
 test_over_target_prefers_squeezing_aux_before_main();
 test_under_target_prioritizes_closer_overall_before_aux_low_bias();
 test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise();
@@ -463,4 +526,5 @@ test_single_material_keeps_hard_relative_cap_margin_near_target_edge();
 test_multi_material_allows_cross_side_compensation_for_closer_overall();
 test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
 test_multi_material_returns_selection_trace();
+test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids();
 console.log("craftAssistService tests passed");

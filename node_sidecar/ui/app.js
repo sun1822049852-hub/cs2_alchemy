@@ -21,7 +21,7 @@ const state = {
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
-  craftSelectedItemIds: new Set(), craftBusy: false, craftStatusText: "", craftIncludeCooling: false, craftShowSeed: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftRightPanelWidth: 360,
+  craftSelectedItemIds: new Set(), craftBusy: false, craftAssistSelecting: false, craftStatusText: "", craftIncludeCooling: false, craftShowSeed: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftRightPanelWidth: 360,
   craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false,
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
@@ -1473,6 +1473,7 @@ async function switchAccountView(username, {silentSnapshotSummary = false} = {})
   state.lastDirtyFallbackTs = 0;
   state.craftSelectedItemIds.clear();
   state.craftBusy = false;
+  state.craftAssistSelecting = false;
   state.craftStatusText = "";
   state.craftRecipeQueue = [];
   state.craftActiveRecipeId = "";
@@ -1618,6 +1619,7 @@ function setNoAccountState({silentSummary = false} = {}) {
   state.componentTaskProgressMap = {};
   state.craftSelectedItemIds.clear();
   state.craftBusy = false;
+  state.craftAssistSelecting = false;
   state.craftStatusText = "";
   state.craftRecipeQueue = [];
   state.craftActiveRecipeId = "";
@@ -3831,7 +3833,7 @@ function removeCraftAssistPreset(presetId) {
 function renderCraftAssistPresetPanel() {
   if (!ui.craftAssistPresetPanel || !ui.craftAssistPresetList) return;
   if (ui.craftAssistPresetSaveBtn) {
-    ui.craftAssistPresetSaveBtn.disabled = state.refreshing || state.craftBusy;
+    ui.craftAssistPresetSaveBtn.disabled = state.refreshing || state.craftBusy || state.craftAssistSelecting;
   }
   ui.craftAssistPresetList.replaceChildren();
   const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
@@ -3861,7 +3863,7 @@ function renderCraftAssistPresetPanel() {
     const presetId = String(preset && preset.id || "").trim();
     const isEditingItem = inEditingMode && presetId === activeEditingId;
     item.classList.toggle("editing", isEditingItem);
-    item.draggable = !(state.refreshing || state.craftBusy || inEditingMode);
+    item.draggable = !(state.refreshing || state.craftBusy || state.craftAssistSelecting || inEditingMode);
     const applyCountValue = normalizeCraftAssistApplyCount(applyCountMap[presetId], 1);
     if (presetId) applyCountMap[presetId] = applyCountValue;
     item.ondragstart = (evt) => {
@@ -3923,7 +3925,7 @@ function renderCraftAssistPresetPanel() {
     editBtn.type = "button";
     editBtn.className = "craft-assist-preset-edit";
     editBtn.textContent = "编辑";
-    editBtn.disabled = state.refreshing || state.craftBusy;
+    editBtn.disabled = state.refreshing || state.craftBusy || state.craftAssistSelecting;
     editBtn.onclick = () => {
       applyCraftAssistPresetForEdit(preset.id);
     };
@@ -3936,7 +3938,7 @@ function renderCraftAssistPresetPanel() {
     applyCountInput.step = "1";
     applyCountInput.value = String(applyCountValue);
     applyCountInput.setAttribute("aria-label", "应用数量");
-    applyCountInput.disabled = inEditingMode || state.refreshing || state.craftBusy;
+    applyCountInput.disabled = inEditingMode || state.refreshing || state.craftBusy || state.craftAssistSelecting;
     applyCountInput.onchange = () => {
       const next = normalizeCraftAssistApplyCount(applyCountInput.value, applyCountMap[presetId]);
       applyCountInput.value = String(next);
@@ -3946,7 +3948,7 @@ function renderCraftAssistPresetPanel() {
     const applyBtn = document.createElement("button");
     applyBtn.type = "button";
     applyBtn.textContent = "应用";
-    applyBtn.disabled = inEditingMode || state.refreshing || state.craftBusy;
+    applyBtn.disabled = inEditingMode || state.refreshing || state.craftBusy || state.craftAssistSelecting;
     applyBtn.onclick = () => {
       const countValue = normalizeCraftAssistApplyCount(applyCountInput.value, applyCountMap[presetId]);
       applyCountInput.value = String(countValue);
@@ -3959,7 +3961,7 @@ function renderCraftAssistPresetPanel() {
     removeBtn.className = "craft-assist-preset-remove";
     removeBtn.title = "删除该配置";
     removeBtn.setAttribute("aria-label", "删除该配置");
-    removeBtn.disabled = inEditingMode || state.refreshing || state.craftBusy;
+    removeBtn.disabled = inEditingMode || state.refreshing || state.craftBusy || state.craftAssistSelecting;
     removeBtn.onclick = () => {
       const ok = window.confirm(`确认删除配置【${String(preset && preset.name || "").trim()}】？`);
       if (!ok) return;
@@ -4009,6 +4011,10 @@ async function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
     setCraftStatus("汰换执行中，请稍后再试", true);
     return false;
   }
+  if (state.craftAssistSelecting) {
+    setCraftStatus("辅助选材处理中，请稍后再试", true);
+    return false;
+  }
   if (state.refreshing) {
     setCraftStatus("库存刷新中，请稍后再试", true);
     return false;
@@ -4045,115 +4051,123 @@ async function applyCraftAssistAutoSelection({sourcePresetName = ""} = {}) {
     return false;
   }
 
-  // 每次点击只新增并填充 1 组配方，不覆盖当前编辑中的配方。
-  const created = createEmptyCraftRecipeEntry({activate: false});
-  if (!created) {
-    setCraftStatus("当前无可编辑配方槽位", true);
-    return false;
-  }
-  const createdId = String(created.id || "").trim();
-  const removeCreatedEntry = () => {
-    state.craftRecipeQueue = (Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [])
-      .filter((entry) => String(entry && entry.id || "").trim() !== createdId);
-  };
-
-  const pendingEntries = getCraftQueuePendingEntries();
-  const pendingOrder = new Map();
-  for (let i = 0; i < pendingEntries.length; i += 1) {
-    const entry = pendingEntries[i];
-    const key = String(entry && entry.id || "").trim();
-    if (!key) continue;
-    pendingOrder.set(key, i + 1);
-  }
-  const recipeNo = pendingOrder.get(createdId) || pendingEntries.length;
-  const activeRecipeId = String(state.craftActiveRecipeId || "").trim();
-  const blockedIds = new Set();
-  for (const entry of pendingEntries) {
-    const entryId = String(entry && entry.id || "").trim();
-    if (entryId === createdId) continue;
-    // 当前正在编辑且未满 10 件时，不参与屏蔽，避免“新增一组”时把候选过度裁掉。
-    if (activeRecipeId && entryId === activeRecipeId && normalizeCraftRecipeItemIds(entry && entry.item_ids).length < mode) {
-      continue;
-    }
-    for (const id of normalizeCraftRecipeItemIds(entry && entry.item_ids)) {
-      blockedIds.add(id);
-    }
-  }
-
-  const wearFilterMode = getCraftAssistFilterMode();
-  const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  let run = null;
   try {
-    run = await api("/api/craft/assist-select", {
-      method: "POST",
-      body: JSON.stringify({
-        username,
-        target_wear: targetValue,
-        wear_filter_mode: wearFilterMode,
-        materials,
-        blocked_ids: [...blockedIds],
-        include_cooling: !!state.craftIncludeCooling,
-        wear_offset_pct: wearOffsetPct
-      })
-    });
-  } catch (err) {
-    removeCreatedEntry();
-    setCraftStatus(`配方#${recipeNo}：${err.message}`, true);
+    state.craftAssistSelecting = true;
     renderCraftPage();
-    return false;
-  }
 
-  created.item_ids = normalizeCraftRecipeItemIds(run && (run.item_ids || run.itemIds));
-  if (created.item_ids.length !== mode) {
-    removeCreatedEntry();
-    setCraftStatus(`配方#${recipeNo}：辅助选材返回数量异常（${created.item_ids.length}/${mode}）`, true);
-    renderCraftPage();
-    return false;
-  }
-  const rowsById = buildRowsByAssetId(Array.isArray(state.rows) ? state.rows : []);
-  const selectedRows = created.item_ids.map((id) => rowsById.get(id)).filter(Boolean);
-  const sourceText = String(sourcePresetName || "").trim();
-  if (selectedRows.length) {
-    logCraftAssistPickedRows({
-      recipeNo,
-      sourceText,
-      targetValue,
-      runOverall: run && run.overall,
-      mode,
-      selectedRows
-    });
-  } else if (Array.isArray(run && run.picks) && run.picks.length) {
-    const prefix = `[craft-assist][recipe#${Math.max(1, Number(recipeNo) || 1)}${sourceText ? `|${sourceText}` : ""}]`;
-    const targetText = targetValue == null ? "-" : numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS);
-    const runOverallText = run && run.overall == null ? "-" : numberTextTrunc(run && run.overall, WEAR_INPUT_DECIMALS);
-    if (typeof console.groupCollapsed === "function") {
-      console.groupCollapsed(`${prefix} picked ${run.picks.length}/${mode}, target=${targetText}, algorithm=${runOverallText}`);
-    } else {
-      console.info(`${prefix} picked ${run.picks.length}/${mode}, target=${targetText}, algorithm=${runOverallText}`);
+    // 每次点击只新增并填充 1 组配方，不覆盖当前编辑中的配方。
+    const created = createEmptyCraftRecipeEntry({activate: false});
+    if (!created) {
+      setCraftStatus("当前无可编辑配方槽位", true);
+      return false;
     }
-    console.info(`${prefix} picked_ids=${run.picks.map((item) => item.asset_id).join(",")}`);
-    if (typeof console.table === "function") console.table(run.picks);
-    else console.info(run.picks);
-    if (typeof console.groupEnd === "function") console.groupEnd();
-  }
-  const localRecipeInfo = selectedRows.length === mode
-    ? getTradeUpRecipeFromRows(selectedRows)
-    : {ok: true, reason: ""};
-  const backendRecipeOk = run && run.recipe_ok !== false;
-  const backendRecipeReason = String(run && run.recipe_reason || "").trim();
-  const sourceSuffix = sourceText ? `（${sourceText}）` : "";
-  state.craftStatusText = "";
-  if (!backendRecipeOk || !localRecipeInfo.ok) {
-    const reason = backendRecipeReason || localRecipeInfo.reason || "请调整材料";
-    setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，但不满足炼金规则：${reason}`, true);
-    renderCraftPage();
-    return false;
-  }
+    const createdId = String(created.id || "").trim();
+    const removeCreatedEntry = () => {
+      state.craftRecipeQueue = (Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [])
+        .filter((entry) => String(entry && entry.id || "").trim() !== createdId);
+    };
 
-  const raritySuffix = Number(run && run.rarity || 0) > 0 ? `，稀有度 ${craftRarityLabel(run.rarity)}` : "";
-  setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${created.item_ids.length}/${mode}${raritySuffix}，均值 ${numberTextTrunc(run.overall, WEAR_INPUT_DECIMALS)} < 目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`);
-  renderCraftPage();
-  return true;
+    const pendingEntries = getCraftQueuePendingEntries();
+    const pendingOrder = new Map();
+    for (let i = 0; i < pendingEntries.length; i += 1) {
+      const entry = pendingEntries[i];
+      const key = String(entry && entry.id || "").trim();
+      if (!key) continue;
+      pendingOrder.set(key, i + 1);
+    }
+    const recipeNo = pendingOrder.get(createdId) || pendingEntries.length;
+    const activeRecipeId = String(state.craftActiveRecipeId || "").trim();
+    const blockedIds = new Set();
+    for (const entry of pendingEntries) {
+      const entryId = String(entry && entry.id || "").trim();
+      if (entryId === createdId) continue;
+      // 当前正在编辑且未满 10 件时，不参与屏蔽，避免“新增一组”时把候选过度裁掉。
+      if (activeRecipeId && entryId === activeRecipeId && normalizeCraftRecipeItemIds(entry && entry.item_ids).length < mode) {
+        continue;
+      }
+      for (const id of normalizeCraftRecipeItemIds(entry && entry.item_ids)) {
+        blockedIds.add(id);
+      }
+    }
+
+    const wearFilterMode = getCraftAssistFilterMode();
+    const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+    let run = null;
+    try {
+      run = await api("/api/craft/assist-select", {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          target_wear: targetValue,
+          wear_filter_mode: wearFilterMode,
+          materials,
+          blocked_ids: [...blockedIds],
+          include_cooling: !!state.craftIncludeCooling,
+          wear_offset_pct: wearOffsetPct
+        })
+      });
+    } catch (err) {
+      removeCreatedEntry();
+      setCraftStatus(`配方#${recipeNo}：${err.message}`, true);
+      renderCraftPage();
+      return false;
+    }
+
+    created.item_ids = normalizeCraftRecipeItemIds(run && (run.item_ids || run.itemIds));
+    if (created.item_ids.length !== mode) {
+      removeCreatedEntry();
+      setCraftStatus(`配方#${recipeNo}：辅助选材返回数量异常（${created.item_ids.length}/${mode}）`, true);
+      renderCraftPage();
+      return false;
+    }
+    const rowsById = buildRowsByAssetId(Array.isArray(state.rows) ? state.rows : []);
+    const selectedRows = created.item_ids.map((id) => rowsById.get(id)).filter(Boolean);
+    const sourceText = String(sourcePresetName || "").trim();
+    if (selectedRows.length) {
+      logCraftAssistPickedRows({
+        recipeNo,
+        sourceText,
+        targetValue,
+        runOverall: run && run.overall,
+        mode,
+        selectedRows
+      });
+    } else if (Array.isArray(run && run.picks) && run.picks.length) {
+      const prefix = `[craft-assist][recipe#${Math.max(1, Number(recipeNo) || 1)}${sourceText ? `|${sourceText}` : ""}]`;
+      const targetText = targetValue == null ? "-" : numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS);
+      const runOverallText = run && run.overall == null ? "-" : numberTextTrunc(run && run.overall, WEAR_INPUT_DECIMALS);
+      if (typeof console.groupCollapsed === "function") {
+        console.groupCollapsed(`${prefix} picked ${run.picks.length}/${mode}, target=${targetText}, algorithm=${runOverallText}`);
+      } else {
+        console.info(`${prefix} picked ${run.picks.length}/${mode}, target=${targetText}, algorithm=${runOverallText}`);
+      }
+      console.info(`${prefix} picked_ids=${run.picks.map((item) => item.asset_id).join(",")}`);
+      if (typeof console.table === "function") console.table(run.picks);
+      else console.info(run.picks);
+      if (typeof console.groupEnd === "function") console.groupEnd();
+    }
+    const localRecipeInfo = selectedRows.length === mode
+      ? getTradeUpRecipeFromRows(selectedRows)
+      : {ok: true, reason: ""};
+    const backendRecipeOk = run && run.recipe_ok !== false;
+    const backendRecipeReason = String(run && run.recipe_reason || "").trim();
+    const sourceSuffix = sourceText ? `（${sourceText}）` : "";
+    state.craftStatusText = "";
+    if (!backendRecipeOk || !localRecipeInfo.ok) {
+      const reason = backendRecipeReason || localRecipeInfo.reason || "请调整材料";
+      setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，但不满足炼金规则：${reason}`, true);
+      renderCraftPage();
+      return false;
+    }
+
+    const raritySuffix = Number(run && run.rarity || 0) > 0 ? `，稀有度 ${craftRarityLabel(run.rarity)}` : "";
+    setCraftStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${created.item_ids.length}/${mode}${raritySuffix}，均值 ${numberTextTrunc(run.overall, WEAR_INPUT_DECIMALS)} < 目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`);
+    renderCraftPage();
+    return true;
+  } finally {
+    state.craftAssistSelecting = false;
+    renderCraftPage();
+  }
 }
 async function applyCraftAssistAutoSelectionBatch({sourcePresetName = "", repeatCount = 1} = {}) {
   const total = normalizeCraftAssistApplyCount(repeatCount, 1);
@@ -4207,7 +4221,7 @@ function renderCraftAssistPanel() {
   }
   if (ui.craftAssistApplyBtn) {
     ui.craftAssistApplyBtn.textContent = editingPreset ? "取消" : "按配置选材";
-    ui.craftAssistApplyBtn.disabled = state.refreshing || state.craftBusy;
+    ui.craftAssistApplyBtn.disabled = state.refreshing || state.craftBusy || state.craftAssistSelecting;
   }
   if (ui.craftAssistPresetSaveBtn) {
     ui.craftAssistPresetSaveBtn.textContent = editingPreset ? "保存修改" : "保存当前";

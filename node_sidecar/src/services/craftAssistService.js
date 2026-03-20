@@ -325,6 +325,34 @@ function buildRowsByAssetId(rows) {
   return out;
 }
 
+function buildCraftAssistSelectionContext({rows, includeCooling = false} = {}) {
+  const candidateRows = getCraftCandidates(rows, {includeCooling: !!includeCooling});
+  return {
+    includeCooling: !!includeCooling,
+    candidateRows,
+    rowsByName: buildCraftAssistRowsByName(candidateRows),
+    rowsById: buildRowsByAssetId(candidateRows),
+    candidateCache: new Map()
+  };
+}
+
+function resolveCraftAssistSelectionContext({selectionContext, rows, includeCooling = false} = {}) {
+  if (
+    selectionContext
+    && typeof selectionContext === "object"
+    && selectionContext.includeCooling === !!includeCooling
+    && Array.isArray(selectionContext.candidateRows)
+    && selectionContext.rowsByName instanceof Map
+    && selectionContext.rowsById instanceof Map
+  ) {
+    if (!(selectionContext.candidateCache instanceof Map)) {
+      selectionContext.candidateCache = new Map();
+    }
+    return selectionContext;
+  }
+  return buildCraftAssistSelectionContext({rows, includeCooling});
+}
+
 function craftAssistCandidateComparator(a, b, target) {
   const da = Math.abs(Number(a && a.value) - target);
   const db = Math.abs(Number(b && b.value) - target);
@@ -335,7 +363,26 @@ function craftAssistCandidateComparator(a, b, target) {
   return asString(a && a.id || "").localeCompare(asString(b && b.id || ""));
 }
 
-function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedIds, targetValue, {useRelativeFilter = true} = {}) {
+function buildCraftAssistCandidateCacheKey(material, targetValue, useRelativeFilter) {
+  const names = craftAssistMaterialNames(material);
+  return [
+    useRelativeFilter ? "relative" : "absolute",
+    numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS),
+    numberTextTrunc(material && material.wear_min, WEAR_INPUT_DECIMALS),
+    numberTextTrunc(material && material.wear_max, WEAR_INPUT_DECIMALS),
+    names.join("\u001f")
+  ].join("|");
+}
+
+function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedIds, targetValue, {useRelativeFilter = true, candidateCache = null} = {}) {
+  const cacheKey = candidateCache instanceof Map
+    ? buildCraftAssistCandidateCacheKey(material, targetValue, useRelativeFilter)
+    : "";
+  const cached = cacheKey ? candidateCache.get(cacheKey) : null;
+  if (Array.isArray(cached)) {
+    if (!(blockedIds instanceof Set) || blockedIds.size <= 0) return cached;
+    return cached.filter((item) => !blockedIds.has(item.id));
+  }
   const nameList = craftAssistMaterialNames(material);
   const rows = [];
   for (const name of nameList) {
@@ -355,13 +402,15 @@ function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedId
   }
   const list = [...unique.values()];
   list.sort((a, b) => craftAssistCandidateComparator(a, b, targetValue));
-  return list;
+  if (cacheKey) candidateCache.set(cacheKey, list);
+  if (!(blockedIds instanceof Set) || blockedIds.size <= 0) return list;
+  return list.filter((item) => !blockedIds.has(item.id));
 }
 
 function pickCraftAssistClosest(candidates, count, targetValue) {
-  return [...(Array.isArray(candidates) ? candidates : [])]
-    .sort((a, b) => craftAssistCandidateComparator(a, b, targetValue))
-    .slice(0, Math.max(0, Number(count) || 0));
+  const need = Math.max(0, Number(count) || 0);
+  if (need <= 0) return [];
+  return (Array.isArray(candidates) ? candidates : []).slice(0, need);
 }
 
 function pickCraftAssistByRolePriority(candidates, material, targetValue) {
@@ -1028,13 +1077,17 @@ function runCraftAssistSelectionForRecipe({
   blockedIds,
   targetValue,
   useRelativeFilter = true,
-  wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT
+  wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+  candidateCache = null
 }) {
   const blocked = blockedIds instanceof Set ? blockedIds : new Set();
   const offsetHintText = getCraftAssistOffsetSettingHintText(wearOffsetPct);
   const safeTargetValue = getCraftAssistOutcomeSafeTarget(targetValue);
   const prepared = materials.map((material) => {
-    const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, safeTargetValue, {useRelativeFilter});
+    const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, safeTargetValue, {
+      useRelativeFilter,
+      candidateCache
+    });
     const estimate = pickCraftAssistClosest(cands, material.count, safeTargetValue);
     const estimateDiff = estimate.length
       ? Math.abs(estimate.reduce((sum, item) => sum + Number(item.value), 0) / estimate.length - safeTargetValue)
@@ -1230,6 +1283,7 @@ function buildPickedRowsPayload(rows) {
 
 function selectCraftAssistForRecipe({
   rows,
+  selectionContext,
   targetWear,
   wearFilterMode,
   materials,
@@ -1250,11 +1304,16 @@ function selectCraftAssistForRecipe({
   if (targetValue == null) {
     return {ok: false, message: "请先输入目标相对磨损"};
   }
-  const candidateRows = getCraftCandidates(rows, {includeCooling: !!includeCooling});
+  const context = resolveCraftAssistSelectionContext({
+    selectionContext,
+    rows,
+    includeCooling: !!includeCooling
+  });
+  const candidateRows = Array.isArray(context.candidateRows) ? context.candidateRows : [];
   if (!candidateRows.length) {
     return {ok: false, message: "主库存无可选炼金物品"};
   }
-  const rowsByName = buildCraftAssistRowsByName(candidateRows);
+  const rowsByName = context.rowsByName instanceof Map ? context.rowsByName : buildCraftAssistRowsByName(candidateRows);
   const blocked = new Set(normalizeCraftRecipeItemIds(blockedIds));
   const run = runCraftAssistSelectionForRecipe({
     materials: normalizedMaterials,
@@ -1262,11 +1321,12 @@ function selectCraftAssistForRecipe({
     blockedIds: blocked,
     targetValue,
     useRelativeFilter: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
-    wearOffsetPct: normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT)
+    wearOffsetPct: normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
+    candidateCache: context.candidateCache instanceof Map ? context.candidateCache : null
   });
   if (!run.ok) return run;
   const itemIds = normalizeCraftRecipeItemIds(run.itemIds);
-  const rowsById = buildRowsByAssetId(candidateRows);
+  const rowsById = context.rowsById instanceof Map ? context.rowsById : buildRowsByAssetId(candidateRows);
   const selectedRows = itemIds.map((id) => rowsById.get(id)).filter(Boolean);
   const recipeInfo = getTradeUpRecipeFromRows(selectedRows);
   return {
@@ -1283,8 +1343,30 @@ function selectCraftAssistForRecipe({
 }
 
 function createCraftAssistService({logger} = {}) {
+  const selectionContextCache = new WeakMap();
+
+  function getCachedSelectionContext(rows, {includeCooling = false} = {}) {
+    if (!Array.isArray(rows)) return buildCraftAssistSelectionContext({rows, includeCooling});
+    let variants = selectionContextCache.get(rows);
+    if (!variants) {
+      variants = new Map();
+      selectionContextCache.set(rows, variants);
+    }
+    const key = includeCooling ? "1" : "0";
+    if (variants.has(key)) return variants.get(key);
+    const context = buildCraftAssistSelectionContext({rows, includeCooling});
+    variants.set(key, context);
+    return context;
+  }
+
   function selectForRecipe(args = {}) {
-    const result = selectCraftAssistForRecipe(args);
+    const nextArgs = args && typeof args === "object" ? {...args} : {};
+    if (!nextArgs.selectionContext && Array.isArray(nextArgs.rows)) {
+      nextArgs.selectionContext = getCachedSelectionContext(nextArgs.rows, {
+        includeCooling: !!nextArgs.includeCooling
+      });
+    }
+    const result = selectCraftAssistForRecipe(nextArgs);
     if (logger && typeof logger.info === "function" && result.ok) {
       logger.info(
         "craft_assist",
@@ -1330,5 +1412,6 @@ function createCraftAssistService({logger} = {}) {
 
 module.exports = {
   createCraftAssistService,
-  selectCraftAssistForRecipe
+  selectCraftAssistForRecipe,
+  buildCraftAssistSelectionContext
 };
