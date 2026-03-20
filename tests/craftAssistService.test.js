@@ -163,7 +163,7 @@ function test_under_target_never_uses_candidate_that_pushes_overall_across_targe
   assert.equal(result.item_ids.includes("a2"), false);
 }
 
-function test_single_material_prefers_smaller_radius_before_closer_mean_gap() {
+function test_single_material_falls_back_when_balanced_split_side_is_short() {
   const rows = [
     makeRow({id: "x0", name: "Solo", relative: 0.160173}),
     makeRow({id: "x1", name: "Solo", relative: 0.184536}),
@@ -189,8 +189,10 @@ function test_single_material_prefers_smaller_radius_before_closer_mean_gap() {
 
   assert.equal(result.ok, true);
   assert.equal(result.overall < 0.2142, true);
-  assert.equal(pickedIds(result).includes("x5"), true);
-  assert.equal(pickedIds(result).includes("x9"), false);
+  assert.equal(result.selection_trace.steps[0].belowCount, 7);
+  assert.equal(result.selection_trace.steps[0].aboveCount, 3);
+  assert.equal(pickedIds(result).includes("x9"), true);
+  assert.equal(pickedIds(result).includes("x0"), false);
 }
 
 function test_single_material_non_unit_interval_still_uses_relative_centering() {
@@ -248,11 +250,45 @@ function test_single_material_returns_selection_trace() {
 
   assert.equal(result.ok, true);
   assert.equal(Array.isArray(result.selection_trace && result.selection_trace.steps), true);
+  assert.equal(result.selection_trace.steps[0].stage, "initial");
   assert.equal(result.selection_trace.steps[result.selection_trace.steps.length - 1].stage, "final");
   assert.deepEqual(
     result.selection_trace.steps[result.selection_trace.steps.length - 1].selectedIds,
     pickedIds(result)
   );
+}
+
+function test_single_material_starts_with_balanced_split_then_pushes_upward() {
+  const rows = [
+    makeRow({id: "b1", name: "Solo", relative: 0.193232}),
+    makeRow({id: "b2", name: "Solo", relative: 0.192819}),
+    makeRow({id: "b3", name: "Solo", relative: 0.192762}),
+    makeRow({id: "b4", name: "Solo", relative: 0.192562}),
+    makeRow({id: "b5", name: "Solo", relative: 0.192551}),
+    makeRow({id: "b6", name: "Solo", relative: 0.192545}),
+    makeRow({id: "a1", name: "Solo", relative: 0.223043}),
+    makeRow({id: "a2", name: "Solo", relative: 0.223948}),
+    makeRow({id: "a3", name: "Solo", relative: 0.224158}),
+    makeRow({id: "a4", name: "Solo", relative: 0.224728}),
+    makeRow({id: "a5", name: "Solo", relative: 0.224758}),
+    makeRow({id: "a6", name: "Solo", relative: 0.224877}),
+    makeRow({id: "a7", name: "Solo", relative: 0.224927})
+  ];
+
+  const result = runSelect({
+    rows,
+    targetWear: 0.2142,
+    materials: [
+      {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.overall < 0.2142, true);
+  assert.equal(result.item_ids.includes("a7"), true);
+  assert.equal(result.item_ids.includes("a1"), false);
+  assert.equal(result.selection_trace.steps[0].belowCount, 5);
+  assert.equal(result.selection_trace.steps[0].aboveCount, 5);
 }
 
 function test_multi_material_allows_cross_side_compensation_for_closer_overall() {
@@ -358,9 +394,10 @@ test_under_target_prioritizes_closer_overall_before_aux_low_bias();
 test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise();
 test_all_main_items_use_single_side_branch();
 test_under_target_never_uses_candidate_that_pushes_overall_across_target();
-test_single_material_prefers_smaller_radius_before_closer_mean_gap();
+test_single_material_falls_back_when_balanced_split_side_is_short();
 test_single_material_non_unit_interval_still_uses_relative_centering();
 test_single_material_returns_selection_trace();
+test_single_material_starts_with_balanced_split_then_pushes_upward();
 test_multi_material_allows_cross_side_compensation_for_closer_overall();
 test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
 test_multi_material_returns_selection_trace();

@@ -183,6 +183,69 @@ function compareByValueAsc(a, b) {
   return String(a && a.id || "").localeCompare(String(b && b.id || ""));
 }
 
+function buildSingleMaterialSelection({below, upper, state}) {
+  const nextState = state || {};
+  return [
+    ...(Array.isArray(below) ? below : []).slice(
+      Number(nextState.belowStart || 0),
+      Number(nextState.belowStart || 0) + Number(nextState.belowCount || 0)
+    ),
+    ...(Array.isArray(upper) ? upper : []).slice(
+      Number(nextState.upperStart || 0),
+      Number(nextState.upperStart || 0) + Number(nextState.upperCount || 0)
+    )
+  ];
+}
+
+function countSingleMaterialSides(selected, targetValue) {
+  const list = Array.isArray(selected) ? selected : [];
+  let belowCount = 0;
+  let equalCount = 0;
+  let aboveCount = 0;
+  for (const candidate of list) {
+    const value = Number(candidate && candidate.value || 0);
+    if (value < Number(targetValue) - EPSILON) {
+      belowCount += 1;
+    } else if (value > Number(targetValue) + EPSILON) {
+      aboveCount += 1;
+    } else {
+      equalCount += 1;
+    }
+  }
+  return {belowCount, equalCount, aboveCount};
+}
+
+function scoreSingleMaterialPushState({below, upper, state, targetValue}) {
+  const selected = buildSingleMaterialSelection({below, upper, state});
+  const values = selected.map((candidate) => Number(candidate && candidate.value || 0));
+  if (!values.length) return null;
+  const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const scored = scoreCraftAssistSolutionSingleMaterial({selected, targetValue});
+  return {
+    state,
+    selected,
+    overall,
+    scoreTuple: scored ? scored.tuple : null
+  };
+}
+
+function pickBestSingleMaterialShift(candidates, targetValue, {keepBelow} = {}) {
+  let bestSameSide = null;
+  let bestCrossSide = null;
+  for (const candidate of Array.isArray(candidates) ? candidates : []) {
+    if (!candidate) continue;
+    const staysBelow = Number(candidate.overall) < Number(targetValue) - EPSILON;
+    if (staysBelow === !!keepBelow) {
+      if (!bestSameSide || compareOverallTowardsTarget(candidate, bestSameSide, targetValue, true) < 0) {
+        bestSameSide = candidate;
+      }
+    } else if (!bestCrossSide || compareOverallTowardsTarget(candidate, bestCrossSide, targetValue, true) < 0) {
+      bestCrossSide = candidate;
+    }
+  }
+  return bestSameSide || bestCrossSide;
+}
+
 function searchSingleMaterialExact({group, targetValue}) {
   const material = group && group.material ? group.material : {};
   const count = Math.max(0, Number(material && material.count || 0));
@@ -202,64 +265,195 @@ function searchSingleMaterialExact({group, targetValue}) {
   const below = prepared
     .filter((candidate) => candidate.value < Number(targetValue) - EPSILON)
     .sort(compareByValueDesc);
-  const equal = prepared
-    .filter((candidate) => Math.abs(candidate.value - Number(targetValue)) <= EPSILON)
-    .sort(compareByDistanceThenValueAsc);
-  const above = prepared
-    .filter((candidate) => candidate.value > Number(targetValue) + EPSILON)
+  const upper = prepared
+    .filter((candidate) => candidate.value >= Number(targetValue) - EPSILON)
     .sort(compareByValueAsc);
 
-  let best = null;
-  const maxEqual = Math.min(equal.length, count);
-  for (let equalCount = 0; equalCount <= maxEqual; equalCount += 1) {
-    const remainAfterEqual = count - equalCount;
-    const minBelow = Math.max(0, remainAfterEqual - above.length);
-    const maxBelow = Math.min(below.length, remainAfterEqual);
-    for (let belowCount = minBelow; belowCount <= maxBelow; belowCount += 1) {
-      const aboveCount = remainAfterEqual - belowCount;
-      if (aboveCount < 0 || aboveCount > above.length) continue;
-      const selected = [
-        ...below.slice(0, belowCount),
-        ...equal.slice(0, equalCount),
-        ...above.slice(0, aboveCount)
-      ];
-      if (selected.length !== count) continue;
-      const scored = scoreCraftAssistSolutionSingleMaterial({selected, targetValue});
-      if (!scored) continue;
-      if (!best || compareScoreTuples(scored.tuple, best.scoreTuple) < 0) {
-        best = {
-          selected,
-          overall: scored.overall,
-          scoreTuple: scored.tuple
-        };
+  let belowCount = Math.min(Math.floor(count / 2), below.length);
+  let upperCount = Math.min(count - belowCount, upper.length);
+  if (belowCount + upperCount < count) {
+    const extraBelow = Math.min(count - belowCount - upperCount, Math.max(0, below.length - belowCount));
+    belowCount += extraBelow;
+  }
+  if (belowCount + upperCount < count) {
+    const extraUpper = Math.min(count - belowCount - upperCount, Math.max(0, upper.length - upperCount));
+    upperCount += extraUpper;
+  }
+  if (belowCount + upperCount !== count) return null;
+
+  let current = scoreSingleMaterialPushState({
+    below,
+    upper,
+    state: {
+      belowStart: 0,
+      belowCount,
+      upperStart: 0,
+      upperCount
+    },
+    targetValue
+  });
+  if (!current) return null;
+
+  const initialSides = countSingleMaterialSides(current.selected, targetValue);
+  const trace = {
+    mode: "single_material_balanced_push",
+    steps: [
+      makeSelectionTraceStep({
+        stage: "initial",
+        materialResults: [{
+          material,
+          available: candidates,
+          selected: current.selected
+        }],
+        overall: current.overall,
+        extra: {
+          strategy: "balanced_center_push",
+          ...initialSides
+        }
+      })
+    ]
+  };
+
+  let bestBelow = Array.isArray(current.scoreTuple)
+    ? {
+        selected: current.selected,
+        overall: current.overall,
+        scoreTuple: current.scoreTuple
+      }
+    : null;
+  const startedBelow = Number(current.overall) < Number(targetValue) - EPSILON;
+
+  while (true) {
+    const nextCandidates = [];
+    if (Number(current.overall) < Number(targetValue) - EPSILON) {
+      if (Number(current.state.upperStart) + Number(current.state.upperCount) < upper.length) {
+        nextCandidates.push({
+          ...scoreSingleMaterialPushState({
+            below,
+            upper,
+            state: {
+              ...current.state,
+              upperStart: Number(current.state.upperStart) + 1
+            },
+            targetValue
+          }),
+          move: "upper_up"
+        });
+      }
+      if (
+        Number(current.state.belowCount) > 0
+        && Number(current.state.upperStart) + Number(current.state.upperCount) < upper.length
+      ) {
+        nextCandidates.push({
+          ...scoreSingleMaterialPushState({
+            below,
+            upper,
+            state: {
+              ...current.state,
+              belowCount: Number(current.state.belowCount) - 1,
+              upperCount: Number(current.state.upperCount) + 1
+            },
+            targetValue
+          }),
+          move: "split_up"
+        });
+      }
+    } else {
+      if (Number(current.state.belowStart) + Number(current.state.belowCount) < below.length) {
+        nextCandidates.push({
+          ...scoreSingleMaterialPushState({
+            below,
+            upper,
+            state: {
+              ...current.state,
+              belowStart: Number(current.state.belowStart) + 1
+            },
+            targetValue
+          }),
+          move: "below_down"
+        });
+      }
+      if (
+        Number(current.state.upperCount) > 0
+        && Number(current.state.belowStart) + Number(current.state.belowCount) < below.length
+      ) {
+        nextCandidates.push({
+          ...scoreSingleMaterialPushState({
+            below,
+            upper,
+            state: {
+              ...current.state,
+              belowCount: Number(current.state.belowCount) + 1,
+              upperCount: Number(current.state.upperCount) - 1
+            },
+            targetValue
+          }),
+          move: "split_down"
+        });
       }
     }
+
+    const next = pickBestSingleMaterialShift(nextCandidates, targetValue, {
+      keepBelow: Number(current.overall) < Number(targetValue) - EPSILON
+    });
+    if (!next) break;
+    current = next;
+    const sides = countSingleMaterialSides(current.selected, targetValue);
+    trace.steps.push(makeSelectionTraceStep({
+      stage: "push",
+      materialResults: [{
+        material,
+        available: candidates,
+        selected: current.selected
+      }],
+      overall: current.overall,
+      extra: {
+        strategy: "balanced_center_push",
+        move: String(current.move || ""),
+        ...sides
+      }
+    }));
+
+    if (
+      Array.isArray(current.scoreTuple)
+      && (
+        !bestBelow
+        || compareScoreTuples(current.scoreTuple, bestBelow.scoreTuple) < 0
+      )
+    ) {
+      bestBelow = {
+        selected: current.selected,
+        overall: current.overall,
+        scoreTuple: current.scoreTuple
+      };
+    }
+
+    const isBelow = Number(current.overall) < Number(targetValue) - EPSILON;
+    if (startedBelow ? !isBelow : isBelow) break;
   }
 
-  if (!best) return null;
+  if (!bestBelow) return null;
   const materialResults = [{
     material,
     available: candidates,
-    selected: best.selected
+    selected: bestBelow.selected
   }];
+  const finalSides = countSingleMaterialSides(bestBelow.selected, targetValue);
+  trace.steps.push(makeSelectionTraceStep({
+    stage: "final",
+    materialResults,
+    overall: bestBelow.overall,
+    extra: {
+      strategy: "balanced_center_push",
+      ...finalSides
+    }
+  }));
   return {
     materialResults,
-    overall: Number(best.overall),
-    scoreTuple: best.scoreTuple,
+    overall: Number(bestBelow.overall),
+    scoreTuple: bestBelow.scoreTuple,
     windowExtra: 0,
-    trace: {
-      mode: "single_material_exact",
-      steps: [
-        makeSelectionTraceStep({
-          stage: "final",
-          materialResults,
-          overall: best.overall,
-          extra: {
-            strategy: "radius_then_gap"
-          }
-        })
-      ]
-    }
+    trace
   };
 }
 
