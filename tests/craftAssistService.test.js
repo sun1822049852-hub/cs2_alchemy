@@ -291,6 +291,44 @@ function test_single_material_starts_with_balanced_split_then_pushes_upward() {
   assert.equal(result.selection_trace.steps[0].aboveCount, 5);
 }
 
+function test_single_material_applies_compensation_refinement_after_push_limit() {
+  const rows = [
+    makeRow({id: "b1", name: "Solo", relative: 0.193232}),
+    makeRow({id: "b2", name: "Solo", relative: 0.192819}),
+    makeRow({id: "b3", name: "Solo", relative: 0.192762}),
+    makeRow({id: "b4", name: "Solo", relative: 0.192562}),
+    makeRow({id: "b5", name: "Solo", relative: 0.192551}),
+    makeRow({id: "b6", name: "Solo", relative: 0.168917}),
+    makeRow({id: "a1", name: "Solo", relative: 0.223043}),
+    makeRow({id: "a2", name: "Solo", relative: 0.227207}),
+    makeRow({id: "a3", name: "Solo", relative: 0.227340}),
+    makeRow({id: "a4", name: "Solo", relative: 0.227395}),
+    makeRow({id: "a5", name: "Solo", relative: 0.227439}),
+    makeRow({id: "a6", name: "Solo", relative: 0.227508}),
+    makeRow({id: "a7", name: "Solo", relative: 0.227533})
+  ];
+
+  const result = runSelect({
+    rows,
+    targetWear: 0.2142,
+    materials: [
+      {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.overall < 0.2142, true);
+  assert.equal(Math.abs(result.overall - 0.2141963) < 1e-6, true);
+  assert.equal(result.item_ids.includes("a1"), true);
+  assert.equal(result.item_ids.includes("b6"), true);
+  assert.equal(result.item_ids.includes("b1"), false);
+  assert.equal(result.selection_trace.steps.some((step) => step.stage === "refine_compensate"), true);
+  const refineStep = result.selection_trace.steps.find((step) => step.stage === "refine_compensate");
+  assert.equal(!!(refineStep && refineStep.debug), true);
+  assert.equal(Array.isArray(refineStep.debug.firstSwapAttempts), true);
+  assert.equal(refineStep.debug.firstSwapAttempts.length > 0, true);
+}
+
 function test_multi_material_allows_cross_side_compensation_for_closer_overall() {
   const rows = [
     makeRow({id: "m0", name: "Main", relative: 0.201757}),
@@ -398,6 +436,7 @@ test_single_material_falls_back_when_balanced_split_side_is_short();
 test_single_material_non_unit_interval_still_uses_relative_centering();
 test_single_material_returns_selection_trace();
 test_single_material_starts_with_balanced_split_then_pushes_upward();
+test_single_material_applies_compensation_refinement_after_push_limit();
 test_multi_material_allows_cross_side_compensation_for_closer_overall();
 test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
 test_multi_material_returns_selection_trace();

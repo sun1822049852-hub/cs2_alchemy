@@ -215,17 +215,265 @@ function countSingleMaterialSides(selected, targetValue) {
   return {belowCount, equalCount, aboveCount};
 }
 
+function scoreSingleMaterialSearchSelection({selected, targetValue}) {
+  const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
+  if (!values.length) return null;
+  const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (!(overall < Number(targetValue) - EPSILON)) return null;
+  const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
+  const above = values.filter((value) => value > Number(targetValue) + EPSILON).length;
+  const below = values.filter((value) => value < Number(targetValue) - EPSILON).length;
+  const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - Number(targetValue)), 0) / values.length;
+  return {
+    overall,
+    tuple: [
+      Number(targetValue) - overall,
+      radius,
+      Math.abs(above - below),
+      calcVariance(values),
+      meanDistance
+    ]
+  };
+}
+
 function scoreSingleMaterialPushState({below, upper, state, targetValue}) {
   const selected = buildSingleMaterialSelection({below, upper, state});
   const values = selected.map((candidate) => Number(candidate && candidate.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const scored = scoreCraftAssistSolutionSingleMaterial({selected, targetValue});
+  const scored = scoreSingleMaterialSearchSelection({selected, targetValue});
   return {
     state,
     selected,
     overall,
     scoreTuple: scored ? scored.tuple : null
+  };
+}
+
+function replaceSingleMaterialCandidates(selected, replacementsByOldId) {
+  return (Array.isArray(selected) ? selected : []).map((candidate) => {
+    const key = String(candidate && candidate.id || "");
+    return replacementsByOldId instanceof Map && replacementsByOldId.has(key)
+      ? replacementsByOldId.get(key)
+      : candidate;
+  });
+}
+
+function calcSelectedMean(selected) {
+  const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function refineSingleMaterialCompensation({selected, below, upper, targetValue, maxIterations = 2} = {}) {
+  let currentSelected = Array.isArray(selected) ? selected : [];
+  let currentScore = scoreSingleMaterialSearchSelection({selected: currentSelected, targetValue});
+  if (!currentScore) return null;
+  const traceSteps = [];
+  const allCandidatesById = new Map();
+  for (const candidate of [...(Array.isArray(below) ? below : []), ...(Array.isArray(upper) ? upper : [])]) {
+    const id = String(candidate && candidate.id || "");
+    if (id && !allCandidatesById.has(id)) {
+      allCandidatesById.set(id, candidate);
+    }
+  }
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const selectedIdSet = new Set(
+      currentSelected.map((candidate) => String(candidate && candidate.id || "")).filter(Boolean)
+    );
+    const selectedBelow = currentSelected
+      .filter((candidate) => Number(candidate && candidate.value || 0) < Number(targetValue) - EPSILON)
+      .sort(compareByValueDesc);
+    const unusedUpper = (Array.isArray(upper) ? upper : [])
+      .filter((candidate) => !selectedIdSet.has(String(candidate && candidate.id || "")));
+    if (!selectedBelow.length || !unusedUpper.length) break;
+
+    let bestImprovement = null;
+    const iterationDebug = {
+      iteration: iteration + 1,
+      currentOverall: Number(currentScore.overall),
+      firstSwapAttempts: [],
+      summary: {
+        firstSwapAttempts: 0,
+        secondSwapEvaluated: 0,
+        secondSwapImproved: 0,
+        rejected: {
+          over_target: 0,
+          not_better: 0
+        }
+      }
+    };
+
+    for (const oldBelowUp of selectedBelow) {
+      const oldBelowUpId = String(oldBelowUp && oldBelowUp.id || "");
+      if (!oldBelowUpId) continue;
+
+      for (const newUpper of unusedUpper) {
+        const newUpperId = String(newUpper && newUpper.id || "");
+        if (!newUpperId) continue;
+        const raise = Number(newUpper && newUpper.value || 0) - Number(oldBelowUp && oldBelowUp.value || 0);
+        if (!(raise > EPSILON)) continue;
+
+        const singleSwapMap = new Map([[oldBelowUpId, newUpper]]);
+        const singleSwapSelected = replaceSingleMaterialCandidates(currentSelected, singleSwapMap);
+        const singleSwapOverall = calcSelectedMean(singleSwapSelected);
+        const singleSwapScore = scoreSingleMaterialSearchSelection({selected: singleSwapSelected, targetValue});
+        const firstSwapAttempt = {
+          firstSwap: {
+            removedId: oldBelowUpId,
+            removedValue: Number(oldBelowUp && oldBelowUp.value || 0),
+            addedId: newUpperId,
+            addedValue: Number(newUpper && newUpper.value || 0),
+            overall: singleSwapOverall,
+            delta: raise,
+            accepted: false,
+            rejectedReason: singleSwapScore
+              ? "not_better"
+              : "over_target"
+          },
+          secondSwap: {
+            evaluated: 0,
+            improved: 0,
+            rejected: {
+              over_target: 0,
+              not_better: 0
+            },
+            best: null
+          }
+        };
+        iterationDebug.summary.firstSwapAttempts += 1;
+        if (
+          singleSwapScore
+          && compareScoreTuples(singleSwapScore.tuple, currentScore.tuple) < 0
+          && (
+            !bestImprovement
+            || compareScoreTuples(singleSwapScore.tuple, bestImprovement.scoreTuple) < 0
+          )
+        ) {
+          firstSwapAttempt.firstSwap.accepted = true;
+          firstSwapAttempt.firstSwap.rejectedReason = null;
+          bestImprovement = {
+            selected: singleSwapSelected,
+            overall: singleSwapScore.overall,
+            scoreTuple: singleSwapScore.tuple,
+            changes: [{
+              removedIds: [oldBelowUpId],
+                addedIds: [newUpperId]
+              }]
+          };
+        }
+
+        const usedAfterUpper = new Set(
+          singleSwapSelected.map((candidate) => String(candidate && candidate.id || "")).filter(Boolean)
+        );
+        const availableAfterUpper = [...allCandidatesById.values()]
+          .filter((candidate) => !usedAfterUpper.has(String(candidate && candidate.id || "")));
+        if (!availableAfterUpper.length) {
+          iterationDebug.firstSwapAttempts.push(firstSwapAttempt);
+          continue;
+        }
+
+        let bestSecondSwapForAttempt = null;
+
+        for (const oldCandidate of singleSwapSelected) {
+          const oldCandidateId = String(oldCandidate && oldCandidate.id || "");
+          if (!oldCandidateId) continue;
+
+          for (const newCandidate of availableAfterUpper) {
+            const newCandidateId = String(newCandidate && newCandidate.id || "");
+            if (!newCandidateId) continue;
+
+            firstSwapAttempt.secondSwap.evaluated += 1;
+            iterationDebug.summary.secondSwapEvaluated += 1;
+            const nextSelected = replaceSingleMaterialCandidates(
+              singleSwapSelected,
+              new Map([[oldCandidateId, newCandidate]])
+            );
+            const nextOverall = calcSelectedMean(nextSelected);
+            const nextScore = scoreSingleMaterialSearchSelection({selected: nextSelected, targetValue});
+            if (!nextScore) {
+              firstSwapAttempt.secondSwap.rejected.over_target += 1;
+              iterationDebug.summary.rejected.over_target += 1;
+              continue;
+            }
+            if (compareScoreTuples(nextScore.tuple, currentScore.tuple) >= 0) {
+              firstSwapAttempt.secondSwap.rejected.not_better += 1;
+              iterationDebug.summary.rejected.not_better += 1;
+              continue;
+            }
+            firstSwapAttempt.secondSwap.improved += 1;
+            iterationDebug.summary.secondSwapImproved += 1;
+            if (
+              !bestSecondSwapForAttempt
+              || compareScoreTuples(nextScore.tuple, bestSecondSwapForAttempt.scoreTuple) < 0
+            ) {
+              bestSecondSwapForAttempt = {
+                removedId: oldCandidateId,
+                removedValue: Number(oldCandidate && oldCandidate.value || 0),
+                addedId: newCandidateId,
+                addedValue: Number(newCandidate && newCandidate.value || 0),
+                overall: nextOverall,
+                gap: Number(targetValue) - Number(nextScore.overall),
+                scoreTuple: nextScore.tuple
+              };
+            }
+            if (
+              !bestImprovement
+              || compareScoreTuples(nextScore.tuple, bestImprovement.scoreTuple) < 0
+            ) {
+              bestImprovement = {
+                selected: nextSelected,
+                overall: nextScore.overall,
+                scoreTuple: nextScore.tuple,
+                changes: [
+                  {
+                    removedIds: [oldBelowUpId],
+                    addedIds: [newUpperId]
+                  },
+                  {
+                    removedIds: [oldCandidateId],
+                    addedIds: [newCandidateId]
+                  }
+                ]
+              };
+            }
+          }
+        }
+
+        firstSwapAttempt.secondSwap.best = bestSecondSwapForAttempt
+          ? {
+              removedId: bestSecondSwapForAttempt.removedId,
+              removedValue: bestSecondSwapForAttempt.removedValue,
+              addedId: bestSecondSwapForAttempt.addedId,
+              addedValue: bestSecondSwapForAttempt.addedValue,
+              overall: bestSecondSwapForAttempt.overall,
+              gap: bestSecondSwapForAttempt.gap
+            }
+          : null;
+        iterationDebug.firstSwapAttempts.push(firstSwapAttempt);
+      }
+    }
+
+    if (!bestImprovement) break;
+    currentSelected = bestImprovement.selected;
+    currentScore = {
+      overall: bestImprovement.overall,
+      tuple: bestImprovement.scoreTuple
+    };
+    traceSteps.push({
+      selected: currentSelected,
+      overall: bestImprovement.overall,
+      changes: bestImprovement.changes,
+      debug: iterationDebug
+    });
+  }
+
+  return {
+    selected: currentSelected,
+    overall: currentScore.overall,
+    scoreTuple: currentScore.tuple,
+    traceSteps
   };
 }
 
@@ -433,6 +681,37 @@ function searchSingleMaterialExact({group, targetValue}) {
   }
 
   if (!bestBelow) return null;
+  const compensated = refineSingleMaterialCompensation({
+    selected: bestBelow.selected,
+    below,
+    upper,
+    targetValue
+  });
+  if (compensated && compareScoreTuples(compensated.scoreTuple, bestBelow.scoreTuple) < 0) {
+    bestBelow = {
+      selected: compensated.selected,
+      overall: compensated.overall,
+      scoreTuple: compensated.scoreTuple
+    };
+    for (const step of Array.isArray(compensated.traceSteps) ? compensated.traceSteps : []) {
+      const stepSides = countSingleMaterialSides(step.selected, targetValue);
+      trace.steps.push(makeSelectionTraceStep({
+        stage: "refine_compensate",
+        materialResults: [{
+          material,
+          available: candidates,
+          selected: step.selected
+        }],
+        overall: step.overall,
+        extra: {
+          strategy: "balanced_center_push",
+          changes: Array.isArray(step.changes) ? step.changes : [],
+          debug: step && step.debug ? step.debug : null,
+          ...stepSides
+        }
+      }));
+    }
+  }
   const materialResults = [{
     material,
     available: candidates,
@@ -1324,6 +1603,127 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
       }
     }
 
+    for (let auxUpEntryIndex = 0; auxUpEntryIndex < currentResults.length; auxUpEntryIndex += 1) {
+      const auxUpEntry = currentResults[auxUpEntryIndex];
+      const auxUpRole = normalizeRole(auxUpEntry && auxUpEntry.material && auxUpEntry.material.role);
+      if (auxUpRole !== "aux") continue;
+      const selectedAuxUp = Array.isArray(auxUpEntry && auxUpEntry.selected) ? auxUpEntry.selected : [];
+
+      for (const oldAuxUp of selectedAuxUp) {
+        const oldAuxUpId = String(oldAuxUp && oldAuxUp.id || "");
+        if (!oldAuxUpId) continue;
+        const usedWithoutUp = new Set(selectedIds);
+        usedWithoutUp.delete(oldAuxUpId);
+
+        const higherAuxes = (Array.isArray(auxUpEntry && auxUpEntry.available) ? auxUpEntry.available : [])
+          .filter((candidate) => {
+            const id = String(candidate && candidate.id || "");
+            return id
+              && !usedWithoutUp.has(id)
+              && Number(candidate && candidate.value || 0) > Number(oldAuxUp && oldAuxUp.value || 0) + EPSILON;
+          })
+          .sort(compareByValueAsc);
+        if (!higherAuxes.length) continue;
+
+        for (const newAuxUp of higherAuxes) {
+          const raise = Number(newAuxUp && newAuxUp.value || 0) - Number(oldAuxUp && oldAuxUp.value || 0);
+          const requiredDrop = raise - currentGap * totalSelected;
+          if (!(requiredDrop > EPSILON)) continue;
+
+          for (let auxDownEntryIndex = 0; auxDownEntryIndex < currentResults.length; auxDownEntryIndex += 1) {
+            const auxDownEntry = currentResults[auxDownEntryIndex];
+            const auxDownRole = normalizeRole(auxDownEntry && auxDownEntry.material && auxDownEntry.material.role);
+            if (auxDownRole !== "aux") continue;
+            const selectedAuxDown = Array.isArray(auxDownEntry && auxDownEntry.selected) ? auxDownEntry.selected : [];
+
+            for (const oldAuxDown of selectedAuxDown) {
+              const oldAuxDownId = String(oldAuxDown && oldAuxDown.id || "");
+              if (!oldAuxDownId || oldAuxDownId === oldAuxUpId) continue;
+
+              const usedWithoutPair = new Set(selectedIds);
+              usedWithoutPair.delete(oldAuxUpId);
+              usedWithoutPair.delete(oldAuxDownId);
+              usedWithoutPair.add(String(newAuxUp && newAuxUp.id || ""));
+
+              const lowerAuxes = (Array.isArray(auxDownEntry && auxDownEntry.available) ? auxDownEntry.available : [])
+                .filter((candidate) => {
+                  const id = String(candidate && candidate.id || "");
+                  return id
+                    && !usedWithoutPair.has(id)
+                    && Number(candidate && candidate.value || 0) < Number(oldAuxDown && oldAuxDown.value || 0) - EPSILON;
+                })
+                .sort(compareByValueAsc);
+              if (!lowerAuxes.length) continue;
+
+              const maxLowerValue = Math.min(
+                Number(oldAuxDown && oldAuxDown.value || 0) - EPSILON,
+                Number(oldAuxDown && oldAuxDown.value || 0) - requiredDrop
+              );
+              const pivot = lowerBoundByValueAsc(lowerAuxes, maxLowerValue + EPSILON);
+              const probeIndexes = new Set([
+                0,
+                Math.max(0, lowerAuxes.length - 1),
+                Math.max(0, pivot - 3),
+                Math.max(0, pivot - 2),
+                Math.max(0, pivot - 1),
+                Math.min(lowerAuxes.length - 1, pivot)
+              ]);
+
+              for (const index of probeIndexes) {
+                const newAuxDown = lowerAuxes[index];
+                if (!newAuxDown) continue;
+                if (!(Number(newAuxDown && newAuxDown.value || 0) <= maxLowerValue + EPSILON)) continue;
+
+                const nextResults = cloneMaterialResultsWithSwaps(currentResults, [
+                  {
+                    entryIndex: auxUpEntryIndex,
+                    oldId: oldAuxUpId,
+                    nextCandidate: newAuxUp
+                  },
+                  {
+                    entryIndex: auxDownEntryIndex,
+                    oldId: oldAuxDownId,
+                    nextCandidate: newAuxDown
+                  }
+                ]);
+                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue);
+                if (!nextScore) continue;
+                if (compareScoreTuples(nextScore.scoreTuple, currentScore.scoreTuple) >= 0) continue;
+                if (
+                  !bestImprovement
+                  || compareScoreTuples(nextScore.scoreTuple, bestImprovement.scoreTuple) < 0
+                ) {
+                  bestImprovement = {
+                    materialResults: nextResults,
+                    selected: nextScore.selected,
+                    overall: nextScore.overall,
+                    scoreTuple: nextScore.scoreTuple,
+                    pattern: "aux_up_aux_down",
+                    changes: [
+                      {
+                        index: auxUpEntryIndex,
+                        materialName: String(auxUpEntry && auxUpEntry.material && auxUpEntry.material.name || ""),
+                        role: "aux",
+                        removedIds: [oldAuxUpId],
+                        addedIds: [String(newAuxUp && newAuxUp.id || "")].filter(Boolean)
+                      },
+                      {
+                        index: auxDownEntryIndex,
+                        materialName: String(auxDownEntry && auxDownEntry.material && auxDownEntry.material.name || ""),
+                        role: "aux",
+                        removedIds: [oldAuxDownId],
+                        addedIds: [String(newAuxDown && newAuxDown.id || "")].filter(Boolean)
+                      }
+                    ]
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (!bestImprovement) break;
     traceSteps.push({
       materialResults: bestImprovement.materialResults,
@@ -1439,6 +1839,7 @@ function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200} = 
 
 module.exports = {
   compareScoreTuples,
+  refineSingleMaterialCompensation,
   refineRoleAwareMaterialResults,
   searchRoleAwarePushSolution,
   searchCraftAssistBestSolution,

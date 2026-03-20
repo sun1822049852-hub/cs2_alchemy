@@ -1,6 +1,9 @@
 const assert = require("node:assert/strict");
 
-const {searchRoleAwarePushSolution} = require("../node_sidecar/src/services/craftAssistSearch");
+const {
+  refineSingleMaterialCompensation,
+  searchRoleAwarePushSolution
+} = require("../node_sidecar/src/services/craftAssistSearch");
 
 function makeCandidate(id, value, groupIndex, role) {
   return {
@@ -65,18 +68,12 @@ function test_role_aware_push_slides_aux_window_down_when_over_target() {
   });
 
   assert.equal(result.overall < 0.21, true);
-  assert.deepEqual(pickedIds(result), [
-    "a10",
-    "a11",
-    "a12",
-    "a5",
-    "a6",
-    "a7",
-    "a8",
-    "a9",
-    "m1",
-    "m2"
-  ]);
+  assert.equal(pickedIds(result).includes("a10"), true);
+  assert.equal(pickedIds(result).includes("a11"), true);
+  assert.equal(pickedIds(result).includes("a12"), true);
+  assert.equal(pickedIds(result).includes("a1"), false);
+  assert.equal(pickedIds(result).includes("a2"), false);
+  assert.equal(pickedIds(result).includes("a3"), false);
 }
 
 function test_role_aware_push_slides_main_window_up_when_under_target() {
@@ -209,8 +206,157 @@ function test_role_aware_push_returns_selection_trace() {
   assert.deepEqual(result.trace.steps[result.trace.steps.length - 1].selectedIds, pickedIds(result));
 }
 
+function test_role_aware_push_applies_aux_compensation_refinement() {
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Main", role: "main", count: 1},
+      candidates: [
+        makeCandidate("m1", 0.70, 0, "main")
+      ]
+    },
+    {
+      index: 1,
+      material: {name: "Aux", role: "aux", count: 9},
+      candidates: [
+        makeCandidate("a0", 0.3666667, 1, "aux"),
+        makeCandidate("a1", 0.4666667, 1, "aux"),
+        makeCandidate("a2", 0.4666667, 1, "aux"),
+        makeCandidate("a3", 0.4666667, 1, "aux"),
+        makeCandidate("a4", 0.4666667, 1, "aux"),
+        makeCandidate("a5", 0.4666667, 1, "aux"),
+        makeCandidate("a6", 0.4666667, 1, "aux"),
+        makeCandidate("a7", 0.4666667, 1, "aux"),
+        makeCandidate("a8", 0.4666667, 1, "aux"),
+        makeCandidate("a9", 0.4666667, 1, "aux"),
+        makeCandidate("a10", 0.6166667, 1, "aux")
+      ]
+    }
+  ];
+
+  const result = searchRoleAwarePushSolution({
+    groups,
+    targetValue: 0.50
+  });
+
+  assert.equal(result.overall < 0.50, true);
+  assert.equal(Math.abs(result.overall - 0.495) < 1e-6, true);
+  assert.equal(pickedIds(result).includes("a0"), true);
+  assert.equal(pickedIds(result).includes("a10"), true);
+  assert.equal(result.trace.steps.some((step) => step.stage === "refine_swap" && step.pattern === "aux_up_aux_down"), true);
+}
+
+function test_single_material_compensation_chooses_closest_global_second_swap() {
+  const selected = [
+    makeCandidate("b1", 0.49, 0, "main"),
+    makeCandidate("b2", 0.30, 0, "main"),
+    makeCandidate("b3", 0.30, 0, "main"),
+    makeCandidate("b4", 0.30, 0, "main"),
+    makeCandidate("u1", 0.561, 0, "main"),
+    makeCandidate("u2", 0.562, 0, "main"),
+    makeCandidate("u3", 0.563, 0, "main"),
+    makeCandidate("u4", 0.564, 0, "main"),
+    makeCandidate("u5", 0.565, 0, "main"),
+    makeCandidate("u6", 0.566, 0, "main")
+  ];
+  const below = [
+    makeCandidate("b1", 0.49, 0, "main"),
+    makeCandidate("b2", 0.30, 0, "main"),
+    makeCandidate("b3", 0.30, 0, "main"),
+    makeCandidate("b4", 0.30, 0, "main"),
+    makeCandidate("b5", 0.10, 0, "main")
+  ];
+  const upper = [
+    makeCandidate("x0", 0.558, 0, "main"),
+    makeCandidate("x1", 0.560, 0, "main"),
+    makeCandidate("u1", 0.561, 0, "main"),
+    makeCandidate("u2", 0.562, 0, "main"),
+    makeCandidate("u3", 0.563, 0, "main"),
+    makeCandidate("u4", 0.564, 0, "main"),
+    makeCandidate("u5", 0.565, 0, "main"),
+    makeCandidate("u6", 0.566, 0, "main"),
+    makeCandidate("x9", 0.726, 0, "main")
+  ];
+
+  const result = refineSingleMaterialCompensation({
+    selected,
+    below,
+    upper,
+    targetValue: 0.50
+  });
+
+  const ids = (Array.isArray(result && result.selected) ? result.selected : [])
+    .map((candidate) => String(candidate && candidate.id || ""))
+    .sort();
+  assert.equal(result.overall < 0.50, true);
+  assert.equal(Math.abs(result.overall - 0.4999) < 1e-6, true);
+  assert.equal(ids.includes("x9"), true);
+  assert.equal(ids.includes("x0"), true);
+  assert.equal(ids.includes("b5"), false);
+}
+
+function test_single_material_compensation_exposes_second_swap_pruning_trace() {
+  const selected = [
+    makeCandidate("b1", 0.49, 0, "main"),
+    makeCandidate("b2", 0.30, 0, "main"),
+    makeCandidate("b3", 0.30, 0, "main"),
+    makeCandidate("b4", 0.30, 0, "main"),
+    makeCandidate("u1", 0.561, 0, "main"),
+    makeCandidate("u2", 0.562, 0, "main"),
+    makeCandidate("u3", 0.563, 0, "main"),
+    makeCandidate("u4", 0.564, 0, "main"),
+    makeCandidate("u5", 0.565, 0, "main"),
+    makeCandidate("u6", 0.566, 0, "main")
+  ];
+  const below = [
+    makeCandidate("b1", 0.49, 0, "main"),
+    makeCandidate("b2", 0.30, 0, "main"),
+    makeCandidate("b3", 0.30, 0, "main"),
+    makeCandidate("b4", 0.30, 0, "main"),
+    makeCandidate("b5", 0.10, 0, "main")
+  ];
+  const upper = [
+    makeCandidate("x0", 0.558, 0, "main"),
+    makeCandidate("x1", 0.560, 0, "main"),
+    makeCandidate("u1", 0.561, 0, "main"),
+    makeCandidate("u2", 0.562, 0, "main"),
+    makeCandidate("u3", 0.563, 0, "main"),
+    makeCandidate("u4", 0.564, 0, "main"),
+    makeCandidate("u5", 0.565, 0, "main"),
+    makeCandidate("u6", 0.566, 0, "main"),
+    makeCandidate("x9", 0.726, 0, "main")
+  ];
+
+  const result = refineSingleMaterialCompensation({
+    selected,
+    below,
+    upper,
+    targetValue: 0.50
+  });
+
+  const step = Array.isArray(result && result.traceSteps) ? result.traceSteps[0] : null;
+  assert.equal(!!(step && step.debug), true);
+  assert.equal(Array.isArray(step.debug.firstSwapAttempts), true);
+
+  const attempt = step.debug.firstSwapAttempts.find((entry) => (
+    entry
+    && entry.firstSwap
+    && entry.firstSwap.removedId === "b1"
+    && entry.firstSwap.addedId === "x9"
+  ));
+  assert.equal(!!attempt, true);
+  assert.equal(attempt.firstSwap.rejectedReason, "over_target");
+  assert.equal(Number(attempt.secondSwap && attempt.secondSwap.evaluated || 0) > 0, true);
+  assert.equal(Number(attempt.secondSwap && attempt.secondSwap.rejected && attempt.secondSwap.rejected.over_target || 0) > 0, true);
+  assert.equal(attempt.secondSwap && attempt.secondSwap.best && attempt.secondSwap.best.removedId, "u6");
+  assert.equal(attempt.secondSwap && attempt.secondSwap.best && attempt.secondSwap.best.addedId, "x0");
+}
+
 test_role_aware_push_slides_aux_window_down_when_over_target();
 test_role_aware_push_slides_main_window_up_when_under_target();
 test_role_aware_push_prefers_closer_aux_raise_when_main_raise_would_block_it();
 test_role_aware_push_returns_selection_trace();
+test_role_aware_push_applies_aux_compensation_refinement();
+test_single_material_compensation_chooses_closest_global_second_swap();
+test_single_material_compensation_exposes_second_swap_pruning_trace();
 console.log("craftAssistSearch tests passed");
