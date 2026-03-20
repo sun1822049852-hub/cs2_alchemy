@@ -329,6 +329,28 @@ function test_single_material_applies_compensation_refinement_after_push_limit()
   assert.equal(refineStep.debug.firstSwapAttempts.length > 0, true);
 }
 
+function test_single_material_keeps_hard_relative_cap_margin_near_target_edge() {
+  const rows = [];
+  for (let i = 1; i <= 9; i += 1) {
+    rows.push(makeRow({id: `e${i}`, name: "Solo", relative: 0.27}));
+  }
+  rows.push(makeRow({id: "tight", name: "Solo", relative: 0.2699999}));
+  rows.push(makeRow({id: "safe", name: "Solo", relative: 0.2699997}));
+
+  const result = runSelect({
+    rows,
+    targetWear: 0.27,
+    materials: [
+      {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.overall < 0.26999998, true);
+  assert.equal(result.item_ids.includes("safe"), true);
+  assert.equal(result.item_ids.includes("tight"), false);
+}
+
 function test_multi_material_allows_cross_side_compensation_for_closer_overall() {
   const rows = [
     makeRow({id: "m0", name: "Main", relative: 0.201757}),
@@ -437,6 +459,7 @@ test_single_material_non_unit_interval_still_uses_relative_centering();
 test_single_material_returns_selection_trace();
 test_single_material_starts_with_balanced_split_then_pushes_upward();
 test_single_material_applies_compensation_refinement_after_push_limit();
+test_single_material_keeps_hard_relative_cap_margin_near_target_edge();
 test_multi_material_allows_cross_side_compensation_for_closer_overall();
 test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
 test_multi_material_returns_selection_trace();

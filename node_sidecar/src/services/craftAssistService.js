@@ -4,6 +4,9 @@ const {compareScoreTuples, searchCraftAssistBestSolution} = require("./craftAssi
 const WEAR_INPUT_DECIMALS = 6;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
 const EPSILON = 1e-9;
+// Leave a tiny guard band so live craft results do not cross the requested
+// relative-wear cap due to float jitter such as 0.2700000107.
+const CRAFT_ASSIST_OUTCOME_RELATIVE_GUARD = 2e-8;
 const RARITY_MAP = {
   1: "Consumer",
   2: "Industrial",
@@ -46,6 +49,12 @@ function parseOptionalWear01(value) {
   if (!Number.isFinite(n)) return null;
   const clamped = Math.max(0, Math.min(1, n));
   return truncateNumber(clamped, WEAR_INPUT_DECIMALS);
+}
+
+function getCraftAssistOutcomeSafeTarget(targetValue) {
+  const target = Number(targetValue);
+  if (!Number.isFinite(target)) return targetValue;
+  return Math.max(0, target - CRAFT_ASSIST_OUTCOME_RELATIVE_GUARD);
 }
 
 function normalizeItemId(value) {
@@ -1023,11 +1032,12 @@ function runCraftAssistSelectionForRecipe({
 }) {
   const blocked = blockedIds instanceof Set ? blockedIds : new Set();
   const offsetHintText = getCraftAssistOffsetSettingHintText(wearOffsetPct);
+  const safeTargetValue = getCraftAssistOutcomeSafeTarget(targetValue);
   const prepared = materials.map((material) => {
-    const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, targetValue, {useRelativeFilter});
-    const estimate = pickCraftAssistClosest(cands, material.count, targetValue);
+    const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, safeTargetValue, {useRelativeFilter});
+    const estimate = pickCraftAssistClosest(cands, material.count, safeTargetValue);
     const estimateDiff = estimate.length
-      ? Math.abs(estimate.reduce((sum, item) => sum + Number(item.value), 0) / estimate.length - targetValue)
+      ? Math.abs(estimate.reduce((sum, item) => sum + Number(item.value), 0) / estimate.length - safeTargetValue)
       : Number.POSITIVE_INFINITY;
     return {material, candidates: cands, estimateDiff};
   });
@@ -1082,7 +1092,7 @@ function runCraftAssistSelectionForRecipe({
     if (groups.some((group) => group.candidates.length < Number(group.material && group.material.count || 0))) continue;
     const solved = searchCraftAssistBestSolution({
       groups,
-      targetValue
+      targetValue: safeTargetValue
     });
     if (!solved || !Array.isArray(solved.materialResults) || solved.overall == null) continue;
     if (!bestSolved
@@ -1123,21 +1133,21 @@ function runCraftAssistSelectionForRecipe({
   let overall = Number(bestSolved.overall);
   const selectionTrace = bestSolved.trace || null;
 
-  const outputOffset = getCraftAssistWearOffsetByTarget(targetValue, wearOffsetPct);
+  const outputOffset = getCraftAssistWearOffsetByTarget(safeTargetValue, wearOffsetPct);
   if (outputOffset > 0) {
-    const offsetLowerBound = Number(targetValue) - Number(outputOffset);
+    const offsetLowerBound = Number(safeTargetValue) - Number(outputOffset);
     const needOffsetRetry = overall < offsetLowerBound - EPSILON;
     if (needOffsetRetry) {
       applyCraftAssistOffsetWindowCorrection({
         materialResults,
-        targetValue,
+        targetValue: safeTargetValue,
         maxOffset: outputOffset
       });
       overall = calcCraftAssistOverallMean(materialResults);
       if (overall == null) {
         return {ok: false, code: "offset_result_invalid", message: "偏移修正后结果无效，请调整材料范围"};
       }
-      if (!(overall < targetValue - EPSILON)) {
+      if (!(overall < safeTargetValue - EPSILON)) {
         return {
           ok: false,
           code: "offset_pullback_exceeds_target",
@@ -1147,7 +1157,7 @@ function runCraftAssistSelectionForRecipe({
         };
       }
     }
-    const delta = Math.abs(Number(overall) - Number(targetValue));
+    const delta = Math.abs(Number(overall) - Number(safeTargetValue));
     if (delta > outputOffset + EPSILON) {
       const retryPrefix = needOffsetRetry ? "已执行偏移回拉重试，" : "";
       return {
