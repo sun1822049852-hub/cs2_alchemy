@@ -198,6 +198,38 @@ function deriveWearRange(row) {
   return max - min;
 }
 
+function ensureSkinTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skin (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      markethashname TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      basemarkethashname TEXT NOT NULL,
+      basename TEXT NOT NULL,
+      collection TEXT,
+      rarity TEXT,
+      wearlevel TEXT NOT NULL,
+      minfloat REAL,
+      maxfloat REAL,
+      isstattrak INTEGER DEFAULT 0,
+      buffid TEXT,
+      c5id TEXT,
+      youpinid TEXT,
+      createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
+      wear_range REAL,
+      alchemy_type TEXT DEFAULT '不能炼金',
+      detail_status TEXT DEFAULT 'pending',
+      detail_source TEXT DEFAULT '',
+      detail_checked_at DATETIME,
+      detail_error TEXT DEFAULT '',
+      detail_attempts INTEGER DEFAULT 0,
+      goods_icon_url TEXT DEFAULT '',
+      goods_original_icon_url TEXT DEFAULT '',
+      goods_share_thumbnail_url TEXT DEFAULT ''
+    )
+  `);
+}
+
 function ensureAlchemyTypeColumn(db) {
   const columns = db.prepare("PRAGMA table_info(skin)").all();
   if (columns.some((row) => asString(row.name).trim() === "alchemy_type")) {
@@ -508,6 +540,7 @@ async function syncSkinDb({
   const db = new DatabaseSync(dbPath);
   let baseStats = null;
   try {
+    ensureSkinTable(db);
     ensureAlchemyTypeColumn(db);
     ensureSkinDetailColumns(db);
     const existingMetadata = loadExistingMetadataMaps(db);

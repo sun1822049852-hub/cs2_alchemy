@@ -162,6 +162,48 @@ async function test_syncSkinDb_enriches_missing_wear_range_after_base_commit() {
   assert.equal(row.wear_range, 0.6);
 }
 
+async function test_syncSkinDb_creates_skin_table_for_empty_db_path() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cs2-alchemy-skin-db-empty-"));
+  const dbPath = path.join(tempDir, "skins.db");
+
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "AK-47 | 红线 (久经沙场)",
+        marketHashName: "AK-47 | Redline (Field-Tested)",
+        platformList: [{name: "BUFF", itemId: "1001"}]
+      }
+    ]
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const columns = new Set(
+    verify.prepare("PRAGMA table_info(skin)").all().map((row) => String(row.name || "").trim())
+  );
+  const row = verify.prepare(`
+    SELECT markethashname, buffid, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AK-47 | Redline (Field-Tested)");
+  verify.close();
+
+  assert.equal(result.importedItems, 1);
+  assert.equal(columns.has("detail_status"), true);
+  assert.equal(columns.has("detail_source"), true);
+  assert.equal(columns.has("detail_checked_at"), true);
+  assert.equal(columns.has("detail_error"), true);
+  assert.equal(columns.has("detail_attempts"), true);
+  assert.equal(columns.has("goods_icon_url"), true);
+  assert.equal(columns.has("goods_original_icon_url"), true);
+  assert.equal(columns.has("goods_share_thumbnail_url"), true);
+  assert.equal(row.markethashname, "AK-47 | Redline (Field-Tested)");
+  assert.equal(row.buffid, "1001");
+  assert.equal(row.goods_icon_url, "");
+  assert.equal(row.goods_original_icon_url, "");
+  assert.equal(row.goods_share_thumbnail_url, "");
+}
+
 async function runTests() {
   assert.equal(isImportableSkin({marketHashName: "AK-47 | Redline (Field-Tested)"}), true);
   assert.equal(isImportableSkin({marketHashName: "StatTrak™ AK-47 | Redline (Field-Tested)"}), true);
@@ -372,6 +414,7 @@ async function runTests() {
   await test_syncSkinDb_enriches_pending_rows_after_base_commit();
   await test_syncSkinDb_keeps_base_rows_when_enrichment_fails();
   await test_syncSkinDb_enriches_missing_wear_range_after_base_commit();
+  await test_syncSkinDb_creates_skin_table_for_empty_db_path();
 }
 
 (async () => {

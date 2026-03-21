@@ -55,10 +55,20 @@ npm run ui:cli
 
 用途分成两条：
 
-- 三部曲入口：先调用 SteamDT base info 接口抓取全量基础信息，保存为新的 `steam_base_info_*.json`，再重建 `csgo_skins.db`，最后自动补齐缺失的收藏品/品质等详情字段
-- JSON 重建入口：直接把现有 `steam_base_info_*.json` 里的全量饰品数据按当前数据库格式重建到 `csgo_skins.db`，并自动过滤非枪械物品（胶囊、音乐盒、探员、Sticker Slab、裸刀等）
+- 完整入口：先调用 SteamDT base info 接口抓取全量基础信息，保存为新的 `steam_base_info_*.json`，再重建 `csgo_skins.db`，最后自动补齐缺失的收藏品/品质、磨损区间、商品图片
+- JSON 重建入口：直接把现有 `steam_base_info_*.json` 里的全量饰品数据按当前数据库格式重建到 `csgo_skins.db`，并自动过滤非枪械物品（胶囊、音乐盒、探员、Sticker Slab、裸刀等），随后继续补齐缺失的收藏品/品质、磨损区间、商品图片
 
 脚本每次执行前会自动备份当前数据库。
+
+说明：
+
+- 对用户来说仍是一个重建入口
+- 对代码内部来说，当前实际流程是：
+  1. 自动创建或迁移 `skin` 表结构
+  2. 导入 SteamDT 基础信息
+  3. 通过 BUFF 补齐收藏品/品质
+  4. 通过 BUFF 补齐磨损区间
+  5. 通过 BUFF 补齐商品图片
 
 三部曲命令行用法：
 
