@@ -41,6 +41,16 @@ function printStats(stats) {
   console.log(`  补齐行数: ${Number(stats.detailStats && stats.detailStats.rows_filled || 0)}`);
   console.log(`  仍缺失行数: ${Number(stats.detailStats && stats.detailStats.rows_still_missing || 0)}`);
   console.log(`  无可用平台ID行数: ${Number(stats.detailStats && stats.detailStats.rows_no_supported_platform || 0)}`);
+  console.log("磨损区间补齐统计:");
+  console.log(`  待补磨损行数: ${Number(stats.detailStats && stats.detailStats.wear_rows_pending || 0)}`);
+  console.log(`  磨损补齐成功行数: ${Number(stats.detailStats && stats.detailStats.wear_rows_ok || 0)}`);
+  console.log(`  磨损补齐失败行数: ${Number(stats.detailStats && stats.detailStats.wear_rows_failed || 0)}`);
+  console.log(`  仍缺失磨损行数: ${Number(stats.detailStats && stats.detailStats.wear_rows_still_missing || 0)}`);
+  console.log("图片补齐统计:");
+  console.log(`  待补图片行数: ${Number(stats.detailStats && stats.detailStats.image_rows_pending || 0)}`);
+  console.log(`  图片补齐成功行数: ${Number(stats.detailStats && stats.detailStats.image_rows_ok || 0)}`);
+  console.log(`  图片补齐失败行数: ${Number(stats.detailStats && stats.detailStats.image_rows_failed || 0)}`);
+  console.log(`  仍缺失图片行数: ${Number(stats.detailStats && stats.detailStats.image_rows_still_missing || 0)}`);
   if (stats.detailStats && stats.detailStats.error) {
     console.log(`  补齐异常: ${stats.detailStats.error}`);
   }

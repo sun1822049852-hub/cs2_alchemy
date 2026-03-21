@@ -225,6 +225,15 @@ function ensureSkinDetailColumns(db) {
   if (!columns.has("detail_attempts")) {
     db.exec("ALTER TABLE skin ADD COLUMN detail_attempts INTEGER DEFAULT 0");
   }
+  if (!columns.has("goods_icon_url")) {
+    db.exec("ALTER TABLE skin ADD COLUMN goods_icon_url TEXT DEFAULT ''");
+  }
+  if (!columns.has("goods_original_icon_url")) {
+    db.exec("ALTER TABLE skin ADD COLUMN goods_original_icon_url TEXT DEFAULT ''");
+  }
+  if (!columns.has("goods_share_thumbnail_url")) {
+    db.exec("ALTER TABLE skin ADD COLUMN goods_share_thumbnail_url TEXT DEFAULT ''");
+  }
 }
 
 function summarizeError(err) {
@@ -250,6 +259,32 @@ function createDetailStatsSnapshot(db, extra = {}) {
     rows_filled: 0,
     rows_still_missing: Number(missingRow && missingRow.count || 0) || 0,
     rows_no_supported_platform: Number(noSupportedPlatformRow && noSupportedPlatformRow.count || 0) || 0,
+    wear_rows_pending: 0,
+    wear_rows_ok: 0,
+    wear_rows_failed: 0,
+    wear_rows_still_missing: Number(db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM skin
+      WHERE TRIM(COALESCE(markethashname, '')) <> ''
+        AND (
+          minfloat IS NULL
+          OR maxfloat IS NULL
+          OR wear_range IS NULL
+        )
+    `).get().count || 0) || 0,
+    image_rows_pending: 0,
+    image_rows_ok: 0,
+    image_rows_failed: 0,
+    image_rows_still_missing: Number(db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM skin
+      WHERE TRIM(COALESCE(markethashname, '')) <> ''
+        AND (
+          TRIM(COALESCE(goods_icon_url, '')) = ''
+          OR TRIM(COALESCE(goods_original_icon_url, '')) = ''
+          OR TRIM(COALESCE(goods_share_thumbnail_url, '')) = ''
+        )
+    `).get().count || 0) || 0,
     ...extra
   };
 }
@@ -319,9 +354,19 @@ function pickMostCommonNonEmpty(values) {
   return bestValue;
 }
 
+function pickFirstNonEmpty(values) {
+  for (const raw of Array.isArray(values) ? values : []) {
+    const value = asString(raw).trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
 function loadExistingMetadataMaps(db) {
   const rows = db.prepare(
-    "SELECT markethashname, basemarkethashname, collection, rarity, minfloat, maxfloat, wear_range FROM skin"
+    "SELECT id, markethashname, basemarkethashname, collection, rarity, minfloat, maxfloat, wear_range, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url FROM skin ORDER BY id"
   ).all();
   const exact = new Map();
   const familyBuckets = new Map();
@@ -331,7 +376,10 @@ function loadExistingMetadataMaps(db) {
       rarity: asString(row.rarity).trim(),
       minfloat: normalizeFloat(row.minfloat),
       maxfloat: normalizeFloat(row.maxfloat),
-      wear_range: normalizeFloat(row.wear_range)
+      wear_range: normalizeFloat(row.wear_range),
+      goods_icon_url: asString(row.goods_icon_url).trim(),
+      goods_original_icon_url: asString(row.goods_original_icon_url).trim(),
+      goods_share_thumbnail_url: asString(row.goods_share_thumbnail_url).trim()
     };
     const marketHashName = asString(row.markethashname).trim();
     exact.set(marketHashName, metadata);
@@ -353,7 +401,10 @@ function loadExistingMetadataMaps(db) {
       rarity: pickMostCommonNonEmpty(bucket.map((row) => row.rarity)),
       minfloat: pickFirstNonNull(bucket.map((row) => row.minfloat)),
       maxfloat: pickFirstNonNull(bucket.map((row) => row.maxfloat)),
-      wear_range: pickFirstNonNull(bucket.map((row) => row.wear_range))
+      wear_range: pickFirstNonNull(bucket.map((row) => row.wear_range)),
+      goods_icon_url: pickFirstNonEmpty(bucket.map((row) => row.goods_icon_url)),
+      goods_original_icon_url: pickFirstNonEmpty(bucket.map((row) => row.goods_original_icon_url)),
+      goods_share_thumbnail_url: pickFirstNonEmpty(bucket.map((row) => row.goods_share_thumbnail_url))
     });
   }
   return {exact, family};
@@ -389,7 +440,14 @@ function reuseExistingMetadata(record, existingMetadata) {
       ? current.wear_range
         : family && family.wear_range !== null && family.wear_range !== undefined
           ? family.wear_range
-          : null
+          : null,
+    goods_icon_url: asString((family && family.goods_icon_url) || (current && current.goods_icon_url)).trim(),
+    goods_original_icon_url: asString(
+      (family && family.goods_original_icon_url) || (current && current.goods_original_icon_url)
+    ).trim(),
+    goods_share_thumbnail_url: asString(
+      (family && family.goods_share_thumbnail_url) || (current && current.goods_share_thumbnail_url)
+    ).trim()
   };
 }
 
@@ -462,8 +520,9 @@ async function syncSkinDb({
       INSERT INTO skin (
         markethashname, name, basemarkethashname, basename, collection, rarity,
         wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid, wear_range, alchemy_type,
-        detail_status, detail_source, detail_checked_at, detail_error, detail_attempts
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        detail_status, detail_source, detail_checked_at, detail_error, detail_attempts,
+        goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(markethashname) DO UPDATE SET
         name = excluded.name,
         basemarkethashname = excluded.basemarkethashname,
@@ -483,7 +542,10 @@ async function syncSkinDb({
         detail_source = excluded.detail_source,
         detail_checked_at = excluded.detail_checked_at,
         detail_error = excluded.detail_error,
-        detail_attempts = excluded.detail_attempts
+        detail_attempts = excluded.detail_attempts,
+        goods_icon_url = excluded.goods_icon_url,
+        goods_original_icon_url = excluded.goods_original_icon_url,
+        goods_share_thumbnail_url = excluded.goods_share_thumbnail_url
     `);
 
     db.exec("BEGIN IMMEDIATE");
@@ -509,7 +571,10 @@ async function syncSkinDb({
           asString(row.detail_source).trim(),
           row.detail_checked_at,
           asString(row.detail_error).trim(),
-          Math.max(0, Math.trunc(Number(row.detail_attempts) || 0))
+          Math.max(0, Math.trunc(Number(row.detail_attempts) || 0)),
+          asString(row.goods_icon_url).trim(),
+          asString(row.goods_original_icon_url).trim(),
+          asString(row.goods_share_thumbnail_url).trim()
         );
       }
 
@@ -542,7 +607,12 @@ async function syncSkinDb({
       provider: detailProvider,
       logger,
       concurrency: detailConcurrency,
-      rarityOrder
+      rarityOrder,
+      imageBaseDelayMs: 1200,
+      imageRateLimitBackoffMs: 1500,
+      imageRateLimitMaxDelayMs: 15000,
+      imageDelayRelaxStepMs: 200,
+      imageDelayRelaxAfterSuccesses: 5
     });
     try {
       detailStats = await service.enrichMissingDetails();

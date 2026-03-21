@@ -116,6 +116,52 @@ async function test_syncSkinDb_keeps_base_rows_when_enrichment_fails() {
   assert.equal(String(row.detail_error || "").includes("detail api down"), true);
 }
 
+async function test_syncSkinDb_enriches_missing_wear_range_after_base_commit() {
+  const {dbPath, db} = createTempSkinDb();
+  db.close();
+
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "AK-47 | 红线 (久经沙场)",
+        marketHashName: "AK-47 | Redline (Field-Tested)",
+        platformList: [{name: "BUFF", itemId: "801"}]
+      }
+    ],
+    detailProvider: {
+      async fetchByGoodsId() {
+        return {
+          collection: "Gallery Case",
+          rarity: "受限",
+          detail_source: "buff"
+        };
+      },
+      async fetchWearRangeByGoodsId(goodsId) {
+        assert.equal(String(goodsId), "801");
+        return {
+          minfloat: 0.1,
+          maxfloat: 0.7,
+          wear_range: 0.6
+        };
+      }
+    }
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT markethashname, minfloat, maxfloat, wear_range
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AK-47 | Redline (Field-Tested)");
+  verify.close();
+
+  assert.equal(result.detailStats.wear_rows_ok, 1);
+  assert.equal(row.minfloat, 0.1);
+  assert.equal(row.maxfloat, 0.7);
+  assert.equal(row.wear_range, 0.6);
+}
+
 async function runTests() {
   assert.equal(isImportableSkin({marketHashName: "AK-47 | Redline (Field-Tested)"}), true);
   assert.equal(isImportableSkin({marketHashName: "StatTrak™ AK-47 | Redline (Field-Tested)"}), true);
@@ -195,6 +241,9 @@ async function runTests() {
   assert(columns.includes("detail_checked_at"));
   assert(columns.includes("detail_error"));
   assert(columns.includes("detail_attempts"));
+  assert(columns.includes("goods_icon_url"));
+  assert(columns.includes("goods_original_icon_url"));
+  assert(columns.includes("goods_share_thumbnail_url"));
 
   const {dbPath: familyDbPath, db: familyDb} = createTempSkinDb();
   familyDb.exec(`
@@ -272,8 +321,57 @@ async function runTests() {
   );
   assert.equal(fs.existsSync(path.join(path.dirname(dbPath), "steam_skins.db")), false);
 
+  const {dbPath: imageDbPath, db: imageDb} = createTempSkinDb();
+  imageDb.exec(`
+    ALTER TABLE skin ADD COLUMN goods_icon_url TEXT DEFAULT '';
+    ALTER TABLE skin ADD COLUMN goods_original_icon_url TEXT DEFAULT '';
+    ALTER TABLE skin ADD COLUMN goods_share_thumbnail_url TEXT DEFAULT '';
+    INSERT INTO skin (
+      markethashname, name, basemarkethashname, basename, collection, rarity,
+      wearlevel, isstattrak, buffid, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+    ) VALUES (
+      'AK-47 | Redline (Field-Tested)',
+      'AK-47 | 红线 (久经沙场)',
+      'AK-47 | Redline',
+      'AK-47 | 红线',
+      'Operation Phoenix Weapon Case',
+      '保密',
+      'Field-Tested',
+      0,
+      '9001',
+      'https://img.example/icon.webp',
+      'https://img.example/original.webp',
+      'https://img.example/share.webp'
+    )
+  `);
+  imageDb.close();
+
+  await syncSkinDb({
+    dbPath: imageDbPath,
+    items: [
+      {
+        name: "StatTrak™ AK-47 | 红线 (崭新出厂)",
+        marketHashName: "StatTrak™ AK-47 | Redline (Factory New)",
+        platformList: [{name: "BUFF", itemId: "9002"}]
+      }
+    ]
+  });
+
+  const imageVerify = new DatabaseSync(imageDbPath, {open: true, readOnly: true});
+  const imageRow = imageVerify.prepare(`
+    SELECT goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+    FROM skin
+    WHERE markethashname = ?
+  `).get("StatTrak™ AK-47 | Redline (Factory New)");
+  imageVerify.close();
+
+  assert.equal(imageRow.goods_icon_url, "https://img.example/icon.webp");
+  assert.equal(imageRow.goods_original_icon_url, "https://img.example/original.webp");
+  assert.equal(imageRow.goods_share_thumbnail_url, "https://img.example/share.webp");
+
   await test_syncSkinDb_enriches_pending_rows_after_base_commit();
   await test_syncSkinDb_keeps_base_rows_when_enrichment_fails();
+  await test_syncSkinDb_enriches_missing_wear_range_after_base_commit();
 }
 
 (async () => {

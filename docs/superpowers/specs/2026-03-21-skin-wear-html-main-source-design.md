@@ -17,8 +17,8 @@
 
 其中：
 
-- `paintwear_choices` 表示当前商品页可见的磨损区间桶
-- `relative_goods_ids` 表示同一家族的关联商品成员
+- `paintwear_choices` 的真实初始化数据位于 `var filter_data_selling = { ... }`
+- `relative_goods_ids` 表示同一家族的关联商品成员，但真实页面会混入 `StatTrak` 镜像成员
 
 因此，本设计将磨损补全主链调整为：
 
@@ -56,12 +56,18 @@
 
 ### 4.2 家族规模上限
 
-一个皮肤家族最多对应 5 个成员，也就是最多 5 个磨损区间版本。
+一个皮肤家族最多对应 5 个同轨成员，也就是最多 5 个磨损区间版本。
+
+真实探针已经证明：
+
+- 原始 `relative_goods_ids` 可能返回 `6` 个 id
+- 第 `6` 个常见情况不是第 `6` 个磨损档位，而是 `StatTrak` 镜像成员
 
 因此：
 
-- 家族成员上限固定为 `5`
-- 超出 `5` 视为页面数据异常或解析误判，必须落 `warn`
+- 先按 `seed goods_id` 的 `StatTrak` 属性过滤同轨成员
+- 过滤后的有效家族成员上限固定为 `5`
+- 若同轨成员仍超出 `5`，视为页面数据异常或解析误判，必须落 `warn`
 
 ### 4.3 避免无限递推
 
@@ -72,6 +78,8 @@
 1. 用第一页一次性定族
 2. 定族后逐页采样
 3. 后续页面返回的家族成员 id 只做一致性校验，不再继续扩张
+
+同时，真实页面在连续探针后可能返回 `429 Too Many Requests`。因此家族页采样必须保持低频，并复用现有请求重试与退避策略，不能把整族页面高并发扫完。
 
 ## 5. 方案对比
 
@@ -121,12 +129,13 @@
 
 1. 请求 `GET /goods/<seedGoodsId>?tab=selling&page_num=1`
 2. 解析第一页中的：
-   - `paintwear_choices`
+   - `filter_data_selling.paintwear_choices`
    - `relative_goods_ids`
-3. 用第一页一次性确定 `familyGoodsIds`
-4. 逐个访问 `familyGoodsIds` 的成员页
-5. 对所有成功页面的 `paintwear_choices` 取并集
-6. 得到 `main_min` / `main_max`
+3. 基于 `seed goods_id` 的 `StatTrak` 属性过滤同轨成员
+4. 用第一页一次性确定 `familyGoodsIds`
+5. 逐个访问 `familyGoodsIds` 的成员页
+6. 对所有成功页面的 `paintwear_choices` 取并集
+7. 得到 `main_min` / `main_max`
 
 ### 6.2 补源链
 
@@ -161,9 +170,12 @@ provider 最终仍返回统一结构：
 
 定族规则：
 
-- `familyGoodsIds = unique(seedGoodsId + relative_goods_ids)`
+- 先得到 `candidateGoodsIds = unique(seedGoodsId + relative_goods_ids)`
+- 原始候选集合允许出现 `StatTrak` 镜像成员，因此允许临时达到 `6` 个
+- 需要基于 `seed goods_id` 的 `StatTrak` 属性，过滤出与 `seed` 同轨的候选成员
+- `familyGoodsIds = filteredSameTrackGoodsIds`
 - 若第一页没有解析出 `relative_goods_ids`，则退化为只包含 `seedGoodsId`
-- 若唯一成员数大于 `5`，截到前 `5` 个并落 `warn=family_size_exceeded`
+- 若过滤后的唯一成员数大于 `5`，截到前 `5` 个并落 `warn=family_size_exceeded`
 
 一旦 `familyGoodsIds` 定下来，后续不再允许扩张。
 
@@ -173,20 +185,34 @@ provider 最终仍返回统一结构：
 
 - 每个 `goods_id` 最多访问一次
 - 只解析 `paintwear_choices`
+- 需同时解析页面标题中的 `StatTrak` 属性，用于和 `seed` 做同轨校验
 - 若页面中再次返回家族成员 id，只与第一页定下的集合比较
 - 若不一致，落 `warn=family_goods_mismatch`
 - 不因为后续页面的新 id 再次入队或递推
 
-因此整族请求上界固定为成员数，最多 `5` 页。
+因此整族请求上界固定为：
+
+- 原始候选探测最多 `6` 页
+- 有效同轨家族采样最多 `5` 页
 
 ### 7.3 `paintwear_choices` 解析规则
 
 解析器只提取页面内联脚本中的磨损桶数组，不依赖 DOM 树结构。
 
+真实页面同时存在：
+
+- 模板片段中的 `paintwear_choices`
+- 初始化对象 `var filter_data_selling = { ... paintwear_choices: ... }`
+
+因此解析时不能抓到第一个同名字符串就停止，必须明确锚定 `filter_data_selling` 初始化对象中的 `paintwear_choices`。
+
 目标数据形态示意：
 
 ```js
-paintwear_choices: [["0.10","0.11"],["0.11","0.12"]]
+var filter_data_selling = {
+  paintwear_choices: [["0.10","0.11"],["0.11","0.12"]],
+  fade_choices: ...
+}
 ```
 
 解析后统一转为：
@@ -218,6 +244,8 @@ paintwear_choices: [["0.10","0.11"],["0.11","0.12"]]
 - `main_min = 所有成功页面 pageMin 的最小值`
 - `main_max = 所有成功页面 pageMax 的最大值`
 - `main_range = main_max - main_min`
+
+如果原始关联页里混入了 `StatTrak` 镜像成员，则这些页面只用于识别和过滤轨道，不参与非同轨整族区间并集。
 
 ## 8. 补源 `paintwear_rank` 设计
 
@@ -299,7 +327,7 @@ paintwear_choices: [["0.10","0.11"],["0.11","0.12"]]
 ### 10.1 家族规模异常
 
 ```text
-wear family=<familyKey> seed_goods_id=<seed> closure_goods_ids=<ids> warn=family_size_exceeded
+wear family=<familyKey> seed_goods_id=<seed> candidate_goods_ids=<ids> filtered_goods_ids=<ids> warn=family_size_exceeded
 ```
 
 ### 10.2 家族成员不一致
@@ -354,15 +382,16 @@ wear family=<familyKey> seed_goods_id=<seed> closure_goods_ids=<ids> final_range
 
 在 `tests/buffSkinDetailProvider.test.js` 中新增以下场景：
 
-1. `seed` 页一次性解析出 5 个成员 id，逐页并集得到完整主源区间
-2. 后续成员页重复返回同样的家族 id，不触发递推，访问页数仍不超过 `5`
+1. `seed` 页解析出 `6` 个原始成员 id，其中 `1` 个是 `StatTrak` 镜像；过滤同轨后只保留 `5` 个真实磨损成员
+2. 后续成员页重复返回同样的家族 id，不触发递推；原始探测页数不超过 `6`，有效采样页数不超过 `5`
 3. `seed` 页解析不到家族成员 id，退化为只访问当前 `seed`
 4. 主源部分页面失败，但至少一页成功，仍能得到有效主源区间
 5. 主源已是 `0~1`，即使排行不完整也判成功
 6. 主源非 `0~1`，排行缺任一成员时整组作废并落 `rank_incomplete`
 7. 主源与排行冲突时，最终区间向外扩边并落 `range_expanded`
 8. 成员页返回的家族成员集合与第一页不一致，落 `family_goods_mismatch`
-9. 第 1 页解析出超过 `5` 个成员时截断并落 `family_size_exceeded`
+9. 过滤后的同轨成员仍超过 `5` 个时截断并落 `family_size_exceeded`
+10. 页面前部模板片段也包含 `paintwear_choices` 字样时，解析器仍应从 `filter_data_selling` 抽取真实初始化桶
 
 ### 12.2 enrichment 测试
 
@@ -377,9 +406,10 @@ wear family=<familyKey> seed_goods_id=<seed> closure_goods_ids=<ids> final_range
 满足以下条件即视为达标：
 
 1. 磨损补全主链不再依赖 `goods/info`
-2. 从任意一个家族成员页出发，都能在最多 `5` 页请求内完成整族主源采样
-3. 同一家族成员页重复返回成员 id 时，不会出现无限递推
-4. 主源与补源冲突时，最终区间取更大范围并写 `warn`
-5. 补源不完整时，不会把部分排行结果误当整族结果
-6. 主源已是 `0~1` 时，可绕过补源完整性要求直接成功
-7. 现有数据库写回结构保持不变，只更新 `minfloat`、`maxfloat`、`wear_range`
+2. 从任意一个家族成员页出发，都能在原始候选探测最多 `6` 页、有效同轨采样最多 `5` 页的约束内完成整族主源采样
+3. 原始 `relative_goods_ids` 混入 `StatTrak` 镜像成员时，系统能正确过滤出与 `seed` 同轨的有效家族成员
+4. 同一家族成员页重复返回成员 id 时，不会出现无限递推
+5. 主源与补源冲突时，最终区间取更大范围并写 `warn`
+6. 补源不完整时，不会把部分排行结果误当整族结果
+7. 主源已是 `0~1` 时，可绕过补源完整性要求直接成功
+8. 现有数据库写回结构保持不变，只更新 `minfloat`、`maxfloat`、`wear_range`

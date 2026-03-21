@@ -29,6 +29,9 @@ function createTempSkinDb() {
       youpinid TEXT,
       createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
       wear_range REAL,
+      goods_icon_url TEXT DEFAULT '',
+      goods_original_icon_url TEXT DEFAULT '',
+      goods_share_thumbnail_url TEXT DEFAULT '',
       alchemy_type TEXT DEFAULT '不能炼金',
       detail_status TEXT DEFAULT 'pending',
       detail_source TEXT DEFAULT '',
@@ -45,9 +48,9 @@ function insertSkinRows(db, rows) {
     INSERT INTO skin (
       markethashname, name, basemarkethashname, basename, collection, rarity,
       wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid,
-      wear_range, alchemy_type, detail_status, detail_source, detail_checked_at,
-      detail_error, detail_attempts
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      wear_range, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url,
+      alchemy_type, detail_status, detail_source, detail_checked_at, detail_error, detail_attempts
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const row of rows) {
     stmt.run(
@@ -65,6 +68,9 @@ function insertSkinRows(db, rows) {
       row.c5id || "",
       row.youpinid || "",
       row.wear_range == null ? null : row.wear_range,
+      row.goods_icon_url || "",
+      row.goods_original_icon_url || "",
+      row.goods_share_thumbnail_url || "",
       row.alchemy_type || "不能炼金",
       row.detail_status || "pending",
       row.detail_source || "",
@@ -129,6 +135,69 @@ async function test_enrichment_updates_whole_family_once() {
   assert.equal(rows.every((row) => row.detail_status === "ok"), true);
   assert.equal(rows.every((row) => row.detail_source === "buff"), true);
   assert.equal(rows.every((row) => row.detail_attempts === 1), true);
+}
+
+async function test_enrichment_fills_images_per_family_once() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "★ Butterfly Knife | Blue Steel (Battle-Scarred)",
+      basemarkethashname: "★ Butterfly Knife | Blue Steel",
+      collection: "",
+      rarity: "",
+      wearlevel: "Battle-Scarred",
+      buffid: "201",
+      detail_status: "pending"
+    },
+    {
+      markethashname: "★ StatTrak™ Butterfly Knife | Blue Steel (Factory New)",
+      basemarkethashname: "★ StatTrak™ Butterfly Knife | Blue Steel",
+      isstattrak: 1,
+      collection: "",
+      rarity: "",
+      wearlevel: "Factory New",
+      buffid: "202",
+      detail_status: "pending"
+    }
+  ]);
+  db.close();
+
+  const detailCalls = [];
+  const imageCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId(goodsId) {
+        detailCalls.push(String(goodsId));
+        return {collection: "Gallery Case", rarity: "隐秘", detail_source: "buff"};
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        imageCalls.push(String(goodsId));
+        return {
+          goods_icon_url: `https://img.example/${goodsId}/icon.webp`,
+          goods_original_icon_url: `https://img.example/${goodsId}/original.webp`,
+          goods_share_thumbnail_url: `https://img.example/${goodsId}/share.webp`
+        };
+      }
+    }
+  });
+
+  const result = await service.enrichMissingDetails();
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const rows = verify.prepare(`
+    SELECT markethashname, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+    FROM skin
+    ORDER BY markethashname
+  `).all();
+  verify.close();
+
+  assert.deepEqual(detailCalls, ["201"]);
+  assert.deepEqual(imageCalls, ["201"]);
+  assert.equal(result.image_rows_ok, 2);
+  assert.equal(rows[0].goods_original_icon_url, "https://img.example/201/original.webp");
+  assert.equal(rows[1].goods_original_icon_url, "https://img.example/201/original.webp");
+  assert.equal(rows[0].goods_share_thumbnail_url, "https://img.example/201/share.webp");
+  assert.equal(rows[1].goods_share_thumbnail_url, "https://img.example/201/share.webp");
 }
 
 async function test_enrichment_marks_family_failed() {
@@ -215,6 +284,228 @@ async function test_enrichment_skips_ok_rows() {
   assert.equal(result.families_failed, 0);
 }
 
+async function test_enrichment_fills_images_for_ok_rows_with_missing_image() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AK-47 | Redline (Field-Tested)",
+      basemarkethashname: "AK-47 | Redline",
+      collection: "Operation Phoenix Weapon Case",
+      rarity: "保密",
+      wearlevel: "Field-Tested",
+      buffid: "401",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    }
+  ]);
+  db.close();
+
+  const imageCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        imageCalls.push(String(goodsId));
+        return {
+          goods_icon_url: "https://img.example/401/icon.webp",
+          goods_original_icon_url: "https://img.example/401/original.webp",
+          goods_share_thumbnail_url: "https://img.example/401/share.webp"
+        };
+      }
+    }
+  });
+
+  const result = await service.enrichMissingDetails();
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AK-47 | Redline (Field-Tested)");
+  verify.close();
+
+  assert.deepEqual(imageCalls, ["401"]);
+  assert.equal(result.image_rows_ok, 1);
+  assert.equal(row.goods_original_icon_url, "https://img.example/401/original.webp");
+  assert.equal(row.goods_share_thumbnail_url, "https://img.example/401/share.webp");
+}
+
+async function test_enrichment_fills_wear_range_per_family_once() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AK-47 | Slate (Field-Tested)",
+      basemarkethashname: "AK-47 | Slate",
+      collection: "Snakebite Case",
+      rarity: "保密",
+      wearlevel: "Field-Tested",
+      buffid: "701",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "AK-47 | Slate (Minimal Wear)",
+      basemarkethashname: "AK-47 | Slate",
+      collection: "Snakebite Case",
+      rarity: "保密",
+      wearlevel: "Minimal Wear",
+      buffid: "702",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    }
+  ]);
+  db.close();
+
+  const wearCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchWearRangeByGoodsId(goodsId, options = {}) {
+        wearCalls.push({
+          goodsId: String(goodsId),
+          familyKey: String(options.familyKey || "")
+        });
+        return {
+          minfloat: 0,
+          maxfloat: 1,
+          wear_range: 1
+        };
+      }
+    }
+  });
+
+  const result = await service.enrichMissingDetails();
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const rows = verify.prepare(`
+    SELECT markethashname, minfloat, maxfloat, wear_range
+    FROM skin
+    ORDER BY markethashname
+  `).all();
+  verify.close();
+
+  assert.deepEqual(wearCalls, [{
+    goodsId: "701",
+    familyKey: buildSkinFamilyKey("AK-47 | Slate")
+  }]);
+  assert.equal(result.wear_rows_pending, 2);
+  assert.equal(result.wear_rows_ok, 2);
+  assert.equal(result.wear_rows_failed, 0);
+  assert.equal(result.wear_rows_still_missing, 0);
+  assert.equal(rows[0].minfloat, 0);
+  assert.equal(rows[0].maxfloat, 1);
+  assert.equal(rows[0].wear_range, 1);
+  assert.equal(rows[1].minfloat, 0);
+  assert.equal(rows[1].maxfloat, 1);
+  assert.equal(rows[1].wear_range, 1);
+}
+
+async function test_enrichment_images_only_can_resume_from_db_state() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AK-47 | Redline (Field-Tested)",
+      basemarkethashname: "AK-47 | Redline",
+      collection: "Operation Phoenix Weapon Case",
+      rarity: "保密",
+      wearlevel: "Field-Tested",
+      buffid: "501",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "AK-47 | Redline (Minimal Wear)",
+      basemarkethashname: "AK-47 | Redline",
+      collection: "Operation Phoenix Weapon Case",
+      rarity: "保密",
+      wearlevel: "Minimal Wear",
+      buffid: "502",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "AWP | Asiimov (Field-Tested)",
+      basemarkethashname: "AWP | Asiimov",
+      collection: "Operation Phoenix Weapon Case",
+      rarity: "隐秘",
+      wearlevel: "Field-Tested",
+      buffid: "601",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "AWP | Asiimov (Battle-Scarred)",
+      basemarkethashname: "AWP | Asiimov",
+      collection: "Operation Phoenix Weapon Case",
+      rarity: "隐秘",
+      wearlevel: "Battle-Scarred",
+      buffid: "602",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    }
+  ]);
+  db.close();
+
+  const imageCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        imageCalls.push(String(goodsId));
+        return {
+          goods_icon_url: `https://img.example/${goodsId}/icon.webp`,
+          goods_original_icon_url: `https://img.example/${goodsId}/original.webp`,
+          goods_share_thumbnail_url: `https://img.example/${goodsId}/share.webp`
+        };
+      }
+    }
+  });
+
+  const first = await service.enrichMissingImages({limitFamilies: 1});
+  const midVerify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const midRows = midVerify.prepare(`
+    SELECT markethashname, goods_original_icon_url
+    FROM skin
+    ORDER BY markethashname
+  `).all();
+  midVerify.close();
+
+  assert.deepEqual(imageCalls, ["501"]);
+  assert.equal(first.image_rows_pending, 2);
+  assert.equal(first.image_rows_ok, 2);
+  assert.equal(first.image_rows_still_missing, 2);
+  assert.equal(midRows[0].goods_original_icon_url, "https://img.example/501/original.webp");
+  assert.equal(midRows[1].goods_original_icon_url, "https://img.example/501/original.webp");
+  assert.equal(midRows[2].goods_original_icon_url, "");
+  assert.equal(midRows[3].goods_original_icon_url, "");
+
+  const second = await service.enrichMissingImages();
+  const endVerify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const endRows = endVerify.prepare(`
+    SELECT markethashname, goods_original_icon_url
+    FROM skin
+    ORDER BY markethashname
+  `).all();
+  endVerify.close();
+
+  assert.deepEqual(imageCalls, ["501", "601"]);
+  assert.equal(second.image_rows_pending, 2);
+  assert.equal(second.image_rows_ok, 2);
+  assert.equal(second.image_rows_still_missing, 0);
+  assert.equal(endRows[0].goods_original_icon_url, "https://img.example/501/original.webp");
+  assert.equal(endRows[1].goods_original_icon_url, "https://img.example/501/original.webp");
+  assert.equal(endRows[2].goods_original_icon_url, "https://img.example/601/original.webp");
+  assert.equal(endRows[3].goods_original_icon_url, "https://img.example/601/original.webp");
+}
+
 async function test_enrichment_recalculates_alchemy_type_for_affected_rows() {
   const {dbPath, db} = createTempSkinDb();
   insertSkinRows(db, [
@@ -275,6 +566,94 @@ async function test_enrichment_recalculates_alchemy_type_for_affected_rows() {
   assert.equal(rows.every((row) => row.alchemy_type === "10合1"), true);
 }
 
+async function test_enrichment_increases_delay_after_rate_limit_and_relaxes_after_success() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AK-47 | Slate (Field-Tested)",
+      basemarkethashname: "AK-47 | Slate",
+      collection: "Snakebite Case",
+      rarity: "保密",
+      wearlevel: "Field-Tested",
+      buffid: "701",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "M4A1-S | Night Terror (Field-Tested)",
+      basemarkethashname: "M4A1-S | Night Terror",
+      collection: "Dreams & Nightmares Case",
+      rarity: "军规级",
+      wearlevel: "Field-Tested",
+      buffid: "801",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "USP-S | Ticket to Hell (Field-Tested)",
+      basemarkethashname: "USP-S | Ticket to Hell",
+      collection: "Dreams & Nightmares Case",
+      rarity: "受限",
+      wearlevel: "Field-Tested",
+      buffid: "901",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    }
+  ]);
+  db.close();
+
+  const imageCalls = [];
+  const sleepCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        imageCalls.push(String(goodsId));
+        if (String(goodsId) === "701") {
+          const err = new Error("buff goods page goods_id=701 http=429");
+          err.statusCode = 429;
+          throw err;
+        }
+        return {
+          goods_icon_url: `https://img.example/${goodsId}/icon.webp`,
+          goods_original_icon_url: `https://img.example/${goodsId}/original.webp`,
+          goods_share_thumbnail_url: `https://img.example/${goodsId}/share.webp`
+        };
+      }
+    },
+    concurrency: 1,
+    imageSleepImpl: async (ms) => {
+      sleepCalls.push(ms);
+    },
+    imageRateLimitBackoffMs: 25,
+    imageRateLimitMaxDelayMs: 50,
+    imageDelayRelaxStepMs: 10,
+    imageDelayRelaxAfterSuccesses: 1
+  });
+
+  const result = await service.enrichMissingImages({delayMs: 0});
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const rows = verify.prepare(`
+    SELECT markethashname, goods_original_icon_url
+    FROM skin
+    ORDER BY markethashname
+  `).all();
+  verify.close();
+
+  assert.deepEqual(imageCalls, ["701", "801", "901"]);
+  assert.deepEqual(sleepCalls, [25, 15]);
+  assert.equal(result.image_rows_pending, 3);
+  assert.equal(result.image_rows_ok, 2);
+  assert.equal(result.image_rows_failed, 1);
+  assert.equal(result.image_rows_still_missing, 1);
+  assert.equal(rows[0].goods_original_icon_url, "");
+  assert.equal(rows[1].goods_original_icon_url, "https://img.example/801/original.webp");
+  assert.equal(rows[2].goods_original_icon_url, "https://img.example/901/original.webp");
+}
+
 async function runTests() {
   assert.equal(
     buildSkinFamilyKey("★ Butterfly Knife | Blue Steel"),
@@ -287,9 +666,14 @@ async function runTests() {
   );
 
   await test_enrichment_updates_whole_family_once();
+  await test_enrichment_fills_images_per_family_once();
   await test_enrichment_marks_family_failed();
   await test_enrichment_skips_ok_rows();
+  await test_enrichment_fills_images_for_ok_rows_with_missing_image();
+  await test_enrichment_fills_wear_range_per_family_once();
+  await test_enrichment_images_only_can_resume_from_db_state();
   await test_enrichment_recalculates_alchemy_type_for_affected_rows();
+  await test_enrichment_increases_delay_after_rate_limit_and_relaxes_after_success();
 }
 
 (async () => {

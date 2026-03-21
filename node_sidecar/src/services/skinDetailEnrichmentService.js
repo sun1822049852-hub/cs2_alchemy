@@ -18,8 +18,88 @@ function createSummary() {
     families_failed: 0,
     rows_filled: 0,
     rows_still_missing: 0,
-    rows_no_supported_platform: 0
+    rows_no_supported_platform: 0,
+    wear_rows_pending: 0,
+    wear_rows_ok: 0,
+    wear_rows_failed: 0,
+    wear_rows_still_missing: 0,
+    image_rows_pending: 0,
+    image_rows_ok: 0,
+    image_rows_failed: 0,
+    image_rows_still_missing: 0
   };
+}
+
+function normalizeWearInfo(value) {
+  const rawMinfloat = value && value.minfloat;
+  const rawMaxfloat = value && value.maxfloat;
+  const wearRangeRaw = value && value.wear_range;
+  const minfloat = rawMinfloat === null || rawMinfloat === undefined || rawMinfloat === ""
+    ? NaN
+    : Number(rawMinfloat);
+  const maxfloat = rawMaxfloat === null || rawMaxfloat === undefined || rawMaxfloat === ""
+    ? NaN
+    : Number(rawMaxfloat);
+  const wear_range = Number.isFinite(Number(wearRangeRaw))
+    ? Number(wearRangeRaw)
+    : (Number.isFinite(minfloat) && Number.isFinite(maxfloat) ? maxfloat - minfloat : NaN);
+  return {
+    minfloat: Number.isFinite(minfloat) ? minfloat : null,
+    maxfloat: Number.isFinite(maxfloat) ? maxfloat : null,
+    wear_range: Number.isFinite(wear_range) ? wear_range : null
+  };
+}
+
+function hasCompleteWearInfo(value) {
+  const wearInfo = normalizeWearInfo(value);
+  return wearInfo.minfloat !== null && wearInfo.maxfloat !== null && wearInfo.wear_range !== null;
+}
+
+function normalizeImageInfo(value) {
+  return {
+    goods_icon_url: asString(value && value.goods_icon_url).trim(),
+    goods_original_icon_url: asString(value && value.goods_original_icon_url).trim(),
+    goods_share_thumbnail_url: asString(value && value.goods_share_thumbnail_url).trim()
+  };
+}
+
+function hasAnyImageInfo(value) {
+  const imageInfo = normalizeImageInfo(value);
+  return Boolean(
+    imageInfo.goods_icon_url ||
+    imageInfo.goods_original_icon_url ||
+    imageInfo.goods_share_thumbnail_url
+  );
+}
+
+function hasCompleteImageInfo(value) {
+  const imageInfo = normalizeImageInfo(value);
+  return Boolean(
+    imageInfo.goods_icon_url &&
+    imageInfo.goods_original_icon_url &&
+    imageInfo.goods_share_thumbnail_url
+  );
+}
+
+function buildFamilyKeyFromRow(row) {
+  return buildSkinFamilyKey(
+    asString(row && row.basemarkethashname).trim() ||
+    asString(row && row.markethashname).trim()
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Math.trunc(Number(ms) || 0)));
+  });
+}
+
+function normalizeDelayMs(value, fallback = 0) {
+  const parsed = Math.trunc(Number(value));
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return Math.max(0, Math.trunc(Number(fallback) || 0));
 }
 
 function mapWithConcurrency(items, concurrency, iteratee) {
@@ -39,6 +119,82 @@ function mapWithConcurrency(items, concurrency, iteratee) {
 function summarizeError(err) {
   const text = asString(err && err.message ? err.message : err).trim();
   return text || "detail_enrichment_failed";
+}
+
+function isRateLimitLikeError(err) {
+  if (Math.trunc(Number(err && err.statusCode) || 0) === 429) {
+    return true;
+  }
+  const text = asString(err && err.message ? err.message : err).toLowerCase();
+  return /http=429|too many requests/.test(text);
+}
+
+function createImageRequestController({
+  baseDelayMs = 0,
+  sleepImpl = sleep,
+  rateLimitBackoffMs = 0,
+  rateLimitMaxDelayMs = 0,
+  delayRelaxStepMs = 0,
+  delayRelaxAfterSuccesses = 1,
+  logger = null
+} = {}) {
+  const minDelayMs = normalizeDelayMs(baseDelayMs);
+  const backoffMs = normalizeDelayMs(rateLimitBackoffMs);
+  const maxDelayMs = Math.max(
+    minDelayMs,
+    normalizeDelayMs(rateLimitMaxDelayMs, Math.max(minDelayMs, backoffMs))
+  );
+  const relaxStepMs = normalizeDelayMs(delayRelaxStepMs);
+  const relaxAfter = Math.max(1, Math.trunc(Number(delayRelaxAfterSuccesses) || 0) || 1);
+  const sleepFn = typeof sleepImpl === "function" ? sleepImpl : sleep;
+  let currentDelayMs = minDelayMs;
+  let successStreak = 0;
+  let hasStarted = false;
+  let queue = Promise.resolve();
+
+  function updateDelay(nextDelayMs, reason) {
+    const normalized = Math.max(minDelayMs, normalizeDelayMs(nextDelayMs, currentDelayMs));
+    if (normalized === currentDelayMs) {
+      return;
+    }
+    currentDelayMs = normalized;
+    log(logger, "info", `image_throttle reason=${reason} delay_ms=${currentDelayMs}`);
+  }
+
+  async function run(task) {
+    const scheduled = queue.then(async () => {
+      if (hasStarted && currentDelayMs > 0) {
+        await sleepFn(currentDelayMs);
+      }
+      hasStarted = true;
+      try {
+        const result = await task();
+        if (relaxStepMs > 0 && currentDelayMs > minDelayMs) {
+          successStreak += 1;
+          if (successStreak >= relaxAfter) {
+            successStreak = 0;
+            updateDelay(Math.max(minDelayMs, currentDelayMs - relaxStepMs), "relax");
+          }
+        }
+        return result;
+      } catch (error) {
+        successStreak = 0;
+        if (backoffMs > 0 && isRateLimitLikeError(error)) {
+          const nextDelayMs = currentDelayMs > 0
+            ? Math.min(maxDelayMs, currentDelayMs + backoffMs)
+            : Math.min(maxDelayMs, backoffMs);
+          updateDelay(nextDelayMs, "rate_limit");
+        }
+        throw error;
+      }
+    });
+    queue = scheduled.catch(() => {});
+    return scheduled;
+  }
+
+  return {
+    run
+  };
 }
 
 function recalculateAlchemyTypesForCollections(db, affectedCollections, options = {}) {
@@ -81,7 +237,13 @@ function createSkinDetailEnrichmentService({
   provider,
   logger = null,
   concurrency = 2,
-  rarityOrder = []
+  rarityOrder = [],
+  imageBaseDelayMs = 0,
+  imageSleepImpl = sleep,
+  imageRateLimitBackoffMs = 1500,
+  imageRateLimitMaxDelayMs = 15000,
+  imageDelayRelaxStepMs = 250,
+  imageDelayRelaxAfterSuccesses = 3
 } = {}) {
   if (!asString(dbPath).trim()) {
     throw new Error("dbPath is required");
@@ -164,6 +326,279 @@ function createSkinDetailEnrichmentService({
     return ids.length;
   }
 
+  function loadPendingImageFamilies(db, options = {}) {
+    const rows = db.prepare(`
+      SELECT id, markethashname, basemarkethashname, buffid,
+             goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+      FROM skin
+      WHERE TRIM(COALESCE(markethashname, '')) <> ''
+      ORDER BY id
+    `).all();
+    const families = new Map();
+    for (const row of rows) {
+      const familyKey = buildFamilyKeyFromRow(row);
+      if (!familyKey) {
+        continue;
+      }
+      if (!families.has(familyKey)) {
+        families.set(familyKey, []);
+      }
+      families.get(familyKey).push(row);
+    }
+    const list = [...families.entries()].map(([familyKey, members]) => {
+      const mergedImageInfo = normalizeImageInfo({
+        goods_icon_url: members.map((row) => asString(row && row.goods_icon_url).trim()).find(Boolean) || "",
+        goods_original_icon_url: members.map((row) => asString(row && row.goods_original_icon_url).trim()).find(Boolean) || "",
+        goods_share_thumbnail_url: members.map((row) => asString(row && row.goods_share_thumbnail_url).trim()).find(Boolean) || ""
+      });
+      const pendingRows = members.filter((row) => !hasCompleteImageInfo(row));
+      return {
+        familyKey,
+        rows: members,
+        pendingRows,
+        representativeGoodsId: asString(
+          (members.find((row) => asString(row && row.buffid).trim()) || {}).buffid
+        ).trim(),
+        imageInfo: hasAnyImageInfo(mergedImageInfo) ? mergedImageInfo : null
+      };
+    }).filter((family) => family.pendingRows.length > 0);
+    const limitFamilies = Math.max(0, Math.trunc(Number(options.limitFamilies) || 0));
+    if (limitFamilies > 0) {
+      return list.slice(0, limitFamilies);
+    }
+    return list;
+  }
+
+  function loadPendingWearFamilies(db, options = {}) {
+    const rows = db.prepare(`
+      SELECT id, markethashname, basemarkethashname, buffid, minfloat, maxfloat, wear_range
+      FROM skin
+      WHERE TRIM(COALESCE(markethashname, '')) <> ''
+      ORDER BY id
+    `).all();
+    const families = new Map();
+    for (const row of rows) {
+      const familyKey = buildFamilyKeyFromRow(row);
+      if (!familyKey) {
+        continue;
+      }
+      if (!families.has(familyKey)) {
+        families.set(familyKey, []);
+      }
+      families.get(familyKey).push(row);
+    }
+    const list = [...families.entries()].map(([familyKey, members]) => {
+      const mergedWearInfo = normalizeWearInfo({
+        minfloat: members.map((row) => row.minfloat).find((value) => value !== null && value !== undefined),
+        maxfloat: members.map((row) => row.maxfloat).find((value) => value !== null && value !== undefined),
+        wear_range: members.map((row) => row.wear_range).find((value) => value !== null && value !== undefined)
+      });
+      const pendingRows = members.filter((row) => {
+        const wearInfo = normalizeWearInfo(row);
+        return !hasCompleteWearInfo(wearInfo);
+      });
+      return {
+        familyKey,
+        rows: members,
+        pendingRows,
+        representativeGoodsId: asString(
+          (members.find((row) => asString(row && row.buffid).trim()) || {}).buffid
+        ).trim(),
+        wearInfo: hasCompleteWearInfo(mergedWearInfo) ? mergedWearInfo : null
+      };
+    }).filter((family) => family.pendingRows.length > 0);
+    const limitFamilies = Math.max(0, Math.trunc(Number(options.limitFamilies) || 0));
+    if (limitFamilies > 0) {
+      return list.slice(0, limitFamilies);
+    }
+    return list;
+  }
+
+  function markFamilyImagesOk(db, family, imageInfo) {
+    const ids = family.rows.map((row) => Number(row.id)).filter((id) => Number.isFinite(id));
+    if (!ids.length) {
+      return 0;
+    }
+    const placeholders = ids.map(() => "?").join(",");
+    db.prepare(`
+      UPDATE skin
+      SET goods_icon_url = ?,
+          goods_original_icon_url = ?,
+          goods_share_thumbnail_url = ?
+      WHERE id IN (${placeholders})
+    `).run(
+      asString(imageInfo && imageInfo.goods_icon_url).trim(),
+      asString(imageInfo && imageInfo.goods_original_icon_url).trim(),
+      asString(imageInfo && imageInfo.goods_share_thumbnail_url).trim(),
+      ...ids
+    );
+    return family.pendingRows.length;
+  }
+
+  function markFamilyWearOk(db, family, wearInfo) {
+    const ids = family.rows.map((row) => Number(row.id)).filter((id) => Number.isFinite(id));
+    if (!ids.length) {
+      return 0;
+    }
+    const normalizedWearInfo = normalizeWearInfo(wearInfo);
+    const placeholders = ids.map(() => "?").join(",");
+    db.prepare(`
+      UPDATE skin
+      SET minfloat = ?,
+          maxfloat = ?,
+          wear_range = ?
+      WHERE id IN (${placeholders})
+    `).run(
+      normalizedWearInfo.minfloat,
+      normalizedWearInfo.maxfloat,
+      normalizedWearInfo.wear_range,
+      ...ids
+    );
+    return family.pendingRows.length;
+  }
+
+  async function enrichPendingWear(summary, options = {}) {
+    if (typeof provider.fetchWearRangeByGoodsId !== "function") {
+      return summary;
+    }
+
+    const wearFamilies = [];
+    let db = new DatabaseSync(dbPath);
+    try {
+      for (const family of loadPendingWearFamilies(db, options)) {
+        wearFamilies.push(family);
+        summary.wear_rows_pending += family.pendingRows.length;
+      }
+    } finally {
+      db.close();
+    }
+
+    await mapWithConcurrency(wearFamilies, concurrency, async (family) => {
+      const workerDb = new DatabaseSync(dbPath);
+      try {
+        let wearInfo = hasCompleteWearInfo(family.wearInfo) ? family.wearInfo : null;
+        if (!wearInfo) {
+          if (!family.representativeGoodsId) {
+            summary.wear_rows_failed += family.pendingRows.length;
+            log(
+              logger,
+              "warn",
+              `wear family=${family.familyKey} goods_id=- err=no_supported_platform_id`
+            );
+            return;
+          }
+          wearInfo = await provider.fetchWearRangeByGoodsId(family.representativeGoodsId, {
+            familyKey: family.familyKey
+          });
+        }
+        summary.wear_rows_ok += markFamilyWearOk(workerDb, family, wearInfo);
+      } catch (err) {
+        summary.wear_rows_failed += family.pendingRows.length;
+        log(
+          logger,
+          "warn",
+          `wear family=${family.familyKey} goods_id=${family.representativeGoodsId || "-"} err=${summarizeError(err)}`
+        );
+      } finally {
+        workerDb.close();
+      }
+    });
+
+    db = new DatabaseSync(dbPath);
+    try {
+      const wearRow = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM skin
+        WHERE TRIM(COALESCE(markethashname, '')) <> ''
+          AND (
+            minfloat IS NULL
+            OR maxfloat IS NULL
+            OR wear_range IS NULL
+          )
+      `).get();
+      summary.wear_rows_still_missing = Number(wearRow && wearRow.count || 0) || 0;
+    } finally {
+      db.close();
+    }
+    return summary;
+  }
+
+  async function enrichPendingImages(summary, options = {}) {
+    if (typeof provider.fetchGoodsImageByGoodsId !== "function") {
+      return summary;
+    }
+
+    const imageFamilies = [];
+    const delayMs = normalizeDelayMs(options.delayMs, imageBaseDelayMs);
+    const imageRequestController = createImageRequestController({
+      baseDelayMs: delayMs,
+      sleepImpl: imageSleepImpl,
+      rateLimitBackoffMs: imageRateLimitBackoffMs,
+      rateLimitMaxDelayMs: imageRateLimitMaxDelayMs,
+      delayRelaxStepMs: imageDelayRelaxStepMs,
+      delayRelaxAfterSuccesses: imageDelayRelaxAfterSuccesses,
+      logger
+    });
+    let db = new DatabaseSync(dbPath);
+    try {
+      for (const family of loadPendingImageFamilies(db, options)) {
+        imageFamilies.push(family);
+        summary.image_rows_pending += family.pendingRows.length;
+      }
+    } finally {
+      db.close();
+    }
+
+    await mapWithConcurrency(imageFamilies, concurrency, async (family) => {
+      const workerDb = new DatabaseSync(dbPath);
+      try {
+        let imageInfo = hasCompleteImageInfo(family.imageInfo) ? family.imageInfo : null;
+        if (!imageInfo) {
+          if (!family.representativeGoodsId) {
+            summary.image_rows_failed += family.pendingRows.length;
+            log(
+              logger,
+              "warn",
+              `image family=${family.familyKey} goods_id=- err=no_supported_platform_id`
+            );
+            return;
+          }
+          imageInfo = await imageRequestController.run(
+            () => provider.fetchGoodsImageByGoodsId(family.representativeGoodsId)
+          );
+        }
+        summary.image_rows_ok += markFamilyImagesOk(workerDb, family, imageInfo);
+      } catch (err) {
+        summary.image_rows_failed += family.pendingRows.length;
+        log(
+          logger,
+          "warn",
+          `image family=${family.familyKey} goods_id=${family.representativeGoodsId || "-"} err=${summarizeError(err)}`
+        );
+      } finally {
+        workerDb.close();
+      }
+    });
+
+    db = new DatabaseSync(dbPath);
+    try {
+      const imageRow = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM skin
+        WHERE TRIM(COALESCE(markethashname, '')) <> ''
+          AND (
+            TRIM(COALESCE(goods_icon_url, '')) = ''
+            OR TRIM(COALESCE(goods_original_icon_url, '')) = ''
+            OR TRIM(COALESCE(goods_share_thumbnail_url, '')) = ''
+          )
+      `).get();
+      summary.image_rows_still_missing = Number(imageRow && imageRow.count || 0) || 0;
+    } finally {
+      db.close();
+    }
+    return summary;
+  }
+
   async function enrichMissingDetails() {
     const summary = createSummary();
     const families = [];
@@ -221,11 +656,25 @@ function createSkinDetailEnrichmentService({
     } finally {
       db.close();
     }
+
+    await enrichPendingWear(summary);
+    await enrichPendingImages(summary);
+
     return summary;
   }
 
   return {
-    enrichMissingDetails
+    enrichMissingDetails,
+    async enrichMissingWear(options = {}) {
+      const summary = createSummary();
+      await enrichPendingWear(summary, options);
+      return summary;
+    },
+    async enrichMissingImages(options = {}) {
+      const summary = createSummary();
+      await enrichPendingImages(summary, options);
+      return summary;
+    }
   };
 }
 
