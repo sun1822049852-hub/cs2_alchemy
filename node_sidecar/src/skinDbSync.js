@@ -177,7 +177,13 @@ function parseSkinRecord(item) {
     isstattrak: /StatTrak/i.test(markethashname) || /StatTrak/i.test(name) ? 1 : 0,
     buffid: ids.buffid,
     c5id: ids.c5id,
-    youpinid: ids.youpinid
+    youpinid: ids.youpinid,
+    buffprice: null,
+    c5price: null,
+    youpinprice: null,
+    buffprice_updated_at: null,
+    c5price_updated_at: null,
+    youpinprice_updated_at: null
   };
 }
 
@@ -187,6 +193,19 @@ function normalizeFloat(value) {
   }
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function normalizeInteger(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const n = Math.trunc(Number(value));
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeDateTimeText(value) {
+  const text = asString(value).trim();
+  return text || null;
 }
 
 function deriveWearRange(row) {
@@ -215,6 +234,12 @@ function ensureSkinTable(db) {
       buffid TEXT,
       c5id TEXT,
       youpinid TEXT,
+      buffprice INTEGER,
+      c5price INTEGER,
+      youpinprice INTEGER,
+      buffprice_updated_at DATETIME,
+      c5price_updated_at DATETIME,
+      youpinprice_updated_at DATETIME,
       createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
       wear_range REAL,
       alchemy_type TEXT DEFAULT '不能炼金',
@@ -265,6 +290,30 @@ function ensureSkinDetailColumns(db) {
   }
   if (!columns.has("goods_share_thumbnail_url")) {
     db.exec("ALTER TABLE skin ADD COLUMN goods_share_thumbnail_url TEXT DEFAULT ''");
+  }
+}
+
+function ensureSkinPriceColumns(db) {
+  const columns = new Set(
+    db.prepare("PRAGMA table_info(skin)").all().map((row) => asString(row.name).trim())
+  );
+  if (!columns.has("buffprice")) {
+    db.exec("ALTER TABLE skin ADD COLUMN buffprice INTEGER");
+  }
+  if (!columns.has("c5price")) {
+    db.exec("ALTER TABLE skin ADD COLUMN c5price INTEGER");
+  }
+  if (!columns.has("youpinprice")) {
+    db.exec("ALTER TABLE skin ADD COLUMN youpinprice INTEGER");
+  }
+  if (!columns.has("buffprice_updated_at")) {
+    db.exec("ALTER TABLE skin ADD COLUMN buffprice_updated_at DATETIME");
+  }
+  if (!columns.has("c5price_updated_at")) {
+    db.exec("ALTER TABLE skin ADD COLUMN c5price_updated_at DATETIME");
+  }
+  if (!columns.has("youpinprice_updated_at")) {
+    db.exec("ALTER TABLE skin ADD COLUMN youpinprice_updated_at DATETIME");
   }
 }
 
@@ -398,7 +447,7 @@ function pickFirstNonEmpty(values) {
 
 function loadExistingMetadataMaps(db) {
   const rows = db.prepare(
-    "SELECT id, markethashname, basemarkethashname, collection, rarity, minfloat, maxfloat, wear_range, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url FROM skin ORDER BY id"
+    "SELECT id, markethashname, basemarkethashname, collection, rarity, minfloat, maxfloat, wear_range, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url, buffprice, c5price, youpinprice, buffprice_updated_at, c5price_updated_at, youpinprice_updated_at FROM skin ORDER BY id"
   ).all();
   const exact = new Map();
   const familyBuckets = new Map();
@@ -411,7 +460,13 @@ function loadExistingMetadataMaps(db) {
       wear_range: normalizeFloat(row.wear_range),
       goods_icon_url: asString(row.goods_icon_url).trim(),
       goods_original_icon_url: asString(row.goods_original_icon_url).trim(),
-      goods_share_thumbnail_url: asString(row.goods_share_thumbnail_url).trim()
+      goods_share_thumbnail_url: asString(row.goods_share_thumbnail_url).trim(),
+      buffprice: normalizeInteger(row.buffprice),
+      c5price: normalizeInteger(row.c5price),
+      youpinprice: normalizeInteger(row.youpinprice),
+      buffprice_updated_at: normalizeDateTimeText(row.buffprice_updated_at),
+      c5price_updated_at: normalizeDateTimeText(row.c5price_updated_at),
+      youpinprice_updated_at: normalizeDateTimeText(row.youpinprice_updated_at)
     };
     const marketHashName = asString(row.markethashname).trim();
     exact.set(marketHashName, metadata);
@@ -479,7 +534,25 @@ function reuseExistingMetadata(record, existingMetadata) {
     ).trim(),
     goods_share_thumbnail_url: asString(
       (family && family.goods_share_thumbnail_url) || (current && current.goods_share_thumbnail_url)
-    ).trim()
+    ).trim(),
+    buffprice: current && current.buffprice !== null && current.buffprice !== undefined
+      ? current.buffprice
+      : record.buffprice,
+    c5price: current && current.c5price !== null && current.c5price !== undefined
+      ? current.c5price
+      : record.c5price,
+    youpinprice: current && current.youpinprice !== null && current.youpinprice !== undefined
+      ? current.youpinprice
+      : record.youpinprice,
+    buffprice_updated_at: current && current.buffprice_updated_at
+      ? current.buffprice_updated_at
+      : record.buffprice_updated_at,
+    c5price_updated_at: current && current.c5price_updated_at
+      ? current.c5price_updated_at
+      : record.c5price_updated_at,
+    youpinprice_updated_at: current && current.youpinprice_updated_at
+      ? current.youpinprice_updated_at
+      : record.youpinprice_updated_at
   };
 }
 
@@ -543,6 +616,7 @@ async function syncSkinDb({
     ensureSkinTable(db);
     ensureAlchemyTypeColumn(db);
     ensureSkinDetailColumns(db);
+    ensureSkinPriceColumns(db);
     const existingMetadata = loadExistingMetadataMaps(db);
     const targetRows = buildTargetRecords(items, {existingMetadata, rarityOrder});
     const existingKeys = [...existingMetadata.exact.keys()];
@@ -552,10 +626,12 @@ async function syncSkinDb({
     const upsert = db.prepare(`
       INSERT INTO skin (
         markethashname, name, basemarkethashname, basename, collection, rarity,
-        wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid, wear_range, alchemy_type,
+        wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid,
+        buffprice, c5price, youpinprice, buffprice_updated_at, c5price_updated_at, youpinprice_updated_at,
+        wear_range, alchemy_type,
         detail_status, detail_source, detail_checked_at, detail_error, detail_attempts,
         goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(markethashname) DO UPDATE SET
         name = excluded.name,
         basemarkethashname = excluded.basemarkethashname,
@@ -569,6 +645,12 @@ async function syncSkinDb({
         buffid = excluded.buffid,
         c5id = excluded.c5id,
         youpinid = excluded.youpinid,
+        buffprice = excluded.buffprice,
+        c5price = excluded.c5price,
+        youpinprice = excluded.youpinprice,
+        buffprice_updated_at = excluded.buffprice_updated_at,
+        c5price_updated_at = excluded.c5price_updated_at,
+        youpinprice_updated_at = excluded.youpinprice_updated_at,
         wear_range = excluded.wear_range,
         alchemy_type = excluded.alchemy_type,
         detail_status = excluded.detail_status,
@@ -598,6 +680,12 @@ async function syncSkinDb({
           asString(row.buffid).trim(),
           asString(row.c5id).trim(),
           asString(row.youpinid).trim(),
+          normalizeInteger(row.buffprice),
+          normalizeInteger(row.c5price),
+          normalizeInteger(row.youpinprice),
+          normalizeDateTimeText(row.buffprice_updated_at),
+          normalizeDateTimeText(row.c5price_updated_at),
+          normalizeDateTimeText(row.youpinprice_updated_at),
           normalizeFloat(row.wear_range),
           asString(row.alchemy_type).trim() || "不能炼金",
           asString(row.detail_status).trim() || "pending",

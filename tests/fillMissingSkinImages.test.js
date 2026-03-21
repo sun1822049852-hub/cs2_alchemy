@@ -29,6 +29,12 @@ function createTempSkinDb() {
       buffid TEXT,
       c5id TEXT,
       youpinid TEXT,
+      buffprice INTEGER,
+      c5price INTEGER,
+      youpinprice INTEGER,
+      buffprice_updated_at DATETIME,
+      c5price_updated_at DATETIME,
+      youpinprice_updated_at DATETIME,
       createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
       wear_range REAL,
       goods_icon_url TEXT DEFAULT '',
@@ -50,9 +56,10 @@ function insertSkinRows(db, rows) {
     INSERT INTO skin (
       markethashname, name, basemarkethashname, basename, collection, rarity,
       wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid,
+      buffprice, c5price, youpinprice, buffprice_updated_at, c5price_updated_at, youpinprice_updated_at,
       wear_range, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url,
       alchemy_type, detail_status, detail_source, detail_checked_at, detail_error, detail_attempts
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const row of rows) {
     stmt.run(
@@ -69,6 +76,12 @@ function insertSkinRows(db, rows) {
       row.buffid || "",
       row.c5id || "",
       row.youpinid || "",
+      row.buffprice == null ? null : row.buffprice,
+      row.c5price == null ? null : row.c5price,
+      row.youpinprice == null ? null : row.youpinprice,
+      row.buffprice_updated_at || null,
+      row.c5price_updated_at || null,
+      row.youpinprice_updated_at || null,
       row.wear_range == null ? null : row.wear_range,
       row.goods_icon_url || "",
       row.goods_original_icon_url || "",

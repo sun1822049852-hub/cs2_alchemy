@@ -204,6 +204,46 @@ async function test_syncSkinDb_creates_skin_table_for_empty_db_path() {
   assert.equal(row.goods_share_thumbnail_url, "");
 }
 
+async function test_syncSkinDb_creates_price_columns_for_empty_db_path() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cs2-alchemy-skin-db-price-"));
+  const dbPath = path.join(tempDir, "skins.db");
+
+  await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "M4A1-S | 澎湃之力 (崭新出厂)",
+        marketHashName: "M4A1-S | Hyper Beast (Factory New)",
+        platformList: [{name: "BUFF", itemId: "1101"}]
+      }
+    ]
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const columns = new Set(
+    verify.prepare("PRAGMA table_info(skin)").all().map((row) => String(row.name || "").trim())
+  );
+  const row = verify.prepare(`
+    SELECT buffprice, c5price, youpinprice, buffprice_updated_at, c5price_updated_at, youpinprice_updated_at
+    FROM skin
+    WHERE markethashname = ?
+  `).get("M4A1-S | Hyper Beast (Factory New)");
+  verify.close();
+
+  assert.equal(columns.has("buffprice"), true);
+  assert.equal(columns.has("c5price"), true);
+  assert.equal(columns.has("youpinprice"), true);
+  assert.equal(columns.has("buffprice_updated_at"), true);
+  assert.equal(columns.has("c5price_updated_at"), true);
+  assert.equal(columns.has("youpinprice_updated_at"), true);
+  assert.equal(row.buffprice, null);
+  assert.equal(row.c5price, null);
+  assert.equal(row.youpinprice, null);
+  assert.equal(row.buffprice_updated_at, null);
+  assert.equal(row.c5price_updated_at, null);
+  assert.equal(row.youpinprice_updated_at, null);
+}
+
 async function runTests() {
   assert.equal(isImportableSkin({marketHashName: "AK-47 | Redline (Field-Tested)"}), true);
   assert.equal(isImportableSkin({marketHashName: "StatTrak™ AK-47 | Redline (Field-Tested)"}), true);
@@ -415,6 +455,7 @@ async function runTests() {
   await test_syncSkinDb_keeps_base_rows_when_enrichment_fails();
   await test_syncSkinDb_enriches_missing_wear_range_after_base_commit();
   await test_syncSkinDb_creates_skin_table_for_empty_db_path();
+  await test_syncSkinDb_creates_price_columns_for_empty_db_path();
 }
 
 (async () => {
