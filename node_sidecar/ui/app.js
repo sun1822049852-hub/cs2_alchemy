@@ -21,7 +21,7 @@ const state = {
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
-  craftSelectedItemIds: new Set(), craftBusy: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 360,
+  craftSelectedItemIds: new Set(), craftBusy: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftQueueDeleteMode: false, craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 360,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "",
   craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false,
@@ -74,7 +74,7 @@ const ui = {
   craftLeftPanel: document.getElementById("craftLeftPanel"), craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
   craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
   craftAddRecipeBtn: document.getElementById("craftAddRecipeBtn"), craftExecuteQueueBtn: document.getElementById("craftExecuteQueueBtn"),
-  craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftQueueList: document.getElementById("craftQueueList"),
+  craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftQueueDeleteModeBtn: document.getElementById("craftQueueDeleteModeBtn"), craftQueueList: document.getElementById("craftQueueList"),
   craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
   craftAssistOverlayHandle: document.getElementById("craftAssistOverlayHandle"), craftAssistPanel: document.getElementById("craftAssistPanel"), craftAssistCloseBtn: document.getElementById("craftAssistCloseBtn"),
   craftAssistTargetWear: document.getElementById("craftAssistTargetWear"),
@@ -2716,7 +2716,7 @@ function renderCraftQueueSlots({
   itemIds,
   rowsById,
   metaItems = [],
-  removable = false,
+  showDeleteAction = false,
   onRemove = null,
   onRemoveItem = null,
   active = false,
@@ -2745,14 +2745,16 @@ function renderCraftQueueSlots({
   titleEl.className = "craft-queue-group-title";
   titleEl.textContent = String(title || "").trim() || "#";
   head.append(titleEl);
-  if (removable) {
+  if (showDeleteAction && typeof onRemove === "function") {
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.textContent = "移除";
-    removeBtn.disabled = state.craftBusy;
+    removeBtn.className = "craft-queue-card-delete";
+    removeBtn.title = "删除该配方";
+    removeBtn.setAttribute("aria-label", "删除该配方");
+    removeBtn.textContent = "−";
     removeBtn.onclick = (evt) => {
       evt.stopPropagation();
-      if (typeof onRemove === "function") onRemove();
+      onRemove();
     };
     head.append(removeBtn);
   }
@@ -5031,6 +5033,9 @@ function renderCraftAssistPanel() {
   renderCraftAssistPresetPanel();
   if (typeof renderCraftAssistBusyMask === "function") renderCraftAssistBusyMask();
 }
+function isCraftQueueDeleteModeVisible() {
+  return !!state.craftQueueDeleteMode && !state.refreshing && !state.craftBusy && !state.craftAssistSelecting;
+}
 function renderCraftQueue() {
   if (!ui.craftQueueList) return;
   const prevScrollTop = Math.max(0, Number(ui.craftQueueList.scrollTop || 0) || 0);
@@ -5039,14 +5044,27 @@ function renderCraftQueue() {
   const rowsById = buildRowsByAssetId(state.rows);
   if (!list.length) {
     const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = "暂无配方，点击“添加配方”创建";
+    empty.className = "craft-queue-empty";
+    const emptyIcon = document.createElement("div");
+    emptyIcon.className = "craft-queue-empty-icon";
+    emptyIcon.textContent = "◇";
+    const emptyBody = document.createElement("div");
+    emptyBody.className = "craft-queue-empty-body";
+    const line1 = document.createElement("div");
+    line1.append("点击上方", document.createElement("strong"), "创建配方");
+    line1.querySelector("strong").textContent = "加号";
+    const line2 = document.createElement("div");
+    line2.append("或点击", document.createElement("strong"), "进行快捷选材");
+    line2.querySelector("strong").textContent = "闪电图标";
+    emptyBody.append(line1, line2);
+    empty.append(emptyIcon, emptyBody);
     ui.craftQueueList.append(empty);
     ui.craftQueueList.scrollTop = 0;
     return;
   }
 
   let pendingIndex = 0;
+  const showDeleteAction = isCraftQueueDeleteModeVisible();
   for (let i = 0; i < list.length; i += 1) {
     const entry = list[i];
     const done = String(entry && entry.status || "").trim() === "done";
@@ -5090,7 +5108,7 @@ function renderCraftQueue() {
             clearCraftStatus();
             renderCraftPage();
           },
-          removable: true,
+          showDeleteAction,
           onRemoveItem: (assetId) => {
             entry.item_ids = normalizeCraftRecipeItemIds(entry.item_ids).filter((id) => id !== String(assetId || "").trim());
             syncCraftRecipeEntryItemSources(entry, rowsById);
@@ -5113,7 +5131,7 @@ function renderCraftQueue() {
     }
 
     const doneRow = document.createElement("div");
-    doneRow.className = "craft-queue-item done";
+    doneRow.className = `craft-queue-item done${showDeleteAction ? " deletable" : ""}`;
     const resultWrap = document.createElement("div");
     resultWrap.className = "craft-queue-result";
     const gainedIds = normalizeCraftRecipeItemIds(entry && entry.gained_ids);
@@ -5132,28 +5150,28 @@ function renderCraftQueue() {
     wearLine.className = "craft-queue-result-wear";
     wearLine.textContent = `wear: ${wears.length ? wears.join("，") : "-"}`;
     resultWrap.append(resultTitle, wearLine);
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.textContent = "移除";
-    removeBtn.disabled = state.craftBusy;
-    removeBtn.onclick = () => {
-      state.craftRecipeQueue = state.craftRecipeQueue.filter((x) => x.id !== entry.id);
-      clearCraftStatus();
-      renderCraftPage();
-    };
-    doneRow.append(resultWrap, removeBtn);
+    doneRow.append(resultWrap);
+    if (showDeleteAction) {
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "craft-queue-card-delete craft-queue-card-delete-floating";
+      removeBtn.title = "删除该配方";
+      removeBtn.setAttribute("aria-label", "删除该配方");
+      removeBtn.textContent = "−";
+      removeBtn.onclick = () => {
+        state.craftRecipeQueue = state.craftRecipeQueue.filter((x) => x.id !== entry.id);
+        clearCraftStatus();
+        renderCraftPage();
+      };
+      doneRow.append(removeBtn);
+    }
     ui.craftQueueList.append(doneRow);
   }
   const maxScrollTop = Math.max(0, ui.craftQueueList.scrollHeight - ui.craftQueueList.clientHeight);
   ui.craftQueueList.scrollTop = Math.min(prevScrollTop, maxScrollTop);
 }
 function addCurrentSelectionToCraftQueue() {
-  const connected = isCurrentAccountConnected();
-  if (!connected) {
-    setCraftStatus("请先连接并刷新库存", true);
-    return;
-  }
-  if (state.craftBusy || state.refreshing) return;
+  if (state.craftBusy || state.refreshing || state.craftAssistSelecting) return;
   if (getCraftQueuePendingCount() >= 50) {
     setCraftStatus("配方预览最多 50 组配方", true);
     return;
@@ -5168,9 +5186,10 @@ function addCurrentSelectionToCraftQueue() {
 }
 function clearCraftQueue() {
   if (!state.craftRecipeQueue.length) return;
-  if (state.craftBusy) return;
+  if (state.craftBusy || state.craftAssistSelecting) return;
   state.craftRecipeQueue = [];
   state.craftActiveRecipeId = "";
+  state.craftQueueDeleteMode = false;
   state.craftSelectedItemIds.clear();
   clearCraftStatus();
   setCraftStatus("已清空配方预览");
@@ -5218,23 +5237,32 @@ function renderCraftPage() {
   const queueCount = state.craftRecipeQueue.length;
   const pendingQueueCount = getCraftQueuePendingCount();
   const executableCount = getCraftExecutableEntries().length;
+  if (queueCount <= 0 && state.craftQueueDeleteMode) state.craftQueueDeleteMode = false;
+  const topActionsLocked = state.refreshing || state.craftBusy || state.craftAssistSelecting;
 
   if (ui.craftSelectedText) ui.craftSelectedText.textContent = `当前槽位：${selectedRows.length}/10，可执行：${executableCount}组`;
   if (ui.craftRecipeText) ui.craftRecipeText.textContent = recipeInfo.text;
   syncCraftStatusDom();
   renderCraftQueue();
   if (ui.craftAddRecipeBtn) {
-    ui.craftAddRecipeBtn.disabled = !connected || state.refreshing || state.craftBusy || pendingQueueCount >= 50;
+    ui.craftAddRecipeBtn.disabled = topActionsLocked || pendingQueueCount >= 50;
   }
   if (ui.craftExecuteQueueBtn) {
-    ui.craftExecuteQueueBtn.textContent = state.craftBusy ? "执行中..." : "执行";
-    ui.craftExecuteQueueBtn.disabled = !connected || state.refreshing || state.craftBusy || executableCount <= 0;
+    const executeLabel = state.craftBusy ? "执行中..." : "执行配方";
+    ui.craftExecuteQueueBtn.disabled = !connected || topActionsLocked || executableCount <= 0;
+    ui.craftExecuteQueueBtn.title = executeLabel;
+    ui.craftExecuteQueueBtn.setAttribute("aria-label", executeLabel);
   }
   if (ui.craftClearQueueBtn) {
-    ui.craftClearQueueBtn.disabled = state.craftBusy || queueCount <= 0;
+    ui.craftClearQueueBtn.disabled = topActionsLocked || queueCount <= 0;
+  }
+  if (ui.craftQueueDeleteModeBtn) {
+    ui.craftQueueDeleteModeBtn.disabled = topActionsLocked || queueCount <= 0;
+    ui.craftQueueDeleteModeBtn.classList.toggle("active", !!state.craftQueueDeleteMode && queueCount > 0);
+    ui.craftQueueDeleteModeBtn.setAttribute("aria-pressed", state.craftQueueDeleteMode && queueCount > 0 ? "true" : "false");
   }
   if (ui.craftAssistToggleBtn) {
-    ui.craftAssistToggleBtn.disabled = state.refreshing || state.craftBusy;
+    ui.craftAssistToggleBtn.disabled = topActionsLocked;
   }
   renderCraftAssistPanel();
 
@@ -5251,7 +5279,7 @@ function renderCraftPage() {
     else if (selectedRows.length >= 10 && recipeInfo.ok) setCraftStatus("当前配方已满10件，可执行，或先新增配方继续填充");
     else if (pendingQueueCount > 0) setCraftStatus(`当前有 ${pendingQueueCount} 组配方槽位，点击左侧物品会填充到当前高亮槽位`);
     else if (queueCount > 0) setCraftStatus("本轮产物已回写到预览，可继续添加新配方");
-    else if (selectedRows.length !== 10) setCraftStatus("可随时新增配方；点击左侧物品会填充到当前高亮槽位");
+    else if (selectedRows.length !== 10) setCraftStatus("点击上方加号创建配方，或点击闪电图标进行快捷选材");
     else if (!recipeInfo.ok) setCraftStatus(recipeInfo.reason || "所选物品不满足炼金规则", true);
     else setCraftStatus("已满足炼金条件，可添加配方");
   } else if (!state.craftStatusError && recipeInfo.ok && connected && !state.craftBusy) {
@@ -7063,6 +7091,14 @@ function bindEvents() {
   if (ui.craftAddRecipeBtn) {
     ui.craftAddRecipeBtn.onclick = () => {
       addCurrentSelectionToCraftQueue();
+    };
+  }
+  if (ui.craftQueueDeleteModeBtn) {
+    ui.craftQueueDeleteModeBtn.onclick = () => {
+      if (!state.craftRecipeQueue.length || state.refreshing || state.craftBusy || state.craftAssistSelecting) return;
+      state.craftQueueDeleteMode = !state.craftQueueDeleteMode;
+      setCraftStatus(state.craftQueueDeleteMode ? "删除模式已开启，点击配方右上角减号即可删除" : "已关闭删除模式");
+      renderCraftPage();
     };
   }
   if (ui.craftAssistToggleBtn) {

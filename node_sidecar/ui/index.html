@@ -275,20 +275,30 @@
             </section>
             <div id="craftSplitBar" class="craft-split-bar" title="拖拽调整左右区域宽度" aria-hidden="true"></div>
             <section id="craftRightPanel" class="panel craft-right-panel">
-              <div class="row">
-                <span>配方预览</span>
+              <div class="row craft-queue-header">
+                <div class="craft-queue-header-spacer" aria-hidden="true"></div>
+                <div class="craft-queue-header-actions" aria-label="配方操作">
+                  <button id="craftAssistToggleBtn" class="icon-btn craft-queue-icon-btn craft-assist-toggle-btn" type="button" title="快捷选材" aria-label="快捷选材">
+                    <span class="craft-assist-glyph" aria-hidden="true"></span>
+                  </button>
+                  <button id="craftAddRecipeBtn" class="icon-btn craft-queue-icon-btn craft-add-recipe-btn" type="button" title="添加配方" aria-label="添加配方">
+                    <span class="craft-plus-glyph" aria-hidden="true"></span>
+                  </button>
+                  <button id="craftQueueDeleteModeBtn" class="icon-btn craft-queue-icon-btn craft-delete-mode-btn" type="button" title="删除配方" aria-label="删除配方">
+                    <span class="craft-minus-glyph" aria-hidden="true"></span>
+                  </button>
+                  <button id="craftClearQueueBtn" class="icon-btn craft-queue-icon-btn craft-clear-queue-btn" type="button" title="清空配方" aria-label="清空配方">
+                    <span class="craft-close-glyph" aria-hidden="true"></span>
+                  </button>
+                </div>
               </div>
-              <div id="craftQueueList" class="craft-queue-list"></div>
-              <div class="row craft-queue-actions">
-                <button id="craftAddRecipeBtn" class="btn-primary" type="button">添加配方</button>
-                <button id="craftExecuteQueueBtn" class="btn-primary" type="button">执行</button>
-                <button id="craftClearQueueBtn" type="button">清空</button>
-              </div>
-              <div class="row craft-assist-entry">
-                <button id="craftAssistToggleBtn" class="icon-btn craft-assist-toggle-btn" type="button" title="辅助选材" aria-label="辅助选材">
-                  <span class="craft-assist-glyph" aria-hidden="true"></span>
-                  <span class="craft-assist-toggle-text">辅助选材</span>
-                </button>
+              <div class="craft-queue-shell">
+                <div id="craftQueueList" class="craft-queue-list"></div>
+                <div class="row craft-queue-run-row">
+                  <button id="craftExecuteQueueBtn" class="icon-btn craft-execute-btn" type="button" title="执行配方" aria-label="执行配方">
+                    <span class="craft-play-glyph" aria-hidden="true"></span>
+                  </button>
+                </div>
               </div>
             </section>
           </div>
