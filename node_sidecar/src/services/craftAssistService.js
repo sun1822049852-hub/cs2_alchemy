@@ -285,8 +285,14 @@ function isMainInventoryCraftableRow(row) {
 }
 
 function getCraftCandidates(rows, {includeCooling = false} = {}) {
-  const allRows = (Array.isArray(rows) ? rows : [])
-    .filter((row) => isMainInventoryCraftableRow(row))
+  const allRows = sortCraftAssistCandidateRows((Array.isArray(rows) ? rows : [])
+    .filter((row) => isMainInventoryCraftableRow(row)));
+  if (includeCooling) return allRows;
+  return allRows.filter((row) => !isCoolingRow(row));
+}
+
+function sortCraftAssistCandidateRows(rows) {
+  return (Array.isArray(rows) ? [...rows] : [])
     .sort((a, b) => {
       const ra = Number(a && a.rarity || 0);
       const rb = Number(b && b.rarity || 0);
@@ -299,8 +305,6 @@ function getCraftCandidates(rows, {includeCooling = false} = {}) {
       if (wa !== wb) return wa - wb;
       return assetIdNumber(a) - assetIdNumber(b);
     });
-  if (includeCooling) return allRows;
-  return allRows.filter((row) => !isCoolingRow(row));
 }
 
 function buildCraftAssistRowsByName(rows) {
@@ -325,15 +329,22 @@ function buildRowsByAssetId(rows) {
   return out;
 }
 
-function buildCraftAssistSelectionContext({rows, includeCooling = false} = {}) {
-  const candidateRows = getCraftCandidates(rows, {includeCooling: !!includeCooling});
+function buildCraftAssistSelectionContextFromCandidateRows(candidateRows, {includeCooling = false} = {}) {
+  const normalizedRows = sortCraftAssistCandidateRows(candidateRows);
   return {
     includeCooling: !!includeCooling,
-    candidateRows,
-    rowsByName: buildCraftAssistRowsByName(candidateRows),
-    rowsById: buildRowsByAssetId(candidateRows),
+    candidateRows: normalizedRows,
+    rowsByName: buildCraftAssistRowsByName(normalizedRows),
+    rowsById: buildRowsByAssetId(normalizedRows),
     candidateCache: new Map()
   };
+}
+
+function buildCraftAssistSelectionContext({rows, includeCooling = false} = {}) {
+  return buildCraftAssistSelectionContextFromCandidateRows(
+    getCraftCandidates(rows, {includeCooling: !!includeCooling}),
+    {includeCooling}
+  );
 }
 
 function resolveCraftAssistSelectionContext({selectionContext, rows, includeCooling = false} = {}) {
@@ -1413,5 +1424,6 @@ function createCraftAssistService({logger} = {}) {
 module.exports = {
   createCraftAssistService,
   selectCraftAssistForRecipe,
-  buildCraftAssistSelectionContext
+  buildCraftAssistSelectionContext,
+  buildCraftAssistSelectionContextFromCandidateRows
 };

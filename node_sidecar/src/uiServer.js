@@ -13,8 +13,14 @@ const {createSessionPool} = require("./services/sessionPool");
 const {createComponentOpsService} = require("./services/componentOpsService");
 const {createComponentTaskQueue} = require("./services/componentTaskQueue");
 const {createCraftService} = require("./services/craftService");
-const {createCraftAssistService} = require("./services/craftAssistService");
+const {createCraftTradeupWithComponentsService} = require("./services/craftTradeupWithComponentsService");
+const {requestUsesComponentSourceRecipes} = require("./services/craftExecutionGuard");
+const {
+  createCraftAssistService,
+  buildCraftAssistSelectionContextFromCandidateRows
+} = require("./services/craftAssistService");
 const {createCraftAssistWorkerPool} = require("./services/craftAssistWorkerPool");
+const {buildCraftCandidateContext} = require("./services/craftCandidateService");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
@@ -25,6 +31,12 @@ const logger = new DedupLogger({windowMs: 800});
 const sessionPool = createSessionPool({logger});
 const componentOpsService = createComponentOpsService({sessionPool, logger});
 const craftService = createCraftService({sessionPool, logger});
+const craftTradeupWithComponentsService = createCraftTradeupWithComponentsService({
+  loadRowsForAccount: async ({username}) => loadRowsForAccountFromSnapshot(username),
+  componentOpsService,
+  craftService,
+  logger
+});
 const craftAssistService = createCraftAssistService({logger});
 const CRAFT_ASSIST_USE_WORKER_POOL = process.env.CRAFT_ASSIST_USE_WORKER_POOL !== "0";
 const craftAssistWorkerPool = CRAFT_ASSIST_USE_WORKER_POOL
@@ -321,6 +333,28 @@ function loadSnapshotRows(snapshotPath) {
 
 async function loadSnapshotRowsAsync(snapshotPath) {
   return snapshotRowsLoader.loadSnapshotRowsAsync(snapshotPath);
+}
+
+function loadRowsForAccountFromSnapshot(username) {
+  const accountName = asString(username).trim();
+  const uiState = new UiStateStore();
+  const accountCache = uiState.getAccount(accountName);
+  const snapshotPath = asString(accountCache && accountCache.snapshot_path ? accountCache.snapshot_path : "").trim();
+  if (!snapshotPath) {
+    const err = new Error("当前账号暂无库存快照，请先刷新库存");
+    err.code = "snapshot_missing";
+    throw err;
+  }
+  if (!fs.existsSync(snapshotPath)) {
+    const err = new Error("库存快照不存在或已失效，请先刷新库存");
+    err.code = "snapshot_missing";
+    throw err;
+  }
+  return {
+    rows: loadSnapshotRows(snapshotPath),
+    fetch_time: asString(accountCache && accountCache.fetch_time ? accountCache.fetch_time : "").trim(),
+    snapshot_path: snapshotPath
+  };
 }
 
 function loadSnapshotSafe(snapshotPath) {
@@ -1183,32 +1217,43 @@ async function handleApi(req, res, urlObj) {
       return true;
     }
 
-    const uiState = new UiStateStore();
-    const accountCache = uiState.getAccount(username);
-    const snapshotPath = asString(accountCache && accountCache.snapshot_path ? accountCache.snapshot_path : "").trim();
-    if (!snapshotPath) {
-      writeJson(res, 409, {ok: false, message: "当前账号暂无库存快照，请先刷新库存"});
+    let loaded = null;
+    try {
+      loaded = loadRowsForAccountFromSnapshot(username);
+    } catch (err) {
+      writeJson(res, 409, {ok: false, message: asString(err && err.message ? err.message : err)});
       return true;
     }
-    if (!fs.existsSync(snapshotPath)) {
-      writeJson(res, 409, {ok: false, message: "库存快照不存在或已失效，请先刷新库存"});
-      return true;
-    }
+    const includeComponentItemsRaw = body.use_component_items;
+    const includeComponentItemsText = asString(includeComponentItemsRaw).trim().toLowerCase();
+    const includeComponentItems = includeComponentItemsRaw === true
+      || includeComponentItemsRaw === 1
+      || includeComponentItemsText === "1"
+      || includeComponentItemsText === "true";
     const workerArgs = {
       targetWear: body.target_wear,
       wearFilterMode: body.wear_filter_mode,
       materials: body.materials,
       blockedIds: body.blocked_ids,
+      selectedItemIds: body.blocked_ids,
+      includeComponentItems,
       includeCooling: body.include_cooling,
       wearOffsetPct: body.wear_offset_pct
     };
     const result = CRAFT_ASSIST_USE_WORKER_POOL && craftAssistWorkerPool
       ? await craftAssistWorkerPool.selectForRecipe({
-        snapshotPath,
+        snapshotPath: loaded.snapshot_path,
         ...workerArgs
       })
       : craftAssistService.selectForRecipe({
-        rows: loadSnapshotRows(snapshotPath),
+        selectionContext: buildCraftAssistSelectionContextFromCandidateRows(buildCraftCandidateContext({
+          rows: loaded.rows,
+          includeComponentItems,
+          includeCooling: body.include_cooling,
+          selectedItemIds: body.blocked_ids
+        }).candidateRows, {
+          includeCooling: !!body.include_cooling
+        }),
         ...workerArgs
       });
     if (!result.ok) {
@@ -1225,6 +1270,113 @@ async function handleApi(req, res, urlObj) {
     return true;
   }
 
+  if (pathname === "/api/craft/candidates" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    let loaded = null;
+    try {
+      loaded = loadRowsForAccountFromSnapshot(username);
+    } catch (err) {
+      writeJson(res, 409, {ok: false, message: asString(err && err.message ? err.message : err)});
+      return true;
+    }
+    const includeComponentItemsRaw = body.include_component_items;
+    const includeComponentItemsText = asString(includeComponentItemsRaw).trim().toLowerCase();
+    const includeComponentItems = includeComponentItemsRaw === true
+      || includeComponentItemsRaw === 1
+      || includeComponentItemsText === "1"
+      || includeComponentItemsText === "true";
+    const context = buildCraftCandidateContext({
+      rows: loaded.rows,
+      includeComponentItems,
+      includeCooling: body.include_cooling,
+      selectedItemIds: body.selected_item_ids
+    });
+    writeJson(res, 200, {
+      ok: true,
+      rows: context.candidateRows,
+      stats: context.stats,
+      fetch_time: loaded.fetch_time,
+      snapshot_path: loaded.snapshot_path
+    });
+    return true;
+  }
+
+  if (pathname === "/api/craft/tradeup-with-components" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!username || !refreshRuntime.isConnected(username)) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    try {
+      const allowCoolingRaw = body.allow_cooling;
+      const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
+      const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
+      const recipeCount = Array.isArray(body.recipes) ? body.recipes.length : 0;
+      const progressRunId = `craft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      logger.info("ui_server", `craft-with-components request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0}`);
+      const payload = await craftTradeupWithComponentsService.runTradeUpWithComponents({
+        username,
+        password: body.password,
+        recipes: body.recipes,
+        allowCooling,
+        onProgress: (progress) => {
+          refreshRuntime.emitSse("craft_component_progress", {
+            username,
+            run_id: progressRunId,
+            ...progress
+          });
+        }
+      });
+      const status = payload && payload.ok === false ? 409 : 200;
+      if (status === 200) {
+        logger.info(
+          "ui_server",
+          `craft-with-components success: account=${username} recipes=${toInt(payload && payload.recipe_count, 0)} ready=${toInt(payload && payload.ready_recipe_count, 0)} skipped=${toInt(payload && payload.skipped_recipe_count, 0)} steps=${Array.isArray(payload && payload.steps) ? payload.steps.length : 0}`
+        );
+      } else {
+        logger.warn(
+          "ui_server",
+          `craft-with-components blocked: account=${username} ready=${toInt(payload && payload.ready_recipe_count, 0)} skipped=${toInt(payload && payload.skipped_recipe_count, 0)} msg=${asString(payload && payload.message ? payload.message : "")}`
+        );
+      }
+      writeJson(res, status, {
+        ok: status === 200,
+        ...payload,
+        component: buildComponentSummary(payload.rows || [])
+      });
+    } catch (err) {
+      if (err && err.craft_payload) {
+        const payload = err.craft_payload;
+        logger.warn(
+          "ui_server",
+          `craft-with-components partial: account=${username} completed=${Array.isArray(payload && payload.completed_steps) ? payload.completed_steps.length : 0} msg=${asString(err && err.message ? err.message : err)}`
+        );
+        writeJson(res, 409, {
+          ok: false,
+          ...payload,
+          component: buildComponentSummary(payload.rows || []),
+          message: asString(err && err.message ? err.message : err)
+        });
+        return true;
+      }
+      const status = err && err.code === "snapshot_missing"
+        ? 409
+        : (err && err.code === "bad_request" ? 400 : 500);
+      logger.warn("ui_server", `craft-with-components failed: account=${username} status=${status} msg=${asString(err && err.message ? err.message : err)}`);
+      writeJson(res, status, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
   if (pathname === "/api/craft/tradeup" && req.method === "POST") {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
@@ -1238,6 +1390,16 @@ async function handleApi(req, res, urlObj) {
       const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
       const hasRecipes = Array.isArray(body.recipes) && body.recipes.length > 0;
       const recipeCount = hasRecipes ? body.recipes.length : (Array.isArray(body.item_ids) && body.item_ids.length ? 1 : 0);
+      if (requestUsesComponentSourceRecipes(body)) {
+        const message = "检测到组件来源物品，必须走“先取出组件物品再汰换”的执行链，请重新执行";
+        logger.warn("ui_server", `craft blocked: account=${username} reason=component_route_required recipes=${recipeCount}`);
+        writeJson(res, 409, {
+          ok: false,
+          reason: "component_route_required",
+          message
+        });
+        return true;
+      }
       logger.info("ui_server", `craft request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0}`);
       const payload = hasRecipes
         ? await craftService.runTradeUpBatch({

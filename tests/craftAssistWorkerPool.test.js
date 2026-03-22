@@ -82,6 +82,21 @@ function makeSnapshotArgs(snapshotPath) {
   };
 }
 
+function makeInlineCandidateArgs(rows) {
+  return {
+    candidateRows: rows,
+    targetWear: 0.21,
+    wearFilterMode: "relative",
+    materials: [
+      {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
+      {name: "Aux", names: ["Aux"], role: "aux", count: 8, wear_min: 0, wear_max: 1}
+    ],
+    blockedIds: [],
+    includeCooling: false,
+    wearOffsetPct: 100
+  };
+}
+
 function baseRows() {
   return [
     makeRow({id: "m1", name: "Main", relative: 0.24}),
@@ -116,6 +131,18 @@ async function test_worker_pool_matches_direct_selection() {
       await pool.close();
     }
   });
+}
+
+async function test_worker_pool_accepts_inline_candidate_rows() {
+  const rows = baseRows();
+  const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 2000});
+  try {
+    const direct = selectCraftAssistForRecipe(makeDirectArgs(rows));
+    const viaPool = await pool.selectForRecipe(makeInlineCandidateArgs(rows));
+    assert.deepEqual(viaPool, direct);
+  } finally {
+    await pool.close();
+  }
 }
 
 async function test_worker_pool_reloads_snapshot_after_file_change() {
@@ -192,6 +219,7 @@ async function test_worker_pool_retries_once_after_worker_crash() {
 
 (async () => {
   await test_worker_pool_matches_direct_selection();
+  await test_worker_pool_accepts_inline_candidate_rows();
   await test_worker_pool_reloads_snapshot_after_file_change();
   await test_worker_pool_times_out_and_rejects();
   await test_worker_pool_retries_once_after_worker_crash();

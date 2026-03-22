@@ -182,8 +182,8 @@ function createCraftAssistWorkerPool({
       return Promise.reject(new Error("craft assist worker pool is closed"));
     }
     const payload = normalizePayload(args);
-    if (!payload.snapshotPath) {
-      return Promise.reject(new Error("snapshotPath is required"));
+    if (!payload.snapshotPath && !Array.isArray(payload.candidateRows)) {
+      return Promise.reject(new Error("snapshotPath or candidateRows is required"));
     }
     return new Promise((resolve, reject) => {
       const task = {

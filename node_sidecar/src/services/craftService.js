@@ -393,15 +393,28 @@ function createCraftService({sessionPool, logger}) {
     return {snapshotPath, fetchTime};
   }
 
-  async function runTradeUp({username, password, itemIds, allowCooling = false}) {
-    return runTradeUpBatch({username, password, itemIds, allowCooling});
+  async function runTradeUp({username, password, itemIds, allowCooling = false, onProgress}) {
+    return runTradeUpBatch({username, password, itemIds, allowCooling, onProgress});
   }
 
-  async function runTradeUpBatch({username, password, itemIds, recipes, allowCooling = false}) {
+  async function runTradeUpBatch({username, password, itemIds, recipes, allowCooling = false, onProgress}) {
     const recipeRequests = normalizeRecipeRequests({itemIds, recipes});
     const {accountName, csgo} = await acquireContext({username, password});
+    const progressCb = typeof onProgress === "function" ? onProgress : null;
 
     return withAccountLock(accountName, async () => {
+      function emitProgress(payload) {
+        if (!progressCb) return;
+        try {
+          progressCb({
+            account: accountName,
+            ...payload
+          });
+        } catch (_) {
+          // ignore progress callback errors
+        }
+      }
+
       const schemaStore = new SchemaStore();
       let rows = makeRows(csgo, schemaStore);
       const steps = [];
@@ -433,6 +446,12 @@ function createCraftService({sessionPool, logger}) {
               `tradeup start: account=${accountName} step=${req.index}/${recipeRequests.length} recipe=${recipeInfo.recipe} ids=${req.item_ids.join(",")}`
             );
           }
+          emitProgress({
+            phase: "start",
+            index: req.index,
+            total: recipeRequests.length,
+            completed: steps.length
+          });
 
           const craftResult = await waitCraftingComplete(csgo, recipeInfo.recipe, req.item_ids, 35000);
           if (toInt(craftResult.blueprint, -1) < 0) {
@@ -479,6 +498,12 @@ function createCraftService({sessionPool, logger}) {
               `tradeup done: account=${accountName} step=${req.index}/${recipeRequests.length} recipe=${recipeInfo.recipe} gained=${step.gained_ids.join(",")} gained_present=${step.gained_present_ids.length}/${step.gained_ids.length} still_exists=${step.still_exists_ids.length} settled=${step.inventory_settled} attempts=${step.settle_attempts}`
             );
           }
+          emitProgress({
+            phase: "done",
+            index: req.index,
+            total: recipeRequests.length,
+            completed: steps.length
+          });
         } catch (err) {
           const isBad = err && err.code === "bad_request";
           const normalized = err instanceof Error ? err : new Error(asString(err));
@@ -491,6 +516,13 @@ function createCraftService({sessionPool, logger}) {
               normalized.code = "tradeup_failed";
             }
           }
+          emitProgress({
+            phase: "failed",
+            index: req.index,
+            total: recipeRequests.length,
+            completed: steps.length,
+            message: asString(normalized && normalized.message ? normalized.message : normalized).trim()
+          });
 
           const shouldAttachPayload = steps.length > 0 || !isBad;
           if (shouldAttachPayload) {

@@ -130,13 +130,14 @@
               <label id="showComponentItemsWrap" class="inline"><input type="checkbox" id="showComponentItems" />显示组件内物品</label>
               <div class="component-toolbar-right">
                 <span id="summaryText" class="summary-ghost" aria-live="polite">尚未加载库存</span>
-                <span id="componentAvailableHint" class="component-available-badge" title="主库存可用槽位">可用：1000</span>
+                <span id="componentAvailableHint" class="component-available-badge" title="当前实际可从组件中取出的物品数量">可取出：1000</span>
                 <span id="componentHint" class="component-capacity-badge" title="库存容量">0/1000</span>
                 <div class="craft-settings-wrap component-craft-settings-wrap">
                   <button id="componentCraftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">
                     <span class="craft-gear-glyph" aria-hidden="true"></span>
                   </button>
                   <div id="componentCraftSettingsPanel" class="craft-settings-panel hidden">
+                    <label class="inline"><span>使用组件中物品</span><input id="componentCraftUseComponentItems" type="checkbox" /></label>
                     <label class="inline"><span>显示种子</span><input id="componentCraftShowSeed" type="checkbox" /></label>
                     <label class="inline"><span>显示冷却时间</span><input id="componentCraftShowCoolingTime" type="checkbox" /></label>
                     <label class="inline"><span>磨损偏移阈值(%)</span><input id="componentCraftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
@@ -206,12 +207,13 @@
           <div id="craftLayout" class="craft-layout">
             <section id="craftLeftPanel" class="panel craft-left-panel">
               <div class="row craft-left-head">
-                <span>主库存可炼金物品</span>
+                <span id="craftSelectionTitle">主库存可炼金物品</span>
                 <div class="craft-settings-wrap">
                   <button id="craftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">
                     <span class="craft-gear-glyph" aria-hidden="true"></span>
                   </button>
                   <div id="craftSettingsPanel" class="craft-settings-panel hidden">
+                    <label class="inline"><span>使用组件中物品</span><input id="craftUseComponentItems" type="checkbox" /></label>
                     <label class="inline"><span>使用冷却中的物品</span><input id="craftIncludeCooling" type="checkbox" /></label>
                     <label class="inline"><span>显示种子</span><input id="craftShowSeed" type="checkbox" /></label>
                     <label class="inline"><span>磨损偏移阈值(%)</span><input id="craftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
@@ -224,6 +226,12 @@
                 <div id="craftAssistOverlayHandle" class="craft-assist-overlay-handle" title="拖拽调整辅助选材覆盖范围" aria-hidden="true"></div>
                 <button id="craftAssistCloseBtn" type="button" class="craft-assist-close craft-assist-close-floating" aria-label="关闭辅助选材">×</button>
                 <div id="craftAssistPanel" class="craft-assist-panel" aria-label="辅助选材面板">
+                  <div id="craftAssistBusyMask" class="craft-assist-busy-mask hidden" aria-hidden="true">
+                    <div class="craft-assist-busy-card">
+                      <div id="craftAssistBusyMaskTitle" class="craft-assist-busy-title">正在辅助选材</div>
+                      <div id="craftAssistBusyMaskDetail" class="craft-assist-busy-detail">请稍候...</div>
+                    </div>
+                  </div>
                   <div id="craftAssistContent" class="craft-assist-line craft-assist-content">
                     <div class="craft-assist-main-col">
                       <div class="craft-assist-main-tools">
@@ -302,6 +310,13 @@
             </div>
           </div>
         </div>
+
+        <section id="craftExecutionOverlay" class="craft-execution-overlay hidden" aria-live="polite" aria-label="炼金执行进度">
+          <div class="craft-execution-card">
+            <div id="craftExecutionOverlayTitle" class="craft-execution-title">正在执行炼金任务</div>
+            <div id="craftExecutionOverlayDetail" class="craft-execution-detail">请稍候...</div>
+          </div>
+        </section>
       </main>
     </div>
 

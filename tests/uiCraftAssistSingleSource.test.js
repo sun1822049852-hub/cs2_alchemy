@@ -29,16 +29,30 @@ assert.equal(
   "frontend must still call backend craft assist API"
 );
 
+assert.equal(
+  source.includes('api("/api/craft/candidates"'),
+  true,
+  "frontend must fetch craft candidates from backend single source"
+);
+
 const requiredConcurrencyGuardFragments = [
   "craftAssistSelecting: false",
+  'craftAssistPendingUiAction: ""',
+  'craftAssistPendingPresetId: ""',
+  'use_component_items: !!state.craftUseComponentItems',
+  'selected_item_ids: getCraftCandidateSelectedIds()',
   "if (state.craftAssistSelecting) {",
   'setCraftStatus("辅助选材处理中，请稍后再试", true);',
   "state.craftAssistSelecting = true;",
   "state.craftAssistSelecting = false;",
-  "ui.craftAssistApplyBtn.disabled = state.refreshing || state.craftBusy || state.craftAssistSelecting;",
-  "ui.craftAssistPresetSaveBtn.disabled = state.refreshing || state.craftBusy || state.craftAssistSelecting;",
+  "function isCraftAssistPendingUiAction(",
+  "function rejectCraftAssistBusyUiAction(",
+  'ui.craftAssistApplyBtn.disabled = state.refreshing || state.craftBusy || isCraftAssistPendingUiAction("panel_apply");',
+  "ui.craftAssistPresetSaveBtn.disabled = state.refreshing || state.craftBusy;",
   "item.draggable = !(state.refreshing || state.craftBusy || state.craftAssistSelecting || inEditingMode);",
-  "applyBtn.disabled = inEditingMode || state.refreshing || state.craftBusy || state.craftAssistSelecting;"
+  "editBtn.disabled = state.refreshing || state.craftBusy;",
+  "applyCountInput.disabled = inEditingMode || state.refreshing || state.craftBusy;",
+  'applyBtn.disabled = inEditingMode || state.refreshing || state.craftBusy || isCraftAssistPendingUiAction("preset_apply", {presetId});'
 ];
 
 for (const fragment of requiredConcurrencyGuardFragments) {
