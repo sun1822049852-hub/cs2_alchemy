@@ -28,3 +28,8 @@ csgo_skins.pre_strict_rebuild_*.db
 steam_skins.db
 data/skin_json/*.json
 !data/skin_json/.gitkeep
+
+# local planning / scratch artifacts
+.superpowers/
+docs/superpowers/
+excal.py
