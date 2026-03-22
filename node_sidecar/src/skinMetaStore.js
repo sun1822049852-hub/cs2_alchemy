@@ -11,6 +11,10 @@ function normalizeFloat(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeText(value) {
+  return asString(value).trim();
+}
+
 function fetchSkinMetadataMap(names, dbPath = PATHS.SKIN_DB_FILE) {
   const clean = Array.from(
     new Set(
@@ -32,7 +36,8 @@ function fetchSkinMetadataMap(names, dbPath = PATHS.SKIN_DB_FILE) {
       const chunk = clean.slice(i, i + chunkSize);
       const placeholders = chunk.map(() => "?").join(",");
       const sql =
-        "SELECT markethashname, name, collection, rarity, minfloat, maxfloat, isstattrak, wear_range " +
+        "SELECT markethashname, name, collection, rarity, minfloat, maxfloat, isstattrak, wear_range, " +
+        "goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url " +
         `FROM skin WHERE markethashname IN (${placeholders})`;
       const stmt = db.prepare(sql);
       const rows = stmt.all(...chunk);
@@ -42,13 +47,16 @@ function fetchSkinMetadataMap(names, dbPath = PATHS.SKIN_DB_FILE) {
           continue;
         }
         out.set(key, {
-          name: asString(row.name).trim(),
-          collection: asString(row.collection).trim(),
-          rarity: asString(row.rarity).trim(),
+          name: normalizeText(row.name),
+          collection: normalizeText(row.collection),
+          rarity: normalizeText(row.rarity),
           minfloat: normalizeFloat(row.minfloat),
           maxfloat: normalizeFloat(row.maxfloat),
           isstattrak: toInt(row.isstattrak, 0),
-          wear_range: normalizeFloat(row.wear_range)
+          wear_range: normalizeFloat(row.wear_range),
+          goods_icon_url: normalizeText(row.goods_icon_url),
+          goods_original_icon_url: normalizeText(row.goods_original_icon_url),
+          goods_share_thumbnail_url: normalizeText(row.goods_share_thumbnail_url)
         });
       }
     }
@@ -79,6 +87,12 @@ function fillMissingWearBounds(rows, {dbPath = PATHS.SKIN_DB_FILE} = {}) {
     row.minfloat = normalizeFloat(row.minfloat);
     row.maxfloat = normalizeFloat(row.maxfloat);
     row.wear_range = normalizeFloat(row.wear_range);
+    row.alchemy_name = normalizeText(row.alchemy_name);
+    row.collection = normalizeText(row.collection);
+    row.alchemy_rarity = normalizeText(row.alchemy_rarity);
+    row.goods_icon_url = normalizeText(row.goods_icon_url);
+    row.goods_original_icon_url = normalizeText(row.goods_original_icon_url);
+    row.goods_share_thumbnail_url = normalizeText(row.goods_share_thumbnail_url);
 
     const key = asString(row.market_hash_name || row.name || "").trim();
     if (!key) {
@@ -86,7 +100,17 @@ function fillMissingWearBounds(rows, {dbPath = PATHS.SKIN_DB_FILE} = {}) {
     }
     row.market_hash_name = key;
 
-    if (row.minfloat === null || row.maxfloat === null || row.wear_range === null) {
+    if (
+      row.minfloat === null ||
+      row.maxfloat === null ||
+      row.wear_range === null ||
+      !row.alchemy_name ||
+      !row.collection ||
+      !row.alchemy_rarity ||
+      !row.goods_icon_url ||
+      !row.goods_original_icon_url ||
+      !row.goods_share_thumbnail_url
+    ) {
       missingRows.push({row, key});
       marketHashNames.add(key);
     }
@@ -114,6 +138,24 @@ function fillMissingWearBounds(rows, {dbPath = PATHS.SKIN_DB_FILE} = {}) {
     }
     if (row.wear_range === null) {
       row.wear_range = meta.wear_range;
+    }
+    if (!row.alchemy_name) {
+      row.alchemy_name = meta.name;
+    }
+    if (!row.collection) {
+      row.collection = meta.collection;
+    }
+    if (!row.alchemy_rarity) {
+      row.alchemy_rarity = meta.rarity;
+    }
+    if (!row.goods_icon_url) {
+      row.goods_icon_url = meta.goods_icon_url;
+    }
+    if (!row.goods_original_icon_url) {
+      row.goods_original_icon_url = meta.goods_original_icon_url;
+    }
+    if (!row.goods_share_thumbnail_url) {
+      row.goods_share_thumbnail_url = meta.goods_share_thumbnail_url;
     }
   }
   return rows;

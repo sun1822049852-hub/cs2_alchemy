@@ -329,6 +329,9 @@ function enrichAlchemyMetadata(rows, hiddenRows, dbPath) {
       row.maxfloat = meta.maxfloat;
       row.isstattrak = toInt(meta.isstattrak, 0);
       row.wear_range = meta.wear_range;
+      row.goods_icon_url = asString(meta.goods_icon_url).trim();
+      row.goods_original_icon_url = asString(meta.goods_original_icon_url).trim();
+      row.goods_share_thumbnail_url = asString(meta.goods_share_thumbnail_url).trim();
     } else {
       row.alchemy_name = "";
       row.collection = "";
@@ -337,6 +340,9 @@ function enrichAlchemyMetadata(rows, hiddenRows, dbPath) {
       row.maxfloat = null;
       row.isstattrak = 0;
       row.wear_range = null;
+      row.goods_icon_url = "";
+      row.goods_original_icon_url = "";
+      row.goods_share_thumbnail_url = "";
     }
     const craftable = isCraftableBySkinMeta(meta);
     row.is_craftable = craftable.isCraftable;
@@ -396,6 +402,9 @@ function parseOne(item, schema) {
     maxfloat: null,
     isstattrak: 0,
     wear_range: null,
+    goods_icon_url: "",
+    goods_original_icon_url: "",
+    goods_share_thumbnail_url: "",
     is_craftable: false,
     craftable_reason: "meta_not_loaded",
     casket_id: decodeCasketId(item),

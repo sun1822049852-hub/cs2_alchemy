@@ -28,7 +28,7 @@ function createSnapshotRowsLoader({limit = 6} = {}) {
     return rows;
   }
 
-  function loadSnapshotRows(snapshotPath) {
+  function loadSnapshotRows(snapshotPath, {dbPath} = {}) {
     const fullPath = path.resolve(snapshotPath);
     const stat = fs.statSync(fullPath);
     const stamp = snapshotRowsCacheStamp(stat);
@@ -39,10 +39,10 @@ function createSnapshotRowsLoader({limit = 6} = {}) {
     const text = fs.readFileSync(fullPath, "utf8");
     const obj = JSON.parse(text);
     const rows = Array.isArray(obj.items) ? obj.items : [];
-    return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows));
+    return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows, {dbPath}));
   }
 
-  async function loadSnapshotRowsAsync(snapshotPath) {
+  async function loadSnapshotRowsAsync(snapshotPath, {dbPath} = {}) {
     const fullPath = path.resolve(snapshotPath);
     const stat = await fs.promises.stat(fullPath);
     const stamp = snapshotRowsCacheStamp(stat);
@@ -53,7 +53,7 @@ function createSnapshotRowsLoader({limit = 6} = {}) {
     const text = await fs.promises.readFile(fullPath, "utf8");
     const obj = JSON.parse(text);
     const rows = Array.isArray(obj.items) ? obj.items : [];
-    return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows));
+    return touchSnapshotRowsCache(fullPath, stamp, fillMissingWearBounds(rows, {dbPath}));
   }
 
   return {

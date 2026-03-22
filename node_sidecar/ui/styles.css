@@ -813,6 +813,9 @@ select.small {
   background: #fff;
   border-radius: 8px;
   padding: 10px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .card.selectable {
@@ -826,6 +829,24 @@ select.small {
 .card.selected {
   border-color: #2563eb;
   background: #eff6ff;
+}
+
+.card.has-skin-image {
+  background: linear-gradient(135deg, #ffffff 0%, #f9fbff 100%);
+}
+
+.card > :not(.card-skin-backdrop) {
+  position: relative;
+  z-index: 1;
+}
+
+.card-skin-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.96;
+  background-repeat: no-repeat;
 }
 
 .name {
@@ -914,8 +935,50 @@ select.small {
   cursor: pointer;
 }
 
+.group-parent td {
+  padding-top: 18px;
+  padding-bottom: 18px;
+  vertical-align: middle;
+}
+
 .group-parent.selected {
   background: #edf4ff;
+}
+
+.group-name-cell {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 64px;
+}
+
+.group-name-cell.has-skin-image {
+  background: transparent;
+}
+
+.group-name-cell.has-skin-image::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 176px;
+  height: 72px;
+  transform: translateY(-50%);
+  background-image: var(--group-skin-image);
+  background-repeat: no-repeat;
+  background-position: left center;
+  background-size: contain;
+  opacity: 0.72;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.group-name-label {
+  position: relative;
+  z-index: 1;
+  font-weight: 700;
+  display: inline-block;
+  max-width: 100%;
 }
 
 .group-child {

@@ -1828,6 +1828,61 @@ function rarityName(row) { const e = String(row.alchemy_rarity || "").trim(); if
 const collectionName = (row) => String(row.collection || "").trim();
 const itemDisplayName = (row) => String(row.alchemy_name || "").trim() || String(row.name || "").trim();
 const itemSearchText = (row) => [row.name, row.market_hash_name, row.alchemy_name, row.collection, row.collection_en].map((x) => String(x || "").toLowerCase()).join(" ").trim();
+function normalizeSkinImageUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return /^https?:\/\//i.test(text) ? text : "";
+}
+function cssUrlValue(value) {
+  const text = String(value || "").replace(/[\r\n]/g, "").replace(/["\\]/g, "\\$&");
+  return text ? `url("${text}")` : "";
+}
+function preferredRowSkinImageUrl(row) {
+  if (!row || typeof row !== "object") return "";
+  const candidates = [
+    row.goods_original_icon_url,
+    row.goods_icon_url,
+    row.goods_share_thumbnail_url
+  ];
+  for (const candidate of candidates) {
+    const url = normalizeSkinImageUrl(candidate);
+    if (url) return url;
+  }
+  return "";
+}
+function preferredRowsSkinImageUrl(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  for (const row of list) {
+    const url = preferredRowSkinImageUrl(row);
+    if (url) return url;
+  }
+  return "";
+}
+function appendCardSkinBackdrop(card, row) {
+  const imageUrl = preferredRowSkinImageUrl(row);
+  if (!card || !imageUrl) return "";
+  const backdrop = document.createElement("div");
+  backdrop.className = "card-skin-backdrop";
+  backdrop.style.backgroundImage = `linear-gradient(90deg, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.88) 42%, rgba(255,255,255,0.54) 100%), ${cssUrlValue(imageUrl)}`;
+  backdrop.style.backgroundPosition = "center center, right 14px center";
+  backdrop.style.backgroundSize = "cover, 152px auto";
+  card.classList.add("has-skin-image");
+  card.append(backdrop);
+  return imageUrl;
+}
+function decorateGroupNameCell(nameCell, text, imageUrl) {
+  if (!nameCell) return;
+  nameCell.classList.add("group-name-cell");
+  nameCell.replaceChildren();
+  const label = document.createElement("span");
+  label.className = "group-name-label";
+  label.textContent = text;
+  nameCell.append(label);
+  const normalizedImageUrl = normalizeSkinImageUrl(imageUrl);
+  if (!normalizedImageUrl) return;
+  nameCell.classList.add("has-skin-image");
+  nameCell.style.setProperty("--group-skin-image", cssUrlValue(normalizedImageUrl));
+}
 function normalizeWearToken(text) {
   return String(text || "")
     .toLowerCase()
@@ -1848,13 +1903,26 @@ function numberTextTrunc(value, decimals = WEAR_INPUT_DECIMALS) {
   if (t == null) return "-";
   return t.toFixed(d);
 }
+function wearTextFull(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return "-";
+    return raw;
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  const text = String(n);
+  if (!/[eE]/.test(text)) return text;
+  return n.toFixed(16).replace(/\.?0+$/, "");
+}
 function parseOptionalWear01(value) {
   const raw = String(value == null ? "" : value).trim();
   if (!raw) return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
   const clamped = Math.max(0, Math.min(1, n));
-  return truncateNumber(clamped, WEAR_INPUT_DECIMALS);
+  return clamped;
 }
 function inferWearSuffixRangeByName(name) {
   const normalized = normalizeWearToken(name);
@@ -2528,12 +2596,12 @@ function getRelativeWearValue(row) {
 }
 function absoluteWearLabel(row, {prefix = true} = {}) {
   const value = getAbsoluteWearValue(row);
-  const text = value == null ? "-" : numberTextTrunc(value, WEAR_INPUT_DECIMALS);
+  const text = value == null ? "-" : wearTextFull(value);
   return prefix ? `绝对磨损 ${text}` : text;
 }
 function relativeWearLabel(row, {prefix = true} = {}) {
   const value = getRelativeWearValue(row);
-  const text = value == null ? "-" : numberTextTrunc(value, WEAR_INPUT_DECIMALS);
+  const text = value == null ? "-" : wearTextFull(value);
   return prefix ? `相对磨损 ${text}` : text;
 }
 function averageRelativeWearText(rows) {
@@ -2542,7 +2610,7 @@ function averageRelativeWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
+  return wearTextFull(total / values.length);
 }
 function averageRelativeWearValue(rows) {
   const values = (Array.isArray(rows) ? rows : [])
@@ -2556,16 +2624,16 @@ function logCraftAssistPickedRows({recipeNo = 0, sourceText = "", targetValue = 
   const list = Array.isArray(selectedRows) ? selectedRows : [];
   if (!list.length) return;
   const prefix = `[craft-assist][recipe#${Math.max(1, Number(recipeNo) || 1)}${sourceText ? `|${sourceText}` : ""}]`;
-  const targetText = targetValue == null ? "-" : numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS);
-  const runOverallText = runOverall == null ? "-" : numberTextTrunc(runOverall, WEAR_INPUT_DECIMALS);
+  const targetText = targetValue == null ? "-" : wearTextFull(targetValue);
+  const runOverallText = runOverall == null ? "-" : wearTextFull(runOverall);
   const rowOverallValue = averageRelativeWearValue(list);
-  const rowOverallText = rowOverallValue == null ? "-" : numberTextTrunc(rowOverallValue, WEAR_INPUT_DECIMALS);
+  const rowOverallText = rowOverallValue == null ? "-" : wearTextFull(rowOverallValue);
   const picked = list.map((row, index) => ({
     index: index + 1,
     asset_id: rowAssetId(row),
     name: itemDisplayName(row),
-    relative_wear: numberTextTrunc(getRelativeWearValue(row), WEAR_INPUT_DECIMALS),
-    absolute_wear: numberTextTrunc(getAbsoluteWearValue(row), WEAR_INPUT_DECIMALS),
+    relative_wear: wearTextFull(getRelativeWearValue(row)),
+    absolute_wear: wearTextFull(getAbsoluteWearValue(row)),
     rarity: rarityName(row)
   }));
   if (typeof console.groupCollapsed === "function") {
@@ -2677,7 +2745,7 @@ function averageAbsoluteWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
+  return wearTextFull(total / values.length);
 }
 function makeCraftSlotNode({row = null, rawId = "", onRemove = null}) {
   const slot = document.createElement("div");
@@ -2986,13 +3054,15 @@ function renderCraftGrouped(candidates) {
       `<td>${row.collection || ""}</td>`,
       `<td>${showCooling ? `${row.available_count}/${row.cooling_count}` : row.available_count}</td>`
     ];
-    if (showSeed) parentCells.push("<td></td>");
-    parentCells.push(`<td>${row.wear_range_text || ""}</td>`);
-    if (showCooling) parentCells.push(`<td>${parentCooldownText}</td>`);
-    parent.innerHTML = parentCells.join("");
-    parent.onclick = () => {
-      if (expanded) {
-        state.expandedGroups.delete(groupKey);
+      if (showSeed) parentCells.push("<td></td>");
+      parentCells.push(`<td>${row.wear_range_text || ""}</td>`);
+      if (showCooling) parentCells.push(`<td>${parentCooldownText}</td>`);
+      parent.innerHTML = parentCells.join("");
+      const craftNameCell = parent.children[1];
+      decorateGroupNameCell(craftNameCell, row.name, preferredRowsSkinImageUrl(row.items));
+      parent.onclick = () => {
+        if (expanded) {
+          state.expandedGroups.delete(groupKey);
         renderCraftPage();
         return;
       }
@@ -3027,7 +3097,7 @@ function renderCraftGrouped(candidates) {
         "<td></td>"
       ];
       if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
-      childCells.push(`<td>${itemHasWear(item) ? numberTextTrunc(item.float_value, WEAR_INPUT_DECIMALS) : ""}</td>`);
+      childCells.push(`<td>${itemHasWear(item) ? wearTextFull(item.float_value) : ""}</td>`);
       if (showCooling) {
         childCells.push(`<td>${componentRow ? "" : (locked ? "已在配方预览" : craftItemCooldownLabel(item))}</td>`);
       }
@@ -3910,7 +3980,7 @@ function commitCraftAssistTargetWearInput(input) {
     if (raw) input.value = "";
     return null;
   }
-  input.value = wearText6(parsed);
+  input.value = wearTextFull(parsed);
   return parsed;
 }
 function renderCraftAssistList() {
@@ -3929,7 +3999,7 @@ function renderCraftAssistList() {
   const wearLabel = filterUseRelative ? "相对磨损范围" : "绝对磨损范围";
   const minText = "Minwear";
   const maxText = "Maxwear";
-  const formatRangeWear = wearText6;
+  const formatRangeWear = wearTextFull;
   for (const material of materials) {
     const materialId = String(material && material.id || "").trim();
     const selectedNames = craftAssistMaterialNames(material);
@@ -4622,7 +4692,7 @@ function renderCraftAssistPresetPanel() {
     metaTop.textContent = `材料 ${(preset && preset.materials && preset.materials.length) || 0} 项 / ${count} 件 | ${formatCraftAssistPresetTime(preset && preset.updated_at)}`;
     const metaWear = document.createElement("div");
     metaWear.className = "craft-assist-preset-meta-wear";
-    metaWear.textContent = `wear: ${wearText6(preset && preset.target_wear)}`;
+    metaWear.textContent = `wear: ${wearTextFull(preset && preset.target_wear)}`;
     meta.append(metaTop, metaWear);
 
     const actions = document.createElement("div");
@@ -4889,8 +4959,8 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
       });
     } else if (Array.isArray(run && run.picks) && run.picks.length) {
       const prefix = `[craft-assist][recipe#${Math.max(1, Number(recipeNo) || 1)}${sourceText ? `|${sourceText}` : ""}]`;
-      const targetText = targetValue == null ? "-" : numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS);
-      const runOverallText = run && run.overall == null ? "-" : numberTextTrunc(run && run.overall, WEAR_INPUT_DECIMALS);
+      const targetText = targetValue == null ? "-" : wearTextFull(targetValue);
+      const runOverallText = run && run.overall == null ? "-" : wearTextFull(run && run.overall);
       if (typeof console.groupCollapsed === "function") {
         console.groupCollapsed(`${prefix} picked ${run.picks.length}/${mode}, target=${targetText}, algorithm=${runOverallText}`);
       } else {
@@ -4915,7 +4985,7 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     }
 
     const raritySuffix = Number(run && run.rarity || 0) > 0 ? `，稀有度 ${craftRarityLabel(run.rarity)}` : "";
-    setScopedStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${createdEntry.item_ids.length}/${mode}${raritySuffix}，均值 ${numberTextTrunc(run.overall, WEAR_INPUT_DECIMALS)} < 目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`);
+    setScopedStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${createdEntry.item_ids.length}/${mode}${raritySuffix}，均值 ${wearTextFull(run.overall)} < 目标 ${wearTextFull(targetValue)}`);
     return true;
   } finally {
     if (runUsername === String(state.currentAccountUsername || "").trim()) {
@@ -4988,11 +5058,11 @@ function renderCraftAssistPanel() {
   }
 
   if (ui.craftAssistTargetWear) {
-    ui.craftAssistTargetWear.placeholder = "0.000000";
+    ui.craftAssistTargetWear.placeholder = "0.1234567890123456";
   }
   if (ui.craftAssistTargetWear && document.activeElement !== ui.craftAssistTargetWear) {
     const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
-    ui.craftAssistTargetWear.value = targetWear == null ? "" : wearText6(targetWear);
+    ui.craftAssistTargetWear.value = targetWear == null ? "" : wearTextFull(targetWear);
   }
   const filterMode = getCraftAssistFilterMode();
   if (ui.craftAssistFilterModeRelative) {
@@ -6157,19 +6227,19 @@ function renderCards(filteredRows, totalRows, filterKey = "") {
     const selected = selectable && state.selectedComponentItemIds.has(itemId);
     const card = document.createElement("div");
     card.className = `card${selectable ? " selectable" : ""}${selected ? " selected" : ""}`;
+    appendCardSkinBackdrop(card, row);
     const name = document.createElement("div");
     name.className = "name";
     name.textContent = itemDisplayName(row);
     const meta = document.createElement("div");
     meta.className = "meta";
     const lines = [];
-    lines.push(`Asset: ${itemId || "-"}`);
     if (showSeed) lines.push(`皮肤编号: ${Number(row.paint_index || 0)}  种子: ${Number(row.paint_seed || 0)}`);
     else lines.push(`皮肤编号: ${Number(row.paint_index || 0)}`);
     if (!componentRow) {
-      lines.push(`品质/稀有度: ${qualityName(row)}(${Number(row.quality || 0)}) / ${rarityName(row)}(${Number(row.rarity || 0)})`);
+      lines.push(`稀有度: ${rarityName(row)}`);
     }
-    if (itemHasWear(row)) lines.push(`磨损: ${numberTextTrunc(row.float_value, WEAR_INPUT_DECIMALS)}`);
+    if (itemHasWear(row)) lines.push(`磨损: ${wearTextFull(row.float_value)}`);
     const cid = String(row.casket_id || "").trim();
     const prefix = cid ? `组件: ${componentNameById(cid)}` : "";
     const unlock = coolingUnlockTs(row);
@@ -6358,6 +6428,8 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
     parentCells.push(`<td>${row.wear_range_text || ""}</td>`);
     if (showCoolingTime) parentCells.push(`<td>${parentCooldownText}</td>`);
     parent.innerHTML = parentCells.join("");
+    const nameCell = parent.children[2];
+    decorateGroupNameCell(nameCell, row.name, preferredRowsSkinImageUrl(row.items));
     const groupCheck = parent.querySelector(".group-check");
     if (groupCheck && selectedCount > 0 && selectedCount < groupIds.length) {
       groupCheck.indeterminate = true;
@@ -6391,7 +6463,7 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
         "<td></td>"
       ];
       if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
-      childCells.push(`<td>${itemHasWear(item) ? numberTextTrunc(item.float_value, WEAR_INPUT_DECIMALS) : ""}</td>`);
+      childCells.push(`<td>${itemHasWear(item) ? wearTextFull(item.float_value) : ""}</td>`);
       if (showCoolingTime) childCells.push(`<td>${componentRow ? "" : cooldownText(item)}</td>`);
       child.innerHTML = childCells.join("");
       if (selectable) {
