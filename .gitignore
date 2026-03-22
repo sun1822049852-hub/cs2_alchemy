@@ -33,3 +33,7 @@ data/skin_json/*.json
 .superpowers/
 docs/superpowers/
 excal.py
+
+# local exports / scratch docs
+csgo_skins_export_*.xlsx
+极限卡磨损教程.md
