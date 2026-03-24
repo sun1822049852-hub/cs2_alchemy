@@ -39,8 +39,9 @@ const craftTradeupWithComponentsService = createCraftTradeupWithComponentsServic
 });
 const craftAssistService = createCraftAssistService({logger});
 const CRAFT_ASSIST_USE_WORKER_POOL = process.env.CRAFT_ASSIST_USE_WORKER_POOL !== "0";
+const CRAFT_ASSIST_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 const craftAssistWorkerPool = CRAFT_ASSIST_USE_WORKER_POOL
-  ? createCraftAssistWorkerPool({logger})
+  ? createCraftAssistWorkerPool({logger, requestTimeoutMs: CRAFT_ASSIST_REQUEST_TIMEOUT_MS})
   : null;
 const snapshotRowsLoader = createSnapshotRowsLoader({limit: 6});
 let shutdownHooksInstalled = false;

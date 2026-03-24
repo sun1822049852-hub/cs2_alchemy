@@ -16,10 +16,14 @@ const htmlFragments = [
   'class="craft-queue-shell"',
   'id="craftAssistToggleBtn"',
   'id="craftAddRecipeBtn"',
-  'id="craftQueueDeleteModeBtn"',
   'id="craftClearQueueBtn"',
   'id="craftExecuteQueueBtn"',
-  'class="row craft-queue-run-row"'
+  'class="row craft-queue-run-row"',
+  'id="confirmModal"',
+  'id="confirmModalTitle"',
+  'id="confirmModalMessage"',
+  'id="confirmModalConfirmBtn"',
+  'id="confirmModalCancelBtn"'
 ];
 
 for (const fragment of htmlFragments) {
@@ -36,6 +40,12 @@ assert.equal(
   "craft queue header should no longer render the 配方预览 title text"
 );
 
+assert.equal(
+  html.includes('id="craftQueueDeleteModeBtn"'),
+  false,
+  "craft queue header should remove the old top delete-mode minus button now that each card owns its own delete control"
+);
+
 const cssFragments = [
   ".craft-queue-header {",
   ".craft-queue-header-spacer {",
@@ -46,7 +56,6 @@ const cssFragments = [
   ".craft-queue-empty-icon {",
   ".craft-queue-empty-body {",
   ".craft-add-recipe-btn {",
-  ".craft-delete-mode-btn {",
   ".craft-clear-queue-btn {",
   ".craft-execute-btn::before {",
   ".craft-queue-icon-btn",
@@ -62,9 +71,6 @@ for (const fragment of cssFragments) {
 }
 
 const appFragments = [
-  "craftQueueDeleteMode: false",
-  'craftQueueDeleteModeBtn: document.getElementById("craftQueueDeleteModeBtn")',
-  "state.craftQueueDeleteMode",
   'emptyIcon.className = "craft-queue-empty-icon"',
   'emptyBody.className = "craft-queue-empty-body"',
   "点击上方加号创建配方",
@@ -89,6 +95,36 @@ assert.equal(
   app.includes('ui.craftAddRecipeBtn.disabled = !connected || topActionsLocked || pendingQueueCount >= 50;'),
   false,
   "add recipe button should no longer be disabled only because the account is offline"
+);
+
+assert.equal(
+  app.includes('window.confirm("您确认要执行汰换吗？")'),
+  false,
+  "executing the craft queue should no longer use the browser confirm dialog"
+);
+
+assert.equal(
+  app.includes('await openConfirmModal({'),
+  true,
+  "executing the craft queue should use the in-app confirm modal before sending trade-up requests"
+);
+
+assert.equal(
+  app.includes('message: "您确认要执行汰换吗？"'),
+  true,
+  "the in-app confirm modal should show the required trade-up confirmation copy"
+);
+
+assert.equal(
+  app.includes('return !!state.craftQueueDeleteMode && !state.refreshing && !state.craftBusy && !state.craftAssistSelecting;'),
+  false,
+  "delete affordances should no longer depend on a separate delete mode toggle"
+);
+
+assert.equal(
+  app.includes("craftQueueDeleteMode"),
+  false,
+  "frontend should remove the obsolete delete-mode state and handlers now that deletion lives on each card"
 );
 
 const addFunctionMatch = app.match(/function addCurrentSelectionToCraftQueue\(\) \{([\s\S]*?)\n\}/);

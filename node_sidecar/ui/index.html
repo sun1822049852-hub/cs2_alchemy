@@ -197,6 +197,20 @@
           </div>
         </div>
 
+        <div id="confirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+          <div class="modal-card confirm-modal-card">
+            <div class="modal-header">
+              <h3 id="confirmModalTitle">请确认操作</h3>
+              <button id="confirmModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div id="confirmModalMessage" class="confirm-modal-message">确认继续吗？</div>
+            <div class="row modal-actions">
+              <button id="confirmModalCancelBtn" type="button">取消</button>
+              <button id="confirmModalConfirmBtn" class="confirm-modal-confirm-btn" type="button">确认</button>
+            </div>
+          </div>
+        </div>
+
         <section class="page hidden" id="craftPage">
           <header class="topbar craft-topbar">
             <div class="topbar-meta">
@@ -290,9 +304,6 @@
                   </button>
                   <button id="craftAddRecipeBtn" class="icon-btn craft-queue-icon-btn craft-add-recipe-btn" type="button" title="添加配方" aria-label="添加配方">
                     <span class="craft-plus-glyph" aria-hidden="true"></span>
-                  </button>
-                  <button id="craftQueueDeleteModeBtn" class="icon-btn craft-queue-icon-btn craft-delete-mode-btn" type="button" title="删除配方" aria-label="删除配方">
-                    <span class="craft-minus-glyph" aria-hidden="true"></span>
                   </button>
                   <button id="craftClearQueueBtn" class="icon-btn craft-queue-icon-btn craft-clear-queue-btn" type="button" title="清空配方" aria-label="清空配方">
                     <span class="craft-close-glyph" aria-hidden="true"></span>
