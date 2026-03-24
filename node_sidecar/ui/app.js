@@ -1879,7 +1879,7 @@ function appendCardSkinBackdrop(card, row) {
   const backdrop = document.createElement("div");
   backdrop.className = "card-skin-backdrop";
   backdrop.style.backgroundImage = `linear-gradient(90deg, rgba(10,12,16,0.82) 0%, rgba(16,19,24,0.4) 42%, rgba(16,19,24,0.04) 100%), ${cssUrlValue(imageUrl)}`;
-  backdrop.style.backgroundPosition = "center center, right 14px center";
+  backdrop.style.backgroundPosition = "center center, right 14px bottom -24px";
   backdrop.style.backgroundSize = "cover, 152px auto";
   card.classList.add("has-skin-image");
   card.append(backdrop);
@@ -3050,7 +3050,7 @@ function renderCraftGrouped(candidates) {
   const quantityTitle = showCooling ? "数量(可用/冷却中)" : "数量";
   const headers = [
     "<th><div class=\"th-sort-wrap\"><span>稀有度</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"asc\" title=\"稀有度由低到高\" aria-label=\"稀有度由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"desc\" title=\"稀有度由高到低\" aria-label=\"稀有度由高到低\"></button></span></div></th>",
-    "<th>名称</th>",
+    "<th class=\"group-name-heading\">名称</th>",
     "<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>",
     `<th><div class="th-sort-wrap"><span>${quantityTitle}</span><span class="sort-stack"><button type="button" class="arrow-tri up col-sort-btn" data-sort-key="quantity" data-sort-dir="asc" title="数量由低到高" aria-label="数量由低到高"></button><button type="button" class="arrow-tri down col-sort-btn" data-sort-key="quantity" data-sort-dir="desc" title="数量由高到低" aria-label="数量由高到低"></button></span></div></th>`
   ];
@@ -6419,7 +6419,7 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
   const headCells = [
     "<th class=\"select-col\"><input type=\"checkbox\" class=\"row-check group-check-all\" title=\"全选/全部取消\" aria-label=\"全选/全部取消\" /></th>",
     "<th><div class=\"th-sort-wrap\"><span>稀有度</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"asc\" title=\"稀有度由低到高\" aria-label=\"稀有度由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"desc\" title=\"稀有度由高到低\" aria-label=\"稀有度由高到低\"></button></span></div></th>",
-    "<th>名称</th>",
+    "<th class=\"group-name-heading\">名称</th>",
     "<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>",
     "<th><div class=\"th-sort-wrap\"><span>数量(可用/冷却中)</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"asc\" title=\"数量由低到高\" aria-label=\"数量由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"desc\" title=\"数量由高到低\" aria-label=\"数量由高到低\"></button></span></div></th>"
   ];

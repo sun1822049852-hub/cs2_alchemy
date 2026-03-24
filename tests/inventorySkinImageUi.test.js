@@ -15,6 +15,7 @@ const appFragments = [
   "row.goods_share_thumbnail_url",
   'backdrop.className = "card-skin-backdrop"',
   'linear-gradient(90deg, rgba(10,12,16,0.82) 0%, rgba(16,19,24,0.4) 42%, rgba(16,19,24,0.04) 100%)',
+  'backdrop.style.backgroundPosition = "center center, right 14px bottom -24px"',
   'card.classList.add("has-skin-image")',
   'nameCell.classList.add("group-name-cell")',
   'nameCell.classList.add("has-skin-image")',
@@ -47,6 +48,12 @@ for (const fragment of cssFragments) {
     `inventory image ui css should include fragment: ${fragment}`
   );
 }
+
+assert.match(
+  css,
+  /body\.theme-inkblue #inventoryPage \.card-skin-backdrop\s*\{[\s\S]*opacity:\s*0\.94;[\s\S]*filter:\s*none;/m,
+  "ink blue inventory cards should keep weapon art almost fully opaque on the inventory page"
+);
 
 assert.match(
   css,
