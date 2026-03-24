@@ -954,6 +954,8 @@ select.small {
 
 .group-name-cell.has-skin-image {
   background: transparent;
+  padding-left: 124px;
+  padding-right: 12px;
 }
 
 .group-name-cell.has-skin-image::before {
@@ -977,8 +979,9 @@ select.small {
   position: relative;
   z-index: 1;
   font-weight: 700;
-  display: inline-block;
+  display: block;
   max-width: 100%;
+  word-break: break-word;
 }
 
 .group-child {
@@ -2474,6 +2477,23 @@ select.small {
   background: transparent;
 }
 
+.craft-queue-list.has-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.craft-queue-list.has-items > .craft-queue-empty {
+  grid-column: 1 / -1;
+}
+
+.craft-queue-list.has-items > .craft-queue-item,
+.craft-queue-list.has-items > .craft-queue-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 .craft-queue-empty {
   min-height: 228px;
   border: 0;
@@ -2579,8 +2599,8 @@ select.small {
 
 .craft-queue-group {
   border: 1px solid #d8dee7;
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 12px;
+  padding: 10px;
   margin-bottom: 8px;
   background: #f8fbff;
 }
@@ -2618,7 +2638,7 @@ select.small {
 
 .craft-queue-group-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
@@ -2655,6 +2675,10 @@ select.small {
   font-size: 12px;
   color: #1f2937;
   font-weight: 600;
+  line-height: 1.35;
+  min-width: 0;
+  flex: 1 1 auto;
+  word-break: break-all;
 }
 
 .craft-queue-active-badge {
@@ -2670,7 +2694,7 @@ select.small {
 .craft-slot-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
 }
 
 .craft-queue-meta-list {
@@ -2702,28 +2726,58 @@ select.small {
 .craft-slot {
   position: relative;
   border: 1px solid #d5dce6;
-  border-radius: 6px;
-  padding: 18px 6px 6px;
-  min-height: 44px;
+  border-radius: 12px;
+  padding: 8px 8px 7px;
+  min-height: 78px;
   font-size: 11px;
   color: #334155;
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   line-height: 1.25;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
   overflow: hidden;
+  isolation: isolate;
 }
 
 .craft-slot.filled {
-  border-color: #aac4e6;
-  background: #eef6ff;
+  border-color: #b8cee8;
+  background: linear-gradient(180deg, #ffffff 0%, #eef5ff 100%);
 }
 
 .craft-slot.empty {
   border-style: dashed;
   color: #94a3b8;
   background: #fbfdff;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.craft-slot.has-skin-image {
+  padding: 6px;
+}
+
+.craft-slot.has-skin-image::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.04) 56%, rgba(9, 12, 18, 0.2) 100%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.craft-slot.has-skin-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--craft-slot-skin-image);
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  opacity: 0.98;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .craft-slot-name {
@@ -2732,9 +2786,47 @@ select.small {
 }
 
 .craft-slot-wear {
-  margin-top: 4px;
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
   font-size: 10px;
   color: #475569;
+  line-height: 1.18;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.craft-slot.has-skin-image .craft-slot-wear {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: auto;
+  z-index: 3;
+  margin-top: 0;
+  padding: 4px 6px 3px;
+  border-radius: 0 0 11px 11px;
+  background: rgba(10, 12, 16, 0.78);
+  backdrop-filter: blur(6px);
+  color: #f8fafc;
+  line-height: 1.15;
+  display: block;
+  text-align: center;
+  white-space: nowrap;
+  word-break: normal;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  box-shadow: 0 6px 16px rgba(2, 6, 23, 0.22);
+  font-variant-numeric: tabular-nums;
+}
+
+.craft-slot.full-wear-text .craft-slot-wear {
+  font-size: 8px;
+  letter-spacing: -0.02em;
+  text-overflow: clip;
 }
 
 .craft-slot-remove {
@@ -2752,6 +2844,7 @@ select.small {
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
+  z-index: 2;
 }
 
 .craft-slot-remove.right {
@@ -2785,6 +2878,10 @@ select.small {
 
 .craft-right-panel.compact-actions .craft-queue-actions > button {
   width: 100%;
+}
+
+.craft-right-panel.compact-actions .craft-queue-list.has-items {
+  grid-template-columns: 1fr;
 }
 
 .craft-selection-list {
@@ -3110,6 +3207,10 @@ body.craft-assist-split-dragging {
 
   .component-capacity-badge {
     box-shadow: none;
+  }
+
+  .craft-queue-list.has-items {
+    grid-template-columns: 1fr;
   }
 
   .craft-slot-grid {
@@ -3564,5 +3665,1201 @@ button:active {
 
   .saved-accounts {
     max-height: none;
+  }
+}
+
+body.theme-inkblue {
+  --bg: #06101d;
+  --panel: #0d1726;
+  --panel-soft: #101c2d;
+  --panel-strong: #132238;
+  --border: #27415e;
+  --text: #edf6ff;
+  --muted: #93a8c0;
+  --accent: #7dc4ff;
+  --success: #4be29d;
+  --danger: #ff7a90;
+  --warning: #f6c86a;
+  --focus-ring: 0 0 0 3px rgba(56, 189, 248, 0.18);
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 18%),
+    radial-gradient(circle at top right, rgba(8, 145, 178, 0.10), transparent 22%),
+    linear-gradient(180deg, #091423 0%, var(--bg) 100%);
+}
+
+body.theme-inkblue,
+body.theme-inkblue .layout,
+body.theme-inkblue .workspace,
+body.theme-inkblue .page {
+  color: var(--text);
+  background: transparent;
+}
+
+body.theme-inkblue .sidebar {
+  background: rgba(147, 197, 253, 0.05);
+  border-color: rgba(147, 197, 253, 0.10);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
+}
+
+body.theme-inkblue .sidebar-title,
+body.theme-inkblue h1,
+body.theme-inkblue h2,
+body.theme-inkblue h3,
+body.theme-inkblue .status-title,
+body.theme-inkblue .summary,
+body.theme-inkblue .component-toolbar-search-label,
+body.theme-inkblue .drawer-title {
+  color: var(--text);
+}
+
+body.theme-inkblue .nav-btn {
+  background: rgba(147, 197, 253, 0.05);
+  border-color: rgba(147, 197, 253, 0.12);
+  color: #edf6ff;
+}
+
+body.theme-inkblue .nav-btn:hover {
+  background: rgba(147, 197, 253, 0.09);
+  border-color: rgba(147, 197, 253, 0.22);
+}
+
+body.theme-inkblue .nav-btn.active {
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.26) 0%, rgba(14, 165, 233, 0.10) 100%);
+  border-color: rgba(96, 165, 250, 0.34);
+  color: #eaf4ff;
+  box-shadow: inset 3px 0 0 #3ea3ff;
+}
+
+body.theme-inkblue .panel,
+body.theme-inkblue .account-card,
+body.theme-inkblue .card,
+body.theme-inkblue .craft-assist-panel,
+body.theme-inkblue .craft-assist-preset-panel,
+body.theme-inkblue .craft-settings-panel,
+body.theme-inkblue .filter-sub-panel,
+body.theme-inkblue .filter-menu-shell,
+body.theme-inkblue .menu-list,
+body.theme-inkblue .task-float,
+body.theme-inkblue .component-target-drawer,
+body.theme-inkblue .tips,
+body.theme-inkblue .status-box,
+body.theme-inkblue .modal-card,
+body.theme-inkblue .craft-execution-card,
+body.theme-inkblue .craft-queue-group,
+body.theme-inkblue .craft-queue-item,
+body.theme-inkblue .craft-queue-empty,
+body.theme-inkblue .craft-slot,
+body.theme-inkblue .craft-selection-list,
+body.theme-inkblue .deposit-table,
+body.theme-inkblue .deposit-excluded-table {
+  background: linear-gradient(180deg, rgba(147, 197, 253, 0.045) 0%, rgba(12, 22, 38, 0.96) 100%);
+  border-color: rgba(147, 197, 253, 0.10);
+  color: var(--text);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+}
+
+body.theme-inkblue .topbar,
+body.theme-inkblue .craft-topbar {
+  background: rgba(147, 197, 253, 0.04);
+  border-color: rgba(147, 197, 253, 0.10);
+}
+
+body.theme-inkblue .muted,
+body.theme-inkblue .hint,
+body.theme-inkblue .summary-ghost,
+body.theme-inkblue .craft-queue-meta,
+body.theme-inkblue .account-card-sub,
+body.theme-inkblue .drawer-hint,
+body.theme-inkblue #summaryText,
+body.theme-inkblue #accountStatus,
+body.theme-inkblue #craftStatusText {
+  color: var(--muted);
+}
+
+body.theme-inkblue input,
+body.theme-inkblue select,
+body.theme-inkblue textarea {
+  background: #091524;
+  border-color: rgba(147, 197, 253, 0.16);
+  color: var(--text);
+}
+
+body.theme-inkblue input::placeholder,
+body.theme-inkblue textarea::placeholder {
+  color: #7f95ae;
+}
+
+body.theme-inkblue input:focus,
+body.theme-inkblue select:focus,
+body.theme-inkblue textarea:focus {
+  background: #0b1828;
+  border-color: rgba(96, 165, 250, 0.34);
+}
+
+body.theme-inkblue input[type="checkbox"],
+body.theme-inkblue input[type="radio"] {
+  accent-color: #3ea3ff;
+}
+
+body.theme-inkblue button {
+  background: linear-gradient(180deg, rgba(147, 197, 253, 0.09) 0%, rgba(9, 21, 36, 0.98) 100%);
+  border-color: rgba(147, 197, 253, 0.16);
+  color: var(--text);
+}
+
+body.theme-inkblue button:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(147, 197, 253, 0.14) 0%, rgba(12, 28, 46, 0.98) 100%);
+  border-color: rgba(147, 197, 253, 0.26);
+}
+
+body.theme-inkblue button:disabled {
+  background: rgba(64, 82, 108, 0.18);
+  border-color: rgba(116, 143, 178, 0.10);
+  color: #7388a1;
+}
+
+body.theme-inkblue .icon-btn,
+body.theme-inkblue .craft-queue-icon-btn,
+body.theme-inkblue .modal-close,
+body.theme-inkblue .drawer-close-btn {
+  background: rgba(147, 197, 253, 0.08);
+}
+
+body.theme-inkblue .group-table,
+body.theme-inkblue .craft-selection-table,
+body.theme-inkblue .deposit-table,
+body.theme-inkblue .deposit-excluded-table {
+  color: var(--text);
+}
+
+body.theme-inkblue .group-table th,
+body.theme-inkblue .group-table td,
+body.theme-inkblue .craft-selection-table th,
+body.theme-inkblue .craft-selection-table td,
+body.theme-inkblue .deposit-table th,
+body.theme-inkblue .deposit-table td,
+body.theme-inkblue .deposit-excluded-table th,
+body.theme-inkblue .deposit-excluded-table td {
+  border-color: rgba(147, 197, 253, 0.10);
+  color: #dbe9f7;
+}
+
+body.theme-inkblue .group-table th,
+body.theme-inkblue .craft-selection-table th,
+body.theme-inkblue .deposit-table th,
+body.theme-inkblue .deposit-excluded-table th {
+  background: rgba(147, 197, 253, 0.06);
+  color: #f2f8ff;
+}
+
+body.theme-inkblue .group-parent,
+body.theme-inkblue .group-child,
+body.theme-inkblue .table-row,
+body.theme-inkblue .deposit-table tr {
+  background: transparent;
+}
+
+body.theme-inkblue .group-parent:hover,
+body.theme-inkblue .group-child.selectable:hover,
+body.theme-inkblue .deposit-table tr:hover {
+  background: rgba(147, 197, 253, 0.08);
+}
+
+body.theme-inkblue .group-parent.selected,
+body.theme-inkblue .group-child.selected,
+body.theme-inkblue .card.selected,
+body.theme-inkblue .account-card.selected,
+body.theme-inkblue .craft-queue-group.active {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.16) 0%, rgba(10, 20, 36, 0.98) 100%);
+  border-color: rgba(96, 165, 250, 0.30);
+}
+
+body.theme-inkblue .card.selectable:hover,
+body.theme-inkblue .account-card:hover,
+body.theme-inkblue .craft-queue-group.selectable:hover,
+body.theme-inkblue .craft-slot:hover {
+  border-color: rgba(96, 165, 250, 0.28);
+  background-color: rgba(147, 197, 253, 0.06);
+}
+
+body.theme-inkblue .account-card-state.status,
+body.theme-inkblue .status {
+  border-color: rgba(147, 197, 253, 0.12);
+  background: rgba(147, 197, 253, 0.06);
+  color: #dce8f8;
+}
+
+body.theme-inkblue .account-tools .status.status-connected,
+body.theme-inkblue .account-card-state.status.status-connected {
+  color: #d8ffea;
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(34, 197, 94, 0.14);
+}
+
+body.theme-inkblue .account-tools .status.status-disconnected,
+body.theme-inkblue .account-card-state.status.status-disconnected {
+  color: #ffd7dd;
+  border-color: rgba(251, 113, 133, 0.28);
+  background: rgba(225, 29, 72, 0.14);
+}
+
+body.theme-inkblue .component-available-badge,
+body.theme-inkblue .component-capacity-badge,
+body.theme-inkblue .craft-queue-active-badge {
+  background: rgba(147, 197, 253, 0.08);
+  border-color: rgba(147, 197, 253, 0.14);
+  color: #dceafe;
+}
+
+body.theme-inkblue .craft-assist-overlay,
+body.theme-inkblue .modal,
+body.theme-inkblue .craft-execution-overlay {
+  background: rgba(2, 8, 18, 0.74);
+}
+
+body.theme-inkblue .craft-slot.empty,
+body.theme-inkblue .empty,
+body.theme-inkblue .craft-queue-empty-body {
+  color: #87a0bb;
+}
+
+body.theme-inkblue .group-name-label,
+body.theme-inkblue .craft-queue-group-title,
+body.theme-inkblue .card .name,
+body.theme-inkblue .craft-queue-result-title {
+  color: var(--text);
+}
+
+body.theme-inkblue .card-skin-backdrop {
+  opacity: 0.78;
+}
+
+body.theme-inkblue #inventoryPage .card-skin-backdrop {
+  opacity: 0.68;
+  filter: saturate(0.92) brightness(0.82);
+}
+
+body.theme-inkblue .group-name-cell.has-skin-image::before,
+body.theme-inkblue .craft-slot.has-skin-image::after {
+  filter: saturate(0.95) brightness(0.95);
+}
+
+body.theme-inkblue #accountPage {
+  --account-page-bg: linear-gradient(180deg, #16181c 0%, #0f1114 100%);
+  --account-surface-main: linear-gradient(180deg, rgba(24, 28, 34, 0.94), rgba(16, 19, 24, 0.96));
+  --account-surface-subtle: linear-gradient(180deg, rgba(31, 36, 43, 0.88), rgba(22, 26, 32, 0.92));
+  --account-text-main: #f7f3e8;
+  --account-text-soft: #b9c0cb;
+  --account-text-dim: #8892a1;
+  --account-accent: #dca44c;
+  --account-accent-strong: #f3c779;
+  --account-accent-foreground: #19140b;
+  --account-border-soft: rgba(243, 199, 121, 0.14);
+  --account-border-strong: rgba(220, 164, 76, 0.36);
+  --account-shadow-panel: 0 20px 48px rgba(0, 0, 0, 0.34);
+  --account-shadow-hover: 0 12px 28px rgba(0, 0, 0, 0.24);
+  --account-focus-outline: 2px solid #f3c779;
+  --account-focus-outline-offset: 2px;
+  --account-focus-halo: 0 0 0 4px rgba(243, 199, 121, 0.22);
+  --account-selected-halo: 0 0 0 2px rgba(220, 164, 76, 0.22);
+  --account-success-text: #80d6a4;
+  --account-success-tint: rgba(128, 214, 164, 0.12);
+  --account-danger-text: #ff8a8a;
+  --account-danger-tint: rgba(255, 138, 138, 0.12);
+  --account-placeholder-text: #9aa3af;
+  --account-disabled-text: #96a0ae;
+  --account-disabled-surface: rgba(255, 255, 255, 0.035);
+  --account-disabled-border: rgba(243, 199, 121, 0.08);
+  --account-disabled-chrome-opacity: 0.72;
+  background: var(--account-page-bg);
+  border-radius: 20px;
+}
+
+body.theme-inkblue #accountPage .account-form-panel,
+body.theme-inkblue #accountPage .account-list-panel {
+  background: var(--account-surface-main);
+  border-color: var(--account-border-soft);
+  border-radius: 18px;
+  color: var(--account-text-main);
+  box-shadow: var(--account-shadow-panel);
+}
+
+body.theme-inkblue #accountPage .tips,
+body.theme-inkblue #accountPage .status-box {
+  background: var(--account-surface-subtle);
+  border: 1px solid var(--account-border-soft);
+  border-radius: 16px;
+  color: var(--account-text-soft);
+  box-shadow: var(--account-shadow-hover);
+}
+
+body.theme-inkblue #accountPage .account-form-panel h2,
+body.theme-inkblue #accountPage .account-list-panel h2,
+body.theme-inkblue #accountPage .account-card-title,
+body.theme-inkblue #accountPage .status-title {
+  color: var(--account-text-main);
+}
+
+body.theme-inkblue #accountPage .form-row label,
+body.theme-inkblue #accountPage .tips,
+body.theme-inkblue #accountPage .account-card-sub,
+body.theme-inkblue #accountPage .status-text,
+body.theme-inkblue #accountPage #accountStatus,
+body.theme-inkblue #accountPage .empty {
+  color: var(--account-text-soft);
+}
+
+body.theme-inkblue #accountPage .status-title {
+  margin-bottom: 6px;
+  color: var(--account-text-dim);
+  letter-spacing: 0.04em;
+}
+
+body.theme-inkblue #accountPage .tips {
+  border-style: dashed;
+  line-height: 1.65;
+}
+
+body.theme-inkblue #accountPage .status-box {
+  padding: 12px 14px;
+}
+
+body.theme-inkblue #accountPage .status-text {
+  min-height: 40px;
+  color: var(--account-text-soft);
+  overflow-wrap: anywhere;
+}
+
+body.theme-inkblue #accountPage .status-text.error {
+  color: var(--account-danger-text);
+}
+
+body.theme-inkblue #accountPage .form-row input {
+  background: rgba(10, 12, 16, 0.52);
+  border-color: var(--account-border-soft);
+  border-radius: 12px;
+  color: var(--account-text-main);
+}
+
+body.theme-inkblue #accountPage .form-row input::placeholder {
+  color: var(--account-placeholder-text);
+}
+
+body.theme-inkblue #accountPage :is(input, button):focus-visible {
+  outline: var(--account-focus-outline);
+  outline-offset: var(--account-focus-outline-offset);
+  box-shadow: var(--account-focus-halo);
+}
+
+body.theme-inkblue #accountPage #loginSaveBtn {
+  background: linear-gradient(135deg, #e7ba67, #d49438);
+  border-color: rgba(220, 164, 76, 0.45);
+  color: var(--account-accent-foreground);
+}
+
+body.theme-inkblue #accountPage #clearAccountBtn,
+body.theme-inkblue #accountPage .account-card-actions button {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--account-border-soft);
+  color: var(--account-text-main);
+}
+
+body.theme-inkblue #accountPage .account-actions button:hover:not(:disabled),
+body.theme-inkblue #accountPage .account-card-actions button:hover:not(:disabled) {
+  border-color: var(--account-border-strong);
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+}
+
+body.theme-inkblue #accountPage #loginSaveBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #efc56f, #dc9c3f);
+}
+
+body.theme-inkblue #accountPage #loginSaveBtn:active,
+body.theme-inkblue #accountPage #clearAccountBtn:active,
+body.theme-inkblue #accountPage .account-card-actions button:active {
+  transform: translateY(1px);
+}
+
+body.theme-inkblue #accountPage :is(input, button):disabled {
+  background: var(--account-disabled-surface);
+  border-color: var(--account-disabled-border);
+  color: var(--account-disabled-text);
+  opacity: 1;
+}
+
+body.theme-inkblue #accountPage .account-card {
+  background: var(--account-surface-main);
+  border-color: var(--account-border-soft);
+  border-radius: 16px;
+  box-shadow: none;
+  color: var(--account-text-main);
+}
+
+body.theme-inkblue #accountPage .account-card:hover {
+  border-color: var(--account-border-strong);
+  box-shadow: var(--account-shadow-hover);
+  background: linear-gradient(180deg, rgba(34, 39, 46, 0.96), rgba(18, 21, 26, 0.98));
+  transform: translateY(-1px);
+}
+
+body.theme-inkblue #accountPage .account-card.connected {
+  background: var(--account-surface-main);
+}
+
+body.theme-inkblue #accountPage .account-card.selected {
+  border-color: var(--account-border-strong);
+  box-shadow: var(--account-selected-halo), var(--account-shadow-hover);
+}
+
+body.theme-inkblue #accountPage .account-card-avatar {
+  border-color: rgba(243, 199, 121, 0.12);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(45, 52, 61, 0.96), rgba(27, 31, 37, 0.96));
+}
+
+body.theme-inkblue #accountPage .account-card-avatar-fallback {
+  color: #cdbb9e;
+}
+
+body.theme-inkblue #accountPage .account-card-sub {
+  color: var(--account-text-dim);
+}
+
+body.theme-inkblue #accountPage .account-card-state.status {
+  border-color: var(--account-border-soft);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--account-text-soft);
+}
+
+body.theme-inkblue #accountPage .account-card-state.status.status-connected {
+  border-color: rgba(128, 214, 164, 0.24);
+  background: var(--account-success-tint);
+  color: var(--account-success-text);
+}
+
+body.theme-inkblue #accountPage .account-card-state.status.status-disconnected {
+  border-color: rgba(255, 138, 138, 0.24);
+  background: var(--account-danger-tint);
+  color: var(--account-danger-text);
+}
+
+body.theme-inkblue #accountPage .saved-accounts .empty,
+body.theme-inkblue #accountPage #savedAccountsWrap .empty {
+  border: 1px dashed var(--account-border-soft);
+  border-radius: 16px;
+  background: var(--account-surface-subtle);
+  color: var(--account-text-soft);
+}
+
+body.theme-inkblue {
+  background:
+    radial-gradient(circle at top left, rgba(220, 164, 76, 0.16), transparent 18%),
+    radial-gradient(circle at top right, rgba(243, 199, 121, 0.08), transparent 24%),
+    linear-gradient(180deg, #16181c 0%, #0f1114 100%);
+}
+
+body.theme-inkblue .sidebar {
+  background: linear-gradient(180deg, rgba(22, 25, 31, 0.98) 0%, rgba(14, 16, 20, 0.98) 100%);
+  border-color: rgba(243, 199, 121, 0.12);
+  box-shadow: 0 24px 52px rgba(0, 0, 0, 0.28);
+}
+
+body.theme-inkblue .sidebar-title {
+  color: #f7f3e8;
+  letter-spacing: 0.06em;
+  border-color: rgba(243, 199, 121, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(18, 20, 24, 0.92) 100%);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+body.theme-inkblue .nav-btn {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(14, 16, 20, 0.92) 100%);
+  border-color: rgba(243, 199, 121, 0.12);
+  color: #e7dfcf;
+  border-radius: 14px;
+}
+
+body.theme-inkblue .nav-btn:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(20, 22, 28, 0.96) 100%);
+  border-color: rgba(243, 199, 121, 0.24);
+  transform: translateY(-1px);
+}
+
+body.theme-inkblue .nav-btn.active {
+  background: linear-gradient(135deg, rgba(243, 199, 121, 0.24) 0%, rgba(220, 164, 76, 0.12) 100%);
+  border-color: rgba(220, 164, 76, 0.42);
+  color: #f7f3e8;
+  box-shadow: inset 3px 0 0 #dca44c, 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+body.theme-inkblue .workspace {
+  background: linear-gradient(180deg, rgba(18, 20, 24, 0.82) 0%, rgba(12, 14, 18, 0.94) 100%);
+}
+
+body.theme-inkblue .page:not(.hidden) {
+  background: transparent;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) {
+  --ops-page-bg: linear-gradient(180deg, #16181c 0%, #0f1114 100%);
+  --ops-surface-main: linear-gradient(180deg, rgba(24, 28, 34, 0.95), rgba(15, 18, 22, 0.96));
+  --ops-surface-subtle: linear-gradient(180deg, rgba(31, 36, 43, 0.88), rgba(19, 22, 27, 0.94));
+  --ops-surface-strong: linear-gradient(180deg, rgba(36, 41, 48, 0.98), rgba(18, 21, 26, 0.98));
+  --ops-control-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(14, 16, 20, 0.92) 100%);
+  --ops-control-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(20, 22, 28, 0.96) 100%);
+  --ops-control-bg-active: linear-gradient(135deg, rgba(243, 199, 121, 0.24) 0%, rgba(220, 164, 76, 0.12) 100%);
+  --ops-text-main: #f7f3e8;
+  --ops-text-soft: #b9c0cb;
+  --ops-text-dim: #8892a1;
+  --ops-accent: #dca44c;
+  --ops-accent-strong: #f3c779;
+  --ops-accent-foreground: #19140b;
+  --ops-border-soft: rgba(243, 199, 121, 0.14);
+  --ops-border-strong: rgba(220, 164, 76, 0.36);
+  --ops-panel-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+  --ops-hover-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  --ops-focus-outline: 2px solid #f3c779;
+  --ops-focus-halo: 0 0 0 4px rgba(243, 199, 121, 0.18);
+  background: var(--ops-page-bg);
+  border-radius: 20px;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(h1, h2, h3),
+body.theme-inkblue #inventoryPage :is(.filter-sub-title, .task-float-title, .drawer-title),
+body.theme-inkblue #craftPage :is(.craft-left-head > span, .craft-queue-group-title, .craft-queue-result-title, .craft-slot-name, .craft-assist-title, .craft-assist-item-title, .craft-assist-preset-title, .craft-assist-preset-name, .craft-queue-empty-body strong, .modal-header h3, .craft-assist-busy-title) {
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(.muted, .hint),
+body.theme-inkblue #inventoryPage :is(#fetchTimeText, #summaryText, .component-toolbar-search-label, .menu-item, .task-queue-empty, #componentTaskInfo, .drawer-hint, .task-queue-item),
+body.theme-inkblue #craftPage :is(#craftTopFetchTimeText, .craft-queue-meta, .craft-slot-wear, .craft-queue-empty-body, .craft-assist-field, .craft-assist-item-hint, .craft-assist-range-label, .craft-assist-preset-meta, .craft-assist-list-empty, .craft-assist-busy-detail, #craftStatusText, #craftCoolingHint) {
+  color: var(--ops-text-soft);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(input, select, textarea, .drawer-select-list) {
+  background: rgba(10, 12, 16, 0.52);
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(input, textarea)::placeholder {
+  color: #9aa3af;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(input, select, textarea, button):focus-visible {
+  outline: var(--ops-focus-outline);
+  outline-offset: 2px;
+  box-shadow: var(--ops-focus-halo);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--ops-accent);
+}
+
+body.theme-inkblue #inventoryPage .topbar,
+body.theme-inkblue #craftPage .craft-topbar,
+body.theme-inkblue #inventoryPage #componentPanel,
+body.theme-inkblue #inventoryPage #filterDrawer,
+body.theme-inkblue #inventoryPage .filter-menu-shell,
+body.theme-inkblue #inventoryPage .filter-sub-panel,
+body.theme-inkblue #inventoryPage .menu-list,
+body.theme-inkblue #inventoryPage .task-float,
+body.theme-inkblue #inventoryPage .component-target-drawer,
+body.theme-inkblue #inventoryPage #componentCraftSettingsPanel,
+body.theme-inkblue #craftPage #craftLayout > .panel,
+body.theme-inkblue #craftPage .craft-selection-list,
+body.theme-inkblue #craftPage .craft-assist-panel,
+body.theme-inkblue #craftPage .craft-assist-main-col,
+body.theme-inkblue #craftPage .craft-assist-preset-panel,
+body.theme-inkblue #craftPage .craft-assist-preset-list,
+body.theme-inkblue #craftPage .craft-settings-panel,
+body.theme-inkblue #craftPage .craft-queue-shell,
+body.theme-inkblue #craftPage .craft-execution-card {
+  background: var(--ops-surface-main);
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+  box-shadow: var(--ops-panel-shadow);
+}
+
+body.theme-inkblue #inventoryPage .topbar,
+body.theme-inkblue #craftPage .craft-topbar {
+  backdrop-filter: blur(12px);
+}
+
+body.theme-inkblue #inventoryPage .filter-menu-nav {
+  border-color: var(--ops-border-soft);
+}
+
+body.theme-inkblue #inventoryPage :is(.view-mode-btn, .icon-btn, .filter-nav-item, .menu-actions button, .task-float-actions button, .drawer-actions button, .task-queue-item),
+body.theme-inkblue #craftPage :is(.craft-queue-icon-btn, .craft-settings-btn, .craft-assist-close, .craft-assist-mode-option, .craft-assist-picker-item) {
+  background: var(--ops-control-bg);
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+  box-shadow: none;
+}
+
+body.theme-inkblue #inventoryPage :is(.view-mode-btn:hover, .icon-btn:hover, .filter-nav-item:hover, .menu-actions button:hover, .task-float-actions button:hover, .drawer-actions button:hover, .task-queue-item:hover),
+body.theme-inkblue #craftPage :is(.craft-queue-icon-btn:hover, .craft-settings-btn:hover, .craft-assist-close:hover, .craft-assist-mode-option:hover, .craft-assist-picker-item:hover) {
+  background: var(--ops-control-bg-hover);
+  border-color: rgba(243, 199, 121, 0.24);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue #inventoryPage :is(.view-mode-btn.active, .filter-nav-item.active, .task-queue-item.active),
+body.theme-inkblue #inventoryPage .card.selected,
+body.theme-inkblue #inventoryPage .group-parent.selected,
+body.theme-inkblue #inventoryPage .group-child.selected,
+body.theme-inkblue #craftPage .craft-queue-group.active {
+  background: var(--ops-control-bg-active);
+  border-color: var(--ops-border-strong);
+  color: var(--ops-text-main);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+body.theme-inkblue #inventoryPage :is(#refreshBtn, #componentDepositBtn, #targetComponentDrawerConfirm),
+body.theme-inkblue #craftPage :is(#craftRefreshBtn, .craft-assist-save-btn, .craft-assist-apply-btn, .craft-execute-btn) {
+  background: linear-gradient(135deg, #e7ba67, #d49438);
+  border-color: rgba(220, 164, 76, 0.45);
+  color: var(--ops-accent-foreground);
+}
+
+body.theme-inkblue #inventoryPage :is(#refreshBtn, #componentDepositBtn, #targetComponentDrawerConfirm):hover:not(:disabled),
+body.theme-inkblue #craftPage :is(#craftRefreshBtn, .craft-assist-save-btn, .craft-assist-apply-btn, .craft-execute-btn):hover:not(:disabled) {
+  background: linear-gradient(135deg, #efc56f, #dc9c3f);
+  border-color: rgba(243, 199, 121, 0.46);
+}
+
+body.theme-inkblue #inventoryPage :is(#disconnectBtn, #componentWithdrawBtn, #targetComponentDrawerCancel),
+body.theme-inkblue #craftPage :is(#craftDisconnectBtn, .craft-assist-toggle-btn, .craft-add-recipe-btn, .craft-delete-mode-btn) {
+  background: var(--ops-control-bg);
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue #craftPage .craft-clear-queue-btn {
+  background: linear-gradient(180deg, rgba(82, 31, 35, 0.92) 0%, rgba(49, 20, 24, 0.98) 100%);
+  border-color: rgba(255, 138, 138, 0.28);
+  color: #ffd7dd;
+}
+
+body.theme-inkblue #craftPage .craft-delete-mode-btn.active {
+  background: linear-gradient(135deg, rgba(243, 199, 121, 0.28) 0%, rgba(220, 164, 76, 0.14) 100%);
+  border-color: rgba(220, 164, 76, 0.42);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+body.theme-inkblue #inventoryPage .component-available-badge,
+body.theme-inkblue #inventoryPage .component-capacity-badge,
+body.theme-inkblue #craftPage .craft-queue-active-badge {
+  background: linear-gradient(180deg, rgba(220, 164, 76, 0.16), rgba(220, 164, 76, 0.05));
+  border-color: rgba(220, 164, 76, 0.24);
+  color: #f3ddab;
+  box-shadow: none;
+}
+
+body.theme-inkblue #inventoryPage :is(.card, .group-parent, .group-child, .group-table th, .group-table td) {
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(.group-table, .craft-selection-table, .deposit-table, .deposit-excluded-table) {
+  background: transparent;
+  border-color: rgba(243, 199, 121, 0.08);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(.group-table th, .group-table td, .craft-selection-table th, .craft-selection-table td, .deposit-table th, .deposit-table td, .deposit-excluded-table th, .deposit-excluded-table td) {
+  border-color: rgba(243, 199, 121, 0.08);
+  background-clip: padding-box;
+}
+
+body.theme-inkblue #inventoryPage .card,
+body.theme-inkblue #inventoryPage .group-parent,
+body.theme-inkblue #inventoryPage .group-child {
+  background: var(--ops-surface-subtle);
+  box-shadow: none;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .row-check {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  border: 1px solid var(--ops-border-strong);
+  border-radius: 4px;
+  background: rgba(12, 14, 18, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .row-check:checked {
+  border-color: rgba(243, 199, 121, 0.62);
+  background: linear-gradient(135deg, #f3c779, #dca44c);
+  box-shadow: inset 0 0 0 2px rgba(25, 20, 11, 0.78);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .row-check:indeterminate {
+  border-color: rgba(243, 199, 121, 0.62);
+  background: linear-gradient(135deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
+  box-shadow: inset 0 0 0 4px rgba(25, 20, 11, 0.78);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .sort-stack {
+  border-color: var(--ops-border-soft);
+  background: rgba(12, 14, 18, 0.88);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .arrow-tri {
+  background: rgba(12, 14, 18, 0.88);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .arrow-tri.up::before {
+  border-bottom-color: var(--ops-text-dim);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .arrow-tri.down::before {
+  border-top-color: var(--ops-text-dim);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .arrow-tri.active.up::before {
+  border-bottom-color: var(--ops-accent-strong);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .arrow-tri.active.down::before {
+  border-top-color: var(--ops-accent-strong);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) .arrow-tri:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.theme-inkblue #inventoryPage .group-table th {
+  background: var(--ops-surface-strong);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue #inventoryPage :is(.group-parent, .group-child) > td {
+  background: inherit;
+}
+
+body.theme-inkblue #inventoryPage :is(.card.selectable:hover, .group-child.selectable:hover) {
+  border-color: var(--ops-border-strong);
+  background: var(--ops-surface-strong);
+  box-shadow: var(--ops-hover-shadow);
+}
+
+body.theme-inkblue #inventoryPage .task-queue-list,
+body.theme-inkblue #inventoryPage .drawer-select-list {
+  border-color: var(--ops-border-soft);
+  background: rgba(12, 14, 18, 0.68);
+}
+
+body.theme-inkblue #inventoryPage .task-queue-item {
+  margin-bottom: 6px;
+}
+
+body.theme-inkblue #inventoryPage .task-queue-item:last-child {
+  margin-bottom: 0;
+}
+
+body.theme-inkblue #inventoryPage .icon-box,
+body.theme-inkblue #inventoryPage .icon-box::before {
+  border-color: #cfba91;
+}
+
+body.theme-inkblue #inventoryPage :is(.mode-glyph, .filter-glyph, .craft-gear-glyph),
+body.theme-inkblue #craftPage :is(.craft-gear-glyph) {
+  filter: invert(0.92) sepia(0.14) saturate(0.72) hue-rotate(350deg) brightness(1.08);
+}
+
+body.theme-inkblue #craftPage :is(.craft-selection-table th, .craft-selection-table td) {
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue #craftPage :is(.group-parent, .group-child) {
+  background: rgba(18, 20, 24, 0.88);
+}
+
+body.theme-inkblue #craftPage :is(.group-parent, .group-child) > td {
+  background: inherit;
+}
+
+body.theme-inkblue #craftPage .group-parent:hover,
+body.theme-inkblue #craftPage .group-child.selectable:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.theme-inkblue #craftPage .group-parent.selected,
+body.theme-inkblue #craftPage .group-child.selected {
+  background: linear-gradient(135deg, rgba(243, 199, 121, 0.18), rgba(220, 164, 76, 0.06));
+}
+
+body.theme-inkblue #craftPage .craft-selection-table th {
+  background: var(--ops-surface-strong);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(220, 164, 76, 0.72) rgba(12, 14, 18, 0.88);
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list)::-webkit-scrollbar-track {
+  background: rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
+  border: 2px solid rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+body.theme-inkblue :is(#inventoryPage, #craftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list)::-webkit-scrollbar-corner {
+  background: rgba(12, 14, 18, 0.88);
+}
+
+body.theme-inkblue #craftPage .group-child.locked {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ops-text-dim);
+}
+
+body.theme-inkblue #craftPage .craft-assist-panel {
+  border: 1px solid var(--ops-border-soft);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+body.theme-inkblue #craftPage .craft-assist-busy-mask {
+  background: rgba(12, 14, 18, 0.78);
+  border-radius: 16px;
+}
+
+body.theme-inkblue #craftPage .craft-assist-busy-card {
+  background: var(--ops-surface-strong);
+  border-color: var(--ops-border-soft);
+}
+
+body.theme-inkblue #craftPage .craft-assist-select-box,
+body.theme-inkblue #craftPage .craft-assist-selected-wrap,
+body.theme-inkblue #craftPage .craft-assist-item,
+body.theme-inkblue #craftPage .craft-assist-preset-item,
+body.theme-inkblue #craftPage .craft-assist-list-empty {
+  border-color: var(--ops-border-soft);
+  background: rgba(18, 20, 24, 0.82);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue #craftPage .craft-assist-preset-item.editing,
+body.theme-inkblue #craftPage .craft-assist-selected-tag,
+body.theme-inkblue #craftPage .craft-assist-role-tag.main {
+  border-color: var(--ops-border-strong);
+  background: linear-gradient(135deg, rgba(243, 199, 121, 0.18), rgba(220, 164, 76, 0.05));
+  color: #f3ddab;
+}
+
+body.theme-inkblue #craftPage .craft-assist-role-tag.aux,
+body.theme-inkblue #craftPage .craft-assist-role-split .role-aux {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ops-text-soft);
+}
+
+body.theme-inkblue #craftPage .craft-assist-role-split .role-main {
+  background: rgba(220, 164, 76, 0.16);
+  border-right-color: var(--ops-border-soft);
+  color: #f3ddab;
+}
+
+body.theme-inkblue #craftPage .craft-assist-item-add {
+  border-color: var(--ops-border-strong);
+  background: rgba(220, 164, 76, 0.14);
+  color: #f3ddab;
+}
+
+body.theme-inkblue #craftPage .craft-assist-picker-empty,
+body.theme-inkblue #craftPage .craft-assist-selected-empty {
+  color: var(--ops-text-dim);
+}
+
+body.theme-inkblue #craftPage .craft-queue-empty {
+  color: var(--ops-text-soft);
+}
+
+body.theme-inkblue #craftPage .craft-queue-empty-icon {
+  background: linear-gradient(180deg, rgba(220, 164, 76, 0.18) 0%, rgba(220, 164, 76, 0.06) 100%);
+  border-color: rgba(220, 164, 76, 0.22);
+  color: #f3c779;
+  box-shadow: none;
+}
+
+body.theme-inkblue #craftPage .craft-queue-item,
+body.theme-inkblue #craftPage .craft-queue-group {
+  background: var(--ops-surface-subtle);
+  border-color: var(--ops-border-soft);
+}
+
+body.theme-inkblue #craftPage .craft-queue-group.selectable:hover,
+body.theme-inkblue #craftPage .craft-assist-preset-item:hover,
+body.theme-inkblue #craftPage .craft-assist-item:hover {
+  border-color: var(--ops-border-strong);
+  background: var(--ops-surface-strong);
+}
+
+body.theme-inkblue #craftPage .craft-slot {
+  background: linear-gradient(180deg, rgba(28, 33, 40, 0.98) 0%, rgba(17, 20, 25, 0.98) 100%);
+  border-color: rgba(243, 199, 121, 0.12);
+  color: var(--ops-text-soft);
+}
+
+body.theme-inkblue #craftPage .craft-slot.filled {
+  background: linear-gradient(180deg, rgba(62, 47, 26, 0.34) 0%, rgba(24, 20, 14, 0.98) 100%);
+  border-color: rgba(220, 164, 76, 0.34);
+}
+
+body.theme-inkblue #craftPage .craft-slot.empty {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ops-text-dim);
+}
+
+body.theme-inkblue #craftPage .craft-slot.has-skin-image::before {
+  background: linear-gradient(180deg, rgba(10, 12, 16, 0.16) 0%, rgba(10, 12, 16, 0.04) 56%, rgba(10, 12, 16, 0.42) 100%);
+}
+
+body.theme-inkblue #craftPage .craft-slot.has-skin-image .craft-slot-wear {
+  background: rgba(6, 8, 12, 0.84);
+  color: #fff7e8;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
+}
+
+body.theme-inkblue #craftPage .craft-slot:hover {
+  border-color: var(--ops-border-strong);
+  background: linear-gradient(180deg, rgba(44, 36, 22, 0.3) 0%, rgba(22, 19, 14, 0.98) 100%);
+}
+
+body.theme-inkblue #craftPage .craft-execute-btn::before {
+  background: radial-gradient(ellipse at center, rgba(220, 164, 76, 0.52) 0%, rgba(220, 164, 76, 0.22) 44%, rgba(220, 164, 76, 0.04) 70%, rgba(220, 164, 76, 0) 86%);
+}
+
+body.theme-inkblue #craftPage .craft-execution-card {
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue #craftPage .craft-execution-detail {
+  color: var(--ops-text-soft);
+}
+
+.layout {
+  position: relative;
+  display: block;
+  min-height: 100vh;
+}
+
+.nav-shell {
+  --nav-shell-collapsed-width: 34px;
+  --nav-shell-expanded-width: 244px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 34px;
+  z-index: 260;
+  pointer-events: none;
+  transition: width 0.18s ease;
+}
+
+.nav-shell > * {
+  pointer-events: auto;
+}
+
+.nav-shell.nav-open,
+.nav-shell:hover,
+.nav-shell:focus-within {
+  width: 244px;
+}
+
+.sidebar {
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 228px;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  border-radius: 0 24px 24px 0;
+  opacity: 0.01;
+  pointer-events: none;
+  transform: translateX(calc(-100% - 14px));
+  transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+}
+
+.nav-shell.nav-open .sidebar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.nav-shell:hover .sidebar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.nav-shell:focus-within .sidebar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.nav-rail-trigger {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 34px;
+  height: 118px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 0 18px 18px 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(232, 239, 249, 0.96) 100%);
+  color: #1f4b8f;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+  clip-path: polygon(0 0, 100% 12%, 100% 88%, 0 100%);
+  transform: translateY(-50%);
+  transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.nav-rail-trigger:hover {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(220, 231, 247, 1) 100%);
+}
+
+.nav-shell.nav-open .nav-rail-trigger,
+.nav-shell:hover .nav-rail-trigger,
+.nav-shell:focus-within .nav-rail-trigger {
+  opacity: 0;
+  transform: translate(-8px, -50%);
+  pointer-events: none;
+}
+
+.nav-rail-arrow {
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg) translateX(-1px);
+}
+
+.workspace {
+  min-width: 0;
+  padding: 16px 18px 16px 42px;
+}
+
+body.theme-inkblue #accountPage #savedAccountsWrap {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(220, 164, 76, 0.72) rgba(12, 14, 18, 0.84);
+}
+
+body.theme-inkblue #accountPage #savedAccountsWrap::-webkit-scrollbar {
+  width: 10px;
+}
+
+body.theme-inkblue #accountPage #savedAccountsWrap::-webkit-scrollbar-track {
+  background: rgba(12, 14, 18, 0.84);
+  border-radius: 999px;
+}
+
+body.theme-inkblue #accountPage #savedAccountsWrap::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
+  border: 2px solid rgba(12, 14, 18, 0.84);
+  border-radius: 999px;
+}
+
+body.theme-inkblue #accountPage #savedAccountsWrap::-webkit-scrollbar-corner {
+  background: rgba(12, 14, 18, 0.84);
+}
+
+body.theme-inkblue .nav-rail-trigger {
+  border-color: rgba(243, 199, 121, 0.16);
+  background: linear-gradient(180deg, rgba(36, 31, 23, 0.96) 0%, rgba(14, 16, 20, 0.98) 100%);
+  color: #f3c779;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
+}
+
+body.theme-inkblue .nav-rail-trigger:hover {
+  border-color: rgba(243, 199, 121, 0.34);
+  background: linear-gradient(180deg, rgba(48, 40, 28, 0.98) 0%, rgba(18, 20, 24, 0.98) 100%);
+}
+
+@media (max-width: 1120px) {
+  .nav-shell.nav-open,
+  .nav-shell:hover,
+  .nav-shell:focus-within {
+    width: min(248px, calc(100vw - 44px));
+  }
+
+  .sidebar {
+    top: 12px;
+    bottom: 12px;
+    width: min(248px, calc(100vw - 44px));
+    padding: 16px 12px;
+  }
+
+  .sidebar-title {
+    margin: 0 0 12px;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .nav-btn {
+    width: 100%;
+    min-width: 0;
+    margin: 0 0 8px;
+    justify-content: flex-start;
+  }
+
+  .workspace {
+    padding: 14px 14px 14px 24px;
+  }
+}
+
+@media (max-width: 720px) {
+  .nav-shell {
+    width: 30px;
+  }
+
+  .nav-shell.nav-open,
+  .nav-shell:hover,
+  .nav-shell:focus-within {
+    width: min(242px, calc(100vw - 36px));
+  }
+
+  .sidebar {
+    top: 10px;
+    bottom: 10px;
+    width: min(242px, calc(100vw - 36px));
+    border-radius: 0 20px 20px 0;
+    transform: translateX(calc(-100% - 12px));
+  }
+
+  .nav-rail-trigger {
+    width: 30px;
+    height: 92px;
+  }
+
+  .workspace {
+    padding: 12px 12px 12px 18px;
   }
 }

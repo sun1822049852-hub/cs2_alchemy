@@ -6,14 +6,19 @@
     <title>CS2 管理界面 (Node)</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="theme-inkblue">
     <div class="layout">
-      <aside class="sidebar">
-        <div class="sidebar-title">功能导航</div>
-        <button class="nav-btn active" data-page="accountPage" id="navAccount">账号管理</button>
-        <button class="nav-btn" data-page="inventoryPage" id="navInventory">库存总览</button>
-        <button class="nav-btn" data-page="craftPage" id="navCraft">炼金汰换</button>
-      </aside>
+      <div id="navShell" class="nav-shell">
+        <button id="navRailTrigger" class="nav-rail-trigger" type="button" aria-label="展开功能导航" aria-controls="mainSidebar" aria-expanded="false">
+          <span class="nav-rail-arrow" aria-hidden="true"></span>
+        </button>
+        <aside class="sidebar" id="mainSidebar">
+          <div class="sidebar-title">功能导航</div>
+          <button class="nav-btn active" data-page="accountPage" id="navAccount">账号管理</button>
+          <button class="nav-btn" data-page="inventoryPage" id="navInventory">库存总览</button>
+          <button class="nav-btn" data-page="craftPage" id="navCraft">炼金汰换</button>
+        </aside>
+      </div>
 
       <main class="workspace">
         <section class="page" id="accountPage">
@@ -139,6 +144,7 @@
                   <div id="componentCraftSettingsPanel" class="craft-settings-panel hidden">
                     <label class="inline"><span>使用组件中物品</span><input id="componentCraftUseComponentItems" type="checkbox" /></label>
                     <label class="inline"><span>显示种子</span><input id="componentCraftShowSeed" type="checkbox" /></label>
+                    <label class="inline"><span>显示完整磨损</span><input id="componentCraftShowFullWear" type="checkbox" /></label>
                     <label class="inline"><span>显示冷却时间</span><input id="componentCraftShowCoolingTime" type="checkbox" /></label>
                     <label class="inline"><span>磨损偏移阈值(%)</span><input id="componentCraftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
                     <div id="componentCraftCoolingHint" class="muted">冷却中可选：无</div>
@@ -216,6 +222,7 @@
                     <label class="inline"><span>使用组件中物品</span><input id="craftUseComponentItems" type="checkbox" /></label>
                     <label class="inline"><span>使用冷却中的物品</span><input id="craftIncludeCooling" type="checkbox" /></label>
                     <label class="inline"><span>显示种子</span><input id="craftShowSeed" type="checkbox" /></label>
+                    <label class="inline"><span>显示完整磨损</span><input id="craftShowFullWear" type="checkbox" /></label>
                     <label class="inline"><span>磨损偏移阈值(%)</span><input id="craftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
                     <div id="craftCoolingHint" class="muted">冷却中可选：无</div>
                   </div>

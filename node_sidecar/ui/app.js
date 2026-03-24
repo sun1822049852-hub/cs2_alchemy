@@ -16,12 +16,12 @@ const WEAR_SUFFIX_RANGES = [
 ];
 
 const state = {
-  currentPage: "accountPage", accounts: [], activeAccount: "", accountSelectedUsername: "",
+  currentPage: "accountPage", navDrawerOpen: false, accounts: [], activeAccount: "", accountSelectedUsername: "",
   currentAccountUsername: "", connectedUsername: "", rows: [], mode: "grouped", searchText: "",
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
-  craftSelectedItemIds: new Set(), craftBusy: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftQueueDeleteMode: false, craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 360,
+  craftSelectedItemIds: new Set(), craftBusy: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftQueueDeleteMode: false, craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 360,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "",
   craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false,
@@ -37,6 +37,7 @@ const state = {
 };
 
 const ui = {
+  navShell: document.getElementById("navShell"), navRailTrigger: document.getElementById("navRailTrigger"), mainSidebar: document.getElementById("mainSidebar"),
   navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"),
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
@@ -58,7 +59,7 @@ const ui = {
   showComponentItemsWrap: document.getElementById("showComponentItemsWrap"), showComponentItems: document.getElementById("showComponentItems"),
   componentDepositBtn: document.getElementById("componentDepositBtn"), componentWithdrawBtn: document.getElementById("componentWithdrawBtn"),
   componentCraftSettingsBtn: document.getElementById("componentCraftSettingsBtn"), componentCraftSettingsPanel: document.getElementById("componentCraftSettingsPanel"), componentCraftUseComponentItems: document.getElementById("componentCraftUseComponentItems"),
-  componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
+  componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowFullWear: document.getElementById("componentCraftShowFullWear"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
   componentCraftCoolingHint: document.getElementById("componentCraftCoolingHint"),
   componentTaskFloat: document.getElementById("componentTaskFloat"), componentTaskQueueList: document.getElementById("componentTaskQueueList"),
   componentTaskCancelBtn: document.getElementById("componentTaskCancelBtn"), componentTaskInfo: document.getElementById("componentTaskInfo"),
@@ -72,7 +73,7 @@ const ui = {
   craftSelectedText: document.getElementById("craftSelectedText"), craftRecipeText: document.getElementById("craftRecipeText"),
   craftStatusText: document.getElementById("craftStatusText"), craftCoolingHint: document.getElementById("craftCoolingHint"), craftSelectionTitle: document.getElementById("craftSelectionTitle"),
   craftLeftPanel: document.getElementById("craftLeftPanel"), craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
-  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
+  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
   craftAddRecipeBtn: document.getElementById("craftAddRecipeBtn"), craftExecuteQueueBtn: document.getElementById("craftExecuteQueueBtn"),
   craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftQueueDeleteModeBtn: document.getElementById("craftQueueDeleteModeBtn"), craftQueueList: document.getElementById("craftQueueList"),
   craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
@@ -534,7 +535,7 @@ function applyCraftLayoutWidth() {
 function updateCraftActionLayout() {
   if (!ui.craftRightPanel) return;
   const width = Number(ui.craftRightPanel.clientWidth || 0);
-  ui.craftRightPanel.classList.toggle("compact-actions", width > 0 && width < 390);
+  ui.craftRightPanel.classList.toggle("compact-actions", width > 0 && width < 550);
 }
 
 function clampCraftAssistPresetWidth(width) {
@@ -662,6 +663,7 @@ function saveCraftUiPrefs() {
           craft_use_component_items: !!state.craftUseComponentItems,
           craft_include_cooling: !!state.craftIncludeCooling,
           craft_show_seed: !!state.craftShowSeed,
+        craft_show_full_wear: !!state.craftShowFullWear,
         craft_show_cooling_time: !!state.craftShowCoolingTime,
         craft_assist_wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
         craft_right_width: Number(state.craftRightPanelWidth) || 360,
@@ -682,6 +684,7 @@ function loadCraftUiPrefs() {
     if (typeof prefs.craft_use_component_items === "boolean") state.craftUseComponentItems = prefs.craft_use_component_items;
     if (typeof prefs.craft_include_cooling === "boolean") state.craftIncludeCooling = prefs.craft_include_cooling;
     if (typeof prefs.craft_show_seed === "boolean") state.craftShowSeed = prefs.craft_show_seed;
+    if (typeof prefs.craft_show_full_wear === "boolean") state.craftShowFullWear = prefs.craft_show_full_wear;
     if (typeof prefs.craft_show_cooling_time === "boolean") state.craftShowCoolingTime = prefs.craft_show_cooling_time;
     if (Number.isFinite(Number(prefs.craft_assist_wear_offset_pct))) {
       state.craftAssistWearOffsetPct = normalizeCraftAssistWearOffsetPct(prefs.craft_assist_wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
@@ -1366,17 +1369,29 @@ function syncAccountFormBySelection() {
 
 function showPage(pageId) {
   state.currentPage = pageId;
+  if (ui.navShell && ui.navShell.contains(document.activeElement) && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
   for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft]]) {
     const active = id === pageId;
     document.getElementById(id).classList.toggle("hidden", !active);
     btn.classList.toggle("active", active);
   }
+  setNavDrawerOpen(false);
   if (pageId === "accountPage") renderSavedAccounts();
   if (pageId === "inventoryPage") render();
   if (pageId === "craftPage") {
     applyCraftLayoutWidth();
     renderCraftPage();
   }
+}
+function syncNavDrawerDom() {
+  if (ui.navShell) ui.navShell.classList.toggle("nav-open", !!state.navDrawerOpen);
+  if (ui.navRailTrigger) ui.navRailTrigger.setAttribute("aria-expanded", state.navDrawerOpen ? "true" : "false");
+}
+function setNavDrawerOpen(open) {
+  state.navDrawerOpen = !!open;
+  syncNavDrawerDom();
 }
 
 function syncInventoryAccountSelect() {
@@ -1863,11 +1878,19 @@ function appendCardSkinBackdrop(card, row) {
   if (!card || !imageUrl) return "";
   const backdrop = document.createElement("div");
   backdrop.className = "card-skin-backdrop";
-  backdrop.style.backgroundImage = `linear-gradient(90deg, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.88) 42%, rgba(255,255,255,0.54) 100%), ${cssUrlValue(imageUrl)}`;
+  backdrop.style.backgroundImage = `linear-gradient(90deg, rgba(10,12,16,0.82) 0%, rgba(16,19,24,0.4) 42%, rgba(16,19,24,0.04) 100%), ${cssUrlValue(imageUrl)}`;
   backdrop.style.backgroundPosition = "center center, right 14px center";
   backdrop.style.backgroundSize = "cover, 152px auto";
   card.classList.add("has-skin-image");
   card.append(backdrop);
+  return imageUrl;
+}
+function decorateCraftSlotSkinImage(slot, row) {
+  if (!slot) return "";
+  const imageUrl = preferredRowSkinImageUrl(row);
+  if (!imageUrl) return "";
+  slot.classList.add("has-skin-image");
+  slot.style.setProperty("--craft-slot-skin-image", cssUrlValue(imageUrl));
   return imageUrl;
 }
 function decorateGroupNameCell(nameCell, text, imageUrl) {
@@ -1915,6 +1938,10 @@ function wearTextFull(value) {
   const text = String(n);
   if (!/[eE]/.test(text)) return text;
   return n.toFixed(16).replace(/\.?0+$/, "");
+}
+function formatVisibleWearText(value, decimals = 8) {
+  if (value == null) return "-";
+  return state.craftShowFullWear ? wearTextFull(value) : numberTextTrunc(value, decimals);
 }
 function parseOptionalWear01(value) {
   const raw = String(value == null ? "" : value).trim();
@@ -2596,12 +2623,17 @@ function getRelativeWearValue(row) {
 }
 function absoluteWearLabel(row, {prefix = true} = {}) {
   const value = getAbsoluteWearValue(row);
-  const text = value == null ? "-" : wearTextFull(value);
+  const text = value == null ? "-" : formatVisibleWearText(value, 8);
   return prefix ? `绝对磨损 ${text}` : text;
 }
 function relativeWearLabel(row, {prefix = true} = {}) {
   const value = getRelativeWearValue(row);
-  const text = value == null ? "-" : wearTextFull(value);
+  const text = value == null ? "-" : formatVisibleWearText(value, 8);
+  return prefix ? `相对磨损 ${text}` : text;
+}
+function relativeWearDisplayLabel(row, {prefix = true} = {}) {
+  const value = getRelativeWearValue(row);
+  const text = value == null ? "-" : formatVisibleWearText(value, 8);
   return prefix ? `相对磨损 ${text}` : text;
 }
 function averageRelativeWearText(rows) {
@@ -2737,7 +2769,9 @@ function buildPendingCraftQueueTitle({pendingIndex = 1, recipeRows = []} = {}) {
   return `#${index} | 平均相对磨损 ${averageRelativeWearText(recipeRows)}`;
 }
 function formatCraftSlotWear(row) {
-  return absoluteWearLabel(row, {prefix: false});
+  const value = getAbsoluteWearValue(row);
+  if (value == null) return "-";
+  return state.craftShowFullWear ? wearTextFull(value) : numberTextTrunc(value, 8);
 }
 function averageAbsoluteWearText(rows) {
   const values = (Array.isArray(rows) ? rows : [])
@@ -2759,11 +2793,16 @@ function makeCraftSlotNode({row = null, rawId = "", onRemove = null}) {
   const assetId = row ? rowAssetId(row) : String(rawId || "").trim();
   const wearText = row ? formatCraftSlotWear(row) : "-";
   slot.classList.add("filled");
+  if (row) decorateCraftSlotSkinImage(slot, row);
+  slot.classList.toggle("full-wear-text", !!state.craftShowFullWear);
   const wear = document.createElement("div");
   wear.className = "craft-slot-wear";
   wear.textContent = wearText;
+  wear.title = wearText;
   slot.append(wear);
-  slot.title = row ? (itemDisplayName(row) || "未命名物品") : (assetId || "未知物品");
+  slot.title = row
+    ? `${itemDisplayName(row) || "未命名物品"}\n磨损 ${wearText}`
+    : (assetId || "未知物品");
   if (typeof onRemove === "function") {
     const removeRight = document.createElement("button");
     removeRight.type = "button";
@@ -3092,12 +3131,12 @@ function renderCraftGrouped(candidates) {
       child.className = `group-child${selectable ? " selectable" : ""}${selected ? " selected" : ""}${locked ? " locked" : ""}${!componentRow && coolingUnlockTs(item) > 0 ? " cooling" : ""}`;
       const childCells = [
         "<td></td>",
-        `<td>${relativeWearLabel(item)}</td>`,
+        `<td>${relativeWearDisplayLabel(item)}</td>`,
         "<td></td>",
         "<td></td>"
       ];
       if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
-      childCells.push(`<td>${itemHasWear(item) ? wearTextFull(item.float_value) : ""}</td>`);
+      childCells.push(`<td>${itemHasWear(item) ? formatVisibleWearText(item.float_value, 8) : ""}</td>`);
       if (showCooling) {
         childCells.push(`<td>${componentRow ? "" : (locked ? "已在配方预览" : craftItemCooldownLabel(item))}</td>`);
       }
@@ -3212,6 +3251,7 @@ function syncCraftSettingsControls(allCraftRows = null) {
   const useComponentItems = !!state.craftUseComponentItems;
   const includeCooling = !!state.craftIncludeCooling;
   const showSeed = !!state.craftShowSeed;
+  const showFullWear = !!state.craftShowFullWear;
   const showCoolingTime = !!state.craftShowCoolingTime;
   const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
   state.craftAssistWearOffsetPct = wearOffsetPct;
@@ -3221,6 +3261,8 @@ function syncCraftSettingsControls(allCraftRows = null) {
   if (ui.componentCraftIncludeCooling) ui.componentCraftIncludeCooling.checked = includeCooling;
   if (ui.craftShowSeed) ui.craftShowSeed.checked = showSeed;
   if (ui.componentCraftShowSeed) ui.componentCraftShowSeed.checked = showSeed;
+  if (ui.craftShowFullWear) ui.craftShowFullWear.checked = showFullWear;
+  if (ui.componentCraftShowFullWear) ui.componentCraftShowFullWear.checked = showFullWear;
   if (ui.craftShowCoolingTime) ui.craftShowCoolingTime.checked = showCoolingTime;
   if (ui.componentCraftShowCoolingTime) ui.componentCraftShowCoolingTime.checked = showCoolingTime;
   if (ui.craftAssistWearOffsetPct && document.activeElement !== ui.craftAssistWearOffsetPct) {
@@ -5111,6 +5153,7 @@ function renderCraftQueue() {
   const prevScrollTop = Math.max(0, Number(ui.craftQueueList.scrollTop || 0) || 0);
   ui.craftQueueList.replaceChildren();
   const list = Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [];
+  ui.craftQueueList.classList.toggle("has-items", !!list.length);
   const rowsById = buildRowsByAssetId(state.rows);
   if (!list.length) {
     const empty = document.createElement("div");
@@ -6026,10 +6069,10 @@ function applyFilter() {
   }
 
   const wearCheck = validateWearFilter({autoFix: false});
-  const wearRows = allRows.filter(itemHasWear);
-  const noWearRows = allRows.filter((x) => !itemHasWear(x));
+  const visibleRows = allRows.filter((x) => !x.hidden_reason || String(x.casket_id || "").trim());
+  const wearRows = visibleRows.filter(itemHasWear);
+  const noWearRows = visibleRows.filter((x) => !itemHasWear(x));
   let rows = wearRows;
-  rows = rows.filter((x) => !x.hidden_reason || String(x.casket_id || "").trim());
   if (keyword) rows = rows.filter((x) => itemSearchText(x).includes(keyword));
   if (state.raritySelected.size && state.raritySelected.size < RARITY_VALUES.length) {
     rows = rows.filter((x) => state.raritySelected.has(rarityName(x)));
@@ -6239,7 +6282,7 @@ function renderCards(filteredRows, totalRows, filterKey = "") {
     if (!componentRow) {
       lines.push(`稀有度: ${rarityName(row)}`);
     }
-    if (itemHasWear(row)) lines.push(`磨损: ${wearTextFull(row.float_value)}`);
+    if (itemHasWear(row)) lines.push(`磨损: ${formatVisibleWearText(row.float_value, 8)}`);
     const cid = String(row.casket_id || "").trim();
     const prefix = cid ? `组件: ${componentNameById(cid)}` : "";
     const unlock = coolingUnlockTs(row);
@@ -6341,8 +6384,8 @@ function buildGroupRows(filteredRows) {
       const minWear = Math.min(...vals);
       const maxWear = Math.max(...vals);
       wearRangeText = items.length <= 1 || Math.abs(maxWear - minWear) <= 1e-9
-        ? numberTextTrunc(minWear, WEAR_INPUT_DECIMALS)
-        : `${numberTextTrunc(minWear, WEAR_INPUT_DECIMALS)}~${numberTextTrunc(maxWear, WEAR_INPUT_DECIMALS)}`;
+        ? formatVisibleWearText(minWear, 8)
+        : `${formatVisibleWearText(minWear, 8)}~${formatVisibleWearText(maxWear, 8)}`;
     }
 
     out.push({
@@ -6463,7 +6506,7 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
         "<td></td>"
       ];
       if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
-      childCells.push(`<td>${itemHasWear(item) ? wearTextFull(item.float_value) : ""}</td>`);
+      childCells.push(`<td>${itemHasWear(item) ? formatVisibleWearText(item.float_value, 8) : ""}</td>`);
       if (showCoolingTime) childCells.push(`<td>${componentRow ? "" : cooldownText(item)}</td>`);
       child.innerHTML = childCells.join("");
       if (selectable) {
@@ -6796,9 +6839,43 @@ function bindEvents() {
       }
     });
   }
+  if (ui.navShell) {
+    ui.navShell.addEventListener("mouseenter", () => {
+      setNavDrawerOpen(true);
+    });
+    ui.navShell.addEventListener("mouseleave", () => {
+      if (state.navDrawerOpen && ui.navShell.contains(document.activeElement)) return;
+      setNavDrawerOpen(false);
+    });
+    ui.navShell.addEventListener("focusin", () => {
+      setNavDrawerOpen(true);
+    });
+    ui.navShell.addEventListener("focusout", () => {
+      requestAnimationFrame(() => {
+        if (ui.navShell.contains(document.activeElement)) return;
+        setNavDrawerOpen(false);
+      });
+    });
+  }
+  if (ui.navRailTrigger) {
+    ui.navRailTrigger.onclick = (evt) => {
+      evt.stopPropagation();
+      setNavDrawerOpen(!state.navDrawerOpen);
+    };
+  }
+  document.addEventListener("pointerdown", (evt) => {
+    if (!state.navDrawerOpen || !ui.navShell) return;
+    if (ui.navShell.contains(evt.target)) return;
+    setNavDrawerOpen(false);
+  });
+  document.addEventListener("keydown", (evt) => {
+    if (evt.key !== "Escape" || !state.navDrawerOpen) return;
+    setNavDrawerOpen(false);
+  });
   ui.navAccount.onclick = () => showPage("accountPage");
   ui.navInventory.onclick = () => showPage("inventoryPage");
   ui.navCraft.onclick = () => showPage("craftPage");
+  syncNavDrawerDom();
 
   ui.loginSaveBtn.onclick = loginAndSave;
   ui.clearAccountBtn.onclick = clearAccountForm;
@@ -7073,6 +7150,22 @@ function bindEvents() {
   if (ui.componentCraftShowSeed) {
     ui.componentCraftShowSeed.onchange = () => {
       applyCraftShowSeed(ui.componentCraftShowSeed.checked);
+    };
+  }
+  const applyCraftShowFullWear = (checked) => {
+    state.craftShowFullWear = !!checked;
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+    renderCraftPage();
+  };
+  if (ui.craftShowFullWear) {
+    ui.craftShowFullWear.onchange = () => {
+      applyCraftShowFullWear(ui.craftShowFullWear.checked);
+    };
+  }
+  if (ui.componentCraftShowFullWear) {
+    ui.componentCraftShowFullWear.onchange = () => {
+      applyCraftShowFullWear(ui.componentCraftShowFullWear.checked);
     };
   }
   const applyCraftShowCoolingTime = (checked) => {
