@@ -32,12 +32,16 @@
   - Dedicated fixture worker that never responds so per-shard/group/call timeout handling can be tested deterministically.
 - Create: `C:/Users/18220/Desktop/cs2_alchemy/tests/fixtures/craftAssistShardCrashWorker.js`
   - Dedicated fixture worker that exits or throws immediately so `group full fallback` behavior can be asserted.
+- Create: `C:/Users/18220/Desktop/cs2_alchemy/tests/fixtures/craftAssistOversizedPrefilterRows.js`
+  - Deterministic row builders for medium/large oversized groups, `expand retry`, `rarity full fallback`, and fixed-sample comparison recipes.
 - Modify: `C:/Users/18220/Desktop/cs2_alchemy/tests/fixtures/craftAssistCrashOnceWorker.js`
   - Await the async craft-assist service call so the request-worker crash-retry fixture still returns real selection payloads after the service integration changes.
 - Modify: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistService.test.js`
   - Service-level regression coverage for 2-shard and 4-shard prefilter paths, `group full fallback`, `rarity full fallback`, and trace fields.
 - Modify: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistWorkerPool.test.js`
   - Verify nested shard workers still work when craft assist runs inside the existing request worker pool.
+- Create: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistOversizedPrefilterCompare.test.js`
+  - Fixed-sample comparison gate that runs `ENABLE_OVERSIZED_PREFILTER=false` vs enabled-on override, reports success-rate / overall-gap / timing deltas, and enforces the rollout thresholds from the spec.
 
 ## Chunk 1: Build And Lock The Prefilter Core
 
@@ -187,7 +191,7 @@ Expected: FAIL with module-not-found or missing-export errors for `craftAssistSh
 ```js
 function resolvePrefilterOptions(overrides = {}) {
   return {
-    enableOversizedPrefilter: true,
+    enableOversizedPrefilter: false,
     oversized2ShardsThreshold: 500,
     oversized4ShardsThreshold: 1500,
     topK: 40,
@@ -456,7 +460,35 @@ parentPort.on("message", (message) => {
 });
 ```
 
-- [ ] **Step 3: Implement deterministic shard ranking with `core keep`, `edge keep`, and stats fields**
+- [ ] **Step 3: Add a failing golden worker test that posts a valid shard payload and locks `core keep`, `preferred-side bias`, `edge keep`, and the response stats contract**
+
+```js
+async function test_shard_worker_prefers_correct_side_and_reports_stats() {
+  const reply = await runShardWorkerOnce({
+    recipeNo: 1,
+    groupIndex: 0,
+    shardIndex: 0,
+    shardCount: 2,
+    role: "main",
+    targetValue: 0.21,
+    topK: 6,
+    edgeKeepPerSide: 2,
+    candidates: [
+      {id: "a", value: 0.209, orderedIndex: 0},
+      {id: "b", value: 0.211, orderedIndex: 1},
+      {id: "c", value: 0.212, orderedIndex: 2},
+      {id: "d", value: 0.18, orderedIndex: 3},
+      {id: "e", value: 0.24, orderedIndex: 4}
+    ]
+  });
+  assert.deepEqual(reply.result.selectedIds, ["b", "c", "a", "d", "e"]);
+  assert.equal(reply.result.stats.inputCount, 5);
+  assert.equal(reply.result.stats.outputCount, 5);
+  assert.equal(reply.result.stats.preferredSideCount >= 1, true);
+}
+```
+
+- [ ] **Step 4: Implement deterministic shard ranking with `core keep`, `edge keep`, and stats fields named exactly as the spec requires**
 
 ```js
 const {selectedIds, preferredSideCount, oppositeSideCount} = pickShardCandidates({
@@ -467,15 +499,15 @@ const {selectedIds, preferredSideCount, oppositeSideCount} = pickShardCandidates
   candidates
 });
 const stats = {
-  candidateCount: candidates.length,
-  selectedCount: selectedIds.length,
+  inputCount: candidates.length,
+  outputCount: selectedIds.length,
   preferredSideCount,
   oppositeSideCount
 };
 parentPort.postMessage({type: "result", requestId, ok: true, result: {groupIndex, shardIndex, selectedIds, stats}});
 ```
 
-- [ ] **Step 4: Run `node --check` on the new worker entry and then re-run the shard-prefilter tests**
+- [ ] **Step 5: Run `node --check` on the new worker entry and then re-run the shard-prefilter tests**
 
 Run: `node --check "./node_sidecar/src/services/craftAssistShardWorker.js"`
 
@@ -533,24 +565,26 @@ async function terminateActiveWorkers(activeWorkers) {
 }
 ```
 
-- [ ] **Step 3: Implement the phase state machine exactly as `base -> expand -> rarity_full`, including `group full fallback`, `call timeout mixed-state forbidden`, and explicit worker termination on `rarity full fallback`**
+- [ ] **Step 3: Implement a single-phase prefilter executor in `craftAssistShardPrefilter.js` that handles one call (`prefilter/base` or `prefilter/expand`) at a time, including `group full fallback`, single-group timeout fallback, and `call timeout mixed-state forbidden`**
 
 ```js
-async function prefilterOversizedGroups(args) {
-  const base = await runPhase({...args, phaseName: "prefilter/base", phaseOptions: baseOptions});
-  if (base.kind === "prefilter_ready") return base.result;
-  if (base.kind === "call_timeout") {
-    await terminateActiveWorkers(base.activeWorkers);
-    return buildRarityFullFallbackResult({...args, retryMode: "rarity_full", discardedPhase: "prefilter/base"});
+async function runPrefilterPhase({groups, targetValue, recipeContext, phaseName, phaseOptions}) {
+  const phaseResult = await runPhaseWorkers({groups, targetValue, recipeContext, phaseName, phaseOptions});
+  if (phaseResult.kind === "call_timeout") {
+    await terminateActiveWorkers(phaseResult.activeWorkers);
+    return {kind: "call_timeout", usedRarityFullFallback: true, groups, prefilterTrace: phaseResult.prefilterTrace};
   }
-  const expand = await runPhase({...args, phaseName: "prefilter/expand", phaseOptions: expandOptions});
-  if (expand.kind === "prefilter_ready") return expand.result;
-  await terminateActiveWorkers(expand.activeWorkers);
-  return buildRarityFullFallbackResult({...args, retryMode: "rarity_full", discardedPhase: expand.kind});
+  return {
+    kind: "phase_ready",
+    groups: phaseResult.groups,
+    prefilterTrace: phaseResult.prefilterTrace,
+    groupFallbackIndexes: phaseResult.groupFallbackIndexes,
+    usedRarityFullFallback: false
+  };
 }
 ```
 
-- [ ] **Step 4: Ensure `prefilterTrace` carries `groupFallbackIndexes`, `retryMode`, `shardStats`, `preferredSideCount`, and `oppositeSideCount` so tests can assert the state machine**
+- [ ] **Step 4: Extend `tests/craftAssistShardPrefilter.test.js` so the single-phase executor covers `prefilterGroupTimeoutMs`, `group full fallback`, `call timeout -> rarity_full`, and the full trace schema (`enabled`, `targetValue`, `candidateCountBefore/After`, `centerOverlapSize`, `prefilterMs`, `usedRarityFullFallback`)**
 
 - [ ] **Step 5: Re-run the shard-prefilter test file and make it pass**
 
@@ -570,6 +604,7 @@ Expected: Commit succeeds with only the new prefilter files staged.
 ### Task 6: Integrate prefilter into `craftAssistService`
 
 **Files:**
+- Create: `C:/Users/18220/Desktop/cs2_alchemy/tests/fixtures/craftAssistOversizedPrefilterRows.js`
 - Modify: `C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/craftAssistService.js`
 - Modify: `C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/craftAssistWorker.js`
 - Modify: `C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js`
@@ -583,74 +618,133 @@ const oversizedMaterials = [
   {name: "Aux", names: ["Aux"], role: "neutral", count: 10, wear_min: 0, wear_max: 1}
 ];
 
-function buildOversizedRows(count, {name = "Aux", rarity = 4, baseRelative = 0.2} = {}) {
-  return Array.from({length: count}, (_, index) => makeRow({
-    id: `${name}-${index + 1}`,
-    name,
-    rarity,
-    relative: baseRelative + index / 100000
-  }));
-}
+const {
+  buildMediumOversizedRows,
+  buildLargeOversizedRows,
+  buildExpandRetryRows,
+  buildRarityFallbackRows
+} = require("./fixtures/craftAssistOversizedPrefilterRows");
 
 async function test_prefilter_trace_reports_two_shards_for_medium_oversized_group() {
-  const result = await runSelect({rows: buildOversizedRows(620), targetWear: 0.21, materials: oversizedMaterials});
+  const result = await runSelect({rows: buildMediumOversizedRows(), targetWear: 0.21, materials: oversizedMaterials});
   assert.equal(result.ok, true);
   assert.equal(result.selection_trace.prefilter.groups[0].shardCount, 2);
 }
 
 async function test_prefilter_trace_reports_four_shards_for_large_oversized_group() {
-  const result = await runSelect({rows: buildOversizedRows(1800), targetWear: 0.21, materials: oversizedMaterials});
+  const result = await runSelect({rows: buildLargeOversizedRows(), targetWear: 0.21, materials: oversizedMaterials});
   assert.equal(result.ok, true);
   assert.equal(result.selection_trace.prefilter.groups[0].shardCount, 4);
 }
 ```
 
-- [ ] **Step 2: Add deterministic service-level tests for `group full fallback` and `rarity full fallback`, and assert the solver still returns a legal result**
+- [ ] **Step 2: Add deterministic service-level tests that prove solver failure drives `base -> expand -> rarity_full`, while `group full fallback` and `rarity full fallback` still preserve legal results**
 
 ```js
-function buildPrefilterFallbackArgs(overrides = {}) {
+async function withPrefilterEnv(patch, run) {
+  const previous = new Map(Object.keys(patch).map((key) => [key, process.env[key]]));
+  try {
+    Object.entries(patch).forEach(([key, value]) => { process.env[key] = value; });
+    return await run();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function buildExpandRetryArgs() {
   return {
-    rows: buildOversizedRows(620),
+    rows: buildExpandRetryRows(),
     targetWear: 0.21,
-    materials: oversizedMaterials,
-    ...overrides
+    materials: oversizedMaterials
+  };
+}
+
+function buildRarityFullFallbackArgs() {
+  return {
+    rows: buildRarityFallbackRows(),
+    targetWear: 0.21,
+    materials: oversizedMaterials
   };
 }
 
 async function test_prefilter_group_fallback_preserves_old_solver_result() {
-  const result = await runSelect(buildPrefilterFallbackArgs({
-    prefilterOptions: {workerPath: CRASH_FIXTURE_PATH}
-  }));
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.selection_trace.prefilter.groupFallbackIndexes, [0]);
+  await withPrefilterEnv({SHORTLIST_HARD_MAX: "4"}, async () => {
+    const result = await runSelect({
+      rows: buildMediumOversizedRows(),
+      targetWear: 0.21,
+      materials: [{name: "Aux", names: ["Aux"], role: "neutral", count: 5, wear_min: 0, wear_max: 1}]
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.selection_trace.prefilter.groupFallbackIndexes, [0]);
+  });
 }
 
-async function test_prefilter_call_timeout_promotes_to_rarity_full_fallback() {
-  const result = await runSelect(buildPrefilterFallbackArgs({
-    prefilterOptions: {
-      workerPath: TIMEOUT_FIXTURE_PATH,
-      prefilterCallTimeoutMs: 5
-    }
-  }));
+async function test_prefilter_solver_failure_triggers_expand_retry_before_full_fallback() {
+  const result = await runSelect(buildExpandRetryArgs());
+  assert.equal(result.ok, true);
+  assert.equal(result.selection_trace.prefilter.retryMode, "expand");
+}
+
+async function test_prefilter_full_fallback_trace_marks_rarity_full() {
+  const result = await runSelect(buildRarityFullFallbackArgs());
   assert.equal(result.ok, true);
   assert.equal(result.selection_trace.prefilter.retryMode, "rarity_full");
 }
 ```
 
-- [ ] **Step 3: Make `runCraftAssistSelectionForRecipe(...)`, `selectCraftAssistForRecipe(...)`, and `createCraftAssistService.selectForRecipe(...)` async, then call `prefilterOversizedGroups(...)` before each rarity search attempt and attach `prefilterTrace` to the returned `selection_trace`**
+- [ ] **Step 3: Keep the outer `base -> search -> judge success -> expand -> search -> rarity_full` control loop in `craftAssistService.js`, using the single-phase prefilter executor from Task 5 and a success judge that matches the spec’s `solved != null && overall < targetValue && post-processing stays valid` rule**
 
 ```js
-const prefiltered = await prefilterOversizedGroups({groups, targetValue: safeTargetValue, recipeContext, options});
-const solved = searchCraftAssistBestSolution({groups: prefiltered.groups, targetValue: safeTargetValue});
+const basePhase = await runPrefilterPhase({groups, targetValue: safeTargetValue, recipeContext, phaseName: "prefilter/base", phaseOptions: baseOptions});
+let solved = basePhase.kind === "call_timeout"
+  ? searchCraftAssistBestSolution({groups, targetValue: safeTargetValue})
+  : searchCraftAssistBestSolution({groups: basePhase.groups, targetValue: safeTargetValue});
+if (basePhase.kind !== "call_timeout" && !isSolvedOutcomeAcceptable({solved, targetValue: safeTargetValue, wearOffsetPct})) {
+  const expandPhase = await runPrefilterPhase({groups, targetValue: safeTargetValue, recipeContext, phaseName: "prefilter/expand", phaseOptions: expandOptions});
+  solved = expandPhase.kind === "call_timeout"
+    ? searchCraftAssistBestSolution({groups, targetValue: safeTargetValue})
+    : searchCraftAssistBestSolution({groups: expandPhase.groups, targetValue: safeTargetValue});
+  if (!isSolvedOutcomeAcceptable({solved, targetValue: safeTargetValue, wearOffsetPct})) {
+    solved = searchCraftAssistBestSolution({groups, targetValue: safeTargetValue});
+  }
+}
 ```
 
-- [ ] **Step 4: Run a call-site sweep for the Promise-returning craft-assist APIs, then update every remaining runtime caller (`craftAssistWorker.js`, `tests/fixtures/craftAssistCrashOnceWorker.js`, `uiServer.js`) to await the service result**
+- [ ] **Step 4: Add explicit trace/log schema work in `craftAssistService.js` and `tests/craftAssistService.test.js`, locking `selection_trace.prefilter` plus logger fields `prefilterMs`, `finalSearchMs`, `totalMs`, `timedOut`, and `usedRarityFullFallback`**
+
+```js
+assert.deepEqual(Object.keys(result.selection_trace.prefilter).sort(), [
+  "enabled",
+  "groups",
+  "groupFallbackIndexes",
+  "prefilterMs",
+  "retryMode",
+  "targetValue",
+  "usedRarityFullFallback"
+]);
+assert.deepEqual(Object.keys(result.selection_trace.prefilter.groups[0]).sort(), [
+  "candidateCountAfter",
+  "candidateCountBefore",
+  "centerOverlapSize",
+  "groupIndex",
+  "materialName",
+  "shardCount",
+  "shardStats"
+]);
+assert.equal(logged.prefilter.timedOut, false);
+assert.equal(logged.prefilter.usedRarityFullFallback, false);
+```
+
+- [ ] **Step 5: Run a call-site sweep for the Promise-returning craft-assist APIs, then update every remaining runtime caller (`craftAssistWorker.js`, `tests/fixtures/craftAssistCrashOnceWorker.js`, `uiServer.js`) to await the service result**
 
 Run: `rg "selectCraftAssistForRecipe\\(|runCraftAssistSelectionForRecipe\\(|createCraftAssistService\\(" "./node_sidecar" "./tests"`
 
 Expected: Only the reviewed runtime callers and known test call sites remain to be updated.
 
-- [ ] **Step 5: Preserve the old path behavior when the feature is disabled, no group is oversized, or a rarity-full fallback is taken, while keeping the async callers wired correctly**
+- [ ] **Step 6: Preserve the old path behavior when the feature flag is at its rollout default (`ENABLE_OVERSIZED_PREFILTER = false`), when no group is oversized, or when a rarity-full fallback is taken, while keeping the async callers wired correctly**
 
 ```js
 const result = CRAFT_ASSIST_USE_WORKER_POOL && craftAssistWorkerPool
@@ -658,7 +752,7 @@ const result = CRAFT_ASSIST_USE_WORKER_POOL && craftAssistWorkerPool
   : await craftAssistService.selectForRecipe({...directArgs});
 ```
 
-- [ ] **Step 6: Run the service regression suite and make it pass**
+- [ ] **Step 7: Run the service regression suite and make it pass**
 
 Run: `node "./tests/craftAssistService.test.js"`
 
@@ -707,19 +801,29 @@ Expected: Commit succeeds with only the integration files staged.
 ### Task 8: Run the full regression gates
 
 **Files:**
+- Create: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistOversizedPrefilterCompare.test.js`
 - Test: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistShardPrefilter.test.js`
 - Test: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistService.test.js`
 - Test: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistSearch.test.js`
 - Test: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistWorkerPool.test.js`
 - Test: `C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistTimeoutConfig.test.js`
 
-- [ ] **Step 1: Run the new prefilter-focused test suite**
+- [ ] **Step 1: Create the fixed-sample comparison gate that runs the baseline (`ENABLE_OVERSIZED_PREFILTER = false`) against the enabled override on the same recipe set and records success-rate / overall-gap / timing metrics**
+
+```js
+const baseline = await runComparisonSuite({enableOversizedPrefilter: false});
+const optimized = await runComparisonSuite({enableOversizedPrefilter: true});
+assert.equal(optimized.successRate + 0.01 >= baseline.successRate, true);
+assert.equal(optimized.overallGapP95 <= 0.001, true);
+```
+
+- [ ] **Step 2: Run the new prefilter-focused test suite**
 
 Run: `node "./tests/craftAssistShardPrefilter.test.js"`
 
 Expected: PASS
 
-- [ ] **Step 2: Re-run service and solver regression suites**
+- [ ] **Step 3: Re-run service, solver, and fixed-sample comparison suites**
 
 Run: `node "./tests/craftAssistService.test.js"`
 
@@ -729,7 +833,11 @@ Run: `node "./tests/craftAssistSearch.test.js"`
 
 Expected: PASS
 
-- [ ] **Step 3: Re-run request-worker stability suites**
+Run: `node "./tests/craftAssistOversizedPrefilterCompare.test.js"`
+
+Expected: PASS with logged acceptance metrics for success rate, overall gap, and mean latency delta.
+
+- [ ] **Step 4: Re-run request-worker stability suites**
 
 Run: `node "./tests/craftAssistWorkerPool.test.js"`
 
@@ -739,7 +847,11 @@ Run: `node "./tests/craftAssistTimeoutConfig.test.js"`
 
 Expected: PASS
 
-- [ ] **Step 4: Run a final diff check so only intended files changed**
+- [ ] **Step 5: Verify the rollout gate stays closed by default, then run a final diff check so only intended files changed**
+
+Run: `node -e "const mod=require('./node_sidecar/src/services/craftAssistShardPrefilter'); console.log(mod.resolvePrefilterOptions().enableOversizedPrefilter)"`
+
+Expected: Prints `false`
 
 Run: `git status --short`
 
