@@ -5576,7 +5576,9 @@ async function runCraftTradeUpQueue() {
   let completedCount = 0;
   let skippedCount = 0;
   let currentRecipePos = -1;
-  let currentRecipeUsesComponent = false;
+  let currentRecipeRequest = null;
+  let currentRecipeTotal = pendingRecipes.length;
+  let componentPrepareFinished = false;
   let lastDoneMsg = "";
   let remainingCount = 0;
   let paused = false;
@@ -5602,79 +5604,46 @@ async function runCraftTradeUpQueue() {
         body: JSON.stringify({
           username,
           allow_cooling: !!state.craftIncludeCooling,
+          prepare_only: true,
           use_component_items: true,
           recipes: pendingRecipes
         })
       });
       applyServerRows(data);
-      applyCraftPrepareResultsToQueue({prepareResults: data.prepare_results});
-      const steps = Array.isArray(data.steps) ? data.steps : [];
-      if (steps.length) {
-        applyCraftStepResultsToQueue({
-          steps,
-          pendingIndexes: steps.map((step) => Number(step && step.queue_index)),
-          rows: Array.isArray(data.rows) ? data.rows : state.rows
-        });
-        syncCraftSelectedIdsFromActiveRecipe();
-        completedCount = steps.length;
+      const prepareResults = Array.isArray(data.prepare_results) ? data.prepare_results : [];
+      applyCraftPrepareResultsToQueue({prepareResults});
+      skippedCount = prepareResults.filter((entry) => String(entry && entry.status || "").trim() === "prepare_failed").length;
+      componentPrepareFinished = true;
+      const readyRecipes = prepareResults.filter((entry) => String(entry && entry.prepare_status || "").trim() === "ready");
+      if (!readyRecipes.length) {
+        clearCraftStatus();
+        lastDoneMsg = String(data.message || "").trim() || "组件取料完成";
+        setCraftStatus(`${lastDoneMsg}${skippedCount > 0 ? `，跳过${skippedCount}组` : ""}`);
+        setSummary(lastDoneMsg);
+        return;
       }
-      skippedCount = Array.isArray(data.prepare_results)
-        ? data.prepare_results.filter((entry) => String(entry && entry.status || "").trim() === "prepare_failed").length
-        : 0;
-      clearCraftStatus();
-      lastDoneMsg = String(data.message || "").trim() || "组件取料与炼金执行完成";
-      setCraftStatus(`${lastDoneMsg}，已完成${completedCount}组配方${skippedCount > 0 ? `，跳过${skippedCount}组` : ""}`);
-      setSummary(lastDoneMsg);
-      return;
-    }
-
-    for (let i = 0; i < pendingRecipes.length; i += 1) {
-      currentRecipePos = i;
-      const req = pendingRecipes[i];
-      const entry = pendingEntries[i];
-      currentRecipeUsesComponent = craftRecipeEntryUsesComponentItems(entry);
-      if (currentRecipeUsesComponent) {
-        state.craftProgressEnabled = true;
+      currentRecipeTotal = readyRecipes.length;
+      for (let i = 0; i < readyRecipes.length; i += 1) {
+        currentRecipePos = i;
+        currentRecipeRequest = buildCraftApiRecipePayload(readyRecipes[i]);
+        const req = currentRecipeRequest;
         setCraftExecutionOverlayState({
           visible: true,
-          title: `正在准备并执行第 ${i + 1}/${pendingRecipes.length} 组配方`,
-          detail: "正在等待后端进度..."
+          title: `正在执行第 ${i + 1}/${readyRecipes.length} 组配方`,
+          detail: `已完成 ${completedCount}/${readyRecipes.length} 组`
         });
-        setCraftStatus(`正在准备并执行第 ${i + 1}/${pendingRecipes.length} 组配方...`);
-      } else {
-        clearCraftExecutionOverlayState();
-        setCraftStatus(`正在串行执行第 ${i + 1}/${pendingRecipes.length} 组配方...`);
-      }
-
-      const data = await api(currentRecipeUsesComponent ? "/api/craft/tradeup-with-components" : "/api/craft/tradeup", {
-        method: "POST",
-        body: JSON.stringify({
-          username,
-          allow_cooling: !!state.craftIncludeCooling,
-          use_component_items: currentRecipeUsesComponent,
-          recipes: [buildCraftApiRecipePayload(req)]
-        })
-      });
-
-      const rows = Array.isArray(data.rows) ? data.rows : state.rows;
-      applyServerRows(data);
-      if (currentRecipeUsesComponent) {
-        const prepareResults = Array.isArray(data.prepare_results) ? data.prepare_results : [];
-        if (prepareResults.length) {
-          applyCraftPrepareResultsToQueue({prepareResults});
-          skippedCount += prepareResults.filter((result) => String(result && result.status || "").trim() === "prepare_failed").length;
-        }
-        const steps = Array.isArray(data.steps) ? data.steps : [];
-        if (steps.length) {
-          applyCraftStepResultsToQueue({
-            steps,
-            pendingIndexes: steps.map((step) => Number(step && step.queue_index)),
-            rows
-          });
-          completedCount += steps.length;
-        }
-        lastDoneMsg = String(data.message || "").trim() || "组件取料与炼金执行完成";
-      } else {
+        setCraftStatus(`正在执行第 ${i + 1}/${readyRecipes.length} 组配方...`);
+        const data = await api("/api/craft/tradeup", {
+          method: "POST",
+          body: JSON.stringify({
+            username,
+            allow_cooling: !!state.craftIncludeCooling,
+            use_component_items: false,
+            recipes: [buildCraftApiRecipePayload(req)]
+          })
+        });
+        const rows = Array.isArray(data.rows) ? data.rows : state.rows;
+        applyServerRows(data);
         const stepList = Array.isArray(data.steps) && data.steps.length
           ? data.steps
           : [{
@@ -5689,12 +5658,53 @@ async function runCraftTradeUpQueue() {
         });
         completedCount += 1;
         lastDoneMsg = String(data.message || "").trim();
+        renderCraftPage();
+        if (state.craftPauseRequested && i + 1 < readyRecipes.length) {
+          paused = true;
+          remainingCount = readyRecipes.length - i - 1;
+          break;
+        }
       }
-      renderCraftPage();
-      if (state.craftPauseRequested && i + 1 < pendingRecipes.length) {
-        paused = true;
-        remainingCount = pendingRecipes.length - i - 1;
-        break;
+    } else {
+      currentRecipeTotal = pendingRecipes.length;
+      for (let i = 0; i < pendingRecipes.length; i += 1) {
+        currentRecipePos = i;
+        currentRecipeRequest = pendingRecipes[i];
+        const req = currentRecipeRequest;
+        clearCraftExecutionOverlayState();
+        setCraftStatus(`正在串行执行第 ${i + 1}/${pendingRecipes.length} 组配方...`);
+        const data = await api("/api/craft/tradeup", {
+          method: "POST",
+          body: JSON.stringify({
+            username,
+            allow_cooling: !!state.craftIncludeCooling,
+            use_component_items: false,
+            recipes: [buildCraftApiRecipePayload(req)]
+          })
+        });
+
+        const rows = Array.isArray(data.rows) ? data.rows : state.rows;
+        applyServerRows(data);
+        const stepList = Array.isArray(data.steps) && data.steps.length
+          ? data.steps
+          : [{
+            spent_ids: [...req.item_ids],
+            gained_ids: Array.isArray(data.gained_ids) ? data.gained_ids : [],
+            missing_gained_ids: []
+          }];
+        applyCraftStepResultsToQueue({
+          steps: [stepList[0]],
+          pendingIndexes: [req.queue_index],
+          rows
+        });
+        completedCount += 1;
+        lastDoneMsg = String(data.message || "").trim();
+        renderCraftPage();
+        if (state.craftPauseRequested && i + 1 < pendingRecipes.length) {
+          paused = true;
+          remainingCount = pendingRecipes.length - i - 1;
+          break;
+        }
       }
     }
 
@@ -5714,12 +5724,12 @@ async function runCraftTradeUpQueue() {
     setSummary(doneMsg);
   } catch (err) {
     const payload = err && err.data && typeof err.data === "object" ? err.data : null;
-    const currentReq = currentRecipePos >= 0 && currentRecipePos < pendingRecipes.length ? pendingRecipes[currentRecipePos] : null;
+    const currentReq = currentRecipeRequest;
     if (payload) {
       applyServerRows(payload);
     }
 
-    if (componentFlow && payload) {
+    if (componentFlow && !componentPrepareFinished && payload) {
       const prepareResults = Array.isArray(payload.prepare_results) ? payload.prepare_results : [];
       if (prepareResults.length) {
         applyCraftPrepareResultsToQueue({prepareResults});

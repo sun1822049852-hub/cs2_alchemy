@@ -1362,16 +1362,23 @@ async function handleApi(req, res, urlObj) {
       const allowCoolingRaw = body.allow_cooling;
       const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
       const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
+      const prepareOnlyRaw = body.prepare_only;
+      const prepareOnlyText = asString(prepareOnlyRaw).trim().toLowerCase();
+      const prepareOnly = prepareOnlyRaw === true || prepareOnlyRaw === 1 || prepareOnlyText === "1" || prepareOnlyText === "true";
       const recipeCount = Array.isArray(body.recipes) ? body.recipes.length : 0;
       const progressRunId = `craft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const activeRun = registerActiveCraftRun({username, runId: progressRunId});
-      logger.info("ui_server", `craft-with-components request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0}`);
+      logger.info(
+        "ui_server",
+        `craft-with-components request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0} prepare_only=${prepareOnly ? 1 : 0}`
+      );
       try {
         const payload = await craftTradeupWithComponentsService.runTradeUpWithComponents({
           username,
           password: body.password,
           recipes: body.recipes,
           allowCooling,
+          prepareOnly,
           shouldPause: activeRun && typeof activeRun.shouldPause === "function" ? () => activeRun.shouldPause() : null,
           onProgress: (progress) => {
             refreshRuntime.emitSse("craft_component_progress", {

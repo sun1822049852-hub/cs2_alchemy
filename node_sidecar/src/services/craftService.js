@@ -393,16 +393,25 @@ function createCraftService({sessionPool, logger}) {
     return {snapshotPath, fetchTime};
   }
 
-  async function runTradeUp({username, password, itemIds, allowCooling = false, onProgress}) {
-    return runTradeUpBatch({username, password, itemIds, allowCooling, onProgress});
+  async function runTradeUp({username, password, itemIds, allowCooling = false, onProgress, shouldPause}) {
+    return runTradeUpBatch({username, password, itemIds, allowCooling, onProgress, shouldPause});
   }
 
-  async function runTradeUpBatch({username, password, itemIds, recipes, allowCooling = false, onProgress}) {
+  async function runTradeUpBatch({username, password, itemIds, recipes, allowCooling = false, onProgress, shouldPause}) {
     const recipeRequests = normalizeRecipeRequests({itemIds, recipes});
     const {accountName, csgo} = await acquireContext({username, password});
     const progressCb = typeof onProgress === "function" ? onProgress : null;
+    const pauseCheck = typeof shouldPause === "function" ? shouldPause : null;
 
     return withAccountLock(accountName, async () => {
+      function isPauseRequested() {
+        if (!pauseCheck) return false;
+        try {
+          return !!pauseCheck();
+        } catch (_) {
+          return false;
+        }
+      }
       function emitProgress(payload) {
         if (!progressCb) return;
         try {
@@ -421,6 +430,31 @@ function createCraftService({sessionPool, logger}) {
 
       for (let i = 0; i < recipeRequests.length; i += 1) {
         const req = recipeRequests[i];
+        if (isPauseRequested()) {
+          emitProgress({
+            phase: "paused",
+            index: req.index,
+            total: recipeRequests.length,
+            completed: steps.length
+          });
+          const snapshot = saveRowsSnapshot({accountName, rows});
+          const err = new Error(`已暂停，剩余${recipeRequests.length - steps.length}组配方未执行`);
+          err.code = "paused";
+          err.craft_payload = {
+            ok: false,
+            paused: true,
+            partial: steps.length > 0,
+            account: accountName,
+            recipe_count: recipeRequests.length,
+            allow_cooling: !!allowCooling,
+            completed_steps: steps,
+            remaining_recipe_count: Math.max(0, recipeRequests.length - steps.length),
+            fetch_time: snapshot.fetchTime,
+            snapshot_path: snapshot.snapshotPath,
+            rows
+          };
+          throw err;
+        }
         try {
           const rowMap = buildRowMap(rows);
           const selectedRows = [];

@@ -18,6 +18,16 @@ function extractBlock(startMarker, endMarker) {
   return APP_SOURCE.slice(start, end);
 }
 
+function extractCssBlock(selector) {
+  const start = CSS_SOURCE.indexOf(selector);
+  assert.notEqual(start, -1, `missing css selector: ${selector}`);
+  const open = CSS_SOURCE.indexOf("{", start);
+  assert.notEqual(open, -1, `missing css block start for: ${selector}`);
+  const close = CSS_SOURCE.indexOf("}", open);
+  assert.notEqual(close, -1, `missing css block end for: ${selector}`);
+  return CSS_SOURCE.slice(open + 1, close);
+}
+
 function createClassList() {
   const values = new Set(["hidden"]);
   return {
@@ -112,6 +122,7 @@ function testOverlayApplyAndClearBehavior() {
 }
 
 function testSourceWiresCenteredOverlayAndSseListener() {
+  const overlayBlock = extractCssBlock(".craft-execution-overlay");
   assert.equal(
     APP_SOURCE.includes('stream.addEventListener("craft_component_progress", (evt) => {'),
     true,
@@ -126,6 +137,26 @@ function testSourceWiresCenteredOverlayAndSseListener() {
     CSS_SOURCE.includes(".craft-execution-overlay") && CSS_SOURCE.includes("place-items: center"),
     true,
     "css should center the craft execution overlay on screen"
+  );
+  assert.match(
+    overlayBlock,
+    /pointer-events:\s*none;/,
+    "craft execution overlay should not intercept clicks so pause remains usable"
+  );
+  assert.doesNotMatch(
+    overlayBlock,
+    /backdrop-filter\s*:/,
+    "craft execution overlay should not blur the screen during component withdraw"
+  );
+  assert.match(
+    overlayBlock,
+    /background:\s*transparent;/,
+    "craft execution overlay should keep the page visible behind the centered status card"
+  );
+  assert.match(
+    CSS_SOURCE,
+    /body\.theme-inkblue\s+\.craft-execution-overlay\s*\{[^}]*background:\s*transparent;/m,
+    "inkblue theme should not reintroduce a dark full-screen overlay"
   );
 }
 

@@ -100,14 +100,45 @@ function normalizeRowsPayload(payload) {
   };
 }
 
-function buildPrepareEntry(recipe, status, prepareMessage) {
+function buildItemSourcesFromRows(itemIds, rowMap) {
+  const map = rowMap instanceof Map ? rowMap : new Map();
+  const out = {};
+  for (const itemId of Array.isArray(itemIds) ? itemIds : []) {
+    const key = normalizeAssetId(itemId);
+    if (!key) continue;
+    const row = map.get(key);
+    const componentId = asString(row && row.casket_id).trim();
+    out[key] = componentId
+      ? {
+          source_scope: "component",
+          source_component_id: componentId,
+          source_component_name: componentId
+        }
+      : {
+          source_scope: "main",
+          source_component_id: "",
+          source_component_name: ""
+        };
+  }
+  return out;
+}
+
+function buildPrepareEntry(recipe, status, prepareMessage, itemSources = null, prepareStatus = "") {
   return {
     queue_index: recipe.queue_index,
     item_ids: [...recipe.item_ids],
-    item_sources: {...recipe.item_sources},
+    item_sources: itemSources && typeof itemSources === "object" ? {...itemSources} : {...recipe.item_sources},
     status,
-    prepare_status: status === "ready" ? "ready" : "failed",
+    prepare_status: asString(prepareStatus).trim() || (status === "ready" ? "ready" : "failed"),
     prepare_message: asString(prepareMessage).trim()
+  };
+}
+
+function buildReadyRecipePayload(recipe, rowMap) {
+  return {
+    queue_index: recipe.queue_index,
+    item_ids: [...recipe.item_ids],
+    item_sources: buildItemSourcesFromRows(recipe.item_ids, rowMap)
   };
 }
 
@@ -150,12 +181,23 @@ function createCraftTradeupWithComponentsService({
     password,
     recipes,
     allowCooling = false,
-    onProgress
+    prepareOnly = false,
+    onProgress,
+    shouldPause
   }) {
     const accountName = asString(username).trim();
     if (!accountName) throw badRequest("username 不能为空");
     const recipeRequests = normalizeRecipes(recipes);
     const progressCb = typeof onProgress === "function" ? onProgress : null;
+    const pauseCheck = typeof shouldPause === "function" ? shouldPause : null;
+    function isPauseRequested() {
+      if (!pauseCheck) return false;
+      try {
+        return !!pauseCheck();
+      } catch (_) {
+        return false;
+      }
+    }
     function emitProgress(payload) {
       if (!progressCb) return;
       try {
@@ -216,6 +258,7 @@ function createCraftTradeupWithComponentsService({
     let prepareProcessed = 0;
     let prepareSuccess = 0;
     let prepareFailed = 0;
+    let preparePaused = false;
     emitProgress({
       stage: "prepare",
       phase: "start",
@@ -226,6 +269,10 @@ function createCraftTradeupWithComponentsService({
     });
     const orderedComponentIds = [...componentGroups.keys()].sort((a, b) => a.localeCompare(b));
     for (const componentId of orderedComponentIds) {
+      if (isPauseRequested()) {
+        preparePaused = true;
+        break;
+      }
       const itemIds = Array.from(new Set(componentGroups.get(componentId) || []));
       if (!itemIds.length) continue;
       const baseProcessed = prepareProcessed;
@@ -238,6 +285,7 @@ function createCraftTradeupWithComponentsService({
           password,
           componentId,
           itemIds,
+          shouldPause: isPauseRequested,
           onProgress: (progress) => {
             if (asString(progress && progress.phase).trim() !== "item") return;
             emitProgress({
@@ -278,6 +326,10 @@ function createCraftTradeupWithComponentsService({
         prepareProcessed += Math.max(itemIds.length, successIds.length + failed.length);
         prepareSuccess += successIds.length;
         prepareFailed += failed.length;
+        if (op.paused) {
+          preparePaused = true;
+          break;
+        }
       } catch (err) {
         const message = asString(err && err.message ? err.message : err).trim() || "组件取出失败";
         withdrawResults.push({
@@ -296,38 +348,89 @@ function createCraftTradeupWithComponentsService({
     rowMap = buildRowMap(currentRows);
     const prepareResults = [];
     const readyRecipes = [];
+    let pausedRecipeCount = 0;
+    let failedRecipeCount = 0;
     for (const recipe of recipeRequests) {
       let failureReason = "";
+      let pendingByPause = false;
       for (const itemId of recipe.item_ids) {
         const row = rowMap.get(itemId);
         if (!row) {
-          failureReason = itemFailureMap.get(itemId) || `物品不在当前库存中：${itemId}`;
+          const itemFailure = itemFailureMap.get(itemId) || "";
+          if (itemFailure) {
+            failureReason = itemFailure;
+          } else if (preparePaused) {
+            pendingByPause = true;
+          } else {
+            failureReason = `物品不在当前库存中：${itemId}`;
+          }
           break;
         }
         const componentId = asString(row.casket_id).trim();
         if (componentId) {
-          failureReason = itemFailureMap.get(itemId) || `物品仍在组件 ${componentId}`;
+          const itemFailure = itemFailureMap.get(itemId) || "";
+          if (itemFailure) {
+            failureReason = itemFailure;
+          } else if (preparePaused) {
+            pendingByPause = true;
+          } else {
+            failureReason = `物品仍在组件 ${componentId}`;
+          }
           break;
         }
       }
+      const currentSources = buildItemSourcesFromRows(recipe.item_ids, rowMap);
       if (failureReason) {
-        prepareResults.push(buildPrepareEntry(recipe, "prepare_failed", `组件取出失败，已跳过：${failureReason}`));
+        prepareResults.push(buildPrepareEntry(recipe, "prepare_failed", `组件取出失败，已跳过：${failureReason}`, currentSources, "failed"));
+        failedRecipeCount += 1;
         continue;
       }
-      prepareResults.push(buildPrepareEntry(recipe, "ready", ""));
+      if (preparePaused && pendingByPause) {
+        const hasRemainingComponentItems = recipe.item_ids.some((itemId) => {
+          const row = rowMap.get(itemId);
+          return !!asString(row && row.casket_id).trim();
+        });
+        if (hasRemainingComponentItems) {
+          prepareResults.push(buildPrepareEntry(recipe, "pending", "已暂停，等待继续", currentSources, "paused"));
+          pausedRecipeCount += 1;
+          continue;
+        }
+      }
+      prepareResults.push(buildPrepareEntry(recipe, "ready", "", currentSources, "ready"));
       readyRecipes.push(recipe);
     }
 
     emitProgress({
       stage: "prepare",
-      phase: "done",
-      processed: prepareProcessed,
+      phase: preparePaused ? "paused" : "done",
+      processed: preparePaused ? prepareProcessed : prepareProcessed,
       total: totalPrepareItems,
       success: prepareSuccess,
       failed: prepareFailed,
       ready_recipe_count: readyRecipes.length,
-      skipped_recipe_count: prepareResults.length - readyRecipes.length
+      skipped_recipe_count: failedRecipeCount
     });
+
+    if (preparePaused) {
+      return {
+        ok: false,
+        paused: true,
+        pause_stage: "prepare",
+        partial: prepareSuccess > 0 || prepareFailed > 0,
+        account: accountName,
+        recipe_count: recipeRequests.length,
+        ready_recipe_count: readyRecipes.length,
+        skipped_recipe_count: failedRecipeCount,
+        remaining_recipe_count: pausedRecipeCount,
+        prepare_results: prepareResults,
+        withdraw_results: withdrawResults,
+        steps: [],
+        rows: currentRows,
+        fetch_time: fetchTime,
+        snapshot_path: snapshotPath,
+        message: `已暂停组件取料：可继续${readyRecipes.length}组，待继续${pausedRecipeCount}组${failedRecipeCount > 0 ? `，跳过${failedRecipeCount}组` : ""}`
+      };
+    }
 
     if (!readyRecipes.length) {
       return {
@@ -347,6 +450,26 @@ function createCraftTradeupWithComponentsService({
       };
     }
 
+    if (prepareOnly) {
+      return {
+        ok: true,
+        partial: prepareResults.some((entry) => entry.status === "prepare_failed"),
+        prepare_only: true,
+        account: accountName,
+        recipe_count: recipeRequests.length,
+        ready_recipe_count: readyRecipes.length,
+        skipped_recipe_count: prepareResults.length - readyRecipes.length,
+        prepare_results: prepareResults,
+        ready_recipes: readyRecipes.map((recipe) => buildReadyRecipePayload(recipe, rowMap)),
+        withdraw_results: withdrawResults,
+        steps: [],
+        rows: currentRows,
+        fetch_time: fetchTime,
+        snapshot_path: snapshotPath,
+        message: buildMessage({readyCount: readyRecipes.length, failedCount: prepareResults.length - readyRecipes.length})
+      };
+    }
+
     if (logger) {
       logger.info(
         "craft_component_ops",
@@ -363,6 +486,7 @@ function createCraftTradeupWithComponentsService({
           item_ids: [...recipe.item_ids]
         })),
         allowCooling,
+        shouldPause: isPauseRequested,
         onProgress: (progress) => {
           emitProgress({
             stage: "craft",

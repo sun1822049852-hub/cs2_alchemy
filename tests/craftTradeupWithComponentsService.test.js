@@ -379,12 +379,135 @@ async function testEmitsPrepareAndCraftProgressEvents() {
   assert.equal(events.some((event) => event.stage === "craft" && event.phase === "done"), true);
 }
 
+async function testPrepareOnlyReturnsReadyRecipesWithoutRunningCraft() {
+  const tradeupCalls = [];
+  let workingRows = cloneRows([
+    ...makeMainRows(980, 8000),
+    makeRow({id: 18001, casketId: "9201"})
+  ]);
+  const service = createCraftTradeupWithComponentsService({
+    loadRowsForAccount: async () => ({rows: cloneRows(workingRows)}),
+    componentOpsService: {
+      runMove: async ({itemIds}) => {
+        for (const id of itemIds) {
+          const row = workingRows.find((item) => String(item.asset_id) === String(id));
+          if (row) row.casket_id = "";
+        }
+        return {
+          ok: true,
+          rows: cloneRows(workingRows),
+          op: {
+            success_ids: itemIds.map((id) => String(id)),
+            failed: []
+          }
+        };
+      }
+    },
+    craftService: {
+      runTradeUpBatch: async (payload) => {
+        tradeupCalls.push(payload);
+        return {
+          ok: true,
+          account: payload.username,
+          recipe_count: payload.recipes.length,
+          steps: [],
+          rows: cloneRows(workingRows)
+        };
+      }
+    },
+    logger: null
+  });
+
+  const result = await service.runTradeUpWithComponents({
+    username: "demo",
+    prepareOnly: true,
+    recipes: [
+      buildRecipe(0, [18001, 8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008], {"18001": "9201"}),
+      buildRecipe(1, [8009, 8010, 8011, 8012, 8013, 8014, 8015, 8016, 8017, 8018])
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.prepare_only, true);
+  assert.equal(tradeupCalls.length, 0);
+  assert.deepEqual(result.steps, []);
+  assert.deepEqual(result.ready_recipes.map((entry) => entry.queue_index), [0, 1]);
+  assert.equal(result.prepare_results.every((entry) => entry.prepare_status === "ready"), true);
+}
+
+async function testPauseDuringPrepareStopsBeforeCraftAndKeepsRemainingRecipesPending() {
+  const tradeupCalls = [];
+  let pauseRequested = false;
+  let workingRows = cloneRows([
+    ...makeMainRows(980, 7000),
+    makeRow({id: 17001, casketId: "9101"}),
+    makeRow({id: 17002, casketId: "9102"})
+  ]);
+  const service = createCraftTradeupWithComponentsService({
+    loadRowsForAccount: async () => ({rows: cloneRows(workingRows)}),
+    componentOpsService: {
+      runMove: async ({componentId, itemIds}) => {
+        if (String(componentId) === "9101") {
+          for (const id of itemIds) {
+            const row = workingRows.find((item) => String(item.asset_id) === String(id));
+            if (row) row.casket_id = "";
+          }
+          pauseRequested = true;
+          return {
+            ok: true,
+            rows: cloneRows(workingRows),
+            op: {
+              success_ids: itemIds.map((id) => String(id)),
+              failed: []
+            }
+          };
+        }
+        throw new Error("should not continue withdrawing after pause");
+      }
+    },
+    craftService: {
+      runTradeUpBatch: async (payload) => {
+        tradeupCalls.push(payload);
+        return {
+          ok: true,
+          account: payload.username,
+          recipe_count: payload.recipes.length,
+          steps: [],
+          rows: cloneRows(workingRows)
+        };
+      }
+    },
+    logger: null
+  });
+
+  const result = await service.runTradeUpWithComponents({
+    username: "demo",
+    recipes: [
+      buildRecipe(0, [17001, 7000, 7001, 7002, 7003, 7004, 7005, 7006, 7007, 7008], {"17001": "9101"}),
+      buildRecipe(1, [17002, 7009, 7010, 7011, 7012, 7013, 7014, 7015, 7016, 7017], {"17002": "9102"})
+    ],
+    shouldPause: () => pauseRequested
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.paused, true);
+  assert.equal(tradeupCalls.length, 0);
+  const readyRecipe = result.prepare_results.find((entry) => entry.queue_index === 0);
+  const pendingRecipe = result.prepare_results.find((entry) => entry.queue_index === 1);
+  assert.equal(readyRecipe.prepare_status, "ready");
+  assert.equal(readyRecipe.item_sources["17001"].source_scope, "main");
+  assert.equal(pendingRecipe.status, "pending");
+  assert.equal(pendingRecipe.prepare_status, "paused");
+}
+
 async function main() {
   await testRejectsWholeBatchBeforeWithdrawWhenMainSpaceIsInsufficient();
   await testUsesRealAvailableWithdrawCapacityForHiddenAndCoolingRows();
   await testGroupedWithdrawRunsSeriallyAndSkipsFailedRecipes();
   await testPrepareFailedRecipesStayReportedWhileReadyRecipesStillExecute();
   await testEmitsPrepareAndCraftProgressEvents();
+  await testPrepareOnlyReturnsReadyRecipesWithoutRunningCraft();
+  await testPauseDuringPrepareStopsBeforeCraftAndKeepsRemainingRecipesPending();
   console.log("craftTradeupWithComponentsService tests passed");
 }
 

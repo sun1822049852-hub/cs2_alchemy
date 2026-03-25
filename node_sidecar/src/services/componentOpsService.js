@@ -614,7 +614,7 @@ function createComponentOpsService({sessionPool, logger}) {
     });
   }
 
-  async function runMove({action, username, password, componentId, itemIds, onProgress}) {
+  async function runMove({action, username, password, componentId, itemIds, onProgress, shouldPause}) {
     const opAction = action === "withdraw" ? "withdraw" : "deposit";
     const componentKey = asString(componentId).trim();
     if (!componentKey || !/^\d+$/.test(componentKey)) throw new Error("component_id 无效");
@@ -622,10 +622,19 @@ function createComponentOpsService({sessionPool, logger}) {
     if (!requestedItems.length) throw new Error("item_ids 不能为空");
     const totalRequested = requestedItems.length;
     const progressCb = typeof onProgress === "function" ? onProgress : null;
+    const pauseCheck = typeof shouldPause === "function" ? shouldPause : null;
 
     const {accountName, csgo} = await acquireContext({username, password});
 
     return withAccountLock(accountName, async () => {
+      function isPauseRequested() {
+        if (!pauseCheck) return false;
+        try {
+          return !!pauseCheck();
+        } catch (_) {
+          return false;
+        }
+      }
       function emitProgress(payload) {
         if (!progressCb) return;
         try {
@@ -671,6 +680,7 @@ function createComponentOpsService({sessionPool, logger}) {
       let withdrawReloadAttempted = false;
       const touchedComponentIds = new Set([componentKey]);
       const clippedByCapacityCount = withdrawCapacityContext ? withdrawCapacityContext.clippedSet.size : 0;
+      let paused = false;
 
       emitProgress({
         phase: "start",
@@ -680,6 +690,16 @@ function createComponentOpsService({sessionPool, logger}) {
       });
 
       for (const itemId of requestedItems) {
+        if (isPauseRequested()) {
+          paused = true;
+          emitProgress({
+            phase: "paused",
+            processed,
+            success: successIds.length,
+            failed: failed.length
+          });
+          break;
+        }
         if (opAction === "withdraw" && withdrawCapacityContext && withdrawCapacityContext.clippedSet.has(itemId)) {
           failed.push({
             item_id: itemId,
@@ -882,17 +902,18 @@ function createComponentOpsService({sessionPool, logger}) {
       const firstFailed = failed.length ? `${failed[0].item_id}:${failed[0].reason}` : "";
       const reasonSummary = summarizeFailedReasons(failed);
       const clipTail = clippedByCapacityCount > 0 ? `，服务端预裁剪${clippedByCapacityCount}件` : "";
-      const message = `${actionText}完成：成功${successIds.length}，失败${failed.length}${clipTail}${firstFailed ? `，首个失败 ${firstFailed}` : ""}`;
+      const pauseTail = paused ? `，已暂停，剩余${Math.max(0, totalRequested - processed)}件未处理` : "";
+      const message = `${actionText}完成：成功${successIds.length}，失败${failed.length}${clipTail}${pauseTail}${firstFailed ? `，首个失败 ${firstFailed}` : ""}`;
       if (logger) {
         logger.info(
           "component_ops",
-          `${opAction} done: account=${accountName} component=${componentKey} requested=${totalRequested} selected=${previewIds(requestedItems)} success=${successIds.length} failed=${failed.length} clipped=${clippedByCapacityCount} first_failed=${firstFailed || "-"} failed_reasons=${JSON.stringify(reasonSummary)}`
+          `${opAction} done: account=${accountName} component=${componentKey} requested=${totalRequested} selected=${previewIds(requestedItems)} success=${successIds.length} failed=${failed.length} clipped=${clippedByCapacityCount} paused=${paused ? 1 : 0} first_failed=${firstFailed || "-"} failed_reasons=${JSON.stringify(reasonSummary)}`
         );
       }
 
       emitProgress({
-        phase: "done",
-        processed: totalRequested,
+        phase: paused ? "paused" : "done",
+        processed,
         success: successIds.length,
         failed: failed.length
       });
@@ -909,9 +930,11 @@ function createComponentOpsService({sessionPool, logger}) {
           action: opAction,
           component_id: componentKey,
           requested: totalRequested,
+          paused,
           clipped_count: clippedByCapacityCount,
           success_ids: successIds,
-          failed
+          failed,
+          remaining_ids: requestedItems.slice(processed)
         }
       };
     });

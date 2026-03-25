@@ -1776,17 +1776,18 @@ select.small {
   display: none;
 }
 
-.craft-assist-busy-mask {
+#craftLeftPanel > .craft-assist-busy-mask {
   position: absolute;
-  inset: 10px;
-  z-index: 4;
+  inset: 0;
+  z-index: 16;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 18px;
   background: rgba(248, 250, 252, 0.78);
   backdrop-filter: blur(6px);
-  border-radius: 14px;
+  border-radius: inherit;
+  pointer-events: auto;
 }
 
 .craft-assist-busy-mask.hidden {
@@ -2225,7 +2226,7 @@ select.small {
 
 .craft-assist-preset-actions {
   display: grid;
-  grid-template-columns: 44px 44px 58px;
+  grid-template-columns: 44px 78px 58px;
   justify-content: end;
   gap: 6px;
   align-items: center;
@@ -2249,18 +2250,87 @@ select.small {
 }
 
 .craft-assist-preset-apply-count {
-  flex: 0 0 44px;
-  width: 44px;
+  flex: 0 0 78px;
+  width: 78px;
   min-width: 0;
 }
 
-.craft-assist-preset-apply-count input[type="number"] {
-  width: 44px;
-  min-width: 0;
+.craft-assist-preset-apply-stepper {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 18px;
+  align-items: stretch;
+  width: 100%;
   height: 26px;
+  border: 1px solid #c9d4e3;
+  border-radius: 8px;
+  background: #f7fbff;
+  overflow: hidden;
+}
+
+.craft-assist-preset-apply-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: #e8f0fa;
+  color: #38506f;
+  font-size: 0;
+  line-height: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.craft-assist-preset-apply-step::before {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+}
+
+.craft-assist-preset-apply-step.increment::before {
+  transform: translateX(-1px) rotate(45deg);
+}
+
+.craft-assist-preset-apply-step.decrement::before {
+  transform: translateX(1px) rotate(-135deg);
+}
+
+.craft-assist-preset-apply-step:hover:not(:disabled) {
+  background: #d8e5f4;
+  color: #1d4d8b;
+}
+
+.craft-assist-preset-apply-step:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.craft-assist-preset-apply-count input[type="number"] {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
   text-align: center;
   font-size: 12px;
-  padding: 0 2px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid #d6dfeb;
+  border-right: 1px solid #d6dfeb;
+  border-radius: 0;
+  background: transparent;
+  appearance: textfield;
+}
+
+.craft-assist-preset-apply-count input[type="number"]::-webkit-outer-spin-button,
+.craft-assist-preset-apply-count input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 .craft-assist-preset-remove {
@@ -3147,8 +3217,8 @@ select.small {
   z-index: 230;
   display: grid;
   place-items: center;
-  background: rgba(15, 23, 42, 0.22);
-  backdrop-filter: blur(3px);
+  background: transparent;
+  pointer-events: none;
 }
 
 .craft-execution-overlay.hidden {
@@ -4001,9 +4071,12 @@ body.theme-inkblue .craft-queue-active-badge {
 }
 
 body.theme-inkblue .craft-assist-overlay,
-body.theme-inkblue .modal,
-body.theme-inkblue .craft-execution-overlay {
+body.theme-inkblue .modal {
   background: rgba(2, 8, 18, 0.74);
+}
+
+body.theme-inkblue .craft-execution-overlay {
+  background: transparent;
 }
 
 body.theme-inkblue .craft-slot.empty,
@@ -4672,7 +4745,7 @@ body.theme-inkblue #craftPage .craft-assist-panel {
   padding: 12px;
 }
 
-body.theme-inkblue #craftPage .craft-assist-busy-mask {
+body.theme-inkblue #craftLeftPanel > .craft-assist-busy-mask {
   background: rgba(12, 14, 18, 0.78);
   border-radius: 16px;
 }
@@ -4746,6 +4819,29 @@ body.theme-inkblue #craftPage .craft-assist-preset-item:hover,
 body.theme-inkblue #craftPage .craft-assist-item:hover {
   border-color: var(--ops-border-strong);
   background: var(--ops-surface-strong);
+}
+
+body.theme-inkblue #craftPage .craft-assist-preset-apply-stepper {
+  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(11, 14, 18, 0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+body.theme-inkblue #craftPage .craft-assist-preset-apply-step {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  color: var(--ops-text-soft);
+}
+
+body.theme-inkblue #craftPage .craft-assist-preset-apply-step:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(220, 164, 76, 0.24) 0%, rgba(220, 164, 76, 0.12) 100%);
+  color: #f3ddab;
+}
+
+body.theme-inkblue #craftPage .craft-assist-preset-apply-count input[type="number"] {
+  border-left-color: rgba(255, 255, 255, 0.08);
+  border-right-color: rgba(255, 255, 255, 0.08);
+  background: rgba(11, 14, 18, 0.96);
+  color: var(--ops-text-main);
 }
 
 body.theme-inkblue #craftPage .craft-slot {
