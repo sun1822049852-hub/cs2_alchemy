@@ -33,7 +33,7 @@ const state = {
   rowsVersion: 0, filterCacheKey: "", filterCacheAllRows: [], filterCacheFilteredRows: [],
   groupCacheKey: "", groupCacheRows: [], lastPersistedSelected: "",
   profileHydratingUsernames: new Set(), profileHydratedUsernames: new Set(),
-  snapshotCacheByAccount: new Map(), craftAccountStateByAccount: new Map()
+  snapshotCacheByAccount: new Map(), craftAccountStateByAccount: new Map(), craftAssistRuntimeByAccount: new Map()
 };
 
 const ui = {
@@ -231,6 +231,77 @@ function normalizeItemIdList(values) {
   return Array.from(new Set((Array.isArray(values) ? values : []).map((x) => String(x || "").trim()).filter(Boolean)));
 }
 
+function createDefaultCraftAssistRuntimeState() {
+  return {
+    craftAssistSelecting: false,
+    craftAssistPendingUiAction: "",
+    craftAssistPendingPresetId: ""
+  };
+}
+
+function normalizeCraftAssistRuntimeStateSnapshot(snapshot) {
+  const base = createDefaultCraftAssistRuntimeState();
+  const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const action = String(source.craftAssistPendingUiAction || "").trim();
+  const normalizedAction = action === "panel_apply" || action === "preset_apply" ? action : "";
+  const normalizedPresetId = normalizedAction === "preset_apply"
+    ? String(source.craftAssistPendingPresetId || "").trim()
+    : "";
+  const selecting = !!source.craftAssistSelecting
+    && !!normalizedAction
+    && (normalizedAction !== "preset_apply" || !!normalizedPresetId);
+  return {
+    ...base,
+    craftAssistSelecting: selecting,
+    craftAssistPendingUiAction: selecting ? normalizedAction : "",
+    craftAssistPendingPresetId: selecting ? normalizedPresetId : ""
+  };
+}
+
+function buildCurrentCraftAssistRuntimeStateSnapshot() {
+  return normalizeCraftAssistRuntimeStateSnapshot({
+    craftAssistSelecting: state.craftAssistSelecting,
+    craftAssistPendingUiAction: state.craftAssistPendingUiAction,
+    craftAssistPendingPresetId: state.craftAssistPendingPresetId
+  });
+}
+
+function applyCraftAssistRuntimeStateSnapshot(snapshot) {
+  const next = normalizeCraftAssistRuntimeStateSnapshot(snapshot);
+  if (next.craftAssistSelecting) {
+    state.craftAssistSelecting = true;
+  } else {
+    state.craftAssistSelecting = false;
+  }
+  state.craftAssistPendingUiAction = next.craftAssistPendingUiAction;
+  state.craftAssistPendingPresetId = next.craftAssistPendingPresetId;
+  return next;
+}
+
+function saveCraftAssistRuntimeState(username, snapshot = null) {
+  const key = String(username || "").trim();
+  if (!key) return createDefaultCraftAssistRuntimeState();
+  if (!(state.craftAssistRuntimeByAccount instanceof Map)) {
+    state.craftAssistRuntimeByAccount = new Map();
+  }
+  const next = normalizeCraftAssistRuntimeStateSnapshot(snapshot || buildCurrentCraftAssistRuntimeStateSnapshot());
+  state.craftAssistRuntimeByAccount.set(key, next);
+  return next;
+}
+
+function getCraftAssistRuntimeStateSnapshot(username, {preferCurrent = false} = {}) {
+  const key = String(username || "").trim();
+  if (!key) return createDefaultCraftAssistRuntimeState();
+  const current = String(state.currentAccountUsername || "").trim();
+  if (preferCurrent && key === current) {
+    return buildCurrentCraftAssistRuntimeStateSnapshot();
+  }
+  if (!(state.craftAssistRuntimeByAccount instanceof Map)) {
+    state.craftAssistRuntimeByAccount = new Map();
+  }
+  return normalizeCraftAssistRuntimeStateSnapshot(state.craftAssistRuntimeByAccount.get(key));
+}
+
 function createDefaultCraftAccountScopedState() {
   return {
     craftSelectedItemIds: [],
@@ -238,9 +309,6 @@ function createDefaultCraftAccountScopedState() {
     craftStatusError: false,
     craftRecipeQueue: [],
     craftActiveRecipeId: "",
-    craftAssistSelecting: false,
-    craftAssistPendingUiAction: "",
-    craftAssistPendingPresetId: "",
     craftAssistOpen: false,
     craftAssistPickerOpen: false,
     craftAssistPickerTargetMaterialId: "",
@@ -280,9 +348,6 @@ function normalizeCraftAccountScopedStateSnapshot(snapshot) {
     craftStatusError: !!source.craftStatusError,
     craftRecipeQueue: Array.isArray(source.craftRecipeQueue) ? deepCopyPlain(source.craftRecipeQueue) : [],
     craftActiveRecipeId: String(source.craftActiveRecipeId || "").trim(),
-    craftAssistSelecting: !!source.craftAssistSelecting,
-    craftAssistPendingUiAction: String(source.craftAssistPendingUiAction || "").trim(),
-    craftAssistPendingPresetId: String(source.craftAssistPendingPresetId || "").trim(),
     craftAssistOpen: !!source.craftAssistOpen,
     craftAssistPickerOpen: !!source.craftAssistPickerOpen,
     craftAssistPickerTargetMaterialId: String(source.craftAssistPickerTargetMaterialId || "").trim(),
@@ -314,9 +379,6 @@ function buildCurrentCraftAccountScopedStateSnapshot() {
     craftStatusError: state.craftStatusError,
     craftRecipeQueue: state.craftRecipeQueue,
     craftActiveRecipeId: state.craftActiveRecipeId,
-    craftAssistSelecting: state.craftAssistSelecting,
-    craftAssistPendingUiAction: state.craftAssistPendingUiAction,
-    craftAssistPendingPresetId: state.craftAssistPendingPresetId,
     craftAssistOpen: state.craftAssistOpen,
     craftAssistPickerOpen: state.craftAssistPickerOpen,
     craftAssistPickerTargetMaterialId: state.craftAssistPickerTargetMaterialId,
@@ -335,16 +397,13 @@ function buildCurrentCraftAccountScopedStateSnapshot() {
   });
 }
 
-function applyCraftAccountScopedStateSnapshot(snapshot) {
+function applyCraftAccountScopedStateSnapshot(snapshot, {runtimeSnapshot = null} = {}) {
   const next = normalizeCraftAccountScopedStateSnapshot(snapshot);
   state.craftSelectedItemIds = new Set(next.craftSelectedItemIds);
   state.craftStatusText = next.craftStatusText;
   state.craftStatusError = !!next.craftStatusError;
   state.craftRecipeQueue = next.craftRecipeQueue;
   state.craftActiveRecipeId = next.craftActiveRecipeId;
-  state.craftAssistSelecting = !!next.craftAssistSelecting;
-  state.craftAssistPendingUiAction = next.craftAssistPendingUiAction;
-  state.craftAssistPendingPresetId = next.craftAssistPendingPresetId;
   state.craftAssistOpen = !!next.craftAssistOpen;
   state.craftAssistPickerOpen = !!next.craftAssistPickerOpen;
   state.craftAssistPickerTargetMaterialId = next.craftAssistPickerTargetMaterialId;
@@ -360,6 +419,7 @@ function applyCraftAccountScopedStateSnapshot(snapshot) {
   state.craftAssistPresetEditingName = next.craftAssistPresetEditingName;
   state.craftAssistPresetEditingBackup = next.craftAssistPresetEditingBackup;
   state.craftAssistPresetEditingInitialSnapshot = next.craftAssistPresetEditingInitialSnapshot;
+  applyCraftAssistRuntimeStateSnapshot(runtimeSnapshot || createDefaultCraftAssistRuntimeState());
   return next;
 }
 
@@ -390,11 +450,15 @@ function getCraftAccountScopedStateSnapshot(username, {preferSaved = false} = {}
 function restoreCraftAccountScopedState(username, {preferSaved = true} = {}) {
   const key = String(username || "").trim();
   if (!key) {
-    return applyCraftAccountScopedStateSnapshot(createDefaultCraftAccountScopedState());
+    return applyCraftAccountScopedStateSnapshot(createDefaultCraftAccountScopedState(), {
+      runtimeSnapshot: createDefaultCraftAssistRuntimeState()
+    });
   }
   const next = getCraftAccountScopedStateSnapshot(key, {preferSaved});
   saveCraftAccountScopedState(key, next);
-  return applyCraftAccountScopedStateSnapshot(next);
+  return applyCraftAccountScopedStateSnapshot(next, {
+    runtimeSnapshot: getCraftAssistRuntimeStateSnapshot(key, {preferCurrent: false})
+  });
 }
 
 function buildComponentSummaryFromRows(rows) {
@@ -1707,15 +1771,20 @@ async function switchAccountView(username, {silentSnapshotSummary = false} = {})
   const switchingSameAccount = !!previousUsername && previousUsername === key;
   if (previousUsername) {
     saveCraftAccountScopedState(previousUsername);
+    saveCraftAssistRuntimeState(previousUsername);
   }
   const targetCraftState = switchingSameAccount
     ? buildCurrentCraftAccountScopedStateSnapshot()
     : getCraftAccountScopedStateSnapshot(key, {preferSaved: true});
+  const targetCraftRuntime = switchingSameAccount
+    ? buildCurrentCraftAssistRuntimeStateSnapshot()
+    : getCraftAssistRuntimeStateSnapshot(key, {preferCurrent: false});
   clearSnapshotDirty();
   state.lastDirtyFallbackTs = 0;
   state.craftSettingsOpen = false;
-  applyCraftAccountScopedStateSnapshot(targetCraftState);
+  applyCraftAccountScopedStateSnapshot(targetCraftState, {runtimeSnapshot: targetCraftRuntime});
   saveCraftAccountScopedState(key, targetCraftState);
+  saveCraftAssistRuntimeState(key, targetCraftRuntime);
   if (craftAssistPickerCloseTimer != null) {
     clearTimeout(craftAssistPickerCloseTimer);
     craftAssistPickerCloseTimer = null;
@@ -1763,6 +1832,9 @@ async function deleteAccount(row) {
     }
     if (state.craftAccountStateByAccount instanceof Map) {
       state.craftAccountStateByAccount.delete(String(row.username || "").trim());
+    }
+    if (state.craftAssistRuntimeByAccount instanceof Map) {
+      state.craftAssistRuntimeByAccount.delete(String(row.username || "").trim());
     }
     if (String(state.currentAccountUsername || "").trim() === String(row.username || "").trim()) {
       state.currentAccountUsername = "";
@@ -1836,6 +1908,7 @@ function setNoAccountState({silentSummary = false} = {}) {
   const previousUsername = String(state.currentAccountUsername || "").trim();
   if (previousUsername) {
     saveCraftAccountScopedState(previousUsername);
+    saveCraftAssistRuntimeState(previousUsername);
   }
   stopInventoryEventStream();
   closeTargetComponentDrawer();
@@ -1854,7 +1927,9 @@ function setNoAccountState({silentSummary = false} = {}) {
   state.componentTaskProgressMap = {};
   state.craftBusy = false;
   state.craftSettingsOpen = false;
-  applyCraftAccountScopedStateSnapshot(createDefaultCraftAccountScopedState());
+  applyCraftAccountScopedStateSnapshot(createDefaultCraftAccountScopedState(), {
+    runtimeSnapshot: createDefaultCraftAssistRuntimeState()
+  });
   if (craftAssistPickerCloseTimer != null) {
     clearTimeout(craftAssistPickerCloseTimer);
     craftAssistPickerCloseTimer = null;
@@ -2216,9 +2291,12 @@ function clearCraftCandidateState() {
 function commitCraftAccountScopedState(username, snapshot, {renderIfCurrent = false} = {}) {
   const key = String(username || "").trim();
   if (!key) return null;
-  const next = saveCraftAccountScopedState(key, snapshot);
+  const liveSnapshot = normalizeCraftAccountScopedStateSnapshot(snapshot || buildCurrentCraftAccountScopedStateSnapshot());
+  const next = saveCraftAccountScopedState(key, liveSnapshot);
   if (key === String(state.currentAccountUsername || "").trim()) {
-    applyCraftAccountScopedStateSnapshot(next);
+    applyCraftAccountScopedStateSnapshot(liveSnapshot, {
+      runtimeSnapshot: getCraftAssistRuntimeStateSnapshot(key, {preferCurrent: true})
+    });
     if (renderIfCurrent) renderCraftPage();
   }
   return next;
@@ -4910,6 +4988,9 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     return false;
   }
   let scopedState = getCraftAccountScopedStateSnapshot(runUsername);
+  let runtimeState = getCraftAssistRuntimeStateSnapshot(runUsername, {
+    preferCurrent: runUsername === String(state.currentAccountUsername || "").trim()
+  });
   const commitScopedState = ({showErrorToastOnCurrent = false} = {}) => {
     const next = commitCraftAccountScopedState(runUsername, scopedState, {renderIfCurrent: true});
     if (next) scopedState = next;
@@ -4928,11 +5009,11 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     setCraftStatusOnScopedState(scopedState, text, isError);
     commitScopedState({showErrorToastOnCurrent: isError});
   };
-  if (scopedState.craftAssistSelecting) {
-    if (state.craftAssistSelecting) {
-      setCraftStatus("辅助选材处理中，请稍后再试", true);
-      return false;
-    }
+  if (state.craftAssistSelecting) {
+    setCraftStatus("辅助选材处理中，请稍后再试", true);
+    return false;
+  }
+  if (runtimeState.craftAssistSelecting) {
     setScopedStatus("辅助选材处理中，请稍后再试", true);
     return false;
   }
@@ -4967,12 +5048,14 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
   }
 
   try {
+    runtimeState = saveCraftAssistRuntimeState(runUsername, {
+      craftAssistSelecting: true,
+      craftAssistPendingUiAction: String(pendingUiAction || "").trim(),
+      craftAssistPendingPresetId: String(pendingPresetId || "").trim()
+    });
     if (runUsername === String(state.currentAccountUsername || "").trim()) {
-      state.craftAssistSelecting = true;
+      applyCraftAssistRuntimeStateSnapshot(runtimeState);
     }
-    scopedState.craftAssistSelecting = true;
-    scopedState.craftAssistPendingUiAction = String(pendingUiAction || "").trim();
-    scopedState.craftAssistPendingPresetId = String(pendingPresetId || "").trim();
     commitScopedState();
 
     // 每次点击只新增并填充 1 组配方，不覆盖当前编辑中的配方。
@@ -5095,13 +5178,11 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     setScopedStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${createdEntry.item_ids.length}/${mode}${raritySuffix}，均值 ${wearTextFull(run.overall)} < 目标 ${wearTextFull(targetValue)}`);
     return true;
   } finally {
+    runtimeState = saveCraftAssistRuntimeState(runUsername, createDefaultCraftAssistRuntimeState());
     if (runUsername === String(state.currentAccountUsername || "").trim()) {
-      state.craftAssistSelecting = false;
+      applyCraftAssistRuntimeStateSnapshot(runtimeState);
     }
     scopedState = getCraftAccountScopedStateSnapshot(runUsername);
-    scopedState.craftAssistSelecting = false;
-    scopedState.craftAssistPendingUiAction = "";
-    scopedState.craftAssistPendingPresetId = "";
     commitScopedState();
   }
 }
@@ -5133,7 +5214,10 @@ async function applyCraftAssistAutoSelectionBatch({accountUsername = "", sourceP
 }
 function renderCraftAssistBusyMask() {
   if (!ui.craftAssistBusyMask || !ui.craftAssistBusyMaskTitle || !ui.craftAssistBusyMaskDetail) return;
-  const show = !!state.craftAssistOpen && !!state.craftAssistSelecting;
+  const action = String(state.craftAssistPendingUiAction || "").trim();
+  const presetId = String(state.craftAssistPendingPresetId || "").trim();
+  const hasActiveAction = action === "panel_apply" || (action === "preset_apply" && !!presetId);
+  const show = !!state.craftAssistOpen && !!state.craftAssistSelecting && hasActiveAction;
   ui.craftAssistBusyMask.classList.toggle("hidden", !show);
   ui.craftAssistBusyMask.setAttribute("aria-hidden", show ? "false" : "true");
   let accountLabel = String(state.currentAccountUsername || "").trim() || "当前账号";
@@ -5143,7 +5227,6 @@ function renderCraftAssistBusyMask() {
       accountLabel = displayAccountName(account);
     }
   }
-  const action = String(state.craftAssistPendingUiAction || "").trim();
   ui.craftAssistBusyMaskTitle.textContent = `正在为 ${accountLabel} 辅助选材`;
   ui.craftAssistBusyMaskDetail.textContent = action === "preset_apply"
     ? "正在按已保存配置选材，请稍候..."

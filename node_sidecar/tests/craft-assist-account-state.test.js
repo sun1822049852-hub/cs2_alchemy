@@ -23,7 +23,7 @@ function extractBlock(startMarker, endMarker) {
 function loadCraftAssistAccountStateFns(initialState = {}) {
   const source = [
     extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT"),
-    extractBlock("function createDefaultCraftAccountScopedState(", "function clearCraftCandidateState(")
+    extractBlock("function createDefaultCraftAssistRuntimeState(", "function clearCraftCandidateState(")
   ].join("\n");
   const context = {
     Math,
@@ -60,6 +60,7 @@ function loadCraftAssistAccountStateFns(initialState = {}) {
       craftAssistPresetEditingBackup: null,
       craftAssistPresetEditingInitialSnapshot: null,
       craftAccountStateByAccount: new Map(),
+      craftAssistRuntimeByAccount: new Map(),
       ...initialState
     },
     deepCopyPlain(value) {
@@ -70,7 +71,7 @@ function loadCraftAssistAccountStateFns(initialState = {}) {
   return context;
 }
 
-function testSaveAndRestoreCraftAccountScopedState() {
+function testSaveAndRestoreCraftAccountScopedStateKeepsDraftButClearsRuntimeBusyFlags() {
   const app = loadCraftAssistAccountStateFns({
     craftSelectedItemIds: new Set(["a1", "a2"]),
     craftStatusText: "账号A处理中",
@@ -108,9 +109,9 @@ function testSaveAndRestoreCraftAccountScopedState() {
   assert.deepEqual(Array.from(app.state.craftSelectedItemIds), ["a1", "a2"]);
   assert.equal(app.state.craftStatusText, "账号A处理中");
   assert.equal(app.state.craftRecipeQueue[0].id, "queue-a");
-  assert.equal(app.state.craftAssistSelecting, true);
-  assert.equal(app.state.craftAssistPendingUiAction, "panel_apply");
-  assert.equal(app.state.craftAssistPendingPresetId, "preset-a");
+  assert.equal(app.state.craftAssistSelecting, false);
+  assert.equal(app.state.craftAssistPendingUiAction, "");
+  assert.equal(app.state.craftAssistPendingPresetId, "");
   assert.equal(app.state.craftAssistOpen, true);
   assert.equal(app.state.craftAssistPickRole, "aux");
   assert.equal(app.state.craftAssistTargetWear, 0.2142);
@@ -133,9 +134,67 @@ function testMissingAccountRestoresEmptyDefaults() {
   assert.deepEqual(Array.from(app.state.craftAssistMaterials), []);
 }
 
+function testRestoreCanStillShowLiveRuntimeBusyStateForCurrentAccount() {
+  const app = loadCraftAssistAccountStateFns({
+    craftAssistOpen: true,
+    craftAssistTargetWear: 0.123,
+    craftAssistMaterials: [{id: "m-live"}]
+  });
+
+  assert.equal(typeof app.saveCraftAssistRuntimeState, "function", "expected runtime save helper to exist");
+
+  app.saveCraftAccountScopedState("acc-a");
+  app.saveCraftAssistRuntimeState("acc-a", {
+    craftAssistSelecting: true,
+    craftAssistPendingUiAction: "preset_apply",
+    craftAssistPendingPresetId: "preset-live"
+  });
+
+  app.state.craftAssistSelecting = false;
+  app.state.craftAssistPendingUiAction = "";
+  app.state.craftAssistPendingPresetId = "";
+  app.restoreCraftAccountScopedState("acc-a");
+
+  assert.equal(app.state.craftAssistSelecting, true);
+  assert.equal(app.state.craftAssistPendingUiAction, "preset_apply");
+  assert.equal(app.state.craftAssistPendingPresetId, "preset-live");
+  assert.equal(app.state.craftAssistOpen, true);
+  assert.equal(app.state.craftAssistMaterials[0].id, "m-live");
+}
+
+function testRestoreDropsLegacyBusyRuntimeSnapshotWithoutPendingAction() {
+  const app = loadCraftAssistAccountStateFns({
+    craftAssistOpen: true,
+    craftAssistTargetWear: 0.456,
+    craftAssistMaterials: [{id: "m-legacy"}]
+  });
+
+  app.saveCraftAccountScopedState("acc-a");
+  app.saveCraftAssistRuntimeState("acc-a", {
+    craftAssistSelecting: true,
+    craftAssistPendingUiAction: "",
+    craftAssistPendingPresetId: "preset-stale"
+  });
+
+  app.state.craftAssistSelecting = false;
+  app.state.craftAssistPendingUiAction = "";
+  app.state.craftAssistPendingPresetId = "";
+  app.restoreCraftAccountScopedState("acc-a");
+
+  assert.equal(
+    app.state.craftAssistSelecting,
+    false,
+    "runtime busy flag without an active pending action should be discarded during restore"
+  );
+  assert.equal(app.state.craftAssistPendingUiAction, "");
+  assert.equal(app.state.craftAssistPendingPresetId, "");
+}
+
 function main() {
-  testSaveAndRestoreCraftAccountScopedState();
+  testSaveAndRestoreCraftAccountScopedStateKeepsDraftButClearsRuntimeBusyFlags();
   testMissingAccountRestoresEmptyDefaults();
+  testRestoreCanStillShowLiveRuntimeBusyStateForCurrentAccount();
+  testRestoreDropsLegacyBusyRuntimeSnapshotWithoutPendingAction();
   console.log("craft-assist-account-state tests passed");
 }
 

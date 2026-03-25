@@ -59,6 +59,7 @@ function loadApplyCraftAssistAutoSelection() {
   const source = [
     extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT"),
     extractConst("WEAR_INPUT_DECIMALS"),
+    extractBlock("function createDefaultCraftAssistRuntimeState(", "function createDefaultCraftAccountScopedState("),
     extractBlock("async function applyCraftAssistAutoSelection(", "async function applyCraftAssistAutoSelectionBatch(")
   ].join("\n");
   const context = {
@@ -78,9 +79,12 @@ function loadApplyCraftAssistAutoSelection() {
       currentAccountUsername: "acc-a",
       accountSelectedUsername: "acc-a",
       craftAssistSelecting: false,
+      craftAssistPendingUiAction: "",
+      craftAssistPendingPresetId: "",
       craftUseComponentItems: false,
       craftIncludeCooling: false,
-      craftAssistWearOffsetPct: 5
+      craftAssistWearOffsetPct: 5,
+      craftAssistRuntimeByAccount: new Map()
     },
     getCraftAccountScopedStateSnapshot() {
       return deepClone(savedScopedState);
@@ -162,6 +166,9 @@ function loadApplyCraftAssistAutoSelection() {
     },
     logCraftAssistPickedRows() {},
     numberTextTrunc(value) {
+      return String(value);
+    },
+    wearTextFull(value) {
       return String(value);
     },
     getTradeUpRecipeFromRows() {
