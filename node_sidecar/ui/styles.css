@@ -3733,10 +3733,6 @@ button:active {
   border-radius: 10px;
 }
 
-.craft-assist-overlay {
-  backdrop-filter: blur(4px);
-}
-
 .modal {
   backdrop-filter: blur(2px);
 }
