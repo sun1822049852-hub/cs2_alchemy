@@ -30,7 +30,7 @@ function makeRow({
   };
 }
 
-function runSelect({rows, targetWear, materials}) {
+function runSelect({rows, targetWear, materials, ...extraArgs}) {
   return selectCraftAssistForRecipe({
     rows,
     targetWear,
@@ -38,11 +38,12 @@ function runSelect({rows, targetWear, materials}) {
     materials,
     blockedIds: [],
     includeCooling: false,
-    wearOffsetPct: 100
+    wearOffsetPct: 100,
+    ...extraArgs
   });
 }
 
-function runSelectWithContext({selectionContext, targetWear, materials, blockedIds = []}) {
+function runSelectWithContext({selectionContext, targetWear, materials, blockedIds = [], ...extraArgs}) {
   return selectCraftAssistForRecipe({
     selectionContext,
     targetWear,
@@ -50,7 +51,8 @@ function runSelectWithContext({selectionContext, targetWear, materials, blockedI
     materials,
     blockedIds,
     includeCooling: false,
-    wearOffsetPct: 100
+    wearOffsetPct: 100,
+    ...extraArgs
   });
 }
 
@@ -58,7 +60,85 @@ function pickedIds(result) {
   return Array.isArray(result && result.item_ids) ? [...result.item_ids].sort() : [];
 }
 
-function test_over_target_prefers_squeezing_aux_before_main() {
+async function withEnv(envMap, run) {
+  const prev = new Map();
+  for (const [key, value] of Object.entries(envMap || {})) {
+    prev.set(key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined);
+    if (value == null) {
+      delete process.env[key];
+    } else {
+      process.env[key] = String(value);
+    }
+  }
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of prev.entries()) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function makeOversizedPrefilterRows() {
+  const rows = [
+    makeRow({id: "m1", name: "Main", relative: 0.245}),
+    makeRow({id: "m2", name: "Main", relative: 0.244}),
+    makeRow({id: "m3", name: "Main", relative: 0.243})
+  ];
+  for (let index = 0; index < 60; index += 1) {
+    rows.push(makeRow({
+      id: `a${index + 1}`,
+      name: "Aux",
+      relative: 0.198 + index * 0.00035
+    }));
+  }
+  return rows;
+}
+
+function makeContextRefineRows() {
+  const rows = [];
+  const main = [
+    0.223665, 0.255113, 0.22595, 0.254604, 0.254294, 0.228814,
+    0.227922, 0.21527, 0.217003, 0.240858, 0.223913, 0.240308
+  ];
+  const auxA = [
+    0.189141, 0.181506, 0.190596, 0.193409, 0.212041, 0.226366,
+    0.177782, 0.210399, 0.177017, 0.189009, 0.193335, 0.198675,
+    0.191073, 0.18157, 0.195927, 0.178727, 0.170813, 0.21663,
+    0.211009, 0.185929, 0.210246, 0.216364, 0.171529, 0.181645,
+    0.178797, 0.181253, 0.182063, 0.176562, 0.174258, 0.208559,
+    0.220978, 0.204282, 0.179617, 0.177588, 0.177791, 0.186291,
+    0.2074, 0.176138, 0.22877, 0.218079, 0.225689, 0.19386,
+    0.218424, 0.172643, 0.224274, 0.215841, 0.195974, 0.199726,
+    0.197247, 0.212934, 0.196952, 0.216197, 0.183963, 0.197855,
+    0.192333, 0.210281, 0.203657, 0.173117, 0.218882, 0.174867
+  ];
+  const auxB = [
+    0.223163, 0.172805, 0.228611, 0.223355, 0.189331, 0.207907,
+    0.209509, 0.173308, 0.179485, 0.22744, 0.225744, 0.212715,
+    0.179428, 0.17413, 0.198213, 0.201144, 0.224822, 0.174647,
+    0.195061, 0.192168, 0.192561, 0.190311, 0.173833, 0.22092,
+    0.204177, 0.174603, 0.223953, 0.194436, 0.192865, 0.201617,
+    0.194507, 0.209525, 0.210154, 0.200687, 0.209083, 0.18088,
+    0.196817, 0.224977, 0.181623, 0.202709, 0.200641, 0.202861,
+    0.202848, 0.206837, 0.206288, 0.196076, 0.183793, 0.202936,
+    0.226162, 0.220426, 0.200992, 0.195037, 0.21161, 0.214895,
+    0.198857, 0.208593, 0.219399, 0.172193, 0.19523, 0.207934
+  ];
+  for (let index = 0; index < main.length; index += 1) {
+    rows.push(makeRow({id: `m${index + 1}`, name: "Main", relative: main[index]}));
+  }
+  for (let index = 0; index < auxA.length; index += 1) {
+    rows.push(makeRow({id: `a${index + 1}`, name: "AuxA", relative: auxA[index]}));
+  }
+  for (let index = 0; index < auxB.length; index += 1) {
+    rows.push(makeRow({id: `b${index + 1}`, name: "AuxB", relative: auxB[index]}));
+  }
+  return rows;
+}
+
+async function test_over_target_prefers_squeezing_aux_before_main() {
   const rows = [
     makeRow({id: "m1", name: "Main", relative: 0.62}),
     makeRow({id: "m2", name: "Main", relative: 0.61}),
@@ -74,7 +154,7 @@ function test_over_target_prefers_squeezing_aux_before_main() {
     makeRow({id: "a6", name: "Aux", relative: 0.30}),
     makeRow({id: "a7", name: "Aux", relative: 0.28})
   ];
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.52,
     materials: [
@@ -89,7 +169,7 @@ function test_over_target_prefers_squeezing_aux_before_main() {
   assert.equal(result.item_ids.includes("a6") || result.item_ids.includes("a7"), true);
 }
 
-function test_under_target_prioritizes_closer_overall_before_aux_low_bias() {
+async function test_under_target_prioritizes_closer_overall_before_aux_low_bias() {
   const rows = [];
   for (let i = 1; i <= 9; i += 1) {
     rows.push(makeRow({id: `m${i}`, name: "Main", relative: 0.13}));
@@ -98,7 +178,7 @@ function test_under_target_prioritizes_closer_overall_before_aux_low_bias() {
   rows.push(makeRow({id: "a2", name: "Aux", relative: 0.06}));
   rows.push(makeRow({id: "a3", name: "Aux", relative: 0.09}));
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.169,
     materials: [
@@ -113,7 +193,7 @@ function test_under_target_prioritizes_closer_overall_before_aux_low_bias() {
   assert.equal(result.item_ids.includes("a2"), false);
 }
 
-function test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise() {
+async function test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise() {
   const rows = [];
   for (let i = 1; i <= 9; i += 1) {
     rows.push(makeRow({id: `m${i}`, name: "Main", relative: 0.13}));
@@ -121,7 +201,7 @@ function test_under_target_allows_above_slot_target_when_it_is_the_only_legal_ra
   rows.push(makeRow({id: "a1", name: "Aux", relative: 0.02}));
   rows.push(makeRow({id: "a3", name: "Aux", relative: 0.09}));
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.169,
     materials: [
@@ -135,14 +215,14 @@ function test_under_target_allows_above_slot_target_when_it_is_the_only_legal_ra
   assert.equal(result.item_ids.includes("a3"), true);
 }
 
-function test_all_main_items_use_single_side_branch() {
+async function test_all_main_items_use_single_side_branch() {
   const rows = [];
   for (let i = 1; i <= 10; i += 1) {
     rows.push(makeRow({id: `s${i}`, name: "Solo", relative: 0.01}));
   }
   rows.push(makeRow({id: "s11", name: "Solo", relative: 0.09}));
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.20,
     materials: [
@@ -155,7 +235,7 @@ function test_all_main_items_use_single_side_branch() {
   assert.equal(result.item_ids.includes("s11"), true);
 }
 
-function test_under_target_never_uses_candidate_that_pushes_overall_across_target() {
+async function test_under_target_never_uses_candidate_that_pushes_overall_across_target() {
   const rows = [];
   for (let i = 1; i <= 9; i += 1) {
     rows.push(makeRow({id: `m${i}`, name: "Main", relative: 0.16}));
@@ -163,7 +243,7 @@ function test_under_target_never_uses_candidate_that_pushes_overall_across_targe
   rows.push(makeRow({id: "a1", name: "Aux", relative: 0.02}));
   rows.push(makeRow({id: "a2", name: "Aux", relative: 0.90}));
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.169,
     materials: [
@@ -178,7 +258,7 @@ function test_under_target_never_uses_candidate_that_pushes_overall_across_targe
   assert.equal(result.item_ids.includes("a2"), false);
 }
 
-function test_single_material_falls_back_when_balanced_split_side_is_short() {
+async function test_single_material_falls_back_when_balanced_split_side_is_short() {
   const rows = [
     makeRow({id: "x0", name: "Solo", relative: 0.160173}),
     makeRow({id: "x1", name: "Solo", relative: 0.184536}),
@@ -194,7 +274,7 @@ function test_single_material_falls_back_when_balanced_split_side_is_short() {
     makeRow({id: "x11", name: "Solo", relative: 0.166667})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.2142,
     materials: [
@@ -210,7 +290,7 @@ function test_single_material_falls_back_when_balanced_split_side_is_short() {
   assert.equal(pickedIds(result).includes("x0"), false);
 }
 
-function test_single_material_non_unit_interval_still_uses_relative_centering() {
+async function test_single_material_non_unit_interval_still_uses_relative_centering() {
   const rows = [
     makeRow({id: "r1", name: "Shifted", relative: 0.19, min: 0.06, max: 0.80}),
     makeRow({id: "r2", name: "Shifted", relative: 0.20, min: 0.06, max: 0.80}),
@@ -225,7 +305,7 @@ function test_single_material_non_unit_interval_still_uses_relative_centering() 
     makeRow({id: "r11", name: "Shifted", relative: 0.33, min: 0.06, max: 0.80})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.29,
     materials: [
@@ -239,7 +319,7 @@ function test_single_material_non_unit_interval_still_uses_relative_centering() 
   assert.equal(pickedIds(result).includes("r1"), false);
 }
 
-function test_single_material_returns_selection_trace() {
+async function test_single_material_returns_selection_trace() {
   const rows = [
     makeRow({id: "x0", name: "Solo", relative: 0.160173}),
     makeRow({id: "x1", name: "Solo", relative: 0.184536}),
@@ -255,7 +335,7 @@ function test_single_material_returns_selection_trace() {
     makeRow({id: "x11", name: "Solo", relative: 0.166667})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.2142,
     materials: [
@@ -273,7 +353,7 @@ function test_single_material_returns_selection_trace() {
   );
 }
 
-function test_single_material_starts_with_balanced_split_then_pushes_upward() {
+async function test_single_material_starts_with_balanced_split_then_pushes_upward() {
   const rows = [
     makeRow({id: "b1", name: "Solo", relative: 0.193232}),
     makeRow({id: "b2", name: "Solo", relative: 0.192819}),
@@ -290,7 +370,7 @@ function test_single_material_starts_with_balanced_split_then_pushes_upward() {
     makeRow({id: "a7", name: "Solo", relative: 0.224927})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.2142,
     materials: [
@@ -306,7 +386,7 @@ function test_single_material_starts_with_balanced_split_then_pushes_upward() {
   assert.equal(result.selection_trace.steps[0].aboveCount, 5);
 }
 
-function test_single_material_applies_compensation_refinement_after_push_limit() {
+async function test_single_material_applies_compensation_refinement_after_push_limit() {
   const rows = [
     makeRow({id: "b1", name: "Solo", relative: 0.193232}),
     makeRow({id: "b2", name: "Solo", relative: 0.192819}),
@@ -323,7 +403,7 @@ function test_single_material_applies_compensation_refinement_after_push_limit()
     makeRow({id: "a7", name: "Solo", relative: 0.227533})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.2142,
     materials: [
@@ -344,7 +424,7 @@ function test_single_material_applies_compensation_refinement_after_push_limit()
   assert.equal(refineStep.debug.firstSwapAttempts.length > 0, true);
 }
 
-function test_single_material_keeps_hard_relative_cap_margin_near_target_edge() {
+async function test_single_material_keeps_hard_relative_cap_margin_near_target_edge() {
   const rows = [];
   for (let i = 1; i <= 9; i += 1) {
     rows.push(makeRow({id: `e${i}`, name: "Solo", relative: 0.27}));
@@ -352,7 +432,7 @@ function test_single_material_keeps_hard_relative_cap_margin_near_target_edge() 
   rows.push(makeRow({id: "tight", name: "Solo", relative: 0.2699999}));
   rows.push(makeRow({id: "safe", name: "Solo", relative: 0.2699997}));
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.27,
     materials: [
@@ -366,7 +446,7 @@ function test_single_material_keeps_hard_relative_cap_margin_near_target_edge() 
   assert.equal(result.item_ids.includes("tight"), false);
 }
 
-function test_multi_material_allows_cross_side_compensation_for_closer_overall() {
+async function test_multi_material_allows_cross_side_compensation_for_closer_overall() {
   const rows = [
     makeRow({id: "m0", name: "Main", relative: 0.201757}),
     makeRow({id: "m1", name: "Main", relative: 0.257854}),
@@ -382,7 +462,7 @@ function test_multi_material_allows_cross_side_compensation_for_closer_overall()
     makeRow({id: "a5", name: "Aux", relative: 0.191669})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.2142,
     materials: [
@@ -398,7 +478,7 @@ function test_multi_material_allows_cross_side_compensation_for_closer_overall()
   assert.equal(pickedIds(result).includes("a3"), true);
 }
 
-function test_multi_material_allows_cross_side_fill_when_preferred_side_is_short() {
+async function test_multi_material_allows_cross_side_fill_when_preferred_side_is_short() {
   const rows = [
     makeRow({id: "m1", name: "Main", relative: 0.22}),
     makeRow({id: "m2", name: "Main", relative: 0.221}),
@@ -412,7 +492,7 @@ function test_multi_material_allows_cross_side_fill_when_preferred_side_is_short
     makeRow({id: "a7", name: "Aux", relative: 0.217})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.2142,
     materials: [
@@ -427,7 +507,7 @@ function test_multi_material_allows_cross_side_fill_when_preferred_side_is_short
   assert.equal(pickedIds(result).includes("a7"), true);
 }
 
-function test_multi_material_returns_selection_trace() {
+async function test_multi_material_returns_selection_trace() {
   const rows = [
     makeRow({id: "m1", name: "Main", relative: 0.24}),
     makeRow({id: "m2", name: "Main", relative: 0.245}),
@@ -445,7 +525,7 @@ function test_multi_material_returns_selection_trace() {
     makeRow({id: "a12", name: "Aux", relative: 0.198})
   ];
 
-  const result = runSelect({
+  const result = await runSelect({
     rows,
     targetWear: 0.21,
     materials: [
@@ -464,7 +544,7 @@ function test_multi_material_returns_selection_trace() {
   );
 }
 
-function test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids() {
+async function test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids() {
   const rows = [
     makeRow({id: "m1", name: "Main", relative: 0.24}),
     makeRow({id: "m2", name: "Main", relative: 0.245}),
@@ -487,7 +567,7 @@ function test_prebuilt_selection_context_matches_direct_selection_even_with_bloc
     {name: "Aux", names: ["Aux"], role: "aux", count: 8, wear_min: 0, wear_max: 1}
   ];
   const blockedIds = ["m3"];
-  const direct = selectCraftAssistForRecipe({
+  const direct = await selectCraftAssistForRecipe({
     rows,
     targetWear: 0.21,
     wearFilterMode: "relative",
@@ -497,7 +577,7 @@ function test_prebuilt_selection_context_matches_direct_selection_even_with_bloc
     wearOffsetPct: 100
   });
   const selectionContext = buildCraftAssistSelectionContext({rows, includeCooling: false});
-  const cached = runSelectWithContext({
+  const cached = await runSelectWithContext({
     selectionContext,
     targetWear: 0.21,
     materials,
@@ -512,19 +592,158 @@ function test_prebuilt_selection_context_matches_direct_selection_even_with_bloc
   assert.deepEqual(cached.selection_trace, direct.selection_trace);
 }
 
-test_over_target_prefers_squeezing_aux_before_main();
-test_under_target_prioritizes_closer_overall_before_aux_low_bias();
-test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise();
-test_all_main_items_use_single_side_branch();
-test_under_target_never_uses_candidate_that_pushes_overall_across_target();
-test_single_material_falls_back_when_balanced_split_side_is_short();
-test_single_material_non_unit_interval_still_uses_relative_centering();
-test_single_material_returns_selection_trace();
-test_single_material_starts_with_balanced_split_then_pushes_upward();
-test_single_material_applies_compensation_refinement_after_push_limit();
-test_single_material_keeps_hard_relative_cap_margin_near_target_edge();
-test_multi_material_allows_cross_side_compensation_for_closer_overall();
-test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
-test_multi_material_returns_selection_trace();
-test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids();
-console.log("craftAssistService tests passed");
+async function test_fast_flag_true_runs_expand_correction_before_returning() {
+  const rows = makeOversizedPrefilterRows();
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "0",
+    OVERSIZED_2_SHARDS_THRESHOLD: "20",
+    OVERSIZED_4_SHARDS_THRESHOLD: "9999",
+    SHARD_TOP_K: "20",
+    SHARD_EDGE_KEEP_PER_SIDE: "2",
+    EXPAND_SHARD_TOP_K: "40",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHORTLIST_MIN: "24",
+    SHORTLIST_PER_REQUIRED: "4",
+    SHORTLIST_HARD_MAX: "80"
+  }, async () => {
+    const materials = [
+      {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
+      {name: "Aux", names: ["Aux"], role: "aux", count: 8, wear_min: 0, wear_max: 1}
+    ];
+    const slow = await runSelect({
+      rows,
+      targetWear: 0.21,
+      enableFastCraftAssist: false,
+      materials
+    });
+    const fast = await runSelect({
+      rows,
+      targetWear: 0.21,
+      enableFastCraftAssist: true,
+      materials
+    });
+
+    assert.equal(slow.ok, true);
+    assert.equal(fast.ok, true);
+    assert.equal(slow.overall < 0.21, true);
+    assert.equal(fast.overall, slow.overall);
+    assert.deepEqual(pickedIds(fast), pickedIds(slow));
+    assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
+    assert.equal(fast.selection_trace.prefilter.retryMode, "expand");
+    assert.equal(Array.isArray(fast.selection_trace.prefilter.phases), true);
+    assert.equal(fast.selection_trace.prefilter.phases.length, 2);
+    assert.deepEqual(
+      fast.selection_trace.prefilter.phases.map((phase) => phase.phaseName),
+      ["prefilter/base", "prefilter/expand"]
+    );
+    assert.deepEqual(fast.selection_trace.prefilter.phases[0].prefilteredIndexes, [1]);
+    assert.deepEqual(fast.selection_trace.prefilter.phases[1].prefilteredIndexes, [1]);
+    assert.equal(fast.selection_trace.prefilter.phases[0].groups[0].candidateCountBefore, 60);
+    assert.equal(fast.selection_trace.prefilter.phases[0].groups[0].candidateCountAfter <= 80, true);
+    assert.equal(
+      fast.selection_trace.prefilter.phases[1].groups[0].candidateCountAfter
+      > fast.selection_trace.prefilter.phases[0].groups[0].candidateCountAfter,
+      true
+    );
+  });
+}
+
+async function test_fast_flag_false_forces_old_logic_even_when_env_enabled() {
+  const rows = makeOversizedPrefilterRows();
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "20",
+    OVERSIZED_4_SHARDS_THRESHOLD: "9999",
+    SHARD_TOP_K: "20",
+    SHARD_EDGE_KEEP_PER_SIDE: "2",
+    EXPAND_SHARD_TOP_K: "40",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHORTLIST_MIN: "24",
+    SHORTLIST_PER_REQUIRED: "4",
+    SHORTLIST_HARD_MAX: "80"
+  }, async () => {
+    const result = await runSelect({
+      rows,
+      targetWear: 0.21,
+      enableFastCraftAssist: false,
+      materials: [
+        {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
+        {name: "Aux", names: ["Aux"], role: "aux", count: 8, wear_min: 0, wear_max: 1}
+      ]
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.overall < 0.21, true);
+    assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), false);
+  });
+}
+
+async function test_fast_flag_runs_context_refine_after_expand_improves_multi_oversized_groups() {
+  const rows = makeContextRefineRows();
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "20",
+    OVERSIZED_4_SHARDS_THRESHOLD: "999",
+    SHARD_TOP_K: "18",
+    SHARD_EDGE_KEEP_PER_SIDE: "2",
+    EXPAND_SHARD_TOP_K: "28",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHORTLIST_MIN: "22",
+    SHORTLIST_PER_REQUIRED: "4",
+    SHORTLIST_HARD_MAX: "64"
+  }, async () => {
+    const materials = [
+      {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
+      {name: "AuxA", names: ["AuxA"], role: "aux", count: 4, wear_min: 0, wear_max: 1},
+      {name: "AuxB", names: ["AuxB"], role: "aux", count: 4, wear_min: 0, wear_max: 1}
+    ];
+    const slow = await runSelect({
+      rows,
+      targetWear: 0.2142,
+      enableFastCraftAssist: false,
+      materials
+    });
+    const fast = await runSelect({
+      rows,
+      targetWear: 0.2142,
+      enableFastCraftAssist: true,
+      materials
+    });
+
+    assert.equal(slow.ok, true);
+    assert.equal(fast.ok, true);
+    assert.equal(slow.overall > fast.overall, false);
+    assert.equal(Math.abs(fast.overall - slow.overall) < 1e-12, true);
+    assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
+    assert.equal(!!(fast.selection_trace.prefilter && fast.selection_trace.prefilter.contextRefine), true);
+    assert.equal(fast.selection_trace.prefilter.contextRefine.entered, true);
+    assert.equal(fast.selection_trace.prefilter.contextRefine.rounds.length, 1);
+    assert.equal(fast.selection_trace.prefilter.contextRefine.rounds[0].attempts.length, 2);
+    assert.equal(fast.selection_trace.prefilter.contextRefine.acceptedCount >= 1, true);
+  });
+}
+
+(async () => {
+  await test_over_target_prefers_squeezing_aux_before_main();
+  await test_under_target_prioritizes_closer_overall_before_aux_low_bias();
+  await test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise();
+  await test_all_main_items_use_single_side_branch();
+  await test_under_target_never_uses_candidate_that_pushes_overall_across_target();
+  await test_single_material_falls_back_when_balanced_split_side_is_short();
+  await test_single_material_non_unit_interval_still_uses_relative_centering();
+  await test_single_material_returns_selection_trace();
+  await test_single_material_starts_with_balanced_split_then_pushes_upward();
+  await test_single_material_applies_compensation_refinement_after_push_limit();
+  await test_single_material_keeps_hard_relative_cap_margin_near_target_edge();
+  await test_multi_material_allows_cross_side_compensation_for_closer_overall();
+  await test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
+  await test_multi_material_returns_selection_trace();
+  await test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids();
+  await test_fast_flag_true_runs_expand_correction_before_returning();
+  await test_fast_flag_false_forces_old_logic_even_when_env_enabled();
+  await test_fast_flag_runs_context_refine_after_expand_improves_multi_oversized_groups();
+  console.log("craftAssistService tests passed");
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

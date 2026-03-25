@@ -1,0 +1,179 @@
+"use strict";
+
+const {parentPort} = require("node:worker_threads");
+
+const EPSILON = 1e-9;
+
+if (!parentPort) {
+  throw new Error("craftAssistShardWorker requires parentPort");
+}
+
+function asFiniteNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function asNonNegativeInt(value, fallback = 0) {
+  const n = Math.trunc(asFiniteNumber(value, fallback));
+  return n >= 0 ? n : fallback;
+}
+
+function normalizeRole(role) {
+  const text = String(role || "").trim();
+  if (text === "aux" || text === "neutral") return text;
+  return "main";
+}
+
+function compareTuple(left, right) {
+  const len = Math.max(Array.isArray(left) ? left.length : 0, Array.isArray(right) ? right.length : 0);
+  for (let index = 0; index < len; index += 1) {
+    const diff = asFiniteNumber(left && left[index], 0) - asFiniteNumber(right && right[index], 0);
+    if (Math.abs(diff) > 1e-12) return diff;
+  }
+  return 0;
+}
+
+function candidateSide(value, targetValue) {
+  if (value < targetValue - EPSILON) return "below";
+  if (value > targetValue + EPSILON) return "above";
+  return "equal";
+}
+
+function buildScoreTuple(candidate, {role, targetValue}) {
+  const value = asFiniteNumber(candidate && candidate.value, 0);
+  const orderedIndex = asNonNegativeInt(candidate && candidate.orderedIndex, 0);
+  const distance = Math.abs(value - targetValue);
+  if (role === "neutral") {
+    return [distance, orderedIndex];
+  }
+  const wrongSidePenalty = role === "main"
+    ? (value < targetValue - EPSILON ? 1 : 0)
+    : (value > targetValue + EPSILON ? 1 : 0);
+  if (role === "main") {
+    return [wrongSidePenalty, distance, -value, orderedIndex];
+  }
+  return [wrongSidePenalty, distance, value, orderedIndex];
+}
+
+function compareByOrderedIndex(left, right) {
+  return asNonNegativeInt(left && left.orderedIndex, 0) - asNonNegativeInt(right && right.orderedIndex, 0);
+}
+
+function buildQuantileEdgeKeep(sideCandidates, edgeKeepPerSide) {
+  const list = Array.isArray(sideCandidates) ? sideCandidates : [];
+  const keep = asNonNegativeInt(edgeKeepPerSide, 0);
+  if (!list.length || keep <= 0) return [];
+  if (list.length <= keep) return [...list];
+  if (keep === 1) return [list[0]];
+  const picked = [];
+  const seen = new Set();
+  for (let i = 0; i < keep; i += 1) {
+    const index = Math.round(i * (list.length - 1) / (keep - 1));
+    const candidate = list[index];
+    const id = String(candidate && candidate.id || "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    picked.push(candidate);
+  }
+  return picked;
+}
+
+function selectShardCandidates(payload = {}) {
+  const role = normalizeRole(payload.role);
+  const targetValue = asFiniteNumber(payload.targetValue, 0);
+  const topK = Math.max(1, asNonNegativeInt(payload.topK, 40));
+  const edgeKeepPerSide = asNonNegativeInt(payload.edgeKeepPerSide, 4);
+  const candidates = (Array.isArray(payload.candidates) ? payload.candidates : [])
+    .map((candidate) => ({
+      id: String(candidate && candidate.id || "").trim(),
+      value: asFiniteNumber(candidate && candidate.value, 0),
+      orderedIndex: asNonNegativeInt(candidate && candidate.orderedIndex, 0)
+    }))
+    .filter((candidate) => candidate.id);
+  const uniqueById = new Map();
+  for (const candidate of candidates) {
+    if (!uniqueById.has(candidate.id)) {
+      uniqueById.set(candidate.id, candidate);
+    }
+  }
+  const list = [...uniqueById.values()];
+  const below = [];
+  const above = [];
+  const ranked = [...list].sort((left, right) => compareTuple(
+    buildScoreTuple(left, {role, targetValue}),
+    buildScoreTuple(right, {role, targetValue})
+  ));
+  for (const candidate of list) {
+    const side = candidateSide(candidate.value, targetValue);
+    if (side === "below") {
+      below.push(candidate);
+    } else if (side === "above") {
+      above.push(candidate);
+    }
+  }
+  below.sort(compareByOrderedIndex);
+  above.sort(compareByOrderedIndex);
+  const coreCount = Math.max(1, topK - edgeKeepPerSide * 2);
+  const selected = [];
+  const selectedIds = new Set();
+  function pushCandidate(candidate) {
+    if (!candidate) return false;
+    const id = String(candidate.id || "");
+    if (!id || selectedIds.has(id)) return false;
+    selectedIds.add(id);
+    selected.push(candidate);
+    return true;
+  }
+  for (const candidate of ranked) {
+    if (selected.length >= coreCount) break;
+    pushCandidate(candidate);
+  }
+  const edgeBelow = buildQuantileEdgeKeep(below, edgeKeepPerSide);
+  const edgeAbove = buildQuantileEdgeKeep(above, edgeKeepPerSide);
+  for (const candidate of edgeBelow) {
+    pushCandidate(candidate);
+  }
+  for (const candidate of edgeAbove) {
+    pushCandidate(candidate);
+  }
+  for (const candidate of ranked) {
+    if (selected.length >= topK) break;
+    pushCandidate(candidate);
+  }
+  selected.sort(compareByOrderedIndex);
+  const selectedList = selected.slice(0, topK);
+  let preferredSideCount = 0;
+  let oppositeSideCount = 0;
+  for (const candidate of selectedList) {
+    const side = candidateSide(candidate.value, targetValue);
+    if (role === "neutral" || side === "equal") continue;
+    const preferred = role === "main" ? side === "above" : side === "below";
+    if (preferred) preferredSideCount += 1;
+    else oppositeSideCount += 1;
+  }
+  return {
+    groupIndex: asNonNegativeInt(payload.groupIndex, 0),
+    shardIndex: asNonNegativeInt(payload.shardIndex, 0),
+    selectedIds: selectedList.map((candidate) => candidate.id),
+    stats: {
+      inputCount: list.length,
+      outputCount: selectedList.length,
+      preferredSideCount,
+      oppositeSideCount
+    }
+  };
+}
+
+parentPort.on("message", (message) => {
+  if (!message || message.type !== "prefilter") return;
+  parentPort.postMessage({
+    type: "result",
+    requestId: String(message.requestId || "").trim(),
+    ok: true,
+    result: selectShardCandidates(message.payload || {})
+  });
+});
+
+module.exports = {
+  selectShardCandidates
+};

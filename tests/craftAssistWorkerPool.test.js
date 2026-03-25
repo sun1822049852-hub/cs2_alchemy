@@ -52,7 +52,27 @@ async function withTempDir(run) {
   }
 }
 
-function makeDirectArgs(rows) {
+async function withEnv(envMap, run) {
+  const prev = new Map();
+  for (const [key, value] of Object.entries(envMap || {})) {
+    prev.set(key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined);
+    if (value == null) {
+      delete process.env[key];
+    } else {
+      process.env[key] = String(value);
+    }
+  }
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of prev.entries()) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function makeDirectArgs(rows, overrides = {}) {
   return {
     rows,
     targetWear: 0.21,
@@ -63,11 +83,12 @@ function makeDirectArgs(rows) {
     ],
     blockedIds: [],
     includeCooling: false,
-    wearOffsetPct: 100
+    wearOffsetPct: 100,
+    ...overrides
   };
 }
 
-function makeSnapshotArgs(snapshotPath) {
+function makeSnapshotArgs(snapshotPath, overrides = {}) {
   return {
     snapshotPath,
     targetWear: 0.21,
@@ -78,11 +99,12 @@ function makeSnapshotArgs(snapshotPath) {
     ],
     blockedIds: [],
     includeCooling: false,
-    wearOffsetPct: 100
+    wearOffsetPct: 100,
+    ...overrides
   };
 }
 
-function makeInlineCandidateArgs(rows) {
+function makeInlineCandidateArgs(rows, overrides = {}) {
   return {
     candidateRows: rows,
     targetWear: 0.21,
@@ -93,7 +115,8 @@ function makeInlineCandidateArgs(rows) {
     ],
     blockedIds: [],
     includeCooling: false,
-    wearOffsetPct: 100
+    wearOffsetPct: 100,
+    ...overrides
   };
 }
 
@@ -117,6 +140,22 @@ function baseRows() {
   ];
 }
 
+function oversizedRows() {
+  const rows = [
+    makeRow({id: "m1", name: "Main", relative: 0.245}),
+    makeRow({id: "m2", name: "Main", relative: 0.244}),
+    makeRow({id: "m3", name: "Main", relative: 0.243})
+  ];
+  for (let index = 0; index < 60; index += 1) {
+    rows.push(makeRow({
+      id: `a${index + 1}`,
+      name: "Aux",
+      relative: 0.198 + index * 0.00035
+    }));
+  }
+  return rows;
+}
+
 async function test_worker_pool_matches_direct_selection() {
   await withTempDir(async (dir) => {
     const rows = baseRows();
@@ -124,7 +163,7 @@ async function test_worker_pool_matches_direct_selection() {
     writeSnapshot(snapshotPath, rows);
     const pool = createCraftAssistWorkerPool({size: 2, requestTimeoutMs: 2000});
     try {
-      const direct = selectCraftAssistForRecipe(makeDirectArgs(rows));
+      const direct = await selectCraftAssistForRecipe(makeDirectArgs(rows));
       const viaPool = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath));
       assert.deepEqual(viaPool, direct);
     } finally {
@@ -137,7 +176,7 @@ async function test_worker_pool_accepts_inline_candidate_rows() {
   const rows = baseRows();
   const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 2000});
   try {
-    const direct = selectCraftAssistForRecipe(makeDirectArgs(rows));
+    const direct = await selectCraftAssistForRecipe(makeDirectArgs(rows));
     const viaPool = await pool.selectForRecipe(makeInlineCandidateArgs(rows));
     assert.deepEqual(viaPool, direct);
   } finally {
@@ -160,7 +199,7 @@ async function test_worker_pool_reloads_snapshot_after_file_change() {
       const now = new Date(Date.now() + 2000);
       fs.utimesSync(snapshotPath, now, now);
       const second = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath));
-      const direct = selectCraftAssistForRecipe(makeDirectArgs(secondRows));
+      const direct = await selectCraftAssistForRecipe(makeDirectArgs(secondRows));
       assert.notDeepEqual(second.item_ids, first.item_ids);
       assert.deepEqual(second, direct);
     } finally {
@@ -198,7 +237,7 @@ async function test_worker_pool_retries_once_after_worker_crash() {
     const snapshotPath = path.join(dir, "snapshot.json");
     const crashMarkerPath = path.join(dir, "crash-once.marker");
     writeSnapshot(snapshotPath, rows);
-    const direct = selectCraftAssistForRecipe(makeDirectArgs(rows));
+    const direct = await selectCraftAssistForRecipe(makeDirectArgs(rows));
     const pool = createCraftAssistWorkerPool({
       size: 1,
       requestTimeoutMs: 2000,
@@ -217,12 +256,47 @@ async function test_worker_pool_retries_once_after_worker_crash() {
   });
 }
 
+async function test_worker_pool_handles_nested_prefilter_workers() {
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "20",
+    OVERSIZED_4_SHARDS_THRESHOLD: "9999",
+    SHARD_TOP_K: "20",
+    SHARD_EDGE_KEEP_PER_SIDE: "2",
+    EXPAND_SHARD_TOP_K: "40",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHORTLIST_MIN: "24",
+    SHORTLIST_PER_REQUIRED: "4",
+    SHORTLIST_HARD_MAX: "80"
+  }, async () => {
+    await withTempDir(async (dir) => {
+      const rows = oversizedRows();
+      const snapshotPath = path.join(dir, "oversized.json");
+      writeSnapshot(snapshotPath, rows);
+      const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 4000});
+      try {
+        const direct = await selectCraftAssistForRecipe(makeDirectArgs(rows, {enableFastCraftAssist: true}));
+        const viaPool = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath, {enableFastCraftAssist: true}));
+        assert.equal(!!(direct.selection_trace && direct.selection_trace.prefilter), true);
+        assert.equal(!!(viaPool.selection_trace && viaPool.selection_trace.prefilter), true);
+        assert.deepEqual(viaPool.item_ids, direct.item_ids);
+        assert.equal(viaPool.overall, direct.overall);
+        assert.equal(viaPool.rarity, direct.rarity);
+        assert.equal(viaPool.recipe_text, direct.recipe_text);
+      } finally {
+        await pool.close();
+      }
+    });
+  });
+}
+
 (async () => {
   await test_worker_pool_matches_direct_selection();
   await test_worker_pool_accepts_inline_candidate_rows();
   await test_worker_pool_reloads_snapshot_after_file_change();
   await test_worker_pool_times_out_and_rejects();
   await test_worker_pool_retries_once_after_worker_crash();
+  await test_worker_pool_handles_nested_prefilter_workers();
   console.log("craftAssistWorkerPool tests passed");
 })().catch((err) => {
   console.error(err);

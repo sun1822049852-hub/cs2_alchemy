@@ -23,7 +23,7 @@ const state = {
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
   craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 360,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "",
-  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null,
+  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false,
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
   targetDrawerOpen: false, targetComponentChoices: [], targetComponentSelectedId: "", targetComponentExcludeId: "",
@@ -59,7 +59,7 @@ const ui = {
   showComponentItemsWrap: document.getElementById("showComponentItemsWrap"), showComponentItems: document.getElementById("showComponentItems"),
   componentDepositBtn: document.getElementById("componentDepositBtn"), componentWithdrawBtn: document.getElementById("componentWithdrawBtn"),
   componentCraftSettingsBtn: document.getElementById("componentCraftSettingsBtn"), componentCraftSettingsPanel: document.getElementById("componentCraftSettingsPanel"), componentCraftUseComponentItems: document.getElementById("componentCraftUseComponentItems"),
-  componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowFullWear: document.getElementById("componentCraftShowFullWear"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
+  componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowFullWear: document.getElementById("componentCraftShowFullWear"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistFastMode: document.getElementById("componentCraftAssistFastMode"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
   componentCraftCoolingHint: document.getElementById("componentCraftCoolingHint"),
   componentTaskFloat: document.getElementById("componentTaskFloat"), componentTaskQueueList: document.getElementById("componentTaskQueueList"),
   componentTaskCancelBtn: document.getElementById("componentTaskCancelBtn"), componentTaskInfo: document.getElementById("componentTaskInfo"),
@@ -75,7 +75,7 @@ const ui = {
   craftSelectedText: document.getElementById("craftSelectedText"), craftRecipeText: document.getElementById("craftRecipeText"),
   craftStatusText: document.getElementById("craftStatusText"), craftCoolingHint: document.getElementById("craftCoolingHint"), craftSelectionTitle: document.getElementById("craftSelectionTitle"),
   craftLeftPanel: document.getElementById("craftLeftPanel"), craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
-  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
+  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistFastMode: document.getElementById("craftAssistFastMode"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
   craftAddRecipeBtn: document.getElementById("craftAddRecipeBtn"), craftExecuteQueueBtn: document.getElementById("craftExecuteQueueBtn"),
   craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftQueueList: document.getElementById("craftQueueList"),
   craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
@@ -668,6 +668,7 @@ function saveCraftUiPrefs() {
           craft_show_seed: !!state.craftShowSeed,
         craft_show_full_wear: !!state.craftShowFullWear,
         craft_show_cooling_time: !!state.craftShowCoolingTime,
+        craft_assist_fast_mode: !!state.craftAssistFastMode,
         craft_assist_wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
         craft_right_width: Number(state.craftRightPanelWidth) || 360,
         craft_assist_overlay_height: Number.isFinite(overlayHeight) ? overlayHeight : 0,
@@ -689,6 +690,7 @@ function loadCraftUiPrefs() {
     if (typeof prefs.craft_show_seed === "boolean") state.craftShowSeed = prefs.craft_show_seed;
     if (typeof prefs.craft_show_full_wear === "boolean") state.craftShowFullWear = prefs.craft_show_full_wear;
     if (typeof prefs.craft_show_cooling_time === "boolean") state.craftShowCoolingTime = prefs.craft_show_cooling_time;
+    if (typeof prefs.craft_assist_fast_mode === "boolean") state.craftAssistFastMode = prefs.craft_assist_fast_mode;
     if (Number.isFinite(Number(prefs.craft_assist_wear_offset_pct))) {
       state.craftAssistWearOffsetPct = normalizeCraftAssistWearOffsetPct(prefs.craft_assist_wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
     }
@@ -2762,6 +2764,10 @@ function applyCraftStepResultsToQueue({steps, pendingIndexes, rows}) {
 }
 function applyCraftPrepareResultsToQueue({prepareResults} = {}) {
   const list = Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [];
+  const rowsById = buildRowsByAssetId(getAllInventoryCraftableRows({rows: state.rows, includeComponentItems: true}));
+  const componentSummaryMap = state.component && state.component.summary_map && typeof state.component.summary_map === "object"
+    ? state.component.summary_map
+    : {};
   for (const result of Array.isArray(prepareResults) ? prepareResults : []) {
     const queueIndex = Number(result && result.queue_index);
     if (!Number.isFinite(queueIndex) || queueIndex < 0 || queueIndex >= list.length) continue;
@@ -2780,13 +2786,13 @@ function applyCraftPrepareResultsToQueue({prepareResults} = {}) {
       }
       entry.item_sources = nextSources;
     }
+    syncCraftRecipeEntryItemSources(entry, rowsById, componentSummaryMap);
     const status = String(result && result.status || "").trim();
     entry.status = status === "prepare_failed" ? "prepare_failed" : "pending";
     entry.prepare_status = String(result && result.prepare_status || "").trim() || (entry.status === "prepare_failed" ? "failed" : "ready");
     entry.prepare_message = String(result && result.prepare_message || "").trim();
-    if (entry.status !== "prepare_failed") {
+    if (entry.status !== "prepare_failed" && entry.prepare_status === "ready") {
       entry.prepare_message = "";
-      entry.prepare_status = "ready";
     }
   }
   ensureActiveCraftRecipe({createIfMissing: false});
@@ -3281,6 +3287,7 @@ function syncCraftSettingsControls(allCraftRows = null) {
   const showSeed = !!state.craftShowSeed;
   const showFullWear = !!state.craftShowFullWear;
   const showCoolingTime = !!state.craftShowCoolingTime;
+  const fastMode = !!state.craftAssistFastMode;
   const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
   state.craftAssistWearOffsetPct = wearOffsetPct;
   if (ui.craftUseComponentItems) ui.craftUseComponentItems.checked = useComponentItems;
@@ -3293,6 +3300,8 @@ function syncCraftSettingsControls(allCraftRows = null) {
   if (ui.componentCraftShowFullWear) ui.componentCraftShowFullWear.checked = showFullWear;
   if (ui.craftShowCoolingTime) ui.craftShowCoolingTime.checked = showCoolingTime;
   if (ui.componentCraftShowCoolingTime) ui.componentCraftShowCoolingTime.checked = showCoolingTime;
+  if (ui.craftAssistFastMode) ui.craftAssistFastMode.checked = fastMode;
+  if (ui.componentCraftAssistFastMode) ui.componentCraftAssistFastMode.checked = fastMode;
   if (ui.craftAssistWearOffsetPct && document.activeElement !== ui.craftAssistWearOffsetPct) {
     ui.craftAssistWearOffsetPct.value = craftAssistWearOffsetPctText(wearOffsetPct);
   }
@@ -4776,8 +4785,10 @@ function renderCraftAssistPresetPanel() {
       if (rejectCraftAssistBusyUiAction()) return;
       applyCraftAssistPresetForEdit(preset.id);
     };
-    const applyCountWrap = document.createElement("label");
+    const applyCountWrap = document.createElement("div");
     applyCountWrap.className = "craft-assist-preset-apply-count";
+    const applyCountStepper = document.createElement("div");
+    applyCountStepper.className = "craft-assist-preset-apply-stepper";
     const applyCountInput = document.createElement("input");
     applyCountInput.type = "number";
     applyCountInput.min = "1";
@@ -4786,20 +4797,45 @@ function renderCraftAssistPresetPanel() {
     applyCountInput.value = String(applyCountValue);
     applyCountInput.setAttribute("aria-label", "应用数量");
     applyCountInput.disabled = inEditingMode || state.refreshing || state.craftBusy;
-    applyCountInput.onchange = () => {
-      const next = normalizeCraftAssistApplyCount(applyCountInput.value, applyCountMap[presetId]);
+    const commitApplyCountValue = (value) => {
+      const next = normalizeCraftAssistApplyCount(value, applyCountMap[presetId]);
       applyCountInput.value = String(next);
       if (presetId) applyCountMap[presetId] = next;
+      return next;
     };
-    applyCountWrap.append(applyCountInput);
+    applyCountInput.onchange = () => {
+      commitApplyCountValue(applyCountInput.value);
+    };
+    const decrementBtn = document.createElement("button");
+    decrementBtn.type = "button";
+    decrementBtn.className = "craft-assist-preset-apply-step decrement";
+    decrementBtn.textContent = "−";
+    decrementBtn.title = "减少应用数量";
+    decrementBtn.setAttribute("aria-label", "减少应用数量");
+    decrementBtn.disabled = applyCountInput.disabled;
+    decrementBtn.onclick = () => {
+      if (applyCountInput.disabled) return;
+      commitApplyCountValue((Number(applyCountInput.value) || applyCountValue) - 1);
+    };
+    const incrementBtn = document.createElement("button");
+    incrementBtn.type = "button";
+    incrementBtn.className = "craft-assist-preset-apply-step increment";
+    incrementBtn.textContent = "+";
+    incrementBtn.title = "增加应用数量";
+    incrementBtn.setAttribute("aria-label", "增加应用数量");
+    incrementBtn.disabled = applyCountInput.disabled;
+    incrementBtn.onclick = () => {
+      if (applyCountInput.disabled) return;
+      commitApplyCountValue((Number(applyCountInput.value) || applyCountValue) + 1);
+    };
+    applyCountStepper.append(decrementBtn, applyCountInput, incrementBtn);
+    applyCountWrap.append(applyCountStepper);
     const applyBtn = document.createElement("button");
     applyBtn.type = "button";
     applyBtn.textContent = "应用";
     applyBtn.disabled = inEditingMode || state.refreshing || state.craftBusy || isCraftAssistPendingUiAction("preset_apply", {presetId});
     applyBtn.onclick = () => {
-      const countValue = normalizeCraftAssistApplyCount(applyCountInput.value, applyCountMap[presetId]);
-      applyCountInput.value = String(countValue);
-      if (presetId) applyCountMap[presetId] = countValue;
+      const countValue = commitApplyCountValue(applyCountInput.value);
       void applyCraftAssistPreset(preset.id, {autoSelect: true, applyCount: countValue});
     };
     const removeBtn = document.createElement("button");
@@ -4991,7 +5027,8 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
           use_component_items: !!state.craftUseComponentItems,
           blocked_ids: [...blockedIds],
           include_cooling: !!state.craftIncludeCooling,
-          wear_offset_pct: wearOffsetPct
+          wear_offset_pct: wearOffsetPct,
+          enable_fast_craft_assist: !!state.craftAssistFastMode
         })
       });
     } catch (err) {
@@ -5176,7 +5213,7 @@ function renderCraftAssistPanel() {
 function isCraftQueueDeleteModeVisible() {
   return !state.refreshing && !state.craftBusy && !state.craftAssistSelecting;
 }
-function requestCraftTradeUpPause() {
+async function requestCraftTradeUpPause() {
   if (!state.craftBusy || state.craftPauseRequested) return;
   state.craftPauseRequested = true;
   setCraftStatus("已请求暂停，当前提交完成后将停止后续配方");
@@ -5186,6 +5223,18 @@ function requestCraftTradeUpPause() {
       title: state.craftProgressTitle || "正在执行炼金任务",
       detail: "暂停请求已记录，当前配方完成后停止"
     });
+    const username = String(state.currentAccountUsername || "").trim();
+    if (username) {
+      try {
+        await api("/api/craft/pause", {
+          method: "POST",
+          body: JSON.stringify({username})
+        });
+      } catch (err) {
+        state.craftPauseRequested = false;
+        setCraftStatus(`暂停请求发送失败：${err.message}`, true);
+      }
+    }
   }
   renderCraftPage();
 }
@@ -5245,6 +5294,8 @@ function renderCraftQueue() {
       }
       if (String(entry.status || "").trim() === "prepare_failed") {
         metaItems.push({text: entry.prepare_message || "组件取出失败，已跳过", tone: "error"});
+      } else if (String(entry.prepare_status || "").trim() === "paused") {
+        metaItems.push({text: entry.prepare_message || "已暂停，等待继续", tone: "warn"});
       }
       ui.craftQueueList.append(
         renderCraftQueueSlots({
@@ -5505,6 +5556,8 @@ async function runCraftTradeUpQueue() {
     return;
   }
 
+  const allRowsById = buildRowsByAssetId(getAllInventoryCraftableRows({rows: state.rows, includeComponentItems: true}));
+  const componentFlow = pendingEntries.some((entry) => craftRecipeEntryUsesComponentItems(entry, allRowsById));
   const applyServerRows = (payload) => {
     if (!(payload && Array.isArray(payload.rows))) return;
     const keepSelectedIds = new Set(state.selectedComponentItemIds);
@@ -5527,14 +5580,54 @@ async function runCraftTradeUpQueue() {
   let lastDoneMsg = "";
   let remainingCount = 0;
   let paused = false;
-  state.craftProgressEnabled = false;
+  state.craftProgressEnabled = componentFlow;
   state.craftPauseRequested = false;
   state.craftPaused = false;
-  clearCraftExecutionOverlayState();
+  if (componentFlow) {
+    setCraftExecutionOverlayState({
+      visible: true,
+      title: `正在准备组件并执行 ${pendingRecipes.length} 组配方`,
+      detail: "正在等待后端进度..."
+    });
+  } else {
+    clearCraftExecutionOverlayState();
+  }
   state.craftBusy = true;
-  setCraftStatus(`正在准备执行 ${pendingRecipes.length} 组配方...`);
+  setCraftStatus(componentFlow ? `正在准备组件并执行 ${pendingRecipes.length} 组配方...` : `正在准备执行 ${pendingRecipes.length} 组配方...`);
   renderCraftPage();
   try {
+    if (componentFlow) {
+      const data = await api("/api/craft/tradeup-with-components", {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          allow_cooling: !!state.craftIncludeCooling,
+          use_component_items: true,
+          recipes: pendingRecipes
+        })
+      });
+      applyServerRows(data);
+      applyCraftPrepareResultsToQueue({prepareResults: data.prepare_results});
+      const steps = Array.isArray(data.steps) ? data.steps : [];
+      if (steps.length) {
+        applyCraftStepResultsToQueue({
+          steps,
+          pendingIndexes: steps.map((step) => Number(step && step.queue_index)),
+          rows: Array.isArray(data.rows) ? data.rows : state.rows
+        });
+        syncCraftSelectedIdsFromActiveRecipe();
+        completedCount = steps.length;
+      }
+      skippedCount = Array.isArray(data.prepare_results)
+        ? data.prepare_results.filter((entry) => String(entry && entry.status || "").trim() === "prepare_failed").length
+        : 0;
+      clearCraftStatus();
+      lastDoneMsg = String(data.message || "").trim() || "组件取料与炼金执行完成";
+      setCraftStatus(`${lastDoneMsg}，已完成${completedCount}组配方${skippedCount > 0 ? `，跳过${skippedCount}组` : ""}`);
+      setSummary(lastDoneMsg);
+      return;
+    }
+
     for (let i = 0; i < pendingRecipes.length; i += 1) {
       currentRecipePos = i;
       const req = pendingRecipes[i];
@@ -5626,7 +5719,7 @@ async function runCraftTradeUpQueue() {
       applyServerRows(payload);
     }
 
-    if (currentRecipeUsesComponent && payload) {
+    if (componentFlow && payload) {
       const prepareResults = Array.isArray(payload.prepare_results) ? payload.prepare_results : [];
       if (prepareResults.length) {
         applyCraftPrepareResultsToQueue({prepareResults});
@@ -5641,7 +5734,17 @@ async function runCraftTradeUpQueue() {
           pendingIndexes: completedSteps.map((step) => Number(step && step.queue_index)),
           rows: Array.isArray(payload.rows) ? payload.rows : state.rows
         });
-        completedCount += completedSteps.length;
+        syncCraftSelectedIdsFromActiveRecipe();
+        completedCount = completedSteps.length;
+      }
+      if (payload.paused) {
+        state.craftPaused = true;
+        state.craftPauseRequested = false;
+        clearCraftStatus();
+        const pausedMessage = String(payload && payload.message || "").trim() || `已暂停，剩余${Math.max(0, Number(payload && payload.remaining_recipe_count) || 0)}组配方待继续`;
+        setCraftStatus(pausedMessage);
+        setSummary(pausedMessage);
+        return;
       }
       const msg = `${payload && payload.partial ? "炼金中断" : "炼金失败"}：已完成${completedCount}组${skippedCount > 0 ? `，跳过${skippedCount}组` : ""}，${err.message}`;
       setCraftStatus(msg, true);
@@ -7277,6 +7380,21 @@ function bindEvents() {
       applyCraftShowCoolingTime(ui.componentCraftShowCoolingTime.checked);
     };
   }
+  const applyCraftAssistFastMode = (checked) => {
+    state.craftAssistFastMode = !!checked;
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+  };
+  if (ui.craftAssistFastMode) {
+    ui.craftAssistFastMode.onchange = () => {
+      applyCraftAssistFastMode(ui.craftAssistFastMode.checked);
+    };
+  }
+  if (ui.componentCraftAssistFastMode) {
+    ui.componentCraftAssistFastMode.onchange = () => {
+      applyCraftAssistFastMode(ui.componentCraftAssistFastMode.checked);
+    };
+  }
   const applyCraftAssistWearOffsetPct = (inputNode) => {
     if (!inputNode) return;
     const nextValue = normalizeCraftAssistWearOffsetPct(inputNode.value, state.craftAssistWearOffsetPct);
@@ -7463,7 +7581,7 @@ function bindEvents() {
   if (ui.craftExecuteQueueBtn) {
     ui.craftExecuteQueueBtn.onclick = async () => {
       if (state.craftBusy) {
-        requestCraftTradeUpPause();
+        await requestCraftTradeUpPause();
         return;
       }
       await runCraftTradeUpQueue();

@@ -42,13 +42,14 @@ parentPort.on("message", async (message) => {
     const selectionContext = buildCraftAssistSelectionContextFromCandidateRows(candidateContext.candidateRows, {
       includeCooling
     });
-    const result = craftAssistService.selectForRecipe({
+    const result = await craftAssistService.selectForRecipe({
       targetWear: payload.targetWear,
       wearFilterMode: payload.wearFilterMode,
       materials: payload.materials,
       blockedIds: payload.blockedIds,
       includeCooling,
       wearOffsetPct: payload.wearOffsetPct,
+      enableFastCraftAssist: payload.enableFastCraftAssist,
       rows,
       selectionContext
     });

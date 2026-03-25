@@ -44,8 +44,45 @@ const craftAssistWorkerPool = CRAFT_ASSIST_USE_WORKER_POOL
   ? createCraftAssistWorkerPool({logger, requestTimeoutMs: CRAFT_ASSIST_REQUEST_TIMEOUT_MS})
   : null;
 const snapshotRowsLoader = createSnapshotRowsLoader({limit: 6});
+const activeCraftRuns = new Map();
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
+
+function createActiveCraftRunController({username, runId}) {
+  return {
+    username: asString(username).trim(),
+    runId: asString(runId).trim(),
+    pauseRequested: false,
+    requestPause() {
+      this.pauseRequested = true;
+    },
+    shouldPause() {
+      return this.pauseRequested;
+    }
+  };
+}
+
+function registerActiveCraftRun({username, runId}) {
+  const key = asString(username).trim();
+  if (!key) return null;
+  const controller = createActiveCraftRunController({username: key, runId});
+  activeCraftRuns.set(key, controller);
+  return controller;
+}
+
+function getActiveCraftRun(username) {
+  const key = asString(username).trim();
+  if (!key) return null;
+  return activeCraftRuns.get(key) || null;
+}
+
+function releaseActiveCraftRun(username, controller) {
+  const key = asString(username).trim();
+  if (!key) return;
+  if (activeCraftRuns.get(key) === controller) {
+    activeCraftRuns.delete(key);
+  }
+}
 
 function logEncodingEnvironment() {
   const locale = asString(process.env.LC_ALL || process.env.LANG || process.env.LC_CTYPE || "").trim();
@@ -1231,6 +1268,12 @@ async function handleApi(req, res, urlObj) {
       || includeComponentItemsRaw === 1
       || includeComponentItemsText === "1"
       || includeComponentItemsText === "true";
+    const enableFastCraftAssistRaw = body.enable_fast_craft_assist;
+    const enableFastCraftAssistText = asString(enableFastCraftAssistRaw).trim().toLowerCase();
+    const enableFastCraftAssist = enableFastCraftAssistRaw === true
+      || enableFastCraftAssistRaw === 1
+      || enableFastCraftAssistText === "1"
+      || enableFastCraftAssistText === "true";
     const workerArgs = {
       targetWear: body.target_wear,
       wearFilterMode: body.wear_filter_mode,
@@ -1239,14 +1282,15 @@ async function handleApi(req, res, urlObj) {
       selectedItemIds: body.blocked_ids,
       includeComponentItems,
       includeCooling: body.include_cooling,
-      wearOffsetPct: body.wear_offset_pct
+      wearOffsetPct: body.wear_offset_pct,
+      enableFastCraftAssist
     };
     const result = CRAFT_ASSIST_USE_WORKER_POOL && craftAssistWorkerPool
       ? await craftAssistWorkerPool.selectForRecipe({
         snapshotPath: loaded.snapshot_path,
         ...workerArgs
       })
-      : craftAssistService.selectForRecipe({
+      : await craftAssistService.selectForRecipe({
         selectionContext: buildCraftAssistSelectionContextFromCandidateRows(buildCraftCandidateContext({
           rows: loaded.rows,
           includeComponentItems,
@@ -1320,37 +1364,43 @@ async function handleApi(req, res, urlObj) {
       const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
       const recipeCount = Array.isArray(body.recipes) ? body.recipes.length : 0;
       const progressRunId = `craft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const activeRun = registerActiveCraftRun({username, runId: progressRunId});
       logger.info("ui_server", `craft-with-components request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0}`);
-      const payload = await craftTradeupWithComponentsService.runTradeUpWithComponents({
-        username,
-        password: body.password,
-        recipes: body.recipes,
-        allowCooling,
-        onProgress: (progress) => {
-          refreshRuntime.emitSse("craft_component_progress", {
-            username,
-            run_id: progressRunId,
-            ...progress
-          });
+      try {
+        const payload = await craftTradeupWithComponentsService.runTradeUpWithComponents({
+          username,
+          password: body.password,
+          recipes: body.recipes,
+          allowCooling,
+          shouldPause: activeRun && typeof activeRun.shouldPause === "function" ? () => activeRun.shouldPause() : null,
+          onProgress: (progress) => {
+            refreshRuntime.emitSse("craft_component_progress", {
+              username,
+              run_id: progressRunId,
+              ...progress
+            });
+          }
+        });
+        const status = payload && payload.ok === false ? 409 : 200;
+        if (status === 200) {
+          logger.info(
+            "ui_server",
+            `craft-with-components success: account=${username} recipes=${toInt(payload && payload.recipe_count, 0)} ready=${toInt(payload && payload.ready_recipe_count, 0)} skipped=${toInt(payload && payload.skipped_recipe_count, 0)} steps=${Array.isArray(payload && payload.steps) ? payload.steps.length : 0}`
+          );
+        } else {
+          logger.warn(
+            "ui_server",
+            `craft-with-components blocked: account=${username} ready=${toInt(payload && payload.ready_recipe_count, 0)} skipped=${toInt(payload && payload.skipped_recipe_count, 0)} paused=${payload && payload.paused ? 1 : 0} msg=${asString(payload && payload.message ? payload.message : "")}`
+          );
         }
-      });
-      const status = payload && payload.ok === false ? 409 : 200;
-      if (status === 200) {
-        logger.info(
-          "ui_server",
-          `craft-with-components success: account=${username} recipes=${toInt(payload && payload.recipe_count, 0)} ready=${toInt(payload && payload.ready_recipe_count, 0)} skipped=${toInt(payload && payload.skipped_recipe_count, 0)} steps=${Array.isArray(payload && payload.steps) ? payload.steps.length : 0}`
-        );
-      } else {
-        logger.warn(
-          "ui_server",
-          `craft-with-components blocked: account=${username} ready=${toInt(payload && payload.ready_recipe_count, 0)} skipped=${toInt(payload && payload.skipped_recipe_count, 0)} msg=${asString(payload && payload.message ? payload.message : "")}`
-        );
+        writeJson(res, status, {
+          ok: status === 200,
+          ...payload,
+          component: buildComponentSummary(payload.rows || [])
+        });
+      } finally {
+        releaseActiveCraftRun(username, activeRun);
       }
-      writeJson(res, status, {
-        ok: status === 200,
-        ...payload,
-        component: buildComponentSummary(payload.rows || [])
-      });
     } catch (err) {
       if (err && err.craft_payload) {
         const payload = err.craft_payload;
@@ -1375,6 +1425,32 @@ async function handleApi(req, res, urlObj) {
         message: asString(err && err.message ? err.message : err)
       });
     }
+    return true;
+  }
+
+  if (pathname === "/api/craft/pause" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    const activeRun = getActiveCraftRun(username);
+    if (activeRun && typeof activeRun.requestPause === "function") {
+      activeRun.requestPause();
+      logger.info("ui_server", `craft pause requested: account=${username} run=${asString(activeRun.runId).trim() || "-"}`);
+      writeJson(res, 200, {
+        ok: true,
+        accepted: true,
+        message: "暂停请求已发送"
+      });
+      return true;
+    }
+    writeJson(res, 200, {
+      ok: true,
+      accepted: false,
+      message: "当前没有可暂停的炼金任务"
+    });
     return true;
   }
 

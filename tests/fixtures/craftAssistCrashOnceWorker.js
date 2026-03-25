@@ -23,7 +23,7 @@ parentPort.on("message", async (message) => {
   }
   try {
     const rows = await snapshotRowsLoader.loadSnapshotRowsAsync(payload.snapshotPath);
-    const result = craftAssistService.selectForRecipe({
+    const result = await craftAssistService.selectForRecipe({
       targetWear: payload.targetWear,
       wearFilterMode: payload.wearFilterMode,
       materials: payload.materials,
