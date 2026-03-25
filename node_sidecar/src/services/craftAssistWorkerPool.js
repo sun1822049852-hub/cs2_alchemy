@@ -11,13 +11,13 @@ function asError(err, fallback = "craft assist worker failed") {
 
 function createCraftAssistWorkerPool({
   size = 2,
-  requestTimeoutMs = 30000,
+  requestTimeoutMs = 5 * 60 * 1000,
   workerPath = DEFAULT_WORKER_PATH,
   maxTaskRetries = 1,
   logger = null
 } = {}) {
   const poolSize = Math.max(1, Math.min(4, Math.trunc(Number(size) || 0) || 2));
-  const timeoutMs = Math.max(1, Math.trunc(Number(requestTimeoutMs) || 0) || 30000);
+  const timeoutMs = Math.max(1, Math.trunc(Number(requestTimeoutMs) || 0) || 5 * 60 * 1000);
   const retryLimit = Math.max(0, Math.trunc(Number(maxTaskRetries) || 0));
   const resolvedWorkerPath = path.resolve(workerPath || DEFAULT_WORKER_PATH);
   const queue = [];
