@@ -81,10 +81,12 @@ function loadApplyCraftAssistAutoSelection() {
       craftAssistSelecting: false,
       craftAssistPendingUiAction: "",
       craftAssistPendingPresetId: "",
+      craftAssistRunToken: "",
       craftUseComponentItems: false,
       craftIncludeCooling: false,
       craftAssistWearOffsetPct: 5,
-      craftAssistRuntimeByAccount: new Map()
+      craftAssistRuntimeByAccount: new Map(),
+      craftAssistActiveRunTokensByAccount: new Map()
     },
     getCraftAccountScopedStateSnapshot() {
       return deepClone(savedScopedState);
@@ -199,6 +201,10 @@ async function testSuccessfulAutoSelectionWritesBackFilledRecipeInsteadOfEmptySh
   assert.equal(saved.craftRecipeQueue.length, 1);
   assert.deepEqual(saved.craftRecipeQueue[0].item_ids, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
   assert.equal(saved.craftRecipeQueue.some((entry) => Array.isArray(entry.item_ids) && entry.item_ids.length === 0), false);
+  assert.equal(app.state.craftAssistSelecting, false);
+  assert.equal(app.state.craftAssistPendingUiAction, "");
+  assert.equal(app.state.craftAssistRunToken, "");
+  assert.equal(app.getCraftAssistActiveRunToken("acc-a"), "");
 }
 
 async function main() {

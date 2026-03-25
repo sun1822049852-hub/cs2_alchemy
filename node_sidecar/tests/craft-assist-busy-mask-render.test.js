@@ -50,13 +50,18 @@ function createMaskNode() {
 }
 
 function loadBusyMaskRender(overrides = {}) {
-  const source = extractBlock("function renderCraftAssistBusyMask(", "function renderCraftAssistPanel(");
+  const source = [
+    extractBlock("function createDefaultCraftAssistRuntimeState(", "function createDefaultCraftAccountScopedState("),
+    extractBlock("function renderCraftAssistBusyMask(", "function renderCraftAssistPanel(")
+  ].join("\n");
   const context = {
     state: {
       craftAssistOpen: true,
       craftAssistSelecting: false,
       craftAssistPendingUiAction: "",
       craftAssistPendingPresetId: "",
+      craftAssistRunToken: "",
+      craftAssistActiveRunTokensByAccount: new Map(),
       currentAccountUsername: "acc-a",
       ...overrides.state
     },
@@ -100,9 +105,11 @@ function testMaskShowsForActivePanelApplyRun() {
     state: {
       craftAssistOpen: true,
       craftAssistSelecting: true,
-      craftAssistPendingUiAction: "panel_apply"
+      craftAssistPendingUiAction: "panel_apply",
+      craftAssistRunToken: "token-live"
     }
   });
+  app.setCraftAssistActiveRunToken("acc-a", "token-live");
 
   app.renderCraftAssistBusyMask();
 
@@ -112,9 +119,28 @@ function testMaskShowsForActivePanelApplyRun() {
   assert.match(app.ui.craftAssistBusyMaskDetail.textContent, /当前面板配置/);
 }
 
+function testMaskClearsStalePanelApplyStateWithoutActiveToken() {
+  const app = loadBusyMaskRender({
+    state: {
+      craftAssistOpen: true,
+      craftAssistSelecting: true,
+      craftAssistPendingUiAction: "panel_apply",
+      craftAssistRunToken: "token-stale"
+    }
+  });
+
+  app.renderCraftAssistBusyMask();
+
+  assert.equal(app.ui.craftAssistBusyMask.classList.contains("hidden"), true);
+  assert.equal(app.state.craftAssistSelecting, false);
+  assert.equal(app.state.craftAssistPendingUiAction, "");
+  assert.equal(app.state.craftAssistRunToken, "");
+}
+
 function main() {
   testMaskStaysHiddenWithoutRecognizedPendingAction();
   testMaskShowsForActivePanelApplyRun();
+  testMaskClearsStalePanelApplyStateWithoutActiveToken();
   console.log("craft-assist-busy-mask-render tests passed");
 }
 

@@ -44,6 +44,7 @@ function loadCraftAssistAccountStateFns(initialState = {}) {
       craftAssistSelecting: false,
       craftAssistPendingUiAction: "",
       craftAssistPendingPresetId: "",
+      craftAssistRunToken: "",
       craftAssistOpen: false,
       craftAssistPickerOpen: false,
       craftAssistPickerTargetMaterialId: "",
@@ -61,6 +62,7 @@ function loadCraftAssistAccountStateFns(initialState = {}) {
       craftAssistPresetEditingInitialSnapshot: null,
       craftAccountStateByAccount: new Map(),
       craftAssistRuntimeByAccount: new Map(),
+      craftAssistActiveRunTokensByAccount: new Map(),
       ...initialState
     },
     deepCopyPlain(value) {
@@ -144,10 +146,12 @@ function testRestoreCanStillShowLiveRuntimeBusyStateForCurrentAccount() {
   assert.equal(typeof app.saveCraftAssistRuntimeState, "function", "expected runtime save helper to exist");
 
   app.saveCraftAccountScopedState("acc-a");
+  app.setCraftAssistActiveRunToken("acc-a", "token-live");
   app.saveCraftAssistRuntimeState("acc-a", {
     craftAssistSelecting: true,
     craftAssistPendingUiAction: "preset_apply",
-    craftAssistPendingPresetId: "preset-live"
+    craftAssistPendingPresetId: "preset-live",
+    craftAssistRunToken: "token-live"
   });
 
   app.state.craftAssistSelecting = false;
@@ -158,11 +162,12 @@ function testRestoreCanStillShowLiveRuntimeBusyStateForCurrentAccount() {
   assert.equal(app.state.craftAssistSelecting, true);
   assert.equal(app.state.craftAssistPendingUiAction, "preset_apply");
   assert.equal(app.state.craftAssistPendingPresetId, "preset-live");
+  assert.equal(app.state.craftAssistRunToken, "token-live");
   assert.equal(app.state.craftAssistOpen, true);
   assert.equal(app.state.craftAssistMaterials[0].id, "m-live");
 }
 
-function testRestoreDropsLegacyBusyRuntimeSnapshotWithoutPendingAction() {
+function testRestoreDropsBusyRuntimeSnapshotWithoutActiveRunToken() {
   const app = loadCraftAssistAccountStateFns({
     craftAssistOpen: true,
     craftAssistTargetWear: 0.456,
@@ -172,29 +177,32 @@ function testRestoreDropsLegacyBusyRuntimeSnapshotWithoutPendingAction() {
   app.saveCraftAccountScopedState("acc-a");
   app.saveCraftAssistRuntimeState("acc-a", {
     craftAssistSelecting: true,
-    craftAssistPendingUiAction: "",
-    craftAssistPendingPresetId: "preset-stale"
+    craftAssistPendingUiAction: "panel_apply",
+    craftAssistPendingPresetId: "",
+    craftAssistRunToken: "token-stale"
   });
 
   app.state.craftAssistSelecting = false;
   app.state.craftAssistPendingUiAction = "";
   app.state.craftAssistPendingPresetId = "";
+  app.state.craftAssistRunToken = "";
   app.restoreCraftAccountScopedState("acc-a");
 
   assert.equal(
     app.state.craftAssistSelecting,
     false,
-    "runtime busy flag without an active pending action should be discarded during restore"
+    "runtime busy flag without an active run token should be discarded during restore"
   );
   assert.equal(app.state.craftAssistPendingUiAction, "");
   assert.equal(app.state.craftAssistPendingPresetId, "");
+  assert.equal(app.state.craftAssistRunToken, "");
 }
 
 function main() {
   testSaveAndRestoreCraftAccountScopedStateKeepsDraftButClearsRuntimeBusyFlags();
   testMissingAccountRestoresEmptyDefaults();
   testRestoreCanStillShowLiveRuntimeBusyStateForCurrentAccount();
-  testRestoreDropsLegacyBusyRuntimeSnapshotWithoutPendingAction();
+  testRestoreDropsBusyRuntimeSnapshotWithoutActiveRunToken();
   console.log("craft-assist-account-state tests passed");
 }
 
