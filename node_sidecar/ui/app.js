@@ -119,15 +119,67 @@ const CRAFT_ASSIST_PRESETS_KEY = "craft_assist_presets_v1";
 const ERROR_TOAST_DURATION_MS = 2800;
 
 async function api(path, options = {}) {
-  const r = await fetch(path, {headers: {"Content-Type": "application/json"}, ...options});
-  const d = await r.json();
-  if (!r.ok || d.ok === false) {
-    const err = new Error(d.message || `http ${r.status}`);
-    err.status = r.status;
-    err.data = d;
-    throw err;
+  const requestOptions = options && typeof options === "object" ? {...options} : {};
+  const timeoutMs = Math.max(0, Number(requestOptions.timeoutMs) || 0);
+  const timeoutMessage = String(requestOptions.timeoutMessage || "").trim();
+  const requestHeaders = requestOptions.headers && typeof requestOptions.headers === "object"
+    ? {...requestOptions.headers}
+    : {};
+  const externalSignal = requestOptions.signal || null;
+  delete requestOptions.timeoutMs;
+  delete requestOptions.timeoutMessage;
+  delete requestOptions.headers;
+  delete requestOptions.signal;
+
+  let timer = null;
+  let abortController = null;
+  let detachExternalAbort = null;
+  let fetchSignal = externalSignal || undefined;
+  if (timeoutMs > 0) {
+    abortController = new AbortController();
+    if (externalSignal && typeof externalSignal.addEventListener === "function") {
+      const forwardAbort = () => abortController.abort();
+      if (externalSignal.aborted) {
+        abortController.abort();
+      } else {
+        externalSignal.addEventListener("abort", forwardAbort, {once: true});
+        detachExternalAbort = () => {
+          if (typeof externalSignal.removeEventListener === "function") {
+            externalSignal.removeEventListener("abort", forwardAbort);
+          }
+        };
+      }
+    }
+    timer = setTimeout(() => abortController.abort(), timeoutMs);
+    fetchSignal = abortController.signal;
   }
-  return d;
+
+  try {
+    const r = await fetch(path, {
+      headers: {"Content-Type": "application/json", ...requestHeaders},
+      ...requestOptions,
+      ...(fetchSignal ? {signal: fetchSignal} : {})
+    });
+    const d = await r.json();
+    if (!r.ok || d.ok === false) {
+      const err = new Error(d.message || `http ${r.status}`);
+      err.status = r.status;
+      err.data = d;
+      throw err;
+    }
+    return d;
+  } catch (err) {
+    const message = String(err && err.message ? err.message : err || "").trim();
+    const name = String(err && err.name ? err.name : "").trim();
+    const isAbort = /abort/i.test(name) || /abort|timeout/i.test(message);
+    if (timeoutMs > 0 && abortController && abortController.signal && abortController.signal.aborted && isAbort) {
+      throw new Error(timeoutMessage || `请求超时(${timeoutMs}ms)`);
+    }
+    throw err;
+  } finally {
+    if (timer != null) clearTimeout(timer);
+    if (typeof detachExternalAbort === "function") detachExternalAbort();
+  }
 }
 
 function parseEventData(raw) {
@@ -5192,6 +5244,8 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     try {
       run = await api("/api/craft/assist-select", {
         method: "POST",
+        timeoutMs: 60 * 1000,
+        timeoutMessage: "辅助选材请求超时，请重试",
         body: JSON.stringify({
           username: runUsername,
           target_wear: targetValue,

@@ -56,9 +56,48 @@ function loadApplyCraftAssistAutoSelection() {
   const ids = Array.from({length: 10}, (_, index) => String(index + 1));
   const rows = ids.map((id) => ({asset_id: id}));
   let savedScopedState = createScopedState();
+  function createAbortError(message = "aborted") {
+    const err = new Error(message);
+    err.name = "AbortError";
+    return err;
+  }
+  class AbortSignalMock {
+    constructor() {
+      this.aborted = false;
+      this.listeners = new Set();
+    }
+
+    addEventListener(type, listener) {
+      if (type !== "abort" || typeof listener !== "function") return;
+      this.listeners.add(listener);
+    }
+
+    removeEventListener(type, listener) {
+      if (type !== "abort" || typeof listener !== "function") return;
+      this.listeners.delete(listener);
+    }
+
+    dispatchAbort() {
+      if (this.aborted) return;
+      this.aborted = true;
+      for (const listener of Array.from(this.listeners)) {
+        listener({type: "abort"});
+      }
+    }
+  }
+  class AbortControllerMock {
+    constructor() {
+      this.signal = new AbortSignalMock();
+    }
+
+    abort() {
+      this.signal.dispatchAbort();
+    }
+  }
   const source = [
     extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT"),
     extractConst("WEAR_INPUT_DECIMALS"),
+    extractBlock("async function api(", "function parseEventData("),
     extractBlock("function createDefaultCraftAssistRuntimeState(", "function createDefaultCraftAccountScopedState("),
     extractBlock("async function applyCraftAssistAutoSelection(", "async function applyCraftAssistAutoSelectionBatch(")
   ].join("\n");
@@ -73,6 +112,14 @@ function loadApplyCraftAssistAutoSelection() {
     Map,
     JSON,
     console,
+    AbortController: AbortControllerMock,
+    setTimeout(fn) {
+      if (typeof fn === "function") fn();
+      return {cleared: false};
+    },
+    clearTimeout(timer) {
+      if (timer && typeof timer === "object") timer.cleared = true;
+    },
     state: {
       craftBusy: false,
       refreshing: false,
@@ -143,13 +190,16 @@ function loadApplyCraftAssistAutoSelection() {
     normalizeCraftAssistWearOffsetPct(value) {
       return Number(value) || 5;
     },
-    async api() {
-      return {
-        item_ids: ids,
-        overall: 0.214199,
-        rarity: 2,
-        recipe_ok: true
-      };
+    async fetch(_path, options = {}) {
+      return new Promise((resolve, reject) => {
+        const signal = options && options.signal;
+        if (!signal || typeof signal.addEventListener !== "function") return;
+        if (signal.aborted) {
+          reject(createAbortError());
+          return;
+        }
+        signal.addEventListener("abort", () => reject(createAbortError()), {once: true});
+      });
     },
     resetCraftRecipeEntryPreparation(entry) {
       entry.prepare_status = "pending";
@@ -193,6 +243,17 @@ function loadApplyCraftAssistAutoSelection() {
 
 async function testSuccessfulAutoSelectionWritesBackFilledRecipeInsteadOfEmptyShell() {
   const app = loadApplyCraftAssistAutoSelection();
+  app.fetch = async () => ({
+    ok: true,
+    async json() {
+      return {
+        item_ids: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+        overall: 0.214199,
+        rarity: 2,
+        recipe_ok: true
+      };
+    }
+  });
 
   const ok = await app.applyCraftAssistAutoSelection({accountUsername: "acc-a", pendingUiAction: "panel_apply"});
   const saved = app.getSavedScopedState();
@@ -207,8 +268,34 @@ async function testSuccessfulAutoSelectionWritesBackFilledRecipeInsteadOfEmptySh
   assert.equal(app.getCraftAssistActiveRunToken("acc-a"), "");
 }
 
+async function testHungAutoSelectionRequestStillClearsBusyStateAfterTimeout() {
+  const app = loadApplyCraftAssistAutoSelection();
+  let ok;
+  try {
+    ok = await Promise.race([
+      app.applyCraftAssistAutoSelection({accountUsername: "acc-a", pendingUiAction: "panel_apply"}),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("test timeout: assist-select remained pending")), 80))
+    ]);
+  } catch (err) {
+    if (String(err && err.message || "").includes("test timeout")) {
+      throw err;
+    }
+    throw err;
+  }
+  const saved = app.getSavedScopedState();
+  assert.equal(ok, false);
+  assert.equal(saved.craftRecipeQueue.length, 0);
+  assert.equal(saved.craftStatusError, true);
+  assert.match(saved.craftStatusText, /超时|请重试|timeout/i);
+  assert.equal(app.state.craftAssistSelecting, false);
+  assert.equal(app.state.craftAssistPendingUiAction, "");
+  assert.equal(app.state.craftAssistRunToken, "");
+  assert.equal(app.getCraftAssistActiveRunToken("acc-a"), "");
+}
+
 async function main() {
   await testSuccessfulAutoSelectionWritesBackFilledRecipeInsteadOfEmptyShell();
+  await testHungAutoSelectionRequestStillClearsBusyStateAfterTimeout();
   console.log("craft-assist-autoselect-writeback tests passed");
 }
 
