@@ -23,6 +23,11 @@ function main() {
     /body\.theme-inkblue #craftLeftPanel\s*>\s*\.craft-assist-busy-mask\s*\{[^}]*background:\s*rgba\(12,\s*14,\s*18,\s*0\.78\);/m,
     "inkblue theme should keep the left-panel busy mask covering the left half"
   );
+  assert.match(
+    CSS_SOURCE,
+    /#craftLeftPanel\s*>\s*\.craft-assist-busy-mask\.hidden\s*\{[^}]*display:\s*none;/m,
+    "left-panel busy mask hidden state must override the left-panel display rule so stale blur does not stay visible"
+  );
   assert.doesNotMatch(
     CSS_SOURCE,
     /\.craft-assist-overlay\s*\{[^}]*backdrop-filter:\s*blur\(/m,
