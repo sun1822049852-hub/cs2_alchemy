@@ -31,7 +31,6 @@ data/skin_json/*.json
 
 # local planning / scratch artifacts
 .superpowers/
-docs/superpowers/
 excal.py
 
 # local exports / scratch docs
