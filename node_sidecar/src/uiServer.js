@@ -21,6 +21,8 @@ const {
 } = require("./services/craftAssistService");
 const {createCraftAssistWorkerPool} = require("./services/craftAssistWorkerPool");
 const {buildCraftCandidateContext} = require("./services/craftCandidateService");
+const {createCraftOutcomeCatalog} = require("./services/craftOutcomeCatalog");
+const {createCraftOutcomePredictor} = require("./services/craftOutcomePredictor");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
@@ -40,13 +42,43 @@ const craftTradeupWithComponentsService = createCraftTradeupWithComponentsServic
 const craftAssistService = createCraftAssistService({logger});
 const CRAFT_ASSIST_USE_WORKER_POOL = process.env.CRAFT_ASSIST_USE_WORKER_POOL !== "0";
 const CRAFT_ASSIST_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
-const craftAssistWorkerPool = CRAFT_ASSIST_USE_WORKER_POOL
-  ? createCraftAssistWorkerPool({logger, requestTimeoutMs: CRAFT_ASSIST_REQUEST_TIMEOUT_MS})
-  : null;
+let craftAssistWorkerPool = null;
 const snapshotRowsLoader = createSnapshotRowsLoader({limit: 6});
 const activeCraftRuns = new Map();
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
+let defaultCraftOutcomePredictor = null;
+
+function getCraftOutcomePredictor(service) {
+  if (service && typeof service.predict === "function") {
+    return service;
+  }
+  if (!defaultCraftOutcomePredictor) {
+    defaultCraftOutcomePredictor = createCraftOutcomePredictor({
+      catalog: createCraftOutcomeCatalog({dbPath: PATHS.SKIN_DB_FILE})
+    });
+  }
+  return defaultCraftOutcomePredictor;
+}
+
+function getCraftAssistWorkerPool() {
+  if (!CRAFT_ASSIST_USE_WORKER_POOL) {
+    return null;
+  }
+  if (!craftAssistWorkerPool) {
+    craftAssistWorkerPool = createCraftAssistWorkerPool({logger, requestTimeoutMs: CRAFT_ASSIST_REQUEST_TIMEOUT_MS});
+  }
+  return craftAssistWorkerPool;
+}
+
+async function closeCraftAssistWorkerPool() {
+  if (!craftAssistWorkerPool || typeof craftAssistWorkerPool.close !== "function") {
+    return;
+  }
+  const pool = craftAssistWorkerPool;
+  craftAssistWorkerPool = null;
+  await pool.close();
+}
 
 function createActiveCraftRunController({username, runId}) {
   return {
@@ -118,9 +150,7 @@ function ensureRuntimeBootstrapped() {
     shutdownHooksInstalled = true;
     const shutdown = () => {
       sessionPool.shutdown();
-      if (craftAssistWorkerPool && typeof craftAssistWorkerPool.close === "function") {
-        void craftAssistWorkerPool.close();
-      }
+      void closeCraftAssistWorkerPool();
     };
     process.once("exit", shutdown);
     process.once("SIGINT", () => {
@@ -737,7 +767,7 @@ function buildComponentSummary(rows) {
   return {summary_map: summaryMap, item_map: itemMap};
 }
 
-async function handleApi(req, res, urlObj) {
+async function handleApi(req, res, urlObj, deps = {}) {
   const pathname = urlObj.pathname;
   if (pathname === "/api/events" && req.method === "GET") {
     const username = asString(urlObj.searchParams.get("username") || "").trim();
@@ -1285,8 +1315,9 @@ async function handleApi(req, res, urlObj) {
       wearOffsetPct: body.wear_offset_pct,
       enableFastCraftAssist
     };
-    const result = CRAFT_ASSIST_USE_WORKER_POOL && craftAssistWorkerPool
-      ? await craftAssistWorkerPool.selectForRecipe({
+    const workerPool = getCraftAssistWorkerPool();
+    const result = workerPool
+      ? await workerPool.selectForRecipe({
         snapshotPath: loaded.snapshot_path,
         ...workerArgs
       })
@@ -1312,6 +1343,21 @@ async function handleApi(req, res, urlObj) {
       ok: true,
       ...result
     });
+    return true;
+  }
+
+  if (pathname === "/api/craft/predict-outcomes" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    try {
+      const predictor = getCraftOutcomePredictor(deps.craftOutcomePredictor);
+      const result = predictor.predict(body);
+      writeJson(res, result && result.ok ? 200 : 400, result);
+    } catch (err) {
+      writeJson(res, 500, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
     return true;
   }
 
@@ -1729,13 +1775,16 @@ async function handleApi(req, res, urlObj) {
   return false;
 }
 
-function createServer() {
+function createServer(options = {}) {
   ensureRuntimeBootstrapped();
+  const apiDeps = {
+    craftOutcomePredictor: options.craftOutcomePredictor
+  };
   const server = http.createServer(async (req, res) => {
     try {
       const urlObj = new URL(req.url, "http://127.0.0.1");
       if (urlObj.pathname.startsWith("/api/")) {
-        const hit = await handleApi(req, res, urlObj);
+        const hit = await handleApi(req, res, urlObj, apiDeps);
         if (!hit) {
           writeJson(res, 404, {ok: false, message: "not found"});
         }
@@ -1757,6 +1806,7 @@ function createServer() {
   });
   server.once("close", () => {
     sessionPool.shutdown();
+    void closeCraftAssistWorkerPool();
   });
   return server;
 }

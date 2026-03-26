@@ -113,6 +113,32 @@ function normalizeCollectionKey(name) {
   return COLLECTION_NAME_ALIASES.get(raw.toLowerCase()) || raw;
 }
 
+function buildRarityOrderMap(rarityOrder = []) {
+  return Array.isArray(rarityOrder) && rarityOrder.length
+    ? new Map(rarityOrder.map((name, index) => [asString(name).trim(), index + 1]))
+    : DEFAULT_RARITY_RANKS;
+}
+
+function normalizeRarityRank(value, rarityOrder = []) {
+  return buildRarityOrderMap(rarityOrder).get(asString(value).trim()) || 0;
+}
+
+function rarityLabelFromRank(rank, rarityOrder = []) {
+  const numericRank = Math.trunc(Number(rank) || 0);
+  if (numericRank <= 0) {
+    return "";
+  }
+  if (Array.isArray(rarityOrder) && rarityOrder.length) {
+    return asString(rarityOrder[numericRank - 1]).trim();
+  }
+  for (const [label, value] of DEFAULT_RARITY_RANKS.entries()) {
+    if (value === numericRank) {
+      return label;
+    }
+  }
+  return "";
+}
+
 function splitCollectionNames(value) {
   return asString(value)
     .split("/")
@@ -122,9 +148,7 @@ function splitCollectionNames(value) {
 
 function assignAlchemyTypes(records, options = {}) {
   const rarityOrder = Array.isArray(options.rarityOrder) ? options.rarityOrder : [];
-  const orderMap = rarityOrder.length
-    ? new Map(rarityOrder.map((name, index) => [asString(name).trim(), index + 1]))
-    : DEFAULT_RARITY_RANKS;
+  const orderMap = buildRarityOrderMap(rarityOrder);
   const out = records.map((row) => ({...row}));
   const byCollection = new Map();
 
@@ -177,6 +201,9 @@ function assignAlchemyTypes(records, options = {}) {
 
 module.exports = {
   assignAlchemyTypes,
+  normalizeCollectionKey,
+  normalizeRarityRank,
+  rarityLabelFromRank,
   splitCollectionNames,
   DEFAULT_RARITY_RANKS
 };
