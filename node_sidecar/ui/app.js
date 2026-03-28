@@ -2933,7 +2933,7 @@ function averageRelativeWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
+  return wearTextFull(total / values.length);
 }
 function averageRelativeWearValue(rows) {
   const values = (Array.isArray(rows) ? rows : [])
@@ -3077,7 +3077,7 @@ function averageAbsoluteWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
+  return wearTextFull(total / values.length);
 }
 function makeCraftSlotNode({row = null, rawId = "", onRemove = null, removeDisabled = false}) {
   const slot = document.createElement("div");
