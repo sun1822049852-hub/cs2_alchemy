@@ -146,6 +146,15 @@ function isCoolingRow(row) {
   return unlockTs > Math.floor(Date.now() / 1000);
 }
 
+function isYellowShieldBlockedRow(row) {
+  if (!row || typeof row !== "object") return false;
+  if (row.yellow_shield_blocked === true) return true;
+  const lockKind = asString(row.trade_lock_kind || "").trim().toLowerCase();
+  if (lockKind === "yellow_shield") return true;
+  const hiddenReason = asString(row.hidden_reason || "").trim();
+  return hiddenReason === "flags=24" || hiddenReason === "attr#277" || hiddenReason === "attr#312";
+}
+
 function resolveTradeUpRecipe(rows, {allowCooling = false} = {}) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length !== 10) {
@@ -155,6 +164,12 @@ function resolveTradeUpRecipe(rows, {allowCooling = false} = {}) {
   const badInComponent = list.find((row) => asString(row.casket_id).trim());
   if (badInComponent) {
     throw badRequest("仅支持主库存物品参与汰换");
+  }
+
+  const yellowShieldRow = list.find((row) => isYellowShieldBlockedRow(row));
+  if (yellowShieldRow) {
+    const itemId = asString(yellowShieldRow.asset_id).trim() || "-";
+    throw badRequest(`存在黄盾物品，不可参与汰换：${itemId}`);
   }
 
   const hiddenRow = list.find((row) => asString(row && row.hidden_reason).trim());

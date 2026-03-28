@@ -334,6 +334,15 @@ function isCoolingRow(row) {
   return unlockTs > Math.floor(Date.now() / 1000);
 }
 
+function isYellowShieldBlockedRow(row) {
+  if (!row || typeof row !== "object") return false;
+  if (row.yellow_shield_blocked === true) return true;
+  const lockKind = asString(row.trade_lock_kind || "").trim().toLowerCase();
+  if (lockKind === "yellow_shield") return true;
+  const hiddenReason = asString(row.hidden_reason || "").trim();
+  return hiddenReason === "flags=24" || hiddenReason === "attr#277" || hiddenReason === "attr#312";
+}
+
 function isHardBlockedItem(row) {
   const marketHash = asString(row.market_hash_name || row.name || "").trim().toLowerCase();
   return HARD_BLOCKED_MARKET_HASHES.has(marketHash);
@@ -351,7 +360,7 @@ function ensureCanOperateItemByRules(row, targetComponentId) {
   const assetId = asString(row.asset_id || "").trim();
   if (!assetId) return {ok: false, reason: "物品 asset_id 无效"};
   if (toInt(row.def_index, 0) === STORAGE_UNIT_DEF_INDEX) return {ok: false, reason: "组件不能存入组件"};
-  if (isCoolingRow(row)) return {ok: false, reason: "黄盾冷却中，不能存入组件"};
+  if (isYellowShieldBlockedRow(row)) return {ok: false, reason: "黄盾物品不能存入组件"};
   if (isHiddenDisallowedRow(row)) return {ok: false, reason: "隐藏条目不可存入组件"};
   if (isHardBlockedItem(row)) return {ok: false, reason: "该物品被硬编码禁止存入组件"};
   if (asString(row.casket_id || "").trim() === asString(targetComponentId).trim()) {

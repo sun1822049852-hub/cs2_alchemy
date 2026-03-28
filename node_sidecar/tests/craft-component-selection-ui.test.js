@@ -50,6 +50,9 @@ function makeRow({
   casketId = "",
   craftable = true,
   hiddenReason = "",
+  yellowShieldBlocked = false,
+  tradeLockKind = "",
+  tradableAfter = 0,
   rarity = 3,
   quality = 0,
   qualityName = "Normal",
@@ -63,6 +66,9 @@ function makeRow({
     casket_id: String(casketId || ""),
     is_craftable: craftable,
     hidden_reason: hiddenReason,
+    yellow_shield_blocked: yellowShieldBlocked,
+    trade_lock_kind: tradeLockKind,
+    tradable_after: tradableAfter,
     rarity,
     quality,
     quality_name: qualityName,
@@ -156,11 +162,35 @@ function testSourceClarifiesAvailableMeansActualWithdrawableCount() {
   );
 }
 
+function testYellowShieldRowsStayUnselectableWhileNormalCoolingRemainsAvailable() {
+  const app = loadCraftComponentSelectionFns();
+  const rows = [
+    makeRow({id: "plain-1", name: "Plain Craft"}),
+    makeRow({id: "steam-cooling-1", name: "Steam Cooling Craft", tradableAfter: "2000000000"}),
+    makeRow({
+      id: "yellow-shield-1",
+      name: "Yellow Shield Craft",
+      yellowShieldBlocked: true,
+      tradeLockKind: "yellow_shield",
+      tradableAfter: "2000000000"
+    })
+  ];
+
+  assert.equal(app.isInventoryRowSelectable(rows[0]), true);
+  assert.equal(app.isInventoryRowSelectable(rows[1]), true);
+  assert.equal(app.isInventoryRowSelectable(rows[2]), false);
+  assert.deepEqual(
+    pickIds(app.getAllInventoryCraftableRows({rows, includeComponentItems: false})),
+    ["plain-1", "steam-cooling-1"]
+  );
+}
+
 function main() {
   testComponentCandidatesAppearOnlyWhenEnabled();
   testComponentCandidatesAlsoReadFromComponentItemMap();
   testStrictPreclipHidesUnselectedComponentCandidatesAtBudget();
   testSourceClarifiesAvailableMeansActualWithdrawableCount();
+  testYellowShieldRowsStayUnselectableWhileNormalCoolingRemainsAvailable();
   console.log("craft-component-selection-ui tests passed");
 }
 

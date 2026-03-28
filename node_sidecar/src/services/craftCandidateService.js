@@ -95,9 +95,19 @@ function isAllowedComponentCraftHiddenReason(row) {
   return hiddenReason === "attr#272/273";
 }
 
+function isYellowShieldBlockedRow(row) {
+  if (!row || typeof row !== "object") return false;
+  if (row.yellow_shield_blocked === true) return true;
+  const lockKind = asString(row.trade_lock_kind || "").trim().toLowerCase();
+  if (lockKind === "yellow_shield") return true;
+  const hiddenReason = asString(row.hidden_reason || "").trim();
+  return hiddenReason === "flags=24" || hiddenReason === "attr#277" || hiddenReason === "attr#312";
+}
+
 function isCraftCandidateRow(row, {includeComponentItems = false} = {}) {
   if (!row || typeof row !== "object") return false;
   if (isComponentRow(row)) return false;
+  if (isYellowShieldBlockedRow(row)) return false;
   const inComponent = !!asString(row.casket_id || "").trim();
   const hiddenReason = asString(row.hidden_reason || "").trim();
   if (hiddenReason && !isAllowedComponentCraftHiddenReason(row)) return false;

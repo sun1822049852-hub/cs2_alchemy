@@ -277,10 +277,20 @@ function isCoolingRow(row) {
   return coolingUnlockTs(row) > 0;
 }
 
+function isYellowShieldBlockedRow(row) {
+  if (!row || typeof row !== "object") return false;
+  if (row.yellow_shield_blocked === true) return true;
+  const lockKind = asString(row.trade_lock_kind || "").trim().toLowerCase();
+  if (lockKind === "yellow_shield") return true;
+  const hiddenReason = asString(row.hidden_reason || "").trim();
+  return hiddenReason === "flags=24" || hiddenReason === "attr#277" || hiddenReason === "attr#312";
+}
+
 function isMainInventoryCraftableRow(row) {
   if (!row || typeof row !== "object") return false;
   if (asString(row.casket_id || "").trim()) return false;
   if (asString(row.hidden_reason || "").trim()) return false;
+  if (isYellowShieldBlockedRow(row)) return false;
   if (row.is_craftable !== true) return false;
   return true;
 }

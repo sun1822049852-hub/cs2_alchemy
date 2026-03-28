@@ -2330,7 +2330,15 @@ function resolveCraftAssistMaterialEffectiveRange(material, {useRelative = true,
   };
 }
 function isComponentRow(row) { if (!row || typeof row !== "object") return false; const defIndex = Number(row.def_index || 0); if (defIndex === STORAGE_UNIT_DEF_INDEX) return true; const name = String(row.name || row.alchemy_name || "").toLowerCase(); return name.includes("storage unit"); }
-function isInventoryRowSelectable(row) { return !isComponentRow(row); }
+function isYellowShieldBlockedRow(row) {
+  if (!row || typeof row !== "object") return false;
+  if (row.yellow_shield_blocked === true) return true;
+  const lockKind = String(row.trade_lock_kind || "").trim().toLowerCase();
+  if (lockKind === "yellow_shield") return true;
+  const hiddenReason = String(row.hidden_reason || "").trim();
+  return hiddenReason === "flags=24" || hiddenReason === "attr#277" || hiddenReason === "attr#312";
+}
+function isInventoryRowSelectable(row) { return !isComponentRow(row) && !isYellowShieldBlockedRow(row); }
 function itemHasWear(row) { if (row.minfloat != null && row.maxfloat != null) return true; const n = String(row.name || "").toLowerCase(); return ["(factory new)", "(minimal wear)", "(field-tested)", "(well-worn)", "(battle-scarred)"].some((x) => n.includes(x)); }
 function nthWeekdayOfMonthUtc(year, month, weekday, nth) { const first = new Date(Date.UTC(year, month, 1)); const firstWeekday = first.getUTCDay(); return 1 + ((7 + weekday - firstWeekday) % 7) + (nth - 1) * 7; }
 function isUsPacificDst(unlockTs) { if (!Number.isFinite(unlockTs) || unlockTs <= 0) return false; const d = new Date(unlockTs * 1000); const year = d.getUTCFullYear(); const marchDay = nthWeekdayOfMonthUtc(year, 2, 0, 2); const novDay = nthWeekdayOfMonthUtc(year, 10, 0, 1); const startUtcTs = Math.floor(Date.UTC(year, 2, marchDay, 10, 0, 0) / 1000); const endUtcTs = Math.floor(Date.UTC(year, 10, novDay, 9, 0, 0) / 1000); return unlockTs >= startUtcTs && unlockTs < endUtcTs; }
@@ -2369,6 +2377,7 @@ function isMainInventoryCraftableRow(row) {
   if (!row || typeof row !== "object") return false;
   if (String(row.casket_id || "").trim()) return false;
   if (String(row.hidden_reason || "").trim()) return false;
+  if (isYellowShieldBlockedRow(row)) return false;
   if (row.is_craftable !== true) return false;
   return true;
 }
@@ -2418,6 +2427,7 @@ function getAllInventoryCraftableRows({rows = state.rows, includeComponentItems 
   return sourceRows
     .filter((row) => {
       if (!row || typeof row !== "object") return false;
+      if (isYellowShieldBlockedRow(row)) return false;
       if (String(row.hidden_reason || "").trim() && !isAllowedComponentCraftHiddenReason(row)) return false;
       if (row.is_craftable !== true) return false;
       if (isComponentRow(row)) return false;
@@ -2923,7 +2933,7 @@ function averageRelativeWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return wearTextFull(total / values.length);
+  return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
 }
 function averageRelativeWearValue(rows) {
   const values = (Array.isArray(rows) ? rows : [])
@@ -3067,7 +3077,7 @@ function averageAbsoluteWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return wearTextFull(total / values.length);
+  return numberTextTrunc(total / values.length, WEAR_INPUT_DECIMALS);
 }
 function makeCraftSlotNode({row = null, rawId = "", onRemove = null, removeDisabled = false}) {
   const slot = document.createElement("div");
@@ -5990,6 +6000,7 @@ function renderCraftPredictorPanel() {
   ui.craftPredictorPanel.classList.toggle("collapsed", !open);
   ui.craftPredictorHandle.setAttribute("aria-expanded", open ? "true" : "false");
   ui.craftPredictorHandle.setAttribute("aria-label", open ? "收起产物预测抽屉" : "展开产物预测抽屉");
+  if (typeof updateCraftPredictorHandleGeometry === "function") updateCraftPredictorHandleGeometry();
   if (ui.craftPredictorTitle) ui.craftPredictorTitle.textContent = "模拟结果";
   const response = state.craftPredictorResponse && typeof state.craftPredictorResponse === "object"
     ? state.craftPredictorResponse
@@ -6109,6 +6120,46 @@ function renderCraftPredictorPanel() {
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(() => fitCraftPredictorOutcomeNames(ui.craftPredictorList));
   }
+}
+function updateCraftPredictorHandleGeometry() {
+  if (typeof ui === "undefined" || !ui) return;
+  const panel = ui.craftRightPanel;
+  const anchor = ui.craftPredictorPanel;
+  const drawer = ui.craftPredictorDrawer;
+  const fallbackTop = "50%";
+  const fallbackHeight = "156px";
+  const fallbackWidth = "24px";
+  const reset = () => {
+    if (!panel) return;
+    panel.style.setProperty("--craft-predictor-handle-top", fallbackTop);
+    panel.style.setProperty("--craft-predictor-handle-height", fallbackHeight);
+    panel.style.setProperty("--craft-predictor-handle-width", fallbackWidth);
+  };
+  if (!panel || !anchor || !drawer) {
+    reset();
+    return;
+  }
+  const panelRect = panel.getBoundingClientRect();
+  const anchorRect = anchor.getBoundingClientRect();
+  const drawerRect = drawer.getBoundingClientRect();
+  if (!(panelRect.height > 0) || !(drawerRect.height > 0) || !(anchorRect.right <= panelRect.right)) {
+    reset();
+    return;
+  }
+  const nextHeight = Math.round(Math.max(132, Math.min(168, drawerRect.height * 0.4)));
+  const nextWidth = Math.round(panelRect.right - anchorRect.right);
+  if (!(nextWidth > 0)) {
+    reset();
+    return;
+  }
+  const gapCenter = drawerRect.top + drawerRect.height / 2;
+  const nextTop = Math.max(
+    nextHeight / 2,
+    Math.min(panelRect.height - nextHeight / 2, gapCenter - panelRect.top)
+  );
+  panel.style.setProperty("--craft-predictor-handle-top", `${Math.round(nextTop)}px`);
+  panel.style.setProperty("--craft-predictor-handle-height", `${nextHeight}px`);
+  panel.style.setProperty("--craft-predictor-handle-width", `${nextWidth}px`);
 }
 function getCraftLeftPanelBusyState() {
   if (state.componentOpBusy) {
@@ -6519,6 +6570,7 @@ function renderCraftPage() {
 
   renderCraftGrouped(candidates);
   renderCraftExecutionOverlay();
+  if (typeof updateCraftPredictorHandleGeometry === "function") updateCraftPredictorHandleGeometry();
 }
 async function runCraftTradeUpQueue() {
   const username = String(state.currentAccountUsername || "").trim();
@@ -7914,6 +7966,7 @@ function bindEvents() {
     if (typeof fitCraftPredictorOutcomeNames === "function" && ui.craftPredictorList) {
       fitCraftPredictorOutcomeNames(ui.craftPredictorList);
     }
+    if (typeof updateCraftPredictorHandleGeometry === "function") updateCraftPredictorHandleGeometry();
     if (ui.targetComponentDrawer && !ui.targetComponentDrawer.classList.contains("hidden")) {
       const rect = ui.targetComponentDrawer.getBoundingClientRect();
       setTargetDrawerPosition(rect.left, rect.top);

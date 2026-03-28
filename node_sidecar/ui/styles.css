@@ -1291,6 +1291,10 @@ select.small {
 }
 
 .craft-right-panel {
+  position: relative;
+  --craft-predictor-handle-top: 50%;
+  --craft-predictor-handle-height: 156px;
+  --craft-predictor-handle-width: 24px;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1445,40 +1449,36 @@ select.small {
   pointer-events: none;
 }
 
-.craft-predictor-handle {
+.craft-right-panel > .craft-predictor-handle {
   position: absolute;
   right: 0;
-  top: 52%;
-  width: 42px;
-  height: 64px;
+  top: var(--craft-predictor-handle-top);
+  width: var(--craft-predictor-handle-width);
+  height: var(--craft-predictor-handle-height);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid rgba(233, 182, 44, 0.96);
-  border-right: 0;
-  border-radius: 16px 0 0 16px;
-  background: linear-gradient(180deg, #ffdb72 0%, #e2a830 100%);
-  color: #5f3b00;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 18px 0 0 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(232, 239, 249, 0.96) 100%);
+  color: #1f4b8f;
+  clip-path: polygon(0 12%, 100% 0, 100% 100%, 0 88%);
   box-shadow:
-    -12px 0 22px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 248, 209, 0.68);
+    0 16px 30px rgba(15, 23, 42, 0.18);
   transform: translateY(-50%);
   pointer-events: auto;
-  z-index: 3;
+  z-index: 4;
   cursor: pointer;
-  transition: filter 0.14s ease, box-shadow 0.14s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
-.craft-predictor-handle:hover {
-  border-color: rgba(255, 230, 155, 1);
-  filter: brightness(1.03);
-  box-shadow:
-    -14px 0 24px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 248, 209, 0.72);
+.craft-right-panel > .craft-predictor-handle:hover {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(220, 231, 247, 1) 100%);
 }
 
-.craft-predictor-handle:active {
+.craft-right-panel > .craft-predictor-handle:active {
   transform: translateY(-50%);
 }
 
@@ -1490,7 +1490,7 @@ select.small {
   transform: rotate(-135deg) translateX(-1px);
 }
 
-.craft-predictor-panel:not(.collapsed) .craft-predictor-handle-arrow {
+.craft-right-panel > .craft-predictor-handle[aria-expanded="true"] .craft-predictor-handle-arrow {
   transform: rotate(45deg) translateX(-1px);
 }
 
@@ -1500,7 +1500,7 @@ select.small {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 14px 18px;
+  padding: 16px 14px 18px 14px;
   border-top: 1px solid #353535;
   border-radius: 22px 22px 0 0;
   background: linear-gradient(180deg, #242424 0%, #171717 100%);
@@ -4839,9 +4839,15 @@ body.theme-inkblue #craftPage .craft-predictor-drawer {
 }
 
 body.theme-inkblue #craftPage .craft-predictor-handle {
-  border-color: rgba(233, 182, 44, 0.96);
-  background: linear-gradient(180deg, #f8d24f 0%, #efc243 46%, #d79b27 100%);
-  color: #5f3b00;
+  border-color: rgba(243, 199, 121, 0.16);
+  background: linear-gradient(180deg, rgba(36, 31, 23, 0.96) 0%, rgba(14, 16, 20, 0.98) 100%);
+  color: #f3c779;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
+}
+
+body.theme-inkblue #craftPage .craft-right-panel > .craft-predictor-handle:hover {
+  border-color: rgba(243, 199, 121, 0.34);
+  background: linear-gradient(180deg, rgba(48, 40, 28, 0.98) 0%, rgba(18, 20, 24, 0.98) 100%);
 }
 
 body.theme-inkblue #craftPage .craft-assist-preset-list {

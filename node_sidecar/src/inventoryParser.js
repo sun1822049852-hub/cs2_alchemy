@@ -209,6 +209,19 @@ function hiddenReason(item) {
   return null;
 }
 
+function yellowShieldBlockReason(item) {
+  if (toInt(item && item.flags, 0) === 24) {
+    return "flags=24";
+  }
+  if (hasAttr(item, 277)) {
+    return "attr#277";
+  }
+  if (hasAttr(item, 312)) {
+    return "attr#312";
+  }
+  return "";
+}
+
 function decodeCasketId(item) {
   const direct = asString(item.casket_id || "").trim();
   if (/^\d+$/.test(direct) && direct !== "0") {
@@ -357,6 +370,7 @@ function parseOne(item, schema) {
   const quality = toInt(item.quality, 0);
   const rarity = toInt(item.rarity, 0);
   const inventoryRaw = toInt(item.inventory, 0);
+  const yellowShieldReason = yellowShieldBlockReason(item);
 
   let customName = asString(item.custom_name || "").trim();
   if (!customName) {
@@ -393,6 +407,8 @@ function parseOne(item, schema) {
     flags: toInt(item.flags, 0),
     inventory: inventoryRaw,
     tradable_after: getAttrUint32(item, 75, {decodeFloatEncoded: false}),
+    trade_lock_kind: yellowShieldReason ? "yellow_shield" : "",
+    yellow_shield_blocked: !!yellowShieldReason,
     name,
     market_hash_name: marketHashName,
     alchemy_name: "",
