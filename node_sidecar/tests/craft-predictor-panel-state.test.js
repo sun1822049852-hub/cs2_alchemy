@@ -23,6 +23,7 @@ function extractBlock(startMarker, endMarker) {
 function loadPredictorPanelFns(initialState = {}) {
   const source = [
     extractConst("RARITY_MAP"),
+    extractBlock("function setCraftAssistPanelOpen(", "function setCraftAssistRoleChooserOpen("),
     extractBlock("function normalizeCraftPredictorRarityLabel(", "function renderCraftAssistBusyMask(")
   ].join("\n");
   const context = {
@@ -36,42 +37,257 @@ function loadPredictorPanelFns(initialState = {}) {
     JSON,
     console,
     state: {
+      craftAssistOpen: false,
+      craftAssistPickerOpen: false,
+      craftAssistPickerTargetMaterialId: "",
+      craftAssistRoleChooserOpen: false,
+      craftAssistPresetEditingId: "",
+      craftAssistPresetEditingName: "",
       craftPredictorOpen: false,
-      craftPredictorSelectedConfigKey: "",
-      craftPredictorSelectedConfigLabel: "",
-      craftPredictorDismissedConfigKeys: {},
+      craftPredictorContextType: "",
+      craftPredictorContextId: "",
+      craftPredictorContextLabel: "",
+      craftPredictorAutoOpenMuted: false,
+      craftPredictorLoading: false,
+      craftPredictorError: "",
+      craftPredictorResponse: null,
+      craftPredictorRequestKey: "",
+      craftPredictorLoadedKey: "",
+      craftPredictorRequestSeq: 0,
+      craftPredictorPreferredRowsContextKey: "",
+      craftPredictorPreferredRowsById: null,
+      craftAssistTargetWear: null,
+      craftAssistMaterials: [],
       ...initialState
     },
+    craftAssistPickerCloseTimer: null,
+    renderCraftAssistPanel() {},
     renderCraftPredictorPanel() {},
-    renderCraftPage() {}
+    renderCraftPage() {},
+    refreshCraftPredictorPreview() {
+      context.refreshCalls += 1;
+    },
+    refreshCalls: 0,
+    isCraftAssistPresetEditing() {
+      return false;
+    },
+    expandCraftAssistOverlayToBottom() {},
+    stopCraftAssistOverlayDrag() {},
+    stopCraftAssistSplitDrag() {},
+    cancelCraftAssistPresetEditingSession() {},
+    applyCraftAssistOverlayHeight() {},
+    applyCraftAssistPresetWidth() {},
+    buildCraftAssistParentGroups() {
+      return [];
+    },
+    findCraftRecipeById(recipeId) {
+      const key = String(recipeId || "").trim();
+      if (!key) return null;
+      const list = Array.isArray(context.state.craftRecipeQueue) ? context.state.craftRecipeQueue : [];
+      return list.find((entry) => String(entry && entry.id || "").trim() === key) || {id: key, item_ids: [], status: "pending"};
+    },
+    getAllInventoryCraftableRows() {
+      return [];
+    },
+    buildRowsByAssetId() {
+      return new Map();
+    },
+    normalizeCraftRecipeItemIds(ids) {
+      return Array.isArray(ids) ? ids.map((value) => String(value || "").trim()).filter(Boolean) : [];
+    },
+    collectionName(row) {
+      return String(row && row.collection || "").trim();
+    },
+    rarityName(row) {
+      return String(row && (row.alchemy_rarity || row.rarity_name) || "").trim();
+    },
+    isRowStatTrak(row) {
+      return !!(row && row.stattrak);
+    },
+    averageRelativeWearValue() {
+      return 0.2;
+    },
+    craftAssistMaterialLimitFor() {
+      return 10;
+    },
+    api() {
+      throw new Error("api should not be called in panel-state unit tests");
+    },
+    wearTextFull(value) {
+      return String(value);
+    }
   };
   vm.runInNewContext(source, context, {filename: APP_PATH});
   return context;
 }
 
-function testSelectCraftPredictorConfigAutoOpensOnlyOncePerConfig() {
+async function flushMicrotasks(count = 4) {
+  for (let i = 0; i < count; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+function testSelectCraftPredictorContextSetsRecipeTargetWithoutAutoOpen() {
   const app = loadPredictorPanelFns();
-  assert.equal(typeof app.selectCraftPredictorConfig, "function", "expected config selection helper to exist");
+  assert.equal(typeof app.selectCraftPredictorContext, "function", "expected recipe-oriented predictor context helper");
   assert.equal(typeof app.setCraftPredictorPanelOpen, "function", "expected panel toggle helper to exist");
 
-  app.selectCraftPredictorConfig("draft", {label: "当前配置", autoOpen: true});
+  app.selectCraftPredictorContext({type: "recipe", id: "recipe-1", label: "#1"});
+  assert.equal(app.state.craftPredictorOpen, false, "selecting predictor context should not force the drawer open");
+  assert.equal(app.state.craftPredictorContextType, "recipe");
+  assert.equal(app.state.craftPredictorContextId, "recipe-1");
+  assert.equal(app.state.craftPredictorContextLabel, "#1");
+}
+
+function testSetCraftAssistPanelOpenDoesNotHijackPredictorContextOrVisibility() {
+  const app = loadPredictorPanelFns({
+    craftPredictorOpen: false,
+    craftPredictorContextType: "recipe",
+    craftPredictorContextId: "recipe-1",
+    craftPredictorContextLabel: "#1"
+  });
+  assert.equal(typeof app.setCraftAssistPanelOpen, "function", "expected craft assist toggle helper to exist");
+
+  app.setCraftAssistPanelOpen(true);
+  assert.equal(app.state.craftAssistOpen, true);
+  assert.equal(app.state.craftPredictorOpen, false, "opening craft assist should not force predictor visible");
+  assert.equal(app.state.craftPredictorContextType, "recipe");
+  assert.equal(app.state.craftPredictorContextId, "recipe-1");
+}
+
+function testFocusCraftPredictorOnActiveDraftRetargetsCurrentEditedRecipe() {
+  const app = loadPredictorPanelFns({
+    craftPredictorOpen: false,
+    craftPredictorContextType: "recipe",
+    craftPredictorContextId: "recipe-1",
+    craftPredictorContextLabel: "#1",
+    craftActiveRecipeId: "recipe-2",
+    craftRecipeQueue: [
+      {id: "recipe-1", item_ids: ["a"], status: "pending"},
+      {id: "recipe-2", item_ids: ["b"], status: "pending"}
+    ]
+  });
+
+  assert.equal(typeof app.focusCraftPredictorOnActiveDraft, "function", "expected current-draft focus helper to exist");
+
+  app.focusCraftPredictorOnActiveDraft({autoOpen: true});
+  assert.equal(app.state.craftPredictorOpen, true, "editing current recipe should auto-open predictor until the user manually collapses it");
+  assert.equal(app.state.craftPredictorContextType, "draft");
+  assert.equal(app.state.craftPredictorContextId, "recipe-2");
+  assert.equal(app.state.craftPredictorContextLabel, "当前配置");
+}
+
+function testManualCollapseStopsRepeatedAutoOpenForSameDraft() {
+  const app = loadPredictorPanelFns({
+    craftPredictorOpen: false,
+    craftActiveRecipeId: "recipe-2",
+    craftRecipeQueue: [
+      {id: "recipe-2", item_ids: ["b"], status: "pending"}
+    ]
+  });
+
+  app.focusCraftPredictorOnActiveDraft({autoOpen: true});
   assert.equal(app.state.craftPredictorOpen, true);
-  assert.equal(app.state.craftPredictorSelectedConfigKey, "draft");
 
   app.setCraftPredictorPanelOpen(false, {manual: true});
   assert.equal(app.state.craftPredictorOpen, false);
-  assert.equal(app.state.craftPredictorDismissedConfigKeys.draft, true);
+  assert.equal(app.state.craftPredictorAutoOpenMuted, true);
 
-  app.selectCraftPredictorConfig("draft", {label: "当前配置", autoOpen: true});
+  app.focusCraftPredictorOnActiveDraft({autoOpen: true});
   assert.equal(
     app.state.craftPredictorOpen,
     false,
-    "manually collapsed config should not auto-open again until another config is selected"
+    "manually collapsed predictor should stop auto-opening again while the user keeps editing"
+  );
+}
+
+function testDifferentDraftAlsoStaysMutedAfterManualCollapse() {
+  const app = loadPredictorPanelFns({
+    craftPredictorOpen: false,
+    craftPredictorAutoOpenMuted: true,
+    craftActiveRecipeId: "recipe-3",
+    craftRecipeQueue: [
+      {id: "recipe-2", item_ids: ["b"], status: "pending"},
+      {id: "recipe-3", item_ids: ["c"], status: "pending"}
+    ]
+  });
+
+  app.focusCraftPredictorOnActiveDraft({autoOpen: true});
+  assert.equal(
+    app.state.craftPredictorOpen,
+    false,
+    "after the user manually collapses predictor, editing other recipes should also stop auto-opening"
+  );
+  assert.equal(app.state.craftPredictorContextId, "recipe-3");
+}
+
+async function testFocusCraftPredictorOnActiveDraftKeepsImmediatePredictionAcrossFollowupRefresh() {
+  const app = loadPredictorPanelFns({
+    craftPredictorOpen: false,
+    craftActiveRecipeId: "recipe-2",
+    craftRecipeQueue: [
+      {id: "recipe-2", item_ids: ["b"], status: "pending"}
+    ]
+  });
+  const preferredRowsById = new Map([[
+    "b",
+    {
+      asset_id: "b",
+      collection: "Fracture Case",
+      alchemy_rarity: "军规级",
+      stattrak: false
+    }
+  ]]);
+  const apiCalls = [];
+  let resolveApi = null;
+
+  app.getAllInventoryCraftableRows = () => [];
+  app.buildRowsByAssetId = (rows) => new Map(
+    (Array.isArray(rows) ? rows : []).map((row) => [String(row && row.asset_id || "").trim(), row])
+  );
+  app.api = async (path, init) => {
+    apiCalls.push({
+      path,
+      body: JSON.parse(String(init && init.body || "{}"))
+    });
+    return await new Promise((resolve) => {
+      resolveApi = () => resolve({
+        ok: true,
+        invalid_reason: "",
+        message: "",
+        required_count: 10,
+        current_count: 1,
+        target_relative_wear: 0.2,
+        input_rarity: "军规级",
+        output_rarity: "受限",
+        outcomes: [{base_name: "AK-47 | Ice Coaled", probability: 0.1}]
+      });
+    });
+  };
+
+  app.focusCraftPredictorOnActiveDraft({autoOpen: true, preferredRowsById});
+  assert.equal(apiCalls.length, 1, "auto-open should immediately start predicting with the just-selected material rows");
+  assert.equal(app.state.craftPredictorLoading, true, "initial auto-open refresh should keep predictor in loading state");
+
+  await app.refreshCraftPredictorPreview();
+  assert.equal(
+    apiCalls.length,
+    1,
+    "follow-up refreshes should reuse the same hinted rows instead of cancelling the in-flight prediction"
+  );
+  assert.equal(
+    app.state.craftPredictorLoading,
+    true,
+    "follow-up refresh without synced inventory rows should not downgrade the predictor back to an error state"
   );
 
-  app.selectCraftPredictorConfig("preset:alpha", {label: "Alpha", autoOpen: true});
-  assert.equal(app.state.craftPredictorOpen, true);
-  assert.equal(app.state.craftPredictorSelectedConfigKey, "preset:alpha");
+  assert.ok(resolveApi, "expected the predictor api call to stay pending until the test resolves it");
+  resolveApi();
+  await flushMicrotasks();
+
+  assert.equal(app.state.craftPredictorError, "");
+  assert.equal(app.state.craftPredictorResponse && app.state.craftPredictorResponse.ok, true);
+  assert.equal(app.state.craftPredictorResponse.outcomes.length, 1);
 }
 
 function testBuildCraftPredictorRequestFromDraftAggregatesCollections() {
@@ -135,11 +351,19 @@ function testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools() {
   assert.equal(mixedPool.reason, "mixed_stattrak");
 }
 
-function main() {
-  testSelectCraftPredictorConfigAutoOpensOnlyOncePerConfig();
+async function main() {
+  testSelectCraftPredictorContextSetsRecipeTargetWithoutAutoOpen();
+  testSetCraftAssistPanelOpenDoesNotHijackPredictorContextOrVisibility();
+  testFocusCraftPredictorOnActiveDraftRetargetsCurrentEditedRecipe();
+  testManualCollapseStopsRepeatedAutoOpenForSameDraft();
+  testDifferentDraftAlsoStaysMutedAfterManualCollapse();
+  await testFocusCraftPredictorOnActiveDraftKeepsImmediatePredictionAcrossFollowupRefresh();
   testBuildCraftPredictorRequestFromDraftAggregatesCollections();
   testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools();
   console.log("craft-predictor-panel-state tests passed");
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

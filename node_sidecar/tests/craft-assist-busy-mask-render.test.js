@@ -52,6 +52,7 @@ function createMaskNode() {
 function loadBusyMaskRender(overrides = {}) {
   const source = [
     extractBlock("function createDefaultCraftAssistRuntimeState(", "function createDefaultCraftAccountScopedState("),
+    extractBlock("function getCraftLeftPanelBusyState(", "function renderCraftAssistBusyMask("),
     extractBlock("function renderCraftAssistBusyMask(", "function renderCraftAssistPanel(")
   ].join("\n");
   const context = {
@@ -63,6 +64,8 @@ function loadBusyMaskRender(overrides = {}) {
       craftAssistRunToken: "",
       craftAssistActiveRunTokensByAccount: new Map(),
       currentAccountUsername: "acc-a",
+      componentOpBusy: false,
+      componentOpBusyAction: "",
       ...overrides.state
     },
     ui: {
@@ -137,10 +140,28 @@ function testMaskClearsStalePanelApplyStateWithoutActiveToken() {
   assert.equal(app.state.craftAssistRunToken, "");
 }
 
+function testMaskShowsForComponentWithdrawBusyState() {
+  const app = loadBusyMaskRender({
+    state: {
+      craftAssistOpen: false,
+      componentOpBusy: true,
+      componentOpBusyAction: "withdraw"
+    }
+  });
+
+  app.renderCraftAssistBusyMask();
+
+  assert.equal(app.ui.craftAssistBusyMask.classList.contains("hidden"), false);
+  assert.equal(app.ui.craftAssistBusyMask.attrs["aria-hidden"], "false");
+  assert.match(app.ui.craftAssistBusyMaskTitle.textContent, /组件/);
+  assert.match(app.ui.craftAssistBusyMaskDetail.textContent, /取出物品/);
+}
+
 function main() {
   testMaskStaysHiddenWithoutRecognizedPendingAction();
   testMaskShowsForActivePanelApplyRun();
   testMaskClearsStalePanelApplyStateWithoutActiveToken();
+  testMaskShowsForComponentWithdrawBusyState();
   console.log("craft-assist-busy-mask-render tests passed");
 }
 

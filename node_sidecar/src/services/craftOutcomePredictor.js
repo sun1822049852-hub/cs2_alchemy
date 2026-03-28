@@ -149,6 +149,8 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
             maxfloat: candidate.maxfloat == null ? null : Number(candidate.maxfloat),
             wear_range: candidate.wear_range == null ? null : Number(candidate.wear_range),
             goods_icon_url: asString(candidate.goods_icon_url).trim(),
+            goods_original_icon_url: asString(candidate.goods_original_icon_url).trim(),
+            goods_share_thumbnail_url: asString(candidate.goods_share_thumbnail_url).trim(),
             missing_wear_bounds: false,
             mapped_skin_missing: false,
             predicted_float: null,

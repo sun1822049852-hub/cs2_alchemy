@@ -104,6 +104,9 @@ function insertWearFamily(db, {
   minfloat = 0,
   maxfloat = 1,
   wearRange = null,
+  goodsIconUrl = "",
+  goodsOriginalIconUrl = "",
+  goodsShareThumbnailUrl = "",
   wearlevels = ["Factory New", "Minimal Wear", "Field-Tested", "Well-Worn", "Battle-Scarred"]
 }) {
   const computedWearRange = wearRange == null && minfloat != null && maxfloat != null
@@ -121,7 +124,10 @@ function insertWearFamily(db, {
       minfloat,
       maxfloat,
       isstattrak,
-      wear_range: computedWearRange
+      wear_range: computedWearRange,
+      goods_icon_url: goodsIconUrl,
+      goods_original_icon_url: goodsOriginalIconUrl,
+      goods_share_thumbnail_url: goodsShareThumbnailUrl
     });
   }
 }
@@ -131,7 +137,10 @@ function buildPredictorFixtureDb() {
   insertWearFamily(db, {
     base: "AK-47 | Ice Coaled",
     collection: "Fracture Case",
-    rarity: "受限"
+    rarity: "受限",
+    goodsIconUrl: "https://img.example/ice-coaled/icon.webp",
+    goodsOriginalIconUrl: "https://img.example/ice-coaled/original.webp",
+    goodsShareThumbnailUrl: "https://img.example/ice-coaled/share.webp"
   });
   insertWearFamily(db, {
     base: "M4A4 | Tooth Fairy",
@@ -230,6 +239,8 @@ function test_predictor_returns_realtime_probabilities_for_partial_recipe() {
   const fractureOutcome = result.outcomes.find((item) => item.base_name === "AK-47 | Ice Coaled");
   const clutchOutcome = result.outcomes.find((item) => item.base_name === "USP-S | Cortex");
   assert.equal(fractureOutcome.probability, 0.1);
+  assert.equal(fractureOutcome.goods_original_icon_url, "https://img.example/ice-coaled/original.webp");
+  assert.equal(fractureOutcome.goods_share_thumbnail_url, "https://img.example/ice-coaled/share.webp");
   assert.equal(clutchOutcome.probability, 0.2);
 }
 

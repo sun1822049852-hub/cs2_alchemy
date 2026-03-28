@@ -45,7 +45,7 @@ for (const fragment of appFragments) {
   );
 }
 
-const makeCraftSlotNodeMatch = app.match(/function makeCraftSlotNode\(\{row = null, rawId = "", onRemove = null\}\) \{([\s\S]*?)\n\}/);
+const makeCraftSlotNodeMatch = app.match(/function makeCraftSlotNode\(\{row = null, rawId = "", onRemove = null(?:, removeDisabled = false)?\}\) \{([\s\S]*?)\n\}/);
 assert.ok(makeCraftSlotNodeMatch, "should find makeCraftSlotNode function");
 assert.equal(
   makeCraftSlotNodeMatch[1].includes('craft-slot-name'),

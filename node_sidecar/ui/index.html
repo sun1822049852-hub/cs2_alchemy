@@ -313,28 +313,29 @@
                 </div>
               </div>
               <div class="craft-queue-shell">
-                <div id="craftQueueMain" class="craft-queue-main">
-                  <div id="craftQueueList" class="craft-queue-list"></div>
-                  <section id="craftPredictorPanel" class="craft-predictor-panel hidden collapsed" aria-live="polite" aria-label="产物预测辅助面板">
-                    <button id="craftPredictorRail" class="craft-predictor-rail" type="button" aria-label="展开产物预测辅助面板" aria-controls="craftPredictorSurface" aria-expanded="false">
-                      <span class="craft-predictor-rail-arrow" aria-hidden="true"></span>
-                      <span class="craft-predictor-rail-text">预测</span>
-                    </button>
-                    <div id="craftPredictorSurface" class="craft-predictor-surface">
-                      <div class="craft-predictor-head">
-                        <div class="craft-predictor-title-wrap">
-                          <div id="craftPredictorTitle" class="craft-predictor-title">产物预测</div>
-                          <div id="craftPredictorSubtitle" class="craft-predictor-subtitle">等待配置</div>
+                <div id="craftPreviewViewport" class="craft-preview-viewport">
+                  <div id="craftPreviewCandidates" class="craft-preview-candidates">
+                    <div id="craftQueueList" class="craft-queue-list"></div>
+                  </div>
+                  <div id="craftPredictorStage" class="craft-predictor-stage">
+                    <section id="craftPredictorPanel" class="craft-predictor-panel collapsed" aria-live="polite" aria-label="产物预测抽屉">
+                      <button id="craftPredictorHandle" class="craft-predictor-handle" type="button" aria-label="展开产物预测抽屉" aria-controls="craftPredictorDrawer" aria-expanded="false">
+                        <span class="craft-predictor-handle-arrow" aria-hidden="true"></span>
+                      </button>
+                      <div id="craftPredictorDrawer" class="craft-predictor-drawer">
+                        <div class="craft-predictor-head">
+                          <div class="craft-predictor-title-wrap">
+                            <div id="craftPredictorTitle" class="craft-predictor-title">模拟结果</div>
+                            <div id="craftPredictorSubtitle" class="craft-predictor-subtitle">等待选择配方</div>
+                          </div>
+                          <button id="craftPredictorCloseBtn" class="craft-predictor-close" type="button" aria-label="收起产物预测抽屉">×</button>
                         </div>
-                        <button id="craftPredictorCloseBtn" class="craft-predictor-close" type="button" aria-label="缩小产物预测辅助面板">×</button>
+                        <div class="craft-predictor-body">
+                          <div id="craftPredictorList" class="craft-predictor-list"></div>
+                        </div>
                       </div>
-                      <div id="craftPredictorStatus" class="craft-predictor-status">请先在辅助选材中选择当前配置</div>
-                      <div class="craft-predictor-body">
-                        <div id="craftPredictorList" class="craft-predictor-list"></div>
-                        <aside id="craftPredictorNav" class="craft-predictor-nav" aria-label="预测结果参考导航"></aside>
-                      </div>
-                    </div>
-                  </section>
+                    </section>
+                  </div>
                 </div>
                 <div class="row craft-queue-run-row">
                   <button id="craftExecuteQueueBtn" class="icon-btn craft-execute-btn" type="button" title="执行配方" aria-label="执行配方">

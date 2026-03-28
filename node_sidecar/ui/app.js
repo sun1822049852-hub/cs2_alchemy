@@ -23,8 +23,8 @@ const state = {
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
   craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 360,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "",
-  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorSelectedConfigKey: "", craftPredictorSelectedConfigLabel: "", craftPredictorDismissedConfigKeys: {}, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0,
-  expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false,
+  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
+  expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false, componentOpBusyAction: "",
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
   targetDrawerOpen: false, targetComponentChoices: [], targetComponentSelectedId: "", targetComponentExcludeId: "",
   component: {summary_map: {}, item_map: {}}, snapshotPath: "", fetchTime: "", refreshing: false,
@@ -77,7 +77,7 @@ const ui = {
   craftLeftPanel: document.getElementById("craftLeftPanel"), craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
   craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistFastMode: document.getElementById("craftAssistFastMode"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
   craftAddRecipeBtn: document.getElementById("craftAddRecipeBtn"), craftExecuteQueueBtn: document.getElementById("craftExecuteQueueBtn"),
-  craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftQueueMain: document.getElementById("craftQueueMain"), craftQueueList: document.getElementById("craftQueueList"),
+  craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftPreviewViewport: document.getElementById("craftPreviewViewport"), craftQueueList: document.getElementById("craftQueueList"),
   craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
   craftAssistOverlayHandle: document.getElementById("craftAssistOverlayHandle"), craftAssistPanel: document.getElementById("craftAssistPanel"), craftAssistCloseBtn: document.getElementById("craftAssistCloseBtn"),
   craftAssistTargetWear: document.getElementById("craftAssistTargetWear"),
@@ -88,7 +88,7 @@ const ui = {
   craftAssistRoleSplit: document.getElementById("craftAssistRoleSplit"), craftAssistPicker: document.getElementById("craftAssistPicker"), craftAssistList: document.getElementById("craftAssistList"),
   craftAssistBusyMask: document.getElementById("craftAssistBusyMask"), craftAssistBusyMaskTitle: document.getElementById("craftAssistBusyMaskTitle"), craftAssistBusyMaskDetail: document.getElementById("craftAssistBusyMaskDetail"),
   craftAssistPresetPanel: document.getElementById("craftAssistPresetPanel"), craftAssistPresetSaveBtn: document.getElementById("craftAssistPresetSaveBtn"), craftAssistPresetList: document.getElementById("craftAssistPresetList"),
-  craftPredictorPanel: document.getElementById("craftPredictorPanel"), craftPredictorRail: document.getElementById("craftPredictorRail"), craftPredictorSurface: document.getElementById("craftPredictorSurface"), craftPredictorTitle: document.getElementById("craftPredictorTitle"), craftPredictorSubtitle: document.getElementById("craftPredictorSubtitle"), craftPredictorCloseBtn: document.getElementById("craftPredictorCloseBtn"), craftPredictorStatus: document.getElementById("craftPredictorStatus"), craftPredictorList: document.getElementById("craftPredictorList"), craftPredictorNav: document.getElementById("craftPredictorNav"),
+  craftPredictorPanel: document.getElementById("craftPredictorPanel"), craftPredictorHandle: document.getElementById("craftPredictorHandle"), craftPredictorDrawer: document.getElementById("craftPredictorDrawer"), craftPredictorTitle: document.getElementById("craftPredictorTitle"), craftPredictorSubtitle: document.getElementById("craftPredictorSubtitle"), craftPredictorCloseBtn: document.getElementById("craftPredictorCloseBtn"), craftPredictorList: document.getElementById("craftPredictorList"),
   craftAssistPresetModal: document.getElementById("craftAssistPresetModal"), craftAssistPresetModalInput: document.getElementById("craftAssistPresetModalInput"),
   craftAssistPresetModalClose: document.getElementById("craftAssistPresetModalClose"), craftAssistPresetModalSaveBtn: document.getElementById("craftAssistPresetModalSaveBtn"), craftAssistPresetModalCancelBtn: document.getElementById("craftAssistPresetModalCancelBtn"),
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel"),
@@ -459,9 +459,10 @@ function createDefaultCraftAccountScopedState() {
     craftAssistPresetEditingBackup: null,
     craftAssistPresetEditingInitialSnapshot: null,
     craftPredictorOpen: false,
-    craftPredictorSelectedConfigKey: "",
-    craftPredictorSelectedConfigLabel: "",
-    craftPredictorDismissedConfigKeys: {}
+    craftPredictorContextType: "",
+    craftPredictorContextId: "",
+    craftPredictorContextLabel: "",
+    craftPredictorAutoOpenMuted: false
   };
 }
 
@@ -479,15 +480,14 @@ function normalizeCraftAccountScopedStateSnapshot(snapshot) {
   const selectedIds = source.craftSelectedItemIds instanceof Set
     ? [...source.craftSelectedItemIds]
     : (Array.isArray(source.craftSelectedItemIds) ? source.craftSelectedItemIds : []);
-  const dismissedConfigMap = {};
-  const dismissedSource = source.craftPredictorDismissedConfigKeys && typeof source.craftPredictorDismissedConfigKeys === "object"
-    ? source.craftPredictorDismissedConfigKeys
-    : {};
-  for (const key of Object.keys(dismissedSource)) {
-    const normalizedKey = String(key || "").trim();
-    if (!normalizedKey || !dismissedSource[key]) continue;
-    dismissedConfigMap[normalizedKey] = true;
+  const legacyPredictorKey = String(source.craftPredictorSelectedConfigKey || "").trim();
+  let predictorContextType = String(source.craftPredictorContextType || "").trim();
+  if (predictorContextType !== "recipe" && predictorContextType !== "draft") {
+    predictorContextType = legacyPredictorKey ? "draft" : "";
   }
+  const predictorContextId = String(source.craftPredictorContextId || "").trim();
+  const predictorContextLabel = String(source.craftPredictorContextLabel || source.craftPredictorSelectedConfigLabel || "").trim();
+  const predictorAutoOpenMuted = !!source.craftPredictorAutoOpenMuted;
   return {
     ...base,
     craftSelectedItemIds: normalizeCraftAccountScopedItemIdList(selectedIds),
@@ -517,9 +517,10 @@ function normalizeCraftAccountScopedStateSnapshot(snapshot) {
       ? deepCopyPlain(source.craftAssistPresetEditingInitialSnapshot)
       : null,
     craftPredictorOpen: !!source.craftPredictorOpen,
-    craftPredictorSelectedConfigKey: String(source.craftPredictorSelectedConfigKey || "").trim(),
-    craftPredictorSelectedConfigLabel: String(source.craftPredictorSelectedConfigLabel || "").trim(),
-    craftPredictorDismissedConfigKeys: dismissedConfigMap
+    craftPredictorContextType: predictorContextType,
+    craftPredictorContextId: predictorContextId,
+    craftPredictorContextLabel: predictorContextLabel,
+    craftPredictorAutoOpenMuted: predictorAutoOpenMuted
   };
 }
 
@@ -546,9 +547,10 @@ function buildCurrentCraftAccountScopedStateSnapshot() {
     craftAssistPresetEditingBackup: state.craftAssistPresetEditingBackup,
     craftAssistPresetEditingInitialSnapshot: state.craftAssistPresetEditingInitialSnapshot,
     craftPredictorOpen: state.craftPredictorOpen,
-    craftPredictorSelectedConfigKey: state.craftPredictorSelectedConfigKey,
-    craftPredictorSelectedConfigLabel: state.craftPredictorSelectedConfigLabel,
-    craftPredictorDismissedConfigKeys: state.craftPredictorDismissedConfigKeys
+    craftPredictorContextType: state.craftPredictorContextType,
+    craftPredictorContextId: state.craftPredictorContextId,
+    craftPredictorContextLabel: state.craftPredictorContextLabel,
+    craftPredictorAutoOpenMuted: state.craftPredictorAutoOpenMuted
   });
 }
 
@@ -575,9 +577,10 @@ function applyCraftAccountScopedStateSnapshot(snapshot, {runtimeSnapshot = null,
   state.craftAssistPresetEditingBackup = next.craftAssistPresetEditingBackup;
   state.craftAssistPresetEditingInitialSnapshot = next.craftAssistPresetEditingInitialSnapshot;
   state.craftPredictorOpen = !!next.craftPredictorOpen;
-  state.craftPredictorSelectedConfigKey = next.craftPredictorSelectedConfigKey;
-  state.craftPredictorSelectedConfigLabel = next.craftPredictorSelectedConfigLabel;
-  state.craftPredictorDismissedConfigKeys = next.craftPredictorDismissedConfigKeys;
+  state.craftPredictorContextType = next.craftPredictorContextType;
+  state.craftPredictorContextId = next.craftPredictorContextId;
+  state.craftPredictorContextLabel = next.craftPredictorContextLabel;
+  state.craftPredictorAutoOpenMuted = !!next.craftPredictorAutoOpenMuted;
   if (resetPredictorPreview && typeof clearCraftPredictorPreviewState === "function") {
     clearCraftPredictorPreviewState();
   }
@@ -3050,6 +3053,9 @@ function buildPendingCraftQueueTitle({pendingIndex = 1, recipeRows = []} = {}) {
   const index = Math.max(1, Number(pendingIndex) || 1);
   return `#${index} | 平均相对磨损 ${averageRelativeWearText(recipeRows)}`;
 }
+function isCraftRecipeEditLocked() {
+  return !!(state.refreshing || state.craftBusy || state.craftAssistSelecting || state.componentOpBusy);
+}
 function formatCraftSlotWear(row) {
   const value = getAbsoluteWearValue(row);
   if (value == null) return "-";
@@ -3063,7 +3069,7 @@ function averageAbsoluteWearText(rows) {
   const total = values.reduce((sum, value) => sum + value, 0);
   return wearTextFull(total / values.length);
 }
-function makeCraftSlotNode({row = null, rawId = "", onRemove = null}) {
+function makeCraftSlotNode({row = null, rawId = "", onRemove = null, removeDisabled = false}) {
   const slot = document.createElement("div");
   slot.className = "craft-slot";
   if (!row && !rawId) {
@@ -3091,9 +3097,11 @@ function makeCraftSlotNode({row = null, rawId = "", onRemove = null}) {
     removeRight.className = "craft-slot-remove right";
     removeRight.title = "移除该槽位物品";
     removeRight.setAttribute("aria-label", "移除该槽位物品");
+    removeRight.disabled = !!removeDisabled;
     removeRight.textContent = "×";
     removeRight.onclick = (evt) => {
       evt.stopPropagation();
+      if (removeDisabled) return;
       onRemove(assetId);
     };
     slot.append(removeRight);
@@ -3111,7 +3119,8 @@ function renderCraftQueueSlots({
   active = false,
   selectable = false,
   onActivate = null,
-  extraClass = ""
+  extraClass = "",
+  removeDisabled = false
 }) {
   const wrap = document.createElement("div");
   wrap.className = `craft-queue-group${active ? " active" : ""}${selectable ? " selectable" : ""}${showDeleteAction ? " deletable" : ""}${extraClass ? ` ${extraClass}` : ""}`;
@@ -3155,7 +3164,12 @@ function renderCraftQueueSlots({
   for (let i = 0; i < 10; i += 1) {
     const id = ids[i] || "";
     const row = id ? rowsById.get(id) || null : null;
-    grid.append(makeCraftSlotNode({row, rawId: id, onRemove: id && typeof onRemoveItem === "function" ? onRemoveItem : null}));
+    grid.append(makeCraftSlotNode({
+      row,
+      rawId: id,
+      onRemove: id && typeof onRemoveItem === "function" ? onRemoveItem : null,
+      removeDisabled
+    }));
   }
   wrap.append(grid);
   const metaList = Array.isArray(metaItems) ? metaItems.filter((item) => item && String(item.text || "").trim()) : [];
@@ -3248,6 +3262,7 @@ function craftRarityLabel(value) {
 function toggleCraftItemSelection(itemId) {
   const key = String(itemId || "").trim();
   if (!key) return;
+  if (isCraftRecipeEditLocked()) return;
   const active = ensureActiveCraftRecipe({createIfMissing: true});
   if (!active) return;
   const activeId = String(active.id || "").trim();
@@ -3290,8 +3305,13 @@ function toggleCraftItemSelection(itemId) {
       [key]: buildCraftItemSourceSnapshot(nextRow)
     };
   }
+  const nextRowsById = new Map(allRowsById);
+  if (nextRow) nextRowsById.set(key, nextRow);
   resetCraftRecipeEntryPreparation(active);
   syncCraftSelectedIdsFromActiveRecipe();
+  if (typeof focusCraftPredictorOnActiveDraft === "function") {
+    focusCraftPredictorOnActiveDraft({autoOpen: true, preferredRowsById: nextRowsById});
+  }
   clearCraftStatus();
 }
 function buildCraftGroupRows(candidates) {
@@ -4022,19 +4042,6 @@ function setCraftAssistPanelOpen(open, {expandOnOpen = true} = {}) {
     }
   }
   if (state.craftAssistOpen) {
-    if (typeof selectCraftPredictorConfig === "function") {
-      const editingId = String(state.craftAssistPresetEditingId || "").trim();
-      const currentPredictorKey = String(state.craftPredictorSelectedConfigKey || "").trim();
-      const predictorKey = editingId
-        ? `preset:${editingId}`
-        : (currentPredictorKey || "draft");
-      const predictorLabel = editingId
-        ? (String(state.craftAssistPresetEditingName || "").trim() || "当前配置")
-        : (currentPredictorKey && currentPredictorKey !== "draft"
-          ? (String(state.craftPredictorSelectedConfigLabel || "").trim() || "当前配置")
-          : "当前配置");
-      selectCraftPredictorConfig(predictorKey, {label: predictorLabel, autoOpen: true});
-    }
     applyCraftAssistOverlayHeight({preserveVisibleBottom: true});
   }
   renderCraftAssistPanel();
@@ -4806,13 +4813,6 @@ async function applyCraftAssistPreset(presetId, {autoSelect = true, applyCount =
     ...loaded,
     updated_at: now
   };
-  if (typeof selectCraftPredictorConfig === "function") {
-    selectCraftPredictorConfig(`preset:${id}`, {
-      label: String(loaded.name || "").trim() || "当前配置",
-      autoOpen: true,
-      forceOpen: true
-    });
-  }
   saveCraftAssistPresetsToStorage();
   renderCraftAssistPanel();
   setCraftStatus(`已应用配置：${loaded.name}`);
@@ -4906,13 +4906,6 @@ function applyCraftAssistPresetForEdit(presetId) {
   state.craftAssistPresetEditingId = String(preset.id || "").trim();
   state.craftAssistPresetEditingName = String(preset.name || "").trim();
   loadCraftAssistPresetIntoDraft(preset);
-  if (typeof selectCraftPredictorConfig === "function") {
-    selectCraftPredictorConfig(`preset:${id}`, {
-      label: String(preset.name || "").trim() || "当前配置",
-      autoOpen: true,
-      forceOpen: true
-    });
-  }
   setCraftAssistPanelOpen(true, {expandOnOpen: false});
   setCraftStatus(`正在独立编辑配置：${preset.name}。点击“保存修改”生效，关闭则取消`, false);
 }
@@ -5454,18 +5447,19 @@ function normalizeCraftPredictorRarityLabel(value) {
   }
   return raw;
 }
-function normalizeCraftPredictorDismissedConfigMap(value) {
-  const source = value && typeof value === "object" ? value : {};
-  const out = {};
-  for (const key of Object.keys(source)) {
-    const normalizedKey = String(key || "").trim();
-    if (!normalizedKey || !source[key]) continue;
-    out[normalizedKey] = true;
-  }
-  return out;
+function normalizeCraftPredictorContextType(value) {
+  const raw = String(value || "").trim();
+  return raw === "recipe" || raw === "draft" ? raw : "";
 }
-function normalizeCraftPredictorConfigKey(value) {
+function normalizeCraftPredictorContextId(value) {
   return String(value || "").trim();
+}
+function buildCraftPredictorContextKey(type, id = "") {
+  const normalizedType = normalizeCraftPredictorContextType(type);
+  const normalizedId = normalizeCraftPredictorContextId(id);
+  if (!normalizedType) return "";
+  if (normalizedType === "recipe") return normalizedId ? `recipe:${normalizedId}` : "";
+  return normalizedId ? `draft:${normalizedId}` : "draft";
 }
 function normalizeCraftPredictorMaterialNames(material) {
   const source = Array.isArray(material && material.names)
@@ -5508,38 +5502,119 @@ function clearCraftPredictorPreviewState() {
   state.craftPredictorLoadedKey = "";
   state.craftPredictorRequestSeq = 0;
 }
+function clearCraftPredictorPreferredRows() {
+  state.craftPredictorPreferredRowsContextKey = "";
+  state.craftPredictorPreferredRowsById = null;
+}
+function setCraftPredictorPreferredRows(contextKey, rowsById) {
+  const key = String(contextKey || "").trim();
+  if (!key || !(rowsById instanceof Map) || rowsById.size <= 0) {
+    clearCraftPredictorPreferredRows();
+    return;
+  }
+  state.craftPredictorPreferredRowsContextKey = key;
+  state.craftPredictorPreferredRowsById = new Map(rowsById);
+}
+function getCraftPredictorRowsById({contextKey = "", preferredRowsById = null} = {}) {
+  const liveRowsById = buildRowsByAssetId(getAllInventoryCraftableRows({rows: state.rows, includeComponentItems: true}));
+  const nextKey = String(contextKey || "").trim();
+  const hintedRowsById = preferredRowsById instanceof Map
+    ? preferredRowsById
+    : (nextKey && String(state.craftPredictorPreferredRowsContextKey || "").trim() === nextKey && state.craftPredictorPreferredRowsById instanceof Map
+        ? state.craftPredictorPreferredRowsById
+        : null);
+  if (!(hintedRowsById instanceof Map) || hintedRowsById.size <= 0) return liveRowsById;
+  const merged = new Map(liveRowsById);
+  for (const [id, row] of hintedRowsById.entries()) {
+    const key = String(id || "").trim();
+    if (!key || !row || typeof row !== "object") continue;
+    merged.set(key, row);
+  }
+  return merged;
+}
+function clearCraftPredictorContext() {
+  state.craftPredictorContextType = "";
+  state.craftPredictorContextId = "";
+  state.craftPredictorContextLabel = "";
+  clearCraftPredictorPreferredRows();
+}
 function setCraftPredictorPanelOpen(open, {manual = false} = {}) {
   const nextOpen = !!open;
-  const selectedKey = normalizeCraftPredictorConfigKey(state.craftPredictorSelectedConfigKey);
-  state.craftPredictorOpen = nextOpen;
-  state.craftPredictorDismissedConfigKeys = normalizeCraftPredictorDismissedConfigMap(state.craftPredictorDismissedConfigKeys);
-  if (manual && !nextOpen && selectedKey) {
-    state.craftPredictorDismissedConfigKeys[selectedKey] = true;
+  if (manual && !nextOpen) {
+    state.craftPredictorAutoOpenMuted = true;
   }
+  state.craftPredictorOpen = nextOpen;
   if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
   return state.craftPredictorOpen;
 }
-function selectCraftPredictorConfig(configKey, {label = "", autoOpen = false, forceOpen = false} = {}) {
-  const nextKey = normalizeCraftPredictorConfigKey(configKey);
-  const nextLabel = String(label || "").trim() || (nextKey === "draft" ? "当前配置" : "当前配置");
-  if (!nextKey) {
-    state.craftPredictorSelectedConfigKey = "";
-    state.craftPredictorSelectedConfigLabel = "";
-    if (typeof clearCraftPredictorPreviewState === "function") clearCraftPredictorPreviewState();
+function selectCraftPredictorContext({type = "", id = "", label = "", autoOpen = false, forceOpen = false, preferredRowsById = null} = {}) {
+  const nextType = normalizeCraftPredictorContextType(type);
+  const nextIdRaw = normalizeCraftPredictorContextId(id);
+  const resolvedId = nextType === "draft"
+    ? (nextIdRaw || String(state.craftActiveRecipeId || "").trim())
+    : nextIdRaw;
+  const prevKey = buildCraftPredictorContextKey(state.craftPredictorContextType, state.craftPredictorContextId);
+  if (!nextType || !resolvedId) {
+    const hadContext = !!prevKey;
+    clearCraftPredictorContext();
+    if (hadContext && typeof clearCraftPredictorPreviewState === "function") clearCraftPredictorPreviewState();
     if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
     return;
   }
-  state.craftPredictorDismissedConfigKeys = normalizeCraftPredictorDismissedConfigMap(state.craftPredictorDismissedConfigKeys);
-  state.craftPredictorSelectedConfigKey = nextKey;
-  state.craftPredictorSelectedConfigLabel = nextLabel;
-  if (forceOpen && nextKey) {
-    delete state.craftPredictorDismissedConfigKeys[nextKey];
+  const nextKey = buildCraftPredictorContextKey(nextType, resolvedId);
+  if (prevKey !== nextKey && typeof clearCraftPredictorPreviewState === "function") {
+    clearCraftPredictorPreviewState();
   }
-  if (autoOpen && (forceOpen || !state.craftPredictorDismissedConfigKeys[nextKey])) {
+  if (prevKey !== nextKey) {
+    clearCraftPredictorPreferredRows();
+  }
+  state.craftPredictorContextType = nextType;
+  state.craftPredictorContextId = resolvedId;
+  state.craftPredictorContextLabel = String(label || "").trim() || (nextType === "draft" ? "当前配置" : "已选配方");
+  if (nextType === "draft" && preferredRowsById instanceof Map && preferredRowsById.size > 0) {
+    setCraftPredictorPreferredRows(nextKey, preferredRowsById);
+  }
+  if (autoOpen && (forceOpen || !state.craftPredictorAutoOpenMuted)) {
     state.craftPredictorOpen = true;
   }
   if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
-  if (typeof refreshCraftPredictorPreview === "function") void refreshCraftPredictorPreview();
+  if (typeof refreshCraftPredictorPreview === "function") void refreshCraftPredictorPreview({preferredRowsById});
+}
+function focusCraftPredictorOnActiveDraft({autoOpen = false, preferredRowsById = null} = {}) {
+  const activeId = String(state.craftActiveRecipeId || "").trim();
+  const activeEntry = activeId ? findCraftRecipeById(activeId) : null;
+  if (!activeEntry || String(activeEntry.status || "").trim() === "done") return false;
+  selectCraftPredictorContext({type: "draft", id: activeId, label: "当前配置", autoOpen, preferredRowsById});
+  return true;
+}
+function syncCraftPredictorContextWithActiveRecipe() {
+  const activeId = String(state.craftActiveRecipeId || "").trim();
+  const activeEntry = activeId ? findCraftRecipeById(activeId) : null;
+  const activeValid = !!(activeEntry && String(activeEntry.status || "").trim() !== "done");
+  const contextType = normalizeCraftPredictorContextType(state.craftPredictorContextType);
+  const contextId = normalizeCraftPredictorContextId(state.craftPredictorContextId);
+  if (contextType === "recipe") {
+    const selectedEntry = contextId ? findCraftRecipeById(contextId) : null;
+    if (selectedEntry && String(selectedEntry.status || "").trim() !== "done") return;
+  }
+  if (activeValid) {
+    const nextKey = buildCraftPredictorContextKey("draft", activeId);
+    const prevKey = buildCraftPredictorContextKey(contextType, contextId);
+    if (prevKey !== nextKey) {
+      if (typeof clearCraftPredictorPreviewState === "function") clearCraftPredictorPreviewState();
+      clearCraftPredictorPreferredRows();
+      state.craftPredictorContextType = "draft";
+      state.craftPredictorContextId = activeId;
+      state.craftPredictorContextLabel = "当前配置";
+    } else if (!String(state.craftPredictorContextLabel || "").trim()) {
+      state.craftPredictorContextLabel = "当前配置";
+    }
+    return;
+  }
+  if (contextType || contextId || String(state.craftPredictorContextLabel || "").trim()) {
+    clearCraftPredictorContext();
+    if (typeof clearCraftPredictorPreviewState === "function") clearCraftPredictorPreviewState();
+  }
 }
 function buildCraftPredictorParentGroupMap(parentGroups) {
   const map = new Map();
@@ -5643,11 +5718,69 @@ function buildCraftPredictorRequestFromDraft({targetWear = null, requiredCount =
     }
   };
 }
+function buildCraftPredictorRequestFromRecipeEntry(entry, rowsById) {
+  const requiredCount = 10;
+  const ids = normalizeCraftRecipeItemIds(entry && entry.item_ids);
+  const rowMap = rowsById instanceof Map ? rowsById : new Map();
+  if (!ids.length) {
+    return craftPredictorInvalidDraft("no_recipe_materials", {requiredCount, currentCount: 0});
+  }
+  const rows = [];
+  for (const id of ids) {
+    const row = rowMap.get(id);
+    if (!row) {
+      return craftPredictorInvalidDraft("missing_recipe_items", {requiredCount, currentCount: rows.length});
+    }
+    rows.push(row);
+  }
+  const targetWear = normalizeCraftPredictorTargetWear(averageRelativeWearValue(rows));
+  if (targetWear == null) {
+    return craftPredictorInvalidDraft("missing_recipe_wear", {requiredCount, currentCount: rows.length});
+  }
+  const first = rows[0] || null;
+  const inputRarity = normalizeCraftPredictorRarityLabel(first ? rarityName(first) : "");
+  if (!inputRarity) {
+    return craftPredictorInvalidDraft("invalid_input_rarity", {requiredCount, currentCount: rows.length});
+  }
+  const stattrak = first ? isRowStatTrak(first) : false;
+  const groups = new Map();
+  for (const row of rows) {
+    const rarity = normalizeCraftPredictorRarityLabel(rarityName(row));
+    if (rarity !== inputRarity) {
+      return craftPredictorInvalidDraft("mixed_rarity", {requiredCount, currentCount: rows.length});
+    }
+    if (!!isRowStatTrak(row) !== !!stattrak) {
+      return craftPredictorInvalidDraft("mixed_stattrak", {requiredCount, currentCount: rows.length});
+    }
+    const collection = collectionName(row);
+    if (!collection) {
+      return craftPredictorInvalidDraft("missing_recipe_collection", {requiredCount, currentCount: rows.length});
+    }
+    groups.set(collection, (groups.get(collection) || 0) + 1);
+  }
+  const payloadGroups = Array.from(groups.entries(), ([collection, count]) => ({collection, count}));
+  return {
+    ok: true,
+    requiredCount,
+    currentCount: rows.length,
+    payload: {
+      required_count: requiredCount,
+      target_relative_wear: targetWear,
+      input_rarity: inputRarity,
+      stattrak: !!stattrak,
+      groups: payloadGroups
+    }
+  };
+}
 function buildCraftPredictorStatusMessage(reason, {message = "", requiredCount = 0, currentCount = 0} = {}) {
   const serverMessage = String(message || "").trim();
   if (serverMessage) return serverMessage;
   if (reason === "missing_target_wear") return "请先输入目标相对磨损";
   if (reason === "no_materials") return "请先在辅助选材中添加父类材料";
+  if (reason === "no_recipe_materials") return "请先在当前配方中加入材料";
+  if (reason === "missing_recipe_items") return "当前配方部分材料未同步，请刷新后再试";
+  if (reason === "missing_recipe_wear") return "当前配方无法计算相对磨损，暂时不能预测";
+  if (reason === "missing_recipe_collection") return "当前配方存在缺少收藏品信息的材料，暂时不能预测";
   if (reason === "missing_parent_group") return "当前材料不在可选父类列表中，请重新选择";
   if (reason === "ambiguous_material_group") return "同一材料项跨武器箱或 StatTrak 池，暂时无法预测";
   if (reason === "mixed_rarity") return "当前材料存在不同稀有度，配方无效";
@@ -5693,19 +5826,111 @@ function formatCraftPredictorWearLevel(value) {
   };
   return labels[raw] || raw;
 }
-async function refreshCraftPredictorPreview({force = false} = {}) {
-  const selectedKey = normalizeCraftPredictorConfigKey(state.craftPredictorSelectedConfigKey);
-  if (!selectedKey) {
+function craftPredictorWearToneKey(value) {
+  const token = normalizeWearToken(value);
+  if (token === "崭新出厂" || token === "崭新" || token === "factorynew") return "fn";
+  if (token === "略有磨损" || token === "略磨" || token === "minimalwear") return "mw";
+  if (token === "久经沙场" || token === "久经" || token === "fieldtested") return "ft";
+  if (token === "破损不堪" || token === "破损" || token === "wellworn") return "ww";
+  if (token === "战痕累累" || token === "战痕" || token === "battlescarred") return "bs";
+  return "unknown";
+}
+function formatCraftPredictorTargetWear(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "";
+  if (typeof wearTextFull === "function") return wearTextFull(numeric);
+  return String(numeric);
+}
+function formatCraftPredictorWearMarkerPosition(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "50%";
+  const clamped = Math.max(0, Math.min(1, numeric));
+  return `${(clamped * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+}
+function formatCraftPredictorOutcomeName(outcome) {
+  const baseName = String(outcome && outcome.base_name || "").trim();
+  const displayName = String(outcome && outcome.name || "").trim();
+  return baseName || displayName || "未命名产物";
+}
+function fitCraftPredictorOutcomeName(node, {maxFontSize = 13, minFontSize = 10, step = 0.5} = {}) {
+  if (!node || typeof node !== "object" || !node.style) return;
+  const max = Number(maxFontSize);
+  const min = Number(minFontSize);
+  const shrinkStep = Number(step);
+  if (!Number.isFinite(max) || !Number.isFinite(min) || !Number.isFinite(shrinkStep) || max <= 0 || min <= 0 || shrinkStep <= 0) return;
+  const fits = () => {
+    const clientWidth = Number(node.clientWidth || node.offsetWidth || 0);
+    const scrollWidth = Number(node.scrollWidth || 0);
+    if (!Number.isFinite(clientWidth) || clientWidth <= 0) return true;
+    if (!Number.isFinite(scrollWidth) || scrollWidth <= 0) return true;
+    return scrollWidth <= clientWidth + 1;
+  };
+  node.style.fontSize = `${max}px`;
+  if (fits()) return;
+  for (let size = max - shrinkStep; size >= min; size -= shrinkStep) {
+    node.style.fontSize = `${size}px`;
+    if (fits()) return;
+  }
+  node.style.fontSize = `${min}px`;
+}
+function fitCraftPredictorOutcomeNames(root = null) {
+  if (!root || typeof root.querySelectorAll !== "function") return;
+  const names = root.querySelectorAll(".craft-predictor-outcome-name");
+  for (const node of names) fitCraftPredictorOutcomeName(node);
+}
+function getCraftPredictorResolvedContext() {
+  const contextType = normalizeCraftPredictorContextType(state.craftPredictorContextType);
+  const contextId = normalizeCraftPredictorContextId(state.craftPredictorContextId);
+  if (contextType === "recipe") {
+    const entry = contextId ? findCraftRecipeById(contextId) : null;
+    if (entry && String(entry.status || "").trim() !== "done") {
+      return {
+        key: buildCraftPredictorContextKey("recipe", contextId),
+        type: "recipe",
+        id: contextId,
+        label: String(state.craftPredictorContextLabel || "").trim() || "已选配方",
+        entry
+      };
+    }
+  }
+  if (contextType === "draft") {
+    const draftId = contextId || String(state.craftActiveRecipeId || "").trim();
+    const entry = draftId ? findCraftRecipeById(draftId) : null;
+    if (entry && String(entry.status || "").trim() !== "done") {
+      return {
+        key: buildCraftPredictorContextKey("draft", draftId),
+        type: "draft",
+        id: draftId,
+        label: String(state.craftPredictorContextLabel || "").trim() || "当前配置",
+        entry
+      };
+    }
+  }
+  const activeId = String(state.craftActiveRecipeId || "").trim();
+  const activeEntry = activeId ? findCraftRecipeById(activeId) : null;
+  if (activeEntry && String(activeEntry.status || "").trim() !== "done") {
+    return {
+      key: buildCraftPredictorContextKey("draft", activeId),
+      type: "draft",
+      id: activeId,
+      label: "当前配置",
+      entry: activeEntry
+    };
+  }
+  return null;
+}
+async function refreshCraftPredictorPreview({force = false, preferredRowsById = null} = {}) {
+  const context = getCraftPredictorResolvedContext();
+  if (!context) {
     if (typeof clearCraftPredictorPreviewState === "function") clearCraftPredictorPreviewState();
     if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
     return;
   }
-  const draft = buildCraftPredictorRequestFromDraft({
-    targetWear: state.craftAssistTargetWear,
-    requiredCount: typeof craftAssistMaterialLimitFor === "function" ? craftAssistMaterialLimitFor(state.craftAssistMaterials) : 10,
-    materials: Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [],
-    parentGroups: typeof buildCraftAssistParentGroups === "function" ? buildCraftAssistParentGroups() : []
-  });
+  if (context.type === "draft" && preferredRowsById instanceof Map && preferredRowsById.size > 0) {
+    setCraftPredictorPreferredRows(context.key, preferredRowsById);
+  }
+  const rowsById = getCraftPredictorRowsById({contextKey: context.key, preferredRowsById});
+  const draft = buildCraftPredictorRequestFromRecipeEntry(context.entry, rowsById);
   if (!draft.ok) {
     state.craftPredictorLoading = false;
     state.craftPredictorResponse = null;
@@ -5715,7 +5940,7 @@ async function refreshCraftPredictorPreview({force = false} = {}) {
     if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
     return;
   }
-  const requestKey = JSON.stringify(draft.payload);
+  const requestKey = JSON.stringify({context: context.key, payload: draft.payload});
   if (!force && state.craftPredictorLoadedKey === requestKey) return;
   if (!force && state.craftPredictorLoading && state.craftPredictorRequestKey === requestKey) return;
   if (typeof api !== "function") {
@@ -5758,57 +5983,62 @@ async function refreshCraftPredictorPreview({force = false} = {}) {
 }
 function renderCraftPredictorPanel() {
   if (typeof ui === "undefined" || !ui) return;
-  if (!ui.craftPredictorPanel || !ui.craftPredictorRail || !ui.craftPredictorStatus || !ui.craftPredictorList || !ui.craftPredictorNav) return;
-  const selectedKey = normalizeCraftPredictorConfigKey(state.craftPredictorSelectedConfigKey);
-  const selectedLabel = String(state.craftPredictorSelectedConfigLabel || "").trim() || "当前配置";
-  const show = !!selectedKey;
-  ui.craftPredictorPanel.classList.toggle("hidden", !show);
-  if (!show) return;
+  if (!ui.craftPredictorPanel || !ui.craftPredictorHandle || !ui.craftPredictorList) return;
+  const context = getCraftPredictorResolvedContext();
+  const selectedLabel = context ? context.label : "未选择配方";
   const open = !!state.craftPredictorOpen;
   ui.craftPredictorPanel.classList.toggle("collapsed", !open);
-  ui.craftPredictorRail.setAttribute("aria-expanded", open ? "true" : "false");
-  ui.craftPredictorRail.setAttribute("aria-label", open ? "缩小产物预测辅助面板" : "展开产物预测辅助面板");
-  if (ui.craftPredictorTitle) ui.craftPredictorTitle.textContent = "产物预测";
+  ui.craftPredictorHandle.setAttribute("aria-expanded", open ? "true" : "false");
+  ui.craftPredictorHandle.setAttribute("aria-label", open ? "收起产物预测抽屉" : "展开产物预测抽屉");
+  if (ui.craftPredictorTitle) ui.craftPredictorTitle.textContent = "模拟结果";
   const response = state.craftPredictorResponse && typeof state.craftPredictorResponse === "object"
     ? state.craftPredictorResponse
     : null;
-  const fallbackDraft = buildCraftPredictorRequestFromDraft({
-    targetWear: state.craftAssistTargetWear,
-    requiredCount: typeof craftAssistMaterialLimitFor === "function" ? craftAssistMaterialLimitFor(state.craftAssistMaterials) : 10,
-    materials: Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [],
-    parentGroups: typeof buildCraftAssistParentGroups === "function" ? buildCraftAssistParentGroups() : []
-  });
-  const currentCount = Math.max(0, Number(response && response.current_count != null ? response.current_count : fallbackDraft.currentCount) || 0);
-  const requiredCount = Math.max(0, Number(response && response.required_count != null ? response.required_count : fallbackDraft.requiredCount) || 0);
-  const inputRarity = normalizeCraftPredictorRarityLabel(response && response.input_rarity);
+  const rowsById = buildRowsByAssetId(getAllInventoryCraftableRows({rows: state.rows, includeComponentItems: true}));
+  const fallbackDraft = context ? buildCraftPredictorRequestFromRecipeEntry(context.entry, rowsById) : null;
+  const currentCount = Math.max(0, Number(response && response.current_count != null ? response.current_count : fallbackDraft && fallbackDraft.currentCount) || 0);
+  const requiredCount = Math.max(0, Number(response && response.required_count != null ? response.required_count : fallbackDraft && fallbackDraft.requiredCount) || 0);
+  const targetWear = response && response.target_relative_wear != null
+    ? response.target_relative_wear
+    : (fallbackDraft && fallbackDraft.payload ? fallbackDraft.payload.target_relative_wear : null);
+  const inputRarity = normalizeCraftPredictorRarityLabel(
+    response && response.input_rarity != null
+      ? response.input_rarity
+      : (fallbackDraft && fallbackDraft.payload ? fallbackDraft.payload.input_rarity : "")
+  );
   const outputRarity = normalizeCraftPredictorRarityLabel(response && response.output_rarity);
-  const subtitleParts = [`${selectedLabel} · ${currentCount}/${requiredCount || 10}件`];
-  if (inputRarity && outputRarity) subtitleParts.push(`${inputRarity} -> ${outputRarity}`);
-  if (ui.craftPredictorSubtitle) ui.craftPredictorSubtitle.textContent = subtitleParts.join(" · ");
-
-  let statusText = "请先在辅助选材中输入当前配置";
-  let hasError = false;
-  if (state.craftPredictorLoading) {
-    statusText = "正在根据当前配置预测产物与磨损...";
-  } else if (state.craftPredictorError) {
-    statusText = state.craftPredictorError;
-    hasError = true;
-  } else if (response && response.ok && Array.isArray(response.outcomes)) {
-    statusText = `当前已预测 ${response.outcomes.length} 个可产出物品`;
-  } else if (!fallbackDraft.ok) {
-    statusText = buildCraftPredictorStatusMessage(fallbackDraft.reason, fallbackDraft);
-    hasError = true;
+  const subtitleParts = [];
+  if (context) subtitleParts.push(selectedLabel);
+  const targetWearText = formatCraftPredictorTargetWear(targetWear);
+  if (targetWearText) subtitleParts.push(`平均相对磨损 ${targetWearText}`);
+  if (requiredCount) subtitleParts.push(`${currentCount}/${requiredCount || 10}件`);
+  if (inputRarity && outputRarity) subtitleParts.push(`${inputRarity} → ${outputRarity}`);
+  if (ui.craftPredictorSubtitle) {
+    ui.craftPredictorSubtitle.textContent = subtitleParts.length ? subtitleParts.join(" | ") : "等待选择配方";
   }
-  ui.craftPredictorStatus.textContent = statusText;
-  ui.craftPredictorStatus.classList.toggle("error", hasError);
+
+  let panelMessage = "选择配方后即可在此查看预测结果";
+  let hasError = false;
+  if (!context) {
+    panelMessage = "选择配方后即可在此查看预测结果";
+  } else if (state.craftPredictorLoading) {
+    panelMessage = "正在根据当前配方预测产物与磨损...";
+  } else if (state.craftPredictorError) {
+    panelMessage = state.craftPredictorError;
+    hasError = true;
+  } else if (fallbackDraft && !fallbackDraft.ok) {
+    panelMessage = buildCraftPredictorStatusMessage(fallbackDraft.reason, fallbackDraft);
+    hasError = true;
+  } else if (context) {
+    panelMessage = "当前配方还没有可展示的预测结果";
+  }
   ui.craftPredictorList.replaceChildren();
-  ui.craftPredictorNav.replaceChildren();
 
   const groups = response && response.ok ? buildCraftPredictorOutcomeGroups(response) : [];
   if (!groups.length) {
     const empty = document.createElement("div");
-    empty.className = "craft-predictor-empty";
-    empty.textContent = hasError ? statusText : "当前配置还没有可展示的预测结果";
+    empty.className = hasError ? "craft-predictor-empty error" : "craft-predictor-empty";
+    empty.textContent = panelMessage;
     ui.craftPredictorList.append(empty);
     return;
   }
@@ -5816,64 +6046,87 @@ function renderCraftPredictorPanel() {
     const section = document.createElement("section");
     section.className = "craft-predictor-group";
     section.id = `craftPredictorGroup_${index}`;
+    const head = document.createElement("div");
+    head.className = "craft-predictor-group-head";
     const title = document.createElement("div");
     title.className = "craft-predictor-group-title";
-    title.textContent = group.title;
-    const meta = document.createElement("div");
-    meta.className = "craft-predictor-group-meta";
-    meta.textContent = `候选产物 ${group.outcomes.length} 件`;
-    section.append(title, meta);
+    title.textContent = `${group.title}(${group.outcomes.length})`;
+    const arrow = document.createElement("div");
+    arrow.className = "craft-predictor-group-arrow";
+    arrow.textContent = "›";
+    head.append(title, arrow);
+    const grid = document.createElement("div");
+    grid.className = "craft-predictor-group-grid";
+    grid.dataset.columns = group.outcomes.length >= 4 ? "4" : "2";
     group.outcomes.forEach((outcome) => {
       const card = document.createElement("div");
-      card.className = "craft-predictor-outcome";
-      const main = document.createElement("div");
-      const name = document.createElement("div");
-      name.className = "craft-predictor-outcome-name";
-      name.textContent = String(outcome && (outcome.name || outcome.base_name) || "").trim() || "未命名产物";
-      const info = document.createElement("div");
-      info.className = "craft-predictor-outcome-meta";
-      const infoParts = [];
-      const predictedFloat = formatCraftPredictorFloat(outcome && outcome.predicted_float);
+      card.className = "craft-predictor-outcome-card";
+      const art = document.createElement("div");
+      art.className = "craft-predictor-outcome-art";
+      const artUrl = preferredRowSkinImageUrl(outcome);
+      if (artUrl) {
+        art.classList.add("has-image");
+        art.style.setProperty("--craft-predictor-art-image", cssUrlValue(artUrl));
+      } else {
+        art.textContent = "暂无图";
+      }
       const wearLevel = formatCraftPredictorWearLevel(outcome && outcome.predicted_wearlevel);
-      if (predictedFloat) {
-        infoParts.push(`预测磨损 ${predictedFloat}`);
-      }
       if (wearLevel) {
-        infoParts.push(wearLevel);
+        const wearChip = document.createElement("div");
+        wearChip.className = "craft-predictor-outcome-wear";
+        wearChip.classList.add(`tone-${craftPredictorWearToneKey(wearLevel)}`);
+        wearChip.textContent = wearLevel;
+        art.append(wearChip);
       }
-      if (outcome && outcome.mapped_skin_missing) {
-        infoParts.push("未映射具体磨损外观");
-      }
-      info.textContent = infoParts.join(" · ");
-      main.append(name, info);
       const probability = document.createElement("div");
       probability.className = "craft-predictor-outcome-probability";
       probability.textContent = formatCraftPredictorProbability(outcome && outcome.probability);
-      card.append(main, probability);
-      section.append(card);
+      art.append(probability);
+      const floatValue = formatCraftPredictorFloat(outcome && outcome.predicted_float);
+      const floatLine = document.createElement("div");
+      floatLine.className = "craft-predictor-outcome-float";
+      floatLine.textContent = floatValue ? `磨损: ${floatValue}` : "磨损: 待定";
+      art.append(floatLine);
+      const main = document.createElement("div");
+      main.className = "craft-predictor-outcome-content";
+      const wearBar = document.createElement("div");
+      wearBar.className = "craft-predictor-outcome-bar";
+      wearBar.style.setProperty(
+        "--craft-predictor-wear-pos",
+        formatCraftPredictorWearMarkerPosition(outcome && outcome.predicted_float)
+      );
+      const name = document.createElement("div");
+      name.className = "craft-predictor-outcome-name";
+      name.textContent = formatCraftPredictorOutcomeName(outcome);
+      main.append(wearBar, name);
+      card.append(art, main);
+      grid.append(card);
     });
+    section.append(head, grid);
     ui.craftPredictorList.append(section);
-    const navItem = document.createElement("button");
-    navItem.type = "button";
-    navItem.className = "craft-predictor-nav-item";
-    navItem.textContent = group.title;
-    navItem.onclick = () => {
-      if (typeof section.scrollIntoView === "function") {
-        section.scrollIntoView({block: "start", behavior: "smooth"});
-      }
-    };
-    ui.craftPredictorNav.append(navItem);
   });
+  fitCraftPredictorOutcomeNames(ui.craftPredictorList);
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => fitCraftPredictorOutcomeNames(ui.craftPredictorList));
+  }
 }
-function renderCraftAssistBusyMask() {
-  if (!ui.craftAssistBusyMask || !ui.craftAssistBusyMaskTitle || !ui.craftAssistBusyMaskDetail) return;
+function getCraftLeftPanelBusyState() {
+  if (state.componentOpBusy) {
+    const action = String(state.componentOpBusyAction || "").trim();
+    const withdraw = action !== "deposit";
+    return {
+      show: true,
+      title: withdraw ? "正在从组件取出物品" : "正在向组件存入物品",
+      detail: withdraw ? "正在从组件取出物品，请稍候..." : "正在向组件存入物品，请稍候..."
+    };
+  }
   const runtimeState = syncCurrentCraftAssistRuntimeState();
   const action = String(runtimeState.craftAssistPendingUiAction || "").trim();
   const presetId = String(runtimeState.craftAssistPendingPresetId || "").trim();
   const hasActiveAction = action === "panel_apply" || (action === "preset_apply" && !!presetId);
-  const show = !!state.craftAssistOpen && !!runtimeState.craftAssistSelecting && hasActiveAction;
-  ui.craftAssistBusyMask.classList.toggle("hidden", !show);
-  ui.craftAssistBusyMask.setAttribute("aria-hidden", show ? "false" : "true");
+  if (!state.craftAssistOpen || !runtimeState.craftAssistSelecting || !hasActiveAction) {
+    return {show: false, title: "", detail: ""};
+  }
   let accountLabel = String(state.currentAccountUsername || "").trim() || "当前账号";
   if (typeof accountByUsername === "function" && typeof displayAccountName === "function") {
     const account = accountByUsername(state.currentAccountUsername);
@@ -5881,10 +6134,21 @@ function renderCraftAssistBusyMask() {
       accountLabel = displayAccountName(account);
     }
   }
-  ui.craftAssistBusyMaskTitle.textContent = `正在为 ${accountLabel} 辅助选材`;
-  ui.craftAssistBusyMaskDetail.textContent = action === "preset_apply"
-    ? "正在按已保存配置选材，请稍候..."
-    : "正在按当前面板配置选材，请稍候...";
+  return {
+    show: true,
+    title: `正在为 ${accountLabel} 辅助选材`,
+    detail: action === "preset_apply"
+      ? "正在按已保存配置选材，请稍候..."
+      : "正在按当前面板配置选材，请稍候..."
+  };
+}
+function renderCraftAssistBusyMask() {
+  if (!ui.craftAssistBusyMask || !ui.craftAssistBusyMaskTitle || !ui.craftAssistBusyMaskDetail) return;
+  const busyState = getCraftLeftPanelBusyState();
+  ui.craftAssistBusyMask.classList.toggle("hidden", !busyState.show);
+  ui.craftAssistBusyMask.setAttribute("aria-hidden", busyState.show ? "false" : "true");
+  ui.craftAssistBusyMaskTitle.textContent = busyState.title;
+  ui.craftAssistBusyMaskDetail.textContent = busyState.detail;
 }
 function renderCraftAssistPanel() {
   if (!ui.craftAssistPanel || !ui.craftAssistOverlay) return;
@@ -5952,7 +6216,7 @@ function renderCraftAssistPanel() {
   if (typeof refreshCraftPredictorPreview === "function") void refreshCraftPredictorPreview();
 }
 function isCraftQueueDeleteModeVisible() {
-  return !state.refreshing && !state.craftBusy && !state.craftAssistSelecting;
+  return !isCraftRecipeEditLocked();
 }
 async function requestCraftTradeUpPause() {
   if (!state.craftBusy || state.craftPauseRequested) return;
@@ -5986,6 +6250,7 @@ function renderCraftQueue() {
   const list = Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : [];
   ui.craftQueueList.classList.toggle("has-items", !!list.length);
   const rowsById = buildRowsByAssetId(state.rows);
+  const recipeEditLocked = isCraftRecipeEditLocked();
   if (!list.length) {
     const empty = document.createElement("div");
     empty.className = "craft-queue-empty";
@@ -6049,17 +6314,29 @@ function renderCraftQueue() {
           extraClass: String(entry.status || "").trim() === "prepare_failed" ? "prepare-failed" : "",
           onActivate: () => {
             const currentActiveId = String(state.craftActiveRecipeId || "").trim();
-            if (!entryId || currentActiveId === entryId) return;
-            setActiveCraftRecipe(entryId);
+            if (!entryId) return;
+            if (currentActiveId !== entryId) {
+              setActiveCraftRecipe(entryId);
+            }
+            if (typeof selectCraftPredictorContext === "function") {
+              selectCraftPredictorContext({type: "recipe", id: entryId, label: title});
+            }
             clearCraftStatus();
             renderCraftPage();
           },
           showDeleteAction,
+          removeDisabled: recipeEditLocked,
           onRemoveItem: (assetId) => {
+            if (recipeEditLocked) return;
             entry.item_ids = normalizeCraftRecipeItemIds(entry.item_ids).filter((id) => id !== String(assetId || "").trim());
             syncCraftRecipeEntryItemSources(entry, rowsById);
             resetCraftRecipeEntryPreparation(entry);
-            if (isActive) syncCraftSelectedIdsFromActiveRecipe();
+            if (isActive) {
+              syncCraftSelectedIdsFromActiveRecipe();
+              if (typeof focusCraftPredictorOnActiveDraft === "function") {
+                focusCraftPredictorOnActiveDraft({autoOpen: true, preferredRowsById: rowsById});
+              }
+            }
             clearCraftStatus();
             renderCraftPage();
           },
@@ -6117,12 +6394,15 @@ function renderCraftQueue() {
   ui.craftQueueList.scrollTop = Math.min(prevScrollTop, maxScrollTop);
 }
 function addCurrentSelectionToCraftQueue() {
-  if (state.craftBusy || state.refreshing || state.craftAssistSelecting) return;
+  if (isCraftRecipeEditLocked()) return;
   if (getCraftQueuePendingCount() >= 50) {
     setCraftStatus("配方预览最多 50 组配方", true);
     return;
   }
   const created = createEmptyCraftRecipeEntry({activate: true});
+  if (typeof selectCraftPredictorContext === "function") {
+    selectCraftPredictorContext({type: "draft", id: String(created && created.id || "").trim(), label: "当前配置"});
+  }
   syncCraftSelectedIdsFromActiveRecipe();
   clearCraftStatus();
   const pending = getCraftQueuePendingEntries();
@@ -6132,7 +6412,7 @@ function addCurrentSelectionToCraftQueue() {
 }
 function clearCraftQueue() {
   if (!state.craftRecipeQueue.length) return;
-  if (state.craftBusy || state.craftAssistSelecting) return;
+  if (isCraftRecipeEditLocked()) return;
   state.craftRecipeQueue = [];
   state.craftActiveRecipeId = "";
   state.craftPauseRequested = false;
@@ -6173,10 +6453,10 @@ function renderCraftPage() {
   updateCraftActionLayout();
   if (connected) {
     reconcileCraftQueueWithInventory();
-    ensureActiveCraftRecipe({createIfMissing: false});
-  } else {
-    state.craftActiveRecipeId = "";
-    state.craftSelectedItemIds.clear();
+  }
+  ensureActiveCraftRecipe({createIfMissing: false});
+  if (typeof syncCraftPredictorContextWithActiveRecipe === "function") {
+    syncCraftPredictorContextWithActiveRecipe();
   }
 
   const candidates = getCraftCandidates();
@@ -6185,7 +6465,7 @@ function renderCraftPage() {
   const queueCount = state.craftRecipeQueue.length;
   const pendingQueueCount = getCraftQueuePendingCount();
   const executableCount = getCraftExecutableEntries().length;
-  const topActionsLocked = state.refreshing || state.craftBusy || state.craftAssistSelecting;
+  const topActionsLocked = isCraftRecipeEditLocked();
 
   if (ui.craftSelectedText) ui.craftSelectedText.textContent = `当前槽位：${selectedRows.length}/10，可执行：${executableCount}组`;
   if (ui.craftRecipeText) ui.craftRecipeText.textContent = recipeInfo.text;
@@ -6198,7 +6478,7 @@ function renderCraftPage() {
     const executeLabel = state.craftBusy ? (state.craftPauseRequested ? "暂停中..." : "暂停执行") : (state.craftPaused && executableCount > 0 ? "继续执行" : "执行配方");
     ui.craftExecuteQueueBtn.disabled = state.craftBusy
       ? !!state.craftPauseRequested
-      : (!connected || state.refreshing || state.craftAssistSelecting || executableCount <= 0);
+      : (!connected || topActionsLocked || executableCount <= 0);
     ui.craftExecuteQueueBtn.title = executeLabel;
     ui.craftExecuteQueueBtn.setAttribute("aria-label", executeLabel);
     ui.craftExecuteQueueBtn.classList.toggle("is-pausing", !!state.craftBusy);
@@ -7109,14 +7389,16 @@ function toggleComponentGroupSelection(items) {
   render();
 }
 async function runComponentMove(action, itemIds, componentIdOverride = "") {
+  const actionName = String(action || "").trim() === "deposit" ? "deposit" : "withdraw";
   const componentId = String(componentIdOverride || selectedComponentId()).trim();
   const username = String(state.currentAccountUsername || "").trim();
   if (!componentId) throw new Error("请先选择组件");
   if (!username || !isCurrentAccountConnected()) throw new Error("请先连接并刷新库存");
   state.componentOpBusy = true;
+  state.componentOpBusyAction = actionName;
   refreshComponentControls();
   try {
-    const path = action === "deposit" ? "/api/component/deposit" : "/api/component/withdraw";
+    const path = actionName === "deposit" ? "/api/component/deposit" : "/api/component/withdraw";
     const data = await api(path, {method: "POST", body: JSON.stringify({username, component_id: componentId, item_ids: itemIds})});
     if (data && data.queue) applyTaskQueueSnapshot(data.queue);
     state.selectedQueueJobId = data && data.job ? String(data.job.job_id || "").trim() : "";
@@ -7125,6 +7407,7 @@ async function runComponentMove(action, itemIds, componentIdOverride = "") {
     return data;
   } finally {
     state.componentOpBusy = false;
+    state.componentOpBusyAction = "";
     refreshComponentControls();
   }
 }
@@ -7628,6 +7911,9 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     placeFilterDrawer();
     applyCraftLayoutWidth();
+    if (typeof fitCraftPredictorOutcomeNames === "function" && ui.craftPredictorList) {
+      fitCraftPredictorOutcomeNames(ui.craftPredictorList);
+    }
     if (ui.targetComponentDrawer && !ui.targetComponentDrawer.classList.contains("hidden")) {
       const rect = ui.targetComponentDrawer.getBoundingClientRect();
       setTargetDrawerPosition(rect.left, rect.top);
@@ -8231,8 +8517,8 @@ function bindEvents() {
       setCraftAssistPanelOpen(false);
     };
   }
-  if (ui.craftPredictorRail) {
-    ui.craftPredictorRail.onclick = () => {
+  if (ui.craftPredictorHandle) {
+    ui.craftPredictorHandle.onclick = () => {
       setCraftPredictorPanelOpen(!state.craftPredictorOpen, {manual: true});
     };
   }
