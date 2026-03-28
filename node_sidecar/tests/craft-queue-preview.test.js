@@ -40,11 +40,11 @@ function main() {
     {float_value: 0.35, minfloat: 0.1, maxfloat: 0.6}
   ];
 
-  assert.equal(app.averageAbsoluteWearText(recipeRows), "0.425000");
-  assert.equal(app.averageRelativeWearText(recipeRows), "0.375000");
+  assert.equal(app.averageAbsoluteWearText(recipeRows), "0.425");
+  assert.equal(app.averageRelativeWearText(recipeRows), "0.375");
   assert.equal(
     app.buildPendingCraftQueueTitle({pendingIndex: 2, recipeRows}),
-    "#2 | 平均相对磨损 0.375000"
+    "#2 | 平均相对磨损 0.375"
   );
 }
 

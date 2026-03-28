@@ -2202,6 +2202,11 @@ function numberTextTrunc(value, decimals = WEAR_INPUT_DECIMALS) {
   if (t == null) return "-";
   return t.toFixed(d);
 }
+function numberTextTrimmed(value, decimals = WEAR_INPUT_DECIMALS) {
+  const text = numberTextTrunc(value, decimals);
+  if (text === "-") return text;
+  return text.includes(".") ? text.replace(/\.?0+$/, "") : text;
+}
 function wearTextFull(value) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (raw) {
@@ -2933,7 +2938,7 @@ function averageRelativeWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return wearTextFull(total / values.length);
+  return numberTextTrimmed(total / values.length, WEAR_INPUT_DECIMALS);
 }
 function averageRelativeWearValue(rows) {
   const values = (Array.isArray(rows) ? rows : [])
@@ -3077,7 +3082,7 @@ function averageAbsoluteWearText(rows) {
     .filter((value) => value != null && Number.isFinite(value));
   if (!values.length) return "-";
   const total = values.reduce((sum, value) => sum + value, 0);
-  return wearTextFull(total / values.length);
+  return numberTextTrimmed(total / values.length, WEAR_INPUT_DECIMALS);
 }
 function makeCraftSlotNode({row = null, rawId = "", onRemove = null, removeDisabled = false}) {
   const slot = document.createElement("div");
