@@ -36,15 +36,15 @@ function main() {
   assert.equal(typeof app.buildPendingCraftQueueTitle, "function");
 
   const recipeRows = [
-    {float_value: 0.5, minfloat: 0.4, maxfloat: 0.8},
-    {float_value: 0.35, minfloat: 0.1, maxfloat: 0.6}
+    {float_value: 0, minfloat: 0, maxfloat: 1},
+    {float_value: 0.015625, minfloat: 0, maxfloat: 1}
   ];
 
-  assert.equal(app.averageAbsoluteWearText(recipeRows), "0.425");
-  assert.equal(app.averageRelativeWearText(recipeRows), "0.375");
+  assert.equal(app.averageAbsoluteWearText(recipeRows), "0.0078125");
+  assert.equal(app.averageRelativeWearText(recipeRows), "0.0078125");
   assert.equal(
     app.buildPendingCraftQueueTitle({pendingIndex: 2, recipeRows}),
-    "#2 | 平均相对磨损 0.375"
+    "#2 | 平均相对磨损 0.0078125"
   );
 }
 
