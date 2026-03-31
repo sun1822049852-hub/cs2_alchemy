@@ -48,7 +48,10 @@ const context = {
 vm.runInNewContext(
   [
     extractConst("RARITY_MAP"),
+    extractConst("RARITY_VALUES"),
+    "globalThis.__RARITY_VALUES__ = RARITY_VALUES;",
     extractFunctionSource("normalizeCraftPredictorRarityLabel"),
+    extractFunctionSource("rarityName"),
     extractFunctionSource("getTradeUpRecipeFromRows"),
     extractFunctionSource("craftRarityLabel")
   ].join("\n"),
@@ -66,6 +69,24 @@ assert.equal(
   context.craftRarityLabel(2),
   "工业级",
   "craft rarity helper should not leak Industrial into status text"
+);
+
+assert.deepEqual(
+  Array.from(context.__RARITY_VALUES__ || []),
+  ["消费级", "工业级", "军规级", "受限", "保密", "隐秘", "金"],
+  "rarity filter values should default to Chinese labels instead of the English rarity names"
+);
+
+assert.equal(
+  context.rarityName({rarity_name: "Mil-Spec"}),
+  "军规级",
+  "rarityName should normalize backend English rarity_name values before showing them in the UI"
+);
+
+assert.equal(
+  context.rarityName({alchemy_rarity: "Industrial"}),
+  "工业级",
+  "rarityName should normalize backend English alchemy_rarity values before showing them in the UI"
 );
 
 const recipe = context.getTradeUpRecipeFromRows(Array.from({length: 10}, () => ({rarity: 3})));

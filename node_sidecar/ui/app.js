@@ -1,6 +1,9 @@
 ﻿const RARITY_MAP = {1: "Consumer", 2: "Industrial", 3: "Mil-Spec", 4: "Restricted", 5: "Classified", 6: "Covert", 7: "Contraband"};
 const QUALITY_MAP = {1: "Genuine", 4: "Normal", 9: "StatTrak", 11: "Souvenir"};
-const RARITY_VALUES = Object.keys(RARITY_MAP).map(Number).sort((a, b) => a - b).map((k) => RARITY_MAP[k]);
+const RARITY_VALUES = Object.keys(RARITY_MAP)
+  .map(Number)
+  .sort((a, b) => a - b)
+  .map((k) => normalizeCraftPredictorRarityLabel(RARITY_MAP[k]) || RARITY_MAP[k]);
 const STORAGE_UNIT_CAPACITY = 1000;
 const MAIN_INVENTORY_CAPACITY = 1000;
 const STORAGE_UNIT_DEF_INDEX = 1201;
@@ -2115,7 +2118,14 @@ function setNoAccountState({silentSummary = false} = {}) {
 }
 
 function qualityName(row) { const v = String(row.quality_name || "").trim(); if (v) return v; const id = Number(row.quality || 0); return QUALITY_MAP[id] || `Unknown(${id})`; }
-function rarityName(row) { const e = String(row.alchemy_rarity || "").trim(); if (e) return e; const r = String(row.rarity_name || "").trim(); if (r) return r; const id = Number(row.rarity || 0); return RARITY_MAP[id] || `Unknown(${id})`; }
+function rarityName(row) {
+  const e = normalizeCraftPredictorRarityLabel(row && row.alchemy_rarity);
+  if (e) return e;
+  const r = normalizeCraftPredictorRarityLabel(row && row.rarity_name);
+  if (r) return r;
+  const id = Number(row && row.rarity || 0);
+  return normalizeCraftPredictorRarityLabel(RARITY_MAP[id] || "") || `Unknown(${id})`;
+}
 const collectionName = (row) => String(row.collection || "").trim();
 const itemDisplayName = (row) => String(row.alchemy_name || "").trim() || String(row.name || "").trim();
 const itemSearchText = (row) => [row.name, row.market_hash_name, row.alchemy_name, row.collection, row.collection_en].map((x) => String(x || "").toLowerCase()).join(" ").trim();
