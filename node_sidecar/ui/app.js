@@ -3249,8 +3249,8 @@ function getTradeUpRecipeFromRows(rows) {
   }
   const stattrak = [...stSet][0] === 1;
   const recipe = stattrak ? rarity + 9 : rarity - 1;
-  const rarityLabel = RARITY_MAP[rarity] || `R${rarity}`;
-  const nextLabel = RARITY_MAP[rarity + 1] || `R${rarity + 1}`;
+  const rarityLabel = craftRarityLabel(rarity);
+  const nextLabel = craftRarityLabel(rarity + 1);
   const prefix = stattrak ? "StatTrak " : "";
   return {
     ok: true,
@@ -3266,8 +3266,10 @@ function craftRarityValue(row) {
   return Math.trunc(n);
 }
 function craftRarityLabel(value) {
+  const normalized = normalizeCraftPredictorRarityLabel(value);
+  if (normalized) return normalized;
   const rarity = Math.trunc(Number(value) || 0);
-  return RARITY_MAP[rarity] || `R${rarity || 0}`;
+  return normalizeCraftPredictorRarityLabel(RARITY_MAP[rarity] || "") || `R${rarity || 0}`;
 }
 function toggleCraftItemSelection(itemId) {
   const key = String(itemId || "").trim();
@@ -4258,7 +4260,10 @@ function addCraftAssistMaterialByName(name, {targetMaterialId = ""} = {}) {
   );
   if (nextRarity && existingRarities.size && !existingRarities.has(nextRarity)) {
     const currentRarity = [...existingRarities][0];
-    setCraftStatus(`单配方需同一稀有度：当前为 ${currentRarity}，不能添加 ${nextRarity}`, true);
+    setCraftStatus(
+      `单配方需同一稀有度：当前为 ${normalizeCraftPredictorRarityLabel(currentRarity)}，不能添加 ${normalizeCraftPredictorRarityLabel(nextRarity)}`,
+      true
+    );
     return;
   }
   if (existingIndex >= 0) {
