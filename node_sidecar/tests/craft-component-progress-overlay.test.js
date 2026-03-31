@@ -56,6 +56,9 @@ function createClassList() {
 
 function loadCraftProgressHelpers() {
   const source = extractBlock("function buildCraftComponentProgressDisplay(", "function syncCraftSettingsControls(");
+  const frameQueue = [];
+  const liveFrames = new Map();
+  let nextFrameId = 1;
   const context = {
     Math,
     Number,
@@ -64,14 +67,46 @@ function loadCraftProgressHelpers() {
       craftProgressEnabled: true,
       craftProgressVisible: false,
       craftProgressTitle: "",
-      craftProgressDetail: ""
+      craftProgressDetail: "",
+      craftProgressMode: "",
+      craftProgressPercent: 0,
+      craftProgressPercentTarget: 0
     },
     ui: {
       craftExecutionOverlay: {classList: createClassList()},
+      craftExecutionProgress: {
+        classList: createClassList(),
+        style: {
+          values: new Map(),
+          setProperty(name, value) {
+            this.values.set(String(name), String(value));
+          }
+        }
+      },
+      craftExecutionOverlayPercent: {textContent: ""},
       craftExecutionOverlayTitle: {textContent: ""},
       craftExecutionOverlayDetail: {textContent: ""}
     },
-    console
+    console,
+    requestAnimationFrame(callback) {
+      const id = nextFrameId++;
+      liveFrames.set(id, callback);
+      frameQueue.push(id);
+      return id;
+    },
+    cancelAnimationFrame(id) {
+      liveFrames.delete(id);
+    }
+  };
+  context.flushAnimationFrames = (count = 1) => {
+    for (let i = 0; i < count; i += 1) {
+      const id = frameQueue.shift();
+      if (!id) break;
+      const callback = liveFrames.get(id);
+      if (!callback) continue;
+      liveFrames.delete(id);
+      callback();
+    }
   };
   vm.runInNewContext(source, context, {filename: APP_PATH});
   return context;
@@ -113,12 +148,49 @@ function testOverlayApplyAndClearBehavior() {
 
   assert.equal(app.state.craftProgressVisible, true);
   assert.equal(app.ui.craftExecutionOverlay.classList.contains("hidden"), false);
+  assert.equal(app.ui.craftExecutionProgress.classList.contains("hidden"), true);
   assert.equal(app.ui.craftExecutionOverlayTitle.textContent, "正在执行第 1/2 组汰换");
   assert.equal(app.ui.craftExecutionOverlayDetail.textContent, "已完成 0/2 组");
 
   app.clearCraftExecutionOverlayState();
   assert.equal(app.state.craftProgressEnabled, false);
   assert.equal(app.ui.craftExecutionOverlay.classList.contains("hidden"), true);
+}
+
+function testConnectingOverlayShowsPercentRing() {
+  const app = loadCraftProgressHelpers();
+  app.setCraftExecutionOverlayState({
+    visible: true,
+    mode: "connecting",
+    percent: 80,
+    title: "正在连接账号",
+    detail: "正在建立连接并刷新库存..."
+  });
+
+  assert.equal(app.state.craftProgressMode, "connecting");
+  assert.equal(app.state.craftProgressPercentTarget, 80);
+  assert.equal(app.state.craftProgressPercent, 0);
+  assert.equal(app.ui.craftExecutionOverlay.classList.contains("hidden"), false);
+  assert.equal(app.ui.craftExecutionProgress.classList.contains("hidden"), false);
+  assert.equal(app.ui.craftExecutionOverlayPercent.textContent, "0%");
+  assert.equal(app.ui.craftExecutionOverlayTitle.textContent, "正在连接账号");
+  assert.equal(app.ui.craftExecutionOverlayDetail.textContent, "正在建立连接并刷新库存...");
+
+  app.flushAnimationFrames(4);
+  const earlyPercent = Number.parseInt(app.ui.craftExecutionOverlayPercent.textContent, 10);
+  assert.equal(Number.isFinite(earlyPercent), true);
+  assert.equal(earlyPercent > 0 && earlyPercent < 80, true, "connecting percent should animate upward instead of jumping directly to the target");
+
+  app.flushAnimationFrames(4);
+  const midPercent = Number.parseInt(app.ui.craftExecutionOverlayPercent.textContent, 10);
+  app.flushAnimationFrames(4);
+  const laterPercent = Number.parseInt(app.ui.craftExecutionOverlayPercent.textContent, 10);
+  const earlyDelta = midPercent - earlyPercent;
+  const laterDelta = laterPercent - midPercent;
+  assert.equal(laterDelta > earlyDelta, true, "connecting percent should speed up in the later half instead of using the same fast step from the start");
+
+  app.flushAnimationFrames(60);
+  assert.equal(app.ui.craftExecutionOverlayPercent.textContent, "80%");
 }
 
 function testSourceWiresCenteredOverlayAndSseListener() {
@@ -132,6 +204,11 @@ function testSourceWiresCenteredOverlayAndSseListener() {
     HTML_SOURCE.includes('id="craftExecutionOverlay"'),
     true,
     "html should include centered craft execution overlay root"
+  );
+  assert.equal(
+    HTML_SOURCE.includes('id="craftExecutionProgress"') && HTML_SOURCE.includes('id="craftExecutionOverlayPercent"'),
+    true,
+    "html should include the centered percentage ring nodes for auto-connect progress"
   );
   assert.equal(
     CSS_SOURCE.includes(".craft-execution-overlay") && CSS_SOURCE.includes("place-items: center"),
@@ -158,11 +235,32 @@ function testSourceWiresCenteredOverlayAndSseListener() {
     /body\.theme-inkblue\s+\.craft-execution-overlay\s*\{[^}]*background:\s*transparent;/m,
     "inkblue theme should not reintroduce a dark full-screen overlay"
   );
+  assert.match(
+    CSS_SOURCE,
+    /\.craft-execution-progress-ring::after\s*\{[\s\S]*animation:\s*craft-execution-ring-spin/m,
+    "connecting overlay should animate only the outer ring layer so the embedded number stays fixed"
+  );
+  assert.doesNotMatch(
+    extractCssBlock(".craft-execution-progress-ring"),
+    /animation\s*:/,
+    "connecting overlay should keep the ring container itself static so the embedded percent text does not rotate"
+  );
+  assert.match(
+    CSS_SOURCE,
+    /\.craft-execution-overlay\.connecting\s+\.craft-execution-card\s*\{[\s\S]*background:\s*transparent;[\s\S]*border:\s*0;[\s\S]*box-shadow:\s*none;/m,
+    "connecting overlay should remove the floating card chrome and keep the window fully transparent"
+  );
+  assert.match(
+    CSS_SOURCE,
+    /\.craft-execution-overlay\.connecting\s+\.craft-execution-detail\s*\{[\s\S]*display:\s*none;/m,
+    "connecting overlay should hide the secondary detail line so only the centered ring and title remain"
+  );
 }
 
 function main() {
   testProgressHelperFormatsPrepareAndCraftStages();
   testOverlayApplyAndClearBehavior();
+  testConnectingOverlayShowsPercentRing();
   testSourceWiresCenteredOverlayAndSseListener();
   console.log("craft-component-progress-overlay tests passed");
 }

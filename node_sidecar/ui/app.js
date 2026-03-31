@@ -21,8 +21,8 @@ const state = {
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
-  craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 360,
-  craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "",
+  craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 0,
+  craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "", craftProgressMode: "", craftProgressPercent: 0, craftProgressPercentTarget: 0,
   craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false, componentOpBusyAction: "",
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
@@ -92,7 +92,7 @@ const ui = {
   craftAssistPresetModal: document.getElementById("craftAssistPresetModal"), craftAssistPresetModalInput: document.getElementById("craftAssistPresetModalInput"),
   craftAssistPresetModalClose: document.getElementById("craftAssistPresetModalClose"), craftAssistPresetModalSaveBtn: document.getElementById("craftAssistPresetModalSaveBtn"), craftAssistPresetModalCancelBtn: document.getElementById("craftAssistPresetModalCancelBtn"),
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel"),
-  craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail")
+  craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionProgress: document.getElementById("craftExecutionProgress"), craftExecutionOverlayPercent: document.getElementById("craftExecutionOverlayPercent"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail")
 };
 
 let searchTimer = null;
@@ -754,7 +754,7 @@ function clampCraftRightPanelWidth(width) {
   const maxByWindow = Math.max(min, Math.floor((window.innerWidth || 1600) * 0.7));
   const max = Math.min(760, maxByWindow);
   const value = Number(width);
-  if (!Number.isFinite(value)) return 360;
+  if (!Number.isFinite(value) || value <= 0) return max;
   return Math.max(min, Math.min(Math.round(value), max));
 }
 
@@ -901,7 +901,7 @@ function saveCraftUiPrefs() {
         craft_show_cooling_time: !!state.craftShowCoolingTime,
         craft_assist_fast_mode: !!state.craftAssistFastMode,
         craft_assist_wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
-        craft_right_width: Number(state.craftRightPanelWidth) || 360,
+        craft_right_width: clampCraftRightPanelWidth(state.craftRightPanelWidth),
         craft_assist_overlay_height: Number.isFinite(overlayHeight) ? overlayHeight : 0,
         craft_assist_preset_width: Number(state.craftAssistPresetWidth) || 240
       })
@@ -3531,22 +3531,116 @@ function buildCraftComponentProgressDisplay(data) {
     detail: "请稍候..."
   };
 }
+let craftExecutionPercentAnimationFrame = 0;
+function normalizeCraftExecutionOverlayPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+function cancelCraftExecutionPercentAnimation() {
+  if (craftExecutionPercentAnimationFrame && typeof cancelAnimationFrame === "function") {
+    cancelAnimationFrame(craftExecutionPercentAnimationFrame);
+  }
+  craftExecutionPercentAnimationFrame = 0;
+}
+function stepCraftExecutionOverlayPercentAnimation() {
+  craftExecutionPercentAnimationFrame = 0;
+  const mode = String(state.craftProgressMode || "").trim();
+  if (mode !== "connecting" || !state.craftProgressVisible) return;
+  const current = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
+  const target = normalizeCraftExecutionOverlayPercent(state.craftProgressPercentTarget);
+  if (current >= target) {
+    state.craftProgressPercent = target;
+    renderCraftExecutionOverlay();
+    return;
+  }
+  const delta = target - current;
+  const progressRatio = target > 0 ? current / target : 1;
+  let step = 1;
+  if (progressRatio >= 0.8) step = 6;
+  else if (progressRatio >= 0.62) step = 5;
+  else if (progressRatio >= 0.42) step = 4;
+  else if (progressRatio >= 0.2) step = 3;
+  else if (progressRatio >= 0.08) step = 2;
+  state.craftProgressPercent = Math.min(target, current + step);
+  renderCraftExecutionOverlay();
+  if (state.craftProgressPercent < target && typeof requestAnimationFrame === "function") {
+    craftExecutionPercentAnimationFrame = requestAnimationFrame(stepCraftExecutionOverlayPercentAnimation);
+  }
+}
+function queueCraftExecutionPercentAnimation() {
+  const mode = String(state.craftProgressMode || "").trim();
+  if (mode !== "connecting" || !state.craftProgressVisible) {
+    cancelCraftExecutionPercentAnimation();
+    return;
+  }
+  const current = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
+  const target = normalizeCraftExecutionOverlayPercent(state.craftProgressPercentTarget);
+  if (current >= target) {
+    state.craftProgressPercent = target;
+    renderCraftExecutionOverlay();
+    return;
+  }
+  if (typeof requestAnimationFrame !== "function") {
+    state.craftProgressPercent = target;
+    renderCraftExecutionOverlay();
+    return;
+  }
+  if (craftExecutionPercentAnimationFrame) return;
+  craftExecutionPercentAnimationFrame = requestAnimationFrame(stepCraftExecutionOverlayPercentAnimation);
+}
 function renderCraftExecutionOverlay() {
   if (!ui.craftExecutionOverlay || !ui.craftExecutionOverlayTitle || !ui.craftExecutionOverlayDetail) return;
   const show = !!state.craftProgressEnabled && !!state.craftProgressVisible;
+  const mode = String(state.craftProgressMode || "").trim();
+  const isConnecting = mode === "connecting";
+  const percent = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
   ui.craftExecutionOverlay.classList.toggle("hidden", !show);
+  ui.craftExecutionOverlay.classList.toggle("connecting", show && isConnecting);
+  if (ui.craftExecutionProgress) {
+    ui.craftExecutionProgress.classList.toggle("hidden", !show || !isConnecting);
+    if (ui.craftExecutionProgress.style && typeof ui.craftExecutionProgress.style.setProperty === "function") {
+      ui.craftExecutionProgress.style.setProperty("--craft-execution-progress", `${percent}%`);
+    }
+  }
+  if (ui.craftExecutionOverlayPercent) {
+    ui.craftExecutionOverlayPercent.textContent = `${percent}%`;
+  }
   ui.craftExecutionOverlayTitle.textContent = state.craftProgressTitle || "正在执行炼金任务";
   ui.craftExecutionOverlayDetail.textContent = state.craftProgressDetail || "请稍候...";
 }
-function setCraftExecutionOverlayState({visible = false, title = "", detail = ""} = {}) {
+function setCraftExecutionOverlayState({visible = false, mode = "", percent = 0, title = "", detail = ""} = {}) {
+  const nextMode = String(mode || "").trim();
+  const normalizedPercent = normalizeCraftExecutionOverlayPercent(percent);
+  const prevMode = String(state.craftProgressMode || "").trim();
   state.craftProgressVisible = !!visible;
+  state.craftProgressMode = nextMode;
+  if (nextMode === "connecting") {
+    if (prevMode !== "connecting") {
+      state.craftProgressPercent = 0;
+    } else if (state.craftProgressPercent > normalizedPercent) {
+      state.craftProgressPercent = normalizedPercent;
+    } else {
+      state.craftProgressPercent = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
+    }
+    state.craftProgressPercentTarget = normalizedPercent;
+  } else {
+    cancelCraftExecutionPercentAnimation();
+    state.craftProgressPercent = normalizedPercent;
+    state.craftProgressPercentTarget = normalizedPercent;
+  }
   state.craftProgressTitle = String(title || "").trim();
   state.craftProgressDetail = String(detail || "").trim();
   renderCraftExecutionOverlay();
+  if (nextMode === "connecting" && visible) queueCraftExecutionPercentAnimation();
 }
 function clearCraftExecutionOverlayState() {
+  cancelCraftExecutionPercentAnimation();
   state.craftProgressEnabled = false;
   state.craftProgressVisible = false;
+  state.craftProgressMode = "";
+  state.craftProgressPercent = 0;
+  state.craftProgressPercentTarget = 0;
   state.craftProgressTitle = "";
   state.craftProgressDetail = "";
   renderCraftExecutionOverlay();
@@ -5845,6 +5939,15 @@ function craftPredictorWearToneKey(value) {
   if (token === "战痕累累" || token === "战痕" || token === "battlescarred") return "bs";
   return "unknown";
 }
+function craftPredictorGridColumnCount(count) {
+  const normalizedCount = Math.max(0, Number(count) || 0);
+  if (normalizedCount >= 7) return 4;
+  if (normalizedCount >= 5) return 3;
+  if (normalizedCount === 4) return 4;
+  if (normalizedCount === 3) return 3;
+  if (normalizedCount === 2) return 2;
+  return 1;
+}
 function formatCraftPredictorTargetWear(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "";
@@ -6068,7 +6171,7 @@ function renderCraftPredictorPanel() {
     head.append(title, arrow);
     const grid = document.createElement("div");
     grid.className = "craft-predictor-group-grid";
-    grid.dataset.columns = group.outcomes.length >= 4 ? "4" : "2";
+    grid.dataset.columns = String(craftPredictorGridColumnCount(group.outcomes.length));
     group.outcomes.forEach((outcome) => {
       const card = document.createElement("div");
       card.className = "craft-predictor-outcome-card";
@@ -6529,7 +6632,7 @@ function renderCraftPage() {
     const executeLabel = state.craftBusy ? (state.craftPauseRequested ? "暂停中..." : "暂停执行") : (state.craftPaused && executableCount > 0 ? "继续执行" : "执行配方");
     ui.craftExecuteQueueBtn.disabled = state.craftBusy
       ? !!state.craftPauseRequested
-      : (!connected || topActionsLocked || executableCount <= 0);
+      : (topActionsLocked || executableCount <= 0);
     ui.craftExecuteQueueBtn.title = executeLabel;
     ui.craftExecuteQueueBtn.setAttribute("aria-label", executeLabel);
     ui.craftExecuteQueueBtn.classList.toggle("is-pausing", !!state.craftBusy);
@@ -6549,7 +6652,8 @@ function renderCraftPage() {
   renderCraftAssistPanel();
 
   if (!state.craftStatusText) {
-    if (!connected) setCraftStatus("请先连接并刷新库存");
+    if (!connected && executableCount > 0) setCraftStatus("当前账号未连接，点击执行将自动连接账号");
+    else if (!connected) setCraftStatus("请先连接并刷新库存");
     else if (state.craftCandidateLoading && !candidates.length) setCraftStatus("候选物品同步中...");
     else if (!candidates.length) {
       setCraftStatus(
@@ -6572,10 +6676,57 @@ function renderCraftPage() {
   renderCraftExecutionOverlay();
   if (typeof updateCraftPredictorHandleGeometry === "function") updateCraftPredictorHandleGeometry();
 }
+async function ensureCraftConnectedForExecution() {
+  const username = String(
+    state.currentAccountUsername ||
+    (ui.craftAccountSelect && ui.craftAccountSelect.value) ||
+    (ui.accountSelect && ui.accountSelect.value) ||
+    ""
+  ).trim();
+  if (!username) {
+    setCraftStatus("请先选用一个账号", true);
+    return false;
+  }
+  if (isCurrentAccountConnected()) return true;
+  const onProgress = ({percent = 0, title = "正在连接账号", detail = ""} = {}) => {
+    state.craftProgressEnabled = true;
+    setCraftExecutionOverlayState({
+      visible: true,
+      mode: "connecting",
+      percent,
+      title,
+      detail
+    });
+  };
+  onProgress({percent: 10, detail: "正在准备连接账号..."});
+  const result = await doRefresh({
+    usernameOverride: username,
+    force: true,
+    silentRateLimit: true,
+    silentInfo: true,
+    onProgress
+  });
+  if (result && result.ok && isCurrentAccountConnected()) {
+    onProgress({percent: 100, detail: "账号已连接，准备执行配方..."});
+    clearCraftExecutionOverlayState();
+    return true;
+  }
+  clearCraftExecutionOverlayState();
+  if (!(result && result.message)) {
+    setCraftStatus("连接账号失败，请先连接并刷新库存", true);
+  } else {
+    setCraftStatus(result.message, true);
+  }
+  return false;
+}
 async function runCraftTradeUpQueue() {
   const username = String(state.currentAccountUsername || "").trim();
-  if (!username || !isCurrentAccountConnected()) {
-    setCraftStatus("请先连接并刷新库存", true);
+  if (!username) {
+    setCraftStatus("请先选用一个账号", true);
+    return;
+  }
+  const connectedOk = await ensureCraftConnectedForExecution();
+  if (!connectedOk) {
     return;
   }
   reconcileCraftQueueWithInventory();
@@ -7893,35 +8044,64 @@ function setRefreshBusy(busy) {
   renderCraftPage();
 }
 
-async function doRefresh({usernameOverride = "", force = false, silentRateLimit = false, silentInfo = false} = {}) {
-  if (state.refreshing) return;
+async function doRefresh({usernameOverride = "", force = false, silentRateLimit = false, silentInfo = false, onProgress = null} = {}) {
+  if (state.refreshing) return {ok: false, message: "当前正在刷新库存"};
+  const reportProgress = ({percent = 0, title = "正在连接账号", detail = ""} = {}) => {
+    if (typeof onProgress !== "function") return;
+    try {
+      onProgress({percent, title, detail});
+    } catch (_) {
+      // ignore progress callback errors
+    }
+  };
   const username = String(usernameOverride || ui.accountSelect.value || (ui.craftAccountSelect && ui.craftAccountSelect.value) || state.currentAccountUsername || "").trim();
-  if (!username) { setSummary("请选用一个账号"); state.emptyHint = "请选用一个账号"; render(); return; }
+  if (!username) {
+    const message = "请选用一个账号";
+    setSummary(message);
+    state.emptyHint = message;
+    render();
+    return {ok: false, message};
+  }
   clearCraftStatus();
   if (!force) {
     const now = Date.now() / 1000, remaining = 10 - (now - state.lastRefreshClickTs);
-    if (remaining > 0) { if (!silentRateLimit) setSummary(`刷新过于频繁，请在 ${Math.floor(remaining) + 1}s 后再试`); return; }
+    if (remaining > 0) {
+      const message = `刷新过于频繁，请在 ${Math.floor(remaining) + 1}s 后再试`;
+      if (!silentRateLimit) setSummary(message);
+      return {ok: false, message};
+    }
     state.lastRefreshClickTs = now;
   }
   const account = accountByUsername(username);
-  if (!account) { setSummary(`账号不存在：${username}`); return; }
+  if (!account) {
+    const message = `账号不存在：${username}`;
+    setSummary(message);
+    return {ok: false, message};
+  }
 
   try {
     setRefreshBusy(true);
+    reportProgress({percent: 10, detail: "正在准备连接账号..."});
     state.accountSelectedUsername = username;
     state.currentAccountUsername = username;
     startInventoryEventStream(username);
     syncInventoryAccountSelect();
     await persistLastSelected(username);
     if (state.activeAccount !== username) {
+      reportProgress({percent: 25, detail: "正在切换目标账号..."});
       await api("/api/accounts/active", {method: "POST", body: JSON.stringify({username})});
       state.activeAccount = username;
     }
+    reportProgress({percent: 40, detail: "正在清理其他账号连接..."});
     await disconnectOtherSessionsForTarget(username, {silent: true});
     setRefreshPhase(state.connectedUsername === username ? "连接状态：已连接（刷新中）" : "连接状态：连接中");
     if (!silentInfo) {
       setSummary(state.connectedUsername === username ? "已连接，正在刷新库存..." : "正在建立连接并刷新库存...");
     }
+    reportProgress({
+      percent: 68,
+      detail: state.connectedUsername === username ? "账号已连接，正在刷新库存..." : "正在建立连接并刷新库存..."
+    });
 
     const data = await api("/api/refresh", {method: "POST", body: JSON.stringify({username, include_hidden: "false"})});
     const result = data.result || {}, rows = Array.isArray(data.rows) ? data.rows : [];
@@ -7944,11 +8124,15 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
     if (!silentInfo) {
       setSummary(`${String(result.message || "刷新成功")}，共 ${rows.length} 条`);
     }
+    reportProgress({percent: 100, detail: "库存已同步，准备执行配方..."});
+    return {ok: true, message: String(result.message || "刷新成功").trim() || "刷新成功"};
   } catch (err) {
     if (state.connectedUsername === username) state.connectedUsername = "";
     clearRefreshPhase();
     syncInventoryTop();
-    setSummary(`刷新失败：${err.message}`);
+    const message = `刷新失败：${err.message}`;
+    setSummary(message);
+    return {ok: false, message};
   } finally {
     setRefreshBusy(false);
   }
