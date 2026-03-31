@@ -1,439 +1,445 @@
-# Trade-up Simulation Workbench Design
+# 汰换模拟设计稿
 
-Date: 2026-03-31
-Status: Approved in discussion, pending implementation plan
+日期：2026-03-31  
+状态：已完成脑暴确认，待实现计划
 
-## Summary
+## 1. 概述
 
-Add a new top-level navigation page called `汰换模拟` that is completely independent from the existing `炼金汰换` page.
+新增一个独立于现有 `炼金汰换` 的顶部导航页面 `汰换模拟`。
 
-This new page is a simulation-only workbench for finding candidate trade-up recipes by starting from a target output item and a user-entered absolute float, then working backward to infer:
+这个页面只做模拟，不执行炼金，不读取当前库存作为候选来源，不和现有炼金队列做首期联动。它的目标是让用户从一个具体产物出发，输入该物品的绝对磨损，再反推出同一收藏品下其它产物与对应材料的绝对磨损，便于找配方、看联动、保存样例。
 
-- the shared relative wear used by the simulated recipe
-- the absolute float of all related output items
-- the absolute float of all related lower-tier material items
+## 2. 已确认产品结论
 
-The page is for exploration and recipe discovery only. It does not execute trade-ups, does not require inventory ownership, and does not yet sync with the existing craft queue.
+### 2.1 功能边界
 
-## Goals
+- `汰换模拟` 是新页面，不是 `炼金汰换` 的子模式
+- 首期只做模拟，不做执行
+- 首期不接入现有炼金队列，不校验是否真有库存可做
+- 数据源来自全量皮肤数据库，不来自当前账号库存
 
-- Add a dedicated `汰换模拟` navigation entry and page
-- Use the full skin database as the data source rather than the current account inventory
-- Let the user choose one concrete target item without pre-filtering by wear tier
-- Constrain target absolute float input by the chosen item's `minfloat` and `maxfloat`
-- Auto-match and display the wear tier after the user enters the target absolute float
-- Support anchor inputs that help constrain related output / material branches:
-  - collection anchors
-  - concrete auxiliary output anchors
-  - lower-tier anchors derived from an auxiliary output branch
-- Return all related outputs and all related materials with inferred absolute float values
-- Reuse the existing craft predictor card language where it helps the user read the result quickly
+### 2.2 主页面结构
 
-## Non-Goals
+- 页面顶部使用“已保存样例切换器”，形态类似下拉栏
+- 切换已保存样例时，直接复用同一个主页面区域，不另起一列显示
+- 顶部工具区至少包含：
+  - 当前样例切换器
+  - `新增配方`
+  - `覆盖保存`
+- 页面主体按“收藏品行”组织，而不是单独拆出左侧 recipe list
 
-- No direct linkage to the current `炼金汰换` queue in the first phase
-- No execution, account connection, or inventory availability checks
-- No probability model in the first phase
-- No quantity balancing or exact executable recipe validation in the first phase
-- No persistence to backend storage in the first phase
-- No automatic import from or export to the existing craft assist preset system in the first phase
+### 2.3 收藏品行布局
 
-## Confirmed Product Decisions
+- 一个收藏品对应一整行
+- 空间足够时，该收藏品的全部产物与全部材料应在同一行放下
+- 行内固定为左右两列：
+  - 左侧是产物
+  - 右侧是材料
+- 左右两侧都统一显示绝对磨损
+- 右侧材料也必须尽量单行排开，而不是纵向长列表
 
-### Independent Feature Boundary
+### 2.4 目标产物与编辑规则
 
-- `汰换模拟` is a new page, not a mode inside the current craft page
-- the current `炼金汰换` flow stays unchanged
-- any relationship between simulation and live craft execution will be designed later
+- 选择一个目标产物的意义只是提供初始锚点
+- 目标产物选定后，左侧应展示该收藏品对应的全部产物
+- 左侧任意产物都允许精修绝对磨损
+- 用户最后一次编辑的左侧产物，视为当前驱动产物
+- 右侧材料绝对磨损不允许直接修改
+- 右侧材料磨损由左侧当前驱动产物推导并同步响应
 
-### Target Item Model
+### 2.5 磨损口径
 
-- the user selects one concrete output item from the global skin database
-- the user does not first choose a wear tier
-- the user enters an absolute float value for that selected item
-- the input range is restricted by the selected item's own `minfloat` and `maxfloat`
-- after input, the UI automatically derives and shows:
-  - absolute float
-  - relative wear
-  - wear tier
+- 用户输入的是具体物品的绝对磨损
+- 该物品自身的 `minfloat` / `maxfloat` 限定可输入范围
+- 输入后系统自动匹配磨损品级
+- 页面主显示口径统一为绝对磨损
+- 相对磨损仍可作为内部计算值，但不是主卡片的主展示字段
 
-### Anchor Model
+### 2.6 辅料锚定
 
-Anchors do not carry their own user-entered float values.
+- 辅料不需要用户单独输入磨损
+- 辅料磨损由主料链路自动确定
+- 支持的锚定输入包括：
+  - 收藏品
+  - 具体辅料产物
+  - 某个辅料产物的下级
+- 这些锚定用于约束需要展开哪些分支，不改变“材料磨损只读”的规则
 
-Instead, anchors are used to constrain which related branches are included in the simulation. Once the target item's shared relative wear is derived, that same relative wear is applied to all relevant outputs and then to their lower-tier materials.
+### 2.7 保存样例
 
-Supported anchor types:
+- 当前主页面中的模拟配方必须可以保存
+- 保存后的样例通过顶部下拉切换器选择
+- 选择样例后，在同一工作区加载该样例，不新增第二块工作区
+- 首期保存目标是本地持久化，不要求云端同步
 
-- collection anchor
-- concrete auxiliary output anchor
-- lower-tier anchor derived from an auxiliary output branch
+## 3. 用户流程
 
-### Result Scope
+### 3.1 进入页面
 
-The final result must include:
+1. 用户点击导航栏中的 `汰换模拟`
+2. 页面显示上次使用的样例；若没有样例，则显示空状态
+3. 空状态主按钮为 `新增配方`
 
-- all related outputs selected by the target item plus anchors
-- all related lower-tier material items implied by those output branches
-- inferred absolute float for every resolvable item
+### 3.2 新增配方
 
-Items with missing wear bounds are still shown, but their float display is degraded instead of removing the whole simulation.
+1. 点击 `新增配方`
+2. 打开基于全量皮肤数据库的产物选择器
+3. 用户选择一个具体物品，而不是先选磨损品级
+4. 系统以该物品创建一个新的模拟样例
+5. 主区域立即生成对应收藏品行，并聚焦到该物品的绝对磨损输入框
 
-## Chosen UX
+### 3.3 输入初始绝对磨损
 
-### Page Layout
+1. 用户输入目标物品的绝对磨损
+2. 输入值必须落在该物品自身 `minfloat` / `maxfloat` 范围内
+3. 系统自动推导：
+   - 当前驱动相对磨损
+   - 当前磨损品级
+   - 同行其它产物的绝对磨损
+   - 同行材料的绝对磨损
 
-Use a workbench layout rather than a wizard.
+### 3.4 行内精修
 
-- left rail: simulation recipe list
-- main workbench: target item, target absolute float, anchor editor
-- right result area: output cards and material cards
+1. 左侧任意产物卡片都可再次编辑绝对磨损
+2. 用户修改某张产物卡后，该卡成为新的驱动产物
+3. 系统用该卡重新计算同行共享的相对磨损
+4. 左侧其它产物与右侧材料全部同步更新
 
-This is intentionally optimized for repeated iteration. Users should be able to compare multiple simulation recipes without re-entering the whole setup each time.
+### 3.5 样例保存与切换
 
-### Simulation Recipe List
+1. 用户点击 `覆盖保存` 保存当前样例
+2. 样例在顶部下拉切换器中可见
+3. 切换样例时，主工作区整体替换为选中样例的内容
+4. 页面不出现额外的样例侧栏或第二列样例列表
 
-Each recipe entry is a simulation-only draft and shows:
+## 4. 页面信息架构
 
-- target item name
-- target absolute float
-- derived wear tier
-- anchor count
+### 4.1 顶部工具区
 
-Supported actions:
+包含以下内容：
 
-- add simulation recipe
-- switch active recipe
-- delete simulation recipe
+- 当前样例名称 / 目标产物摘要
+- 样例下拉切换器
+- `新增配方`
+- `覆盖保存`
+- 当前样例状态提示：
+  - 已保存
+  - 有未保存修改
+  - 计算警告
 
-The page always renders one active recipe at a time.
+### 4.2 配置区
 
-### Add Recipe Flow
+顶部工具区下方使用紧凑配置区，不单独拆成左侧面板。
 
-Inside the new `汰换模拟` page:
+至少包含：
 
-1. click `新增配方`
-2. open a target item picker backed by the full skin database
-3. after item selection, create a new simulation recipe entry
-4. focus the target absolute float input for immediate editing
+- 当前样例主卡（大图显示当前初始目标产物 / 当前主料卡）
+- 初始目标产物卡
+- 目标产物绝对磨损输入
+- 自动匹配出的磨损品级
+- 收藏品 / 辅料 / 下级锚定输入区
 
-This button does not reuse the current craft-page `新增配方` behavior.
+### 4.3 收藏品结果区
 
-### Workbench Flow
+结果区按“收藏品行”渲染。
 
-### Target Item Section
+每个收藏品行包含：
 
-- choose one concrete target item from the full database
-- show item art, collection, rarity, and wear bounds
-- enter absolute float within the allowed range
-- show the derived wear tier immediately after the value becomes valid
+- 行头摘要：
+  - 收藏品名
+  - 当前驱动产物
+  - 产物数量
+  - 材料数量
+  - 是否存在警告
+- 左列产物带
+- 右列材料带
 
-### Anchor Section
+若后续锚定扩展到多个收藏品，仍沿用“一行一个收藏品”的同构布局；首期至少要完整支持目标产物所属收藏品这一行。
 
-The user can add multiple anchor cards.
+## 5. 卡片规则
 
-Each anchor card stores:
+### 5.1 左侧产物卡
 
-- anchor type
-- anchor display label
-- normalized lookup key
-- resolution status
+每张产物卡应显示：
 
-Anchor entry types:
+- 物品图
+- 物品名
+- 收藏品
+- 稀有度
+- 角色标记：
+  - 初始目标
+  - 当前驱动
+  - 同收藏品产物
+- 绝对磨损输入框
+- 自动匹配的磨损品级
+- 磨损条
+- 必要时显示该物品自己的 `minfloat ~ maxfloat`
 
-- collection
-- auxiliary output item
-- lower-tier branch derived from an auxiliary output
+### 5.2 右侧材料卡
 
-Anchor changes trigger recalculation for the active simulation recipe.
+每张材料卡应显示：
 
-### Result Section
+- 物品图
+- 物品名
+- 收藏品
+- 稀有度
+- 锁定标记
+- 绝对磨损
+- 自动匹配的磨损品级
+- 磨损条
+- “由左侧产物锚定 / 不可编辑”提示
 
-Split the results into two groups:
+### 5.3 显示一致性
 
-- related outputs
-- related materials
+- 左右两侧主数值都显示绝对磨损
+- 不允许左侧显示绝对、右侧显示相对的双口径读法
+- 卡片视觉语言可参考现有 predictor 卡片，但不要直接把旧布局照搬过来
 
-Each result card reuses the visual grammar of the current craft predictor cards where possible:
+## 6. 核心领域模型
 
-- item art
-- item name
-- collection
-- rarity
-- wear bar
-- absolute float
-- relative wear
-- role badge such as `目标`, `锚定产物`, `辅料`
+### 6.1 模拟样例
 
-The goal is visual continuity, not direct CSS coupling.
+建议前端以 `simulationPreset` 为核心状态单元。
 
-## Core Domain Model
-
-### Shared Wear Derivation
-
-The target item drives the simulation.
-
-Given:
-
-- chosen target item
-- target absolute float
-- target item `minfloat`
-- target item `maxfloat`
-
-Compute:
-
-`relative_wear = (target_absolute_float - minfloat) / (maxfloat - minfloat)`
-
-This relative wear becomes the shared simulation wear for all related branches.
-
-Validation rules:
-
-- reject values below `minfloat`
-- reject values above `maxfloat`
-- reject calculation when wear bounds are missing
-- reject calculation when `maxfloat <= minfloat`
-
-### Output Expansion
-
-After deriving shared relative wear:
-
-1. build the set of related output branches from:
-   - the target item itself
-   - collection anchors
-   - auxiliary output anchors
-   - lower-tier anchors that resolve back to an auxiliary branch
-2. for each related output item with wear bounds:
-   - compute absolute float from shared relative wear
-3. preserve unresolved items in the response with explicit degraded status
-
-### Material Expansion
-
-For every resolved output branch:
-
-1. identify its lower-tier material family candidates
-2. apply the same shared relative wear
-3. compute each material's absolute float when wear bounds exist
-
-The first release is a float simulation, not a full recipe solver. It surfaces the branch space and inferred float values but does not yet prove recipe executability.
-
-## Frontend Architecture
-
-### New Navigation Entry
-
-Update the navigation model to include:
-
-- `simulationPage`
-- `navSimulation`
-
-The existing page routing must keep `accountPage`, `inventoryPage`, and `craftPage` unchanged.
-
-### New Frontend State
-
-Add a dedicated simulation state slice rather than piggybacking on craft state:
-
-- `simulationRecipes`
-- `simulationActiveRecipeId`
-- `simulationItemPickerOpen`
-- `simulationItemPickerQuery`
-- `simulationItemPickerResults`
-- `simulationLoading`
-- `simulationError`
-- `simulationResult`
-
-Each simulation recipe entry should hold:
+每个样例至少包含：
 
 - `id`
-- `target_item`
-- `target_abs_wear`
-- `target_relative_wear`
-- `target_wear_label`
+- `name`
+- `targetItem`
+- `targetCollectionKey`
 - `anchors`
-- `result`
-- `error`
+- `activeDriverItemKey`
+- `activeDriverAbsoluteWear`
+- `rows`
+- `dirty`
+- `warnings`
+- `updatedAt`
 
-### New Frontend Rendering Units
+### 6.2 收藏品行
 
-Recommended renderer boundaries:
+每个 `collectionRow` 至少包含：
+
+- `collectionKey`
+- `collectionLabel`
+- `driverItemKey`
+- `sharedRelativeWear`
+- `outputs`
+- `materials`
+- `warnings`
+
+### 6.3 推导规则
+
+系统内部仍使用共享相对磨损作为推导桥梁。
+
+当某个左侧产物作为当前驱动产物时：
+
+`relativeWear = (driverAbsoluteWear - itemMinFloat) / (itemMaxFloat - itemMinFloat)`
+
+然后对同行其它产物与材料使用：
+
+`absoluteWear = itemMinFloat + (itemMaxFloat - itemMinFloat) * relativeWear`
+
+### 6.4 输入约束
+
+- 驱动物品缺少合法磨损区间时，不允许作为可编辑驱动点
+- 用户输入绝对磨损超出该物品区间时，阻止提交并给出即时错误
+- `maxfloat <= minfloat` 视为数据异常
+- 某些材料或产物缺少磨损边界时，卡片仍保留，但以降级状态显示
+
+## 7. 锚定解析
+
+### 7.1 支持的锚定类型
+
+- `collection`
+- `aux_output`
+- `aux_output_lower_tier`
+
+### 7.2 锚定作用
+
+- 约束需要展开哪些收藏品 / 产物 / 材料分支
+- 帮助用户把模拟聚焦到感兴趣的辅料链路
+- 不为材料提供单独可编辑磨损输入
+
+### 7.3 首期原则
+
+- 首期先优先保证目标收藏品链路完整可用
+- 若锚定无法解析，保留警告但不清空现有有效结果
+- 锚定失败是软失败，不应直接破坏整个页面
+
+## 8. 前端架构建议
+
+### 8.1 导航接入
+
+基于现有文件：
+
+- [index.html](C:\Users\18220\Desktop\cs2_alchemy\node_sidecar\ui\index.html)
+- [app.js](C:\Users\18220\Desktop\cs2_alchemy\node_sidecar\ui\app.js)
+
+新增：
+
+- `navSimulation`
+- `simulationPage`
+
+并将 `showPage()` 的页面映射从当前三页扩展为四页：
+
+- `accountPage`
+- `inventoryPage`
+- `craftPage`
+- `simulationPage`
+
+### 8.2 前端状态
+
+建议新增独立状态切片，而不是复用 `craftAssist` / `craftPredictor` 状态：
+
+- `simulationPresets`
+- `simulationActivePresetId`
+- `simulationPickerOpen`
+- `simulationPickerQuery`
+- `simulationPickerResults`
+- `simulationAnchorEditorOpen`
+- `simulationLoading`
+- `simulationError`
+- `simulationPersisting`
+
+### 8.3 渲染边界
+
+建议拆分以下渲染单元：
 
 - `renderSimulationPage()`
-- `renderSimulationRecipeList()`
-- `renderSimulationWorkbench()`
-- `renderSimulationTargetSection()`
-- `renderSimulationAnchorSection()`
-- `renderSimulationResultSection()`
+- `renderSimulationToolbar()`
+- `renderSimulationPresetSwitcher()`
+- `renderSimulationSetupPanel()`
+- `renderSimulationRows()`
+- `renderSimulationCollectionRow()`
+- `renderSimulationOutputCard()`
+- `renderSimulationMaterialCard()`
 
-Keep these separate from the current craft predictor drawer renderers. Shared card-building helpers can be extracted later if the markup proves similar enough.
+### 8.4 样式边界
 
-## Backend Architecture
+- 新页面样式使用独立 `simulation-*` 命名空间
+- 保持当前 `theme-inkblue` 视觉语言一致
+- 复用已有滚动条、卡片、按钮设计语言，但不要污染 `craftPage`
 
-### New Services
+## 9. 持久化策略
 
-Do not overload the existing `craftOutcomePredictor`.
+### 9.1 首期持久化目标
 
-Recommended new backend modules:
+- 必须支持保存与切换模拟样例
+- 首期采用本地持久化即可
+- 不要求后端账号级同步
+
+### 9.2 样例内容
+
+每个已保存样例至少要保留：
+
+- 样例名称
+- 初始目标产物
+- 当前驱动产物
+- 当前驱动绝对磨损
+- 锚定条件
+- 最近一次成功计算结果
+
+## 10. 后端建议
+
+### 10.1 新服务
+
+建议新增：
 
 - `node_sidecar/src/services/tradeupSimulationCatalog.js`
-  - exposes searchable skin metadata for the simulation page
-  - reuses normalized collection / rarity / wear data from the existing skin database
+  - 提供全量皮肤搜索
+  - 返回物品名、收藏品、稀有度、图片、`minfloat`、`maxfloat`
 - `node_sidecar/src/services/tradeupSimulationService.js`
-  - validates simulation requests
-  - derives shared relative wear
-  - expands anchored output branches
-  - expands lower-tier materials
-  - computes absolute float values and degraded statuses
+  - 校验输入
+  - 解析锚定
+  - 推导共享相对磨损
+  - 输出收藏品行、产物、材料与警告
 
-The existing services to reuse as shared foundations:
-
-- `skinAlchemyRules`
-- `craftOutcomeCatalog` data conventions where useful
-- existing rarity / collection normalization logic
-
-### New Routes
-
-Recommended route set:
+### 10.2 建议接口
 
 - `GET /api/simulation/tradeup/search-items?q=...`
 - `POST /api/simulation/tradeup/resolve`
 
-### Search Route Responsibilities
+`resolve` 的响应结构应以“收藏品行”为中心，而不是简单的 `outputs` / `materials` 两块平铺数组。
 
-- full-database search by item name
-- return normalized item records for picker use
-- include:
-  - display name
-  - base name
-  - collection
-  - rarity
-  - `minfloat`
-  - `maxfloat`
-  - best available image url
+建议返回：
 
-### Resolve Route Request
+- `target`
+- `driver`
+- `rows`
+- `warnings`
 
-```json
-{
-  "target_item": {
-    "markethashname": "AK-47 | Ice Coaled (Minimal Wear)"
-  },
-  "target_abs_wear": 0.1142,
-  "anchors": [
-    {"type": "collection", "value": "Fracture Case"},
-    {"type": "output_item", "value": "USP-S | Cortex"},
-    {"type": "lower_tier_branch", "value": "M4A4 | Tooth Fairy"}
-  ]
-}
-```
+其中 `rows[*]` 下再包含：
 
-### Resolve Route Response
+- `collection`
+- `outputs`
+- `materials`
+- `sharedRelativeWear`
 
-```json
-{
-  "ok": true,
-  "message": "",
-  "target": {
-    "name": "AK-47 | Ice Coaled",
-    "collection": "裂空武器箱",
-    "rarity": "受限",
-    "absolute_float": 0.1142,
-    "relative_wear": 0.1142,
-    "wear_label": "Minimal Wear"
-  },
-  "outputs": [
-    {
-      "role": "target",
-      "name": "AK-47 | Ice Coaled",
-      "collection": "裂空武器箱",
-      "rarity": "受限",
-      "absolute_float": 0.1142,
-      "relative_wear": 0.1142,
-      "wear_label": "Minimal Wear",
-      "goods_icon_url": "..."
-    }
-  ],
-  "materials": [
-    {
-      "role": "material",
-      "name": "M4A1-S | Example",
-      "collection": "裂空武器箱",
-      "rarity": "军规级",
-      "absolute_float": 0.1025,
-      "relative_wear": 0.1142,
-      "wear_label": "Minimal Wear",
-      "goods_icon_url": "..."
-    }
-  ],
-  "warnings": []
-}
-```
+前端可以保留 `sharedRelativeWear` 用于内部状态，但默认不直接作为卡片主显示。
 
-## Error Handling
+## 11. 错误处理
 
-### Hard Failures
+### 11.1 硬失败
 
-Return `ok: false` when:
+以下情况返回失败：
 
-- target item is missing
-- target item wear bounds are missing and relative wear cannot be derived
-- target absolute float is out of range
-- anchor payload shape is invalid
+- 未选择目标产物
+- 当前驱动物品缺失合法磨损区间
+- 输入绝对磨损超出该物品范围
+- 锚定数据结构非法
 
-### Soft Failures
+### 11.2 软失败
 
-Keep `ok: true` with warnings when:
+以下情况保留部分结果并显示警告：
 
-- some anchors cannot be resolved
-- some expanded outputs are missing wear bounds
-- some lower-tier materials are missing wear bounds
-- some lower-tier branches cannot be expanded
+- 某个锚定无法解析
+- 某个产物缺失磨损边界
+- 某个材料缺失磨损边界
+- 某个扩展分支无法完整展开
 
-Frontend behavior:
+## 12. 测试策略
 
-- keep the last valid result visible until a new valid one replaces it
-- show per-anchor errors locally when possible
-- show global warning summaries in the result section without discarding partial results
+遵循 TDD。
 
-## Testing Strategy
+### 12.1 前端测试
 
-Follow TDD.
+- 新导航按钮与 `simulationPage` 页面壳存在
+- 样例切换器只切换同一主工作区，不生成额外侧栏
+- `新增配方` 可打开产物选择器
+- 目标产物绝对磨损范围校验正确
+- 编辑左侧任意产物会重算整行
+- 右侧材料保持只读
+- 左右卡片统一显示绝对磨损
+- 桌面宽度下，单个收藏品行可横向放下全部产物与材料
+- 不回归现有 `craftPage`
 
-### Backend Tests
+### 12.2 后端测试
 
-Add focused unit tests for:
+- 目标物品磨损范围校验
+- 当前驱动产物推导共享相对磨损
+- 同收藏品产物绝对磨损展开
+- 同收藏品材料绝对磨损展开
+- 锚定解析成功与失败
+- 缺失磨损边界时的降级输出
 
-- target absolute float range validation
-- shared relative wear derivation
-- collection anchor expansion
-- auxiliary output anchor expansion
-- lower-tier branch anchor expansion
-- partial results when wear bounds are missing
+## 13. 非目标
 
-### Route Tests
+- 首期不直接执行汰换
+- 首期不校验真实库存是否可做
+- 首期不导出到现有炼金队列
+- 首期不做账号云同步
+- 首期不实现概率、收益、成本联算
 
-Add route coverage for:
+## 14. 假设与后续
 
-- search success
-- resolve success
-- out-of-range target float
-- invalid anchor payload
-- partial result with warnings
+### 14.1 当前假设
 
-### Frontend Tests
+- 首期至少完整覆盖目标产物所属收藏品这一行
+- 若后续需要扩展到多收藏品，继续沿用“一行一个收藏品”的布局，不再推翻结构
 
-Add UI contract coverage for:
+### 14.2 后续可扩展方向
 
-- new navigation button and page shell
-- simulation recipe list behavior
-- target item picker open / select flow
-- target absolute float bounds messaging
-- output and material result grouping
-- predictor-style card fields on simulation result cards
-- no regression to the existing `craftPage`
-
-## Rollout Notes
-
-- Ship the new page as a standalone workflow first
-- do not attempt first-phase linkage into live craft execution
-- once the simulation page is stable, a later design can define:
-  - export to craft queue
-  - import from craft queue
-  - save named simulation presets
+- 从模拟结果一键生成炼金配方草稿
+- 联动库存校验哪些材料真实可做
+- 增加收藏品对比与收益分析
+- 保存更多命名样例管理能力
