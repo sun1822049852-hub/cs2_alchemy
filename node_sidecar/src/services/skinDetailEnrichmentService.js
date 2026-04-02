@@ -121,6 +121,38 @@ function summarizeError(err) {
   return text || "detail_enrichment_failed";
 }
 
+function containsCjkCharacters(value) {
+  return /[\u3400-\u9fff]/.test(asString(value));
+}
+
+function looksLikeLegacyEnglishMetadata(value) {
+  const text = asString(value).trim();
+  if (!text) {
+    return false;
+  }
+  return /[A-Za-z]/.test(text) && !containsCjkCharacters(text);
+}
+
+function isBuffBackedDetailSource(value) {
+  const source = asString(value).trim();
+  return source === "buff" || source === "buff_goods_page";
+}
+
+function needsDetailRefresh(row) {
+  const status = asString(row && row.detail_status).trim();
+  if (status === "pending") {
+    return true;
+  }
+  if (status !== "ok") {
+    return false;
+  }
+  if (isBuffBackedDetailSource(row && row.detail_source)) {
+    return false;
+  }
+  return looksLikeLegacyEnglishMetadata(row && row.collection)
+    || looksLikeLegacyEnglishMetadata(row && row.rarity);
+}
+
 function isRateLimitLikeError(err) {
   if (Math.trunc(Number(err && err.statusCode) || 0) === 429) {
     return true;
@@ -129,14 +161,15 @@ function isRateLimitLikeError(err) {
   return /http=429|too many requests/.test(text);
 }
 
-function createImageRequestController({
+function createRequestController({
   baseDelayMs = 0,
   sleepImpl = sleep,
   rateLimitBackoffMs = 0,
   rateLimitMaxDelayMs = 0,
   delayRelaxStepMs = 0,
   delayRelaxAfterSuccesses = 1,
-  logger = null
+  logger = null,
+  logLabel = "request_throttle"
 } = {}) {
   const minDelayMs = normalizeDelayMs(baseDelayMs);
   const backoffMs = normalizeDelayMs(rateLimitBackoffMs);
@@ -158,7 +191,7 @@ function createImageRequestController({
       return;
     }
     currentDelayMs = normalized;
-    log(logger, "info", `image_throttle reason=${reason} delay_ms=${currentDelayMs}`);
+    log(logger, "info", `${asString(logLabel).trim() || "request_throttle"} reason=${reason} delay_ms=${currentDelayMs}`);
   }
 
   async function run(task) {
@@ -237,6 +270,12 @@ function createSkinDetailEnrichmentService({
   provider,
   logger = null,
   concurrency = 2,
+  detailBaseDelayMs = 0,
+  detailSleepImpl = sleep,
+  detailRateLimitBackoffMs = 1500,
+  detailRateLimitMaxDelayMs = 15000,
+  detailDelayRelaxStepMs = 200,
+  detailDelayRelaxAfterSuccesses = 5,
   rarityOrder = [],
   imageBaseDelayMs = 0,
   imageSleepImpl = sleep,
@@ -254,9 +293,9 @@ function createSkinDetailEnrichmentService({
 
   function loadPendingFamilies(db) {
     const rows = db.prepare(`
-      SELECT id, markethashname, basemarkethashname, buffid, collection, rarity, detail_status
+      SELECT id, markethashname, basemarkethashname, buffid, collection, rarity, detail_status, detail_source
       FROM skin
-      WHERE detail_status = 'pending'
+      WHERE TRIM(COALESCE(markethashname, '')) <> ''
       ORDER BY id
     `).all();
     const families = new Map();
@@ -270,13 +309,15 @@ function createSkinDetailEnrichmentService({
       }
       families.get(key).push(row);
     }
-    return [...families.entries()].map(([familyKey, members]) => ({
-      familyKey,
-      rows: members,
-      representativeGoodsId: asString(
-        (members.find((row) => asString(row && row.buffid).trim()) || {}).buffid
-      ).trim()
-    }));
+    return [...families.entries()]
+      .filter(([, members]) => members.some((row) => needsDetailRefresh(row)))
+      .map(([familyKey, members]) => ({
+        familyKey,
+        rows: members,
+        representativeGoodsId: asString(
+          (members.find((row) => asString(row && row.buffid).trim()) || {}).buffid
+        ).trim()
+      }));
   }
 
   function markFamilyFailed(db, family, errorText) {
@@ -530,14 +571,15 @@ function createSkinDetailEnrichmentService({
 
     const imageFamilies = [];
     const delayMs = normalizeDelayMs(options.delayMs, imageBaseDelayMs);
-    const imageRequestController = createImageRequestController({
+    const imageRequestController = createRequestController({
       baseDelayMs: delayMs,
       sleepImpl: imageSleepImpl,
       rateLimitBackoffMs: imageRateLimitBackoffMs,
       rateLimitMaxDelayMs: imageRateLimitMaxDelayMs,
       delayRelaxStepMs: imageDelayRelaxStepMs,
       delayRelaxAfterSuccesses: imageDelayRelaxAfterSuccesses,
-      logger
+      logger,
+      logLabel: "image_throttle"
     });
     let db = new DatabaseSync(dbPath);
     try {
@@ -603,6 +645,16 @@ function createSkinDetailEnrichmentService({
     const summary = createSummary();
     const families = [];
     const affectedCollections = new Set();
+    const detailRequestController = createRequestController({
+      baseDelayMs: detailBaseDelayMs,
+      sleepImpl: detailSleepImpl,
+      rateLimitBackoffMs: detailRateLimitBackoffMs,
+      rateLimitMaxDelayMs: detailRateLimitMaxDelayMs,
+      delayRelaxStepMs: detailDelayRelaxStepMs,
+      delayRelaxAfterSuccesses: detailDelayRelaxAfterSuccesses,
+      logger,
+      logLabel: "detail_throttle"
+    });
     let db = new DatabaseSync(dbPath);
     try {
       for (const family of loadPendingFamilies(db)) {
@@ -623,10 +675,10 @@ function createSkinDetailEnrichmentService({
           return;
         }
         const representative = family.rows[0] || {};
-        const detail = await provider.fetchByGoodsId(family.representativeGoodsId, {
+        const detail = await detailRequestController.run(() => provider.fetchByGoodsId(family.representativeGoodsId, {
           expectedBaseName: asString(representative.basemarkethashname).trim() ||
             asString(representative.markethashname).trim()
-        });
+        }));
         const affected = markFamilyOk(workerDb, family, detail);
         for (const collection of splitCollectionNames(detail && detail.collection)) {
           affectedCollections.add(collection);

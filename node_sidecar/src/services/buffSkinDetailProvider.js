@@ -247,14 +247,13 @@ function chooseContainers(containers = []) {
   };
 }
 
-function buildItemFamilyKey(item) {
-  return buildSkinFamilyKey(
-    asString(
-      (item && item.localized_name) ||
-      (item && item.goods && item.goods.name) ||
-      ""
-    ).trim()
-  );
+function listItemFamilyKeys(item) {
+  return uniqueTrimmedValues([
+    item && item.localized_name,
+    item && item.goods && item.goods.short_name,
+    item && item.goods && item.goods.name,
+    item && item.goods && item.goods.market_hash_name
+  ]).map((value) => buildSkinFamilyKey(value)).filter(Boolean);
 }
 
 function extractTargetItem(items, goodsId, options = {}) {
@@ -267,7 +266,7 @@ function extractTargetItem(items, goodsId, options = {}) {
     return directId === targetId || nestedId === targetId;
   }) || (
     expectedBaseName
-      ? list.find((item) => buildItemFamilyKey(item) === expectedBaseName)
+      ? list.find((item) => listItemFamilyKeys(item).includes(expectedBaseName))
       : null
   );
   if (!target) {

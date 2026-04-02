@@ -263,6 +263,67 @@ async function test_enrichment_marks_family_failed() {
   assert.equal(rows.every((row) => row.detail_attempts === 1), true);
 }
 
+async function test_enrichment_refreshes_legacy_english_existing_metadata_rows() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "Galil AR | Sky Mandala (Factory New)",
+      basemarkethashname: "Galil AR | Sky Mandala",
+      collection: "The Harlequin Collection",
+      rarity: "Mil-Spec Grade",
+      wearlevel: "Factory New",
+      buffid: "4201",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "Galil AR | Sky Mandala (Minimal Wear)",
+      basemarkethashname: "Galil AR | Sky Mandala",
+      collection: "The Harlequin Collection",
+      rarity: "Mil-Spec Grade",
+      wearlevel: "Minimal Wear",
+      buffid: "4202",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    }
+  ]);
+  db.close();
+
+  const providerCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId(goodsId) {
+        providerCalls.push(String(goodsId));
+        return {
+          collection: "哈乐昆收藏品",
+          rarity: "军规级",
+          detail_source: "buff"
+        };
+      }
+    }
+  });
+
+  const result = await service.enrichMissingDetails();
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const rows = verify.prepare(`
+    SELECT collection, rarity, detail_status, detail_source, detail_attempts
+    FROM skin
+    ORDER BY markethashname
+  `).all();
+  verify.close();
+
+  assert.deepEqual(providerCalls, ["4201"]);
+  assert.equal(result.families_pending, 1);
+  assert.equal(result.families_ok, 1);
+  assert.equal(result.rows_filled, 2);
+  assert.equal(rows.every((row) => row.collection === "哈乐昆收藏品"), true);
+  assert.equal(rows.every((row) => row.rarity === "军规级"), true);
+  assert.equal(rows.every((row) => row.detail_status === "ok"), true);
+  assert.equal(rows.every((row) => row.detail_source === "buff"), true);
+  assert.equal(rows.every((row) => row.detail_attempts === 1), true);
+}
+
 async function test_enrichment_skips_ok_rows() {
   const {dbPath, db} = createTempSkinDb();
   insertSkinRows(db, [
@@ -274,7 +335,7 @@ async function test_enrichment_skips_ok_rows() {
       wearlevel: "Field-Tested",
       buffid: "401",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     }
   ]);
   db.close();
@@ -308,7 +369,7 @@ async function test_enrichment_fills_images_for_ok_rows_with_missing_image() {
       wearlevel: "Field-Tested",
       buffid: "401",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     }
   ]);
   db.close();
@@ -357,7 +418,7 @@ async function test_enrichment_fills_wear_range_per_family_once() {
       wearlevel: "Field-Tested",
       buffid: "701",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     },
     {
       markethashname: "AK-47 | Slate (Minimal Wear)",
@@ -367,7 +428,7 @@ async function test_enrichment_fills_wear_range_per_family_once() {
       wearlevel: "Minimal Wear",
       buffid: "702",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     }
   ]);
   db.close();
@@ -429,7 +490,7 @@ async function test_enrichment_images_only_can_resume_from_db_state() {
       wearlevel: "Field-Tested",
       buffid: "501",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     },
     {
       markethashname: "AK-47 | Redline (Minimal Wear)",
@@ -439,7 +500,7 @@ async function test_enrichment_images_only_can_resume_from_db_state() {
       wearlevel: "Minimal Wear",
       buffid: "502",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     },
     {
       markethashname: "AWP | Asiimov (Field-Tested)",
@@ -449,7 +510,7 @@ async function test_enrichment_images_only_can_resume_from_db_state() {
       wearlevel: "Field-Tested",
       buffid: "601",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     },
     {
       markethashname: "AWP | Asiimov (Battle-Scarred)",
@@ -459,7 +520,7 @@ async function test_enrichment_images_only_can_resume_from_db_state() {
       wearlevel: "Battle-Scarred",
       buffid: "602",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     }
   ]);
   db.close();
@@ -531,7 +592,7 @@ async function test_enrichment_recalculates_alchemy_type_for_affected_rows() {
       buffid: "501",
       alchemy_type: "不能炼金",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     },
     {
       markethashname: "AWP | Doodle Lore (Field-Tested)",
@@ -579,6 +640,71 @@ async function test_enrichment_recalculates_alchemy_type_for_affected_rows() {
   assert.equal(rows.every((row) => row.alchemy_type === "10合1"), true);
 }
 
+async function test_enrichment_throttles_detail_refresh_requests() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AK-47 | Slate (Field-Tested)",
+      basemarkethashname: "AK-47 | Slate",
+      collection: "Snakebite Case",
+      rarity: "Restricted",
+      wearlevel: "Field-Tested",
+      buffid: "701",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "M4A1-S | Night Terror (Field-Tested)",
+      basemarkethashname: "M4A1-S | Night Terror",
+      collection: "Dreams & Nightmares Case",
+      rarity: "Mil-Spec Grade",
+      wearlevel: "Field-Tested",
+      buffid: "801",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    },
+    {
+      markethashname: "USP-S | Ticket to Hell (Field-Tested)",
+      basemarkethashname: "USP-S | Ticket to Hell",
+      collection: "Dreams & Nightmares Case",
+      rarity: "Restricted",
+      wearlevel: "Field-Tested",
+      buffid: "901",
+      detail_status: "ok",
+      detail_source: "existing_metadata"
+    }
+  ]);
+  db.close();
+
+  const detailCalls = [];
+  const sleepCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId(goodsId) {
+        detailCalls.push(String(goodsId));
+        return {
+          collection: "梦魇武器箱",
+          rarity: "军规级",
+          detail_source: "buff"
+        };
+      }
+    },
+    concurrency: 3,
+    detailBaseDelayMs: 20,
+    detailSleepImpl: async (ms) => {
+      sleepCalls.push(ms);
+    }
+  });
+
+  const result = await service.enrichMissingDetails();
+
+  assert.deepEqual(detailCalls, ["701", "801", "901"]);
+  assert.deepEqual(sleepCalls, [20, 20]);
+  assert.equal(result.families_ok, 3);
+  assert.equal(result.families_failed, 0);
+}
+
 async function test_enrichment_increases_delay_after_rate_limit_and_relaxes_after_success() {
   const {dbPath, db} = createTempSkinDb();
   insertSkinRows(db, [
@@ -590,7 +716,7 @@ async function test_enrichment_increases_delay_after_rate_limit_and_relaxes_afte
       wearlevel: "Field-Tested",
       buffid: "701",
       detail_status: "ok",
-      detail_source: "existing_metadata"
+      detail_source: "buff"
     },
     {
       markethashname: "M4A1-S | Night Terror (Field-Tested)",
@@ -681,11 +807,13 @@ async function runTests() {
   await test_enrichment_updates_whole_family_once();
   await test_enrichment_fills_images_per_family_once();
   await test_enrichment_marks_family_failed();
+  await test_enrichment_refreshes_legacy_english_existing_metadata_rows();
   await test_enrichment_skips_ok_rows();
   await test_enrichment_fills_images_for_ok_rows_with_missing_image();
   await test_enrichment_fills_wear_range_per_family_once();
   await test_enrichment_images_only_can_resume_from_db_state();
   await test_enrichment_recalculates_alchemy_type_for_affected_rows();
+  await test_enrichment_throttles_detail_refresh_requests();
   await test_enrichment_increases_delay_after_rate_limit_and_relaxes_after_success();
 }
 

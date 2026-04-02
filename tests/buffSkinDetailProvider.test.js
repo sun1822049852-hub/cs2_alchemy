@@ -891,6 +891,59 @@ async function test_provider_matches_by_expected_base_name() {
   });
 }
 
+async function test_provider_matches_by_market_hash_name_when_localized_names_are_chinese() {
+  let phase = 0;
+  const provider = createBuffSkinDetailProvider({
+    fetchImpl: async () => {
+      phase += 1;
+      if (phase === 1) {
+        return makeResponse({
+          body: {
+            code: "OK",
+            data: {
+              container_type: "itemset",
+              containers: [{container: "set_timed_drops_exuberant", name: "哈乐昆收藏品"}]
+            }
+          }
+        });
+      }
+      return makeResponse({
+        body: {
+          code: "OK",
+          data: {
+            items: [
+              {
+                goods: {
+                  goods_id: "1133247",
+                  market_hash_name: "Galil AR | Sky Mandala (Factory New)",
+                  name: "加利尔AR | 天空曼陀罗 (崭新出厂)",
+                  tags: {
+                    rarity: {
+                      localized_name: "军规级"
+                    }
+                  }
+                },
+                localized_name: "加利尔AR | 天空曼陀罗"
+              }
+            ]
+          }
+        }
+      });
+    },
+    timeoutMs: 50
+  });
+
+  const result = await provider.fetchByGoodsId("1133132", {
+    expectedBaseName: "Galil AR | Sky Mandala"
+  });
+
+  assert.deepEqual(result, {
+    collection: "哈乐昆收藏品",
+    rarity: "军规级",
+    detail_source: "buff"
+  });
+}
+
 async function test_provider_falls_back_to_goods_page_rarity_for_special_items() {
   let phase = 0;
   const provider = createBuffSkinDetailProvider({
@@ -986,6 +1039,7 @@ async function test_provider_times_out() {
   await test_provider_rejects_when_containers_missing();
   await test_provider_rejects_when_target_not_found();
   await test_provider_matches_by_expected_base_name();
+  await test_provider_matches_by_market_hash_name_when_localized_names_are_chinese();
   await test_provider_falls_back_to_goods_page_rarity_for_special_items();
   await test_provider_times_out();
   console.log("buffSkinDetailProvider tests passed");
