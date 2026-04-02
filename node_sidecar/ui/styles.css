@@ -2399,6 +2399,12 @@ select.small {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72);
 }
 
+.simulation-output-card .simulation-card-float,
+.simulation-material-card .simulation-card-float {
+  bottom: 22px;
+  z-index: 4;
+}
+
 .simulation-saved-body,
 .simulation-card-content {
   display: flex;

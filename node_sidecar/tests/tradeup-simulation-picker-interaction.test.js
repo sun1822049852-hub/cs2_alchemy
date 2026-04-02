@@ -419,6 +419,8 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
       const firstCard = outputLane.querySelector('[data-simulation-card-role="output"]');
       const firstArt = firstCard ? firstCard.querySelector('.simulation-card-art') : null;
       const firstArtStyle = firstArt ? getComputedStyle(firstArt, '::after') : null;
+      const firstFloat = firstCard ? firstCard.querySelector('.simulation-card-float') : null;
+      const firstContent = firstCard ? firstCard.querySelector('.simulation-card-content') : null;
       const firstSubline = firstCard ? firstCard.querySelector('.simulation-card-subline') : null;
       const cardNames = Array.from(outputLane.querySelectorAll('.simulation-card-name')).map((node) => String(node.textContent || '').trim());
       const chosenCard = Array.from(outputLane.querySelectorAll('[data-simulation-card-role="output"]')).find((card) => {
@@ -443,6 +445,10 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
         firstCardMetaCount: firstCard ? firstCard.querySelectorAll('.simulation-card-meta').length : 0,
         firstCardNoteCount: firstCard ? firstCard.querySelectorAll('.simulation-card-note').length : 0,
         firstCardArtBackgroundSize: firstArtStyle ? String(firstArtStyle.backgroundSize || '') : '',
+        firstFloatText: firstFloat ? String(firstFloat.textContent || '').trim() : '',
+        firstFloatOverlap: firstFloat && firstContent
+          ? firstFloat.getBoundingClientRect().bottom - firstContent.getBoundingClientRect().top
+          : -1,
         firstCardCollectionText: firstSubline ? String((firstSubline.querySelector('.simulation-card-collection') || {}).textContent || '').trim() : '',
         firstCardRarityText: firstSubline ? String((firstSubline.querySelector('.simulation-card-rarity') || {}).textContent || '').trim() : '',
         chosenCardCollectionText: chosenCard ? String(((chosenCard.querySelector('.simulation-card-collection')) || {}).textContent || '').trim() : '',
@@ -484,6 +490,8 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
     assert.equal(laneState.firstCardMetaCount, 0, "simulation output cards should remove the extra collection/rarity meta block below the title");
     assert.equal(laneState.firstCardNoteCount, 0, "simulation output cards should remove the extra helper note block below the title");
     assert.equal(laneState.firstCardArtBackgroundSize !== "max(132px, 100%) auto", true, "simulation output card artwork should shrink from the previous oversized default");
+    assert.equal(laneState.firstFloatText.includes("绝对磨损"), true, "simulation output cards should still render the absolute wear label");
+    assert.equal(laneState.firstFloatOverlap <= 2, true, "simulation output card absolute wear label should stay above the overlapping content layer instead of getting covered");
     assert.equal(Boolean(laneState.firstCardCollectionText), false, "simulation output cards should remove the repeated collection signature line from the card body");
     assert.equal(Boolean(laneState.firstCardRarityText), false, "simulation output cards should remove the rarity text from the card bottom signature");
     assert.equal(Boolean(laneState.chosenCardCollectionText), false, "the chosen output card should remove the repeated collection signature line from the card body");
