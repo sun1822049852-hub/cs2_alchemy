@@ -477,13 +477,13 @@ assert.match(
 
 assert.match(
   css,
-  /\.simulation-picker-item\s*\{[\s\S]*height:\s*auto;[\s\S]*min-height:\s*0;/m,
-  "tradeup simulation picker result rows should override the global button height so thumbnails remain visible"
+  /\.simulation-picker-item\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*236px;[^}]*\}/m,
+  "tradeup simulation picker result rows should keep a dedicated tall card height so thumbnails remain visible"
 );
 
 assert.match(
   css,
-  /\.simulation-picker-results\s*\{[\s\S]*max-height:\s*min\(72vh,\s*560px\);/m,
+  /\.simulation-picker-results\s*\{[^}]*max-height:\s*min\(72vh,\s*560px\);[^}]*\}/m,
   "tradeup simulation picker results should become taller"
 );
 
@@ -491,6 +491,36 @@ assert.match(
   css,
   /\.simulation-picker-results\s*\{[^}]*flex:\s*1\s+1\s+auto;[^}]*min-height:\s*0;[^}]*\}/m,
   "tradeup simulation picker results should own the remaining modal height as a flexible scroll region"
+);
+
+assert.match(
+  css,
+  /\.simulation-picker-item-thumb\s*\{[^}]*max-height:\s*148px;[^}]*object-position:\s*center center;[^}]*clip-path:\s*inset\(5%\s+6%\s+5%\s+6%\);[^}]*transform:\s*translateY\(2px\)\s+scale\(1\.18\);[^}]*\}/m,
+  "tradeup simulation picker thumbnails should stop over-cropping the art so the full item image stays visible"
+);
+
+assert.match(
+  css,
+  /\.simulation-picker-item-art\s*\{[^}]*align-items:\s*flex-start;[^}]*padding:\s*18px\s+14px\s+10px;[^}]*\}/m,
+  "tradeup simulation picker art area should pull the image upward to remove the oversized empty top band"
+);
+
+assert.match(
+  css,
+  /\.simulation-picker-art-mask\s*\{[^}]*top:\s*75%;[^}]*\}/m,
+  "tradeup simulation picker artwork mask should cover only the lower quarter of the card"
+);
+
+assert.match(
+  css,
+  /\.simulation-picker-item-thumb\.is-wide\s*\{[^}]*transform:\s*translateY\(10px\)\s+scale\(1\.3\);[^}]*transform-origin:\s*center top;[^}]*\}/m,
+  "tradeup simulation picker should give wide weapon thumbnails a stronger downward scale so the middle gap disappears"
+);
+
+assert.match(
+  app,
+  /const handlePickerThumbError = \(thumb\) => \{[\s\S]*thumb\.onerror = \(\) => \{[\s\S]*handlePickerThumbError\(thumb\);[\s\S]*if \(thumb\.complete\) \{[\s\S]*applyPickerThumbLayout\(thumb\);[\s\S]*handlePickerThumbError\(thumb\);[\s\S]*\}/m,
+  "tradeup simulation picker should handle both cached-success and cached-failure thumbnail states after binding image events"
 );
 
 assert.doesNotMatch(

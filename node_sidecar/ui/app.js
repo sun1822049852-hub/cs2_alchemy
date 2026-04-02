@@ -7675,22 +7675,46 @@ function renderTradeupSimulationPickerResults() {
       </button>
     `;
   }).join("");
-  for (const thumb of ui.simulationPickerSearchResults.querySelectorAll(".simulation-picker-item-thumb")) {
-    thumb.onerror = () => {
-      const art = thumb.closest(".simulation-picker-item-art");
-      if (!art) {
-        thumb.remove();
-        return;
-      }
-      art.classList.remove("has-image");
+  const applyPickerThumbLayout = (thumb) => {
+    if (!thumb) return;
+    thumb.classList.remove("is-wide");
+    const naturalWidth = Number(thumb.naturalWidth || 0);
+    const naturalHeight = Number(thumb.naturalHeight || 0);
+    if (!naturalWidth || !naturalHeight) return;
+    if (naturalWidth / naturalHeight >= 1.3) {
+      thumb.classList.add("is-wide");
+    }
+  };
+  const handlePickerThumbError = (thumb) => {
+    if (!thumb) return;
+    const art = thumb.closest(".simulation-picker-item-art");
+    if (!art) {
       thumb.remove();
-      if (!art.querySelector(".simulation-card-art-empty")) {
-        const empty = document.createElement("span");
-        empty.className = "simulation-card-art-empty";
-        empty.textContent = "暂无图";
-        art.append(empty);
-      }
+      return;
+    }
+    art.classList.remove("has-image");
+    thumb.remove();
+    if (!art.querySelector(".simulation-card-art-empty")) {
+      const empty = document.createElement("span");
+      empty.className = "simulation-card-art-empty";
+      empty.textContent = "暂无图";
+      art.append(empty);
+    }
+  };
+  for (const thumb of ui.simulationPickerSearchResults.querySelectorAll(".simulation-picker-item-thumb")) {
+    thumb.onload = () => {
+      applyPickerThumbLayout(thumb);
     };
+    thumb.onerror = () => {
+      handlePickerThumbError(thumb);
+    };
+    if (thumb.complete) {
+      if (Number(thumb.naturalWidth || 0) > 0 && Number(thumb.naturalHeight || 0) > 0) {
+        applyPickerThumbLayout(thumb);
+      } else {
+        handlePickerThumbError(thumb);
+      }
+    }
   }
   for (const button of ui.simulationPickerSearchResults.querySelectorAll("[data-simulation-pick-index]")) {
     button.onclick = async () => {

@@ -337,6 +337,7 @@ async function test_picker_search_dedupes_results_and_renders_visible_thumbnails
         thumbHeight: thumbRect ? thumbRect.height : 0,
         thumbTransform: thumbStyle ? String(thumbStyle.transform || '') : '',
         thumbClipPath: thumbStyle ? String(thumbStyle.clipPath || '') : '',
+        thumbWideClass: thumb ? thumb.classList.contains('is-wide') : false,
         itemHeight: itemRect ? itemRect.height : 0,
         artOverlayOpacity: overlayStyle ? Number.parseFloat(overlayStyle.opacity || '0') : 0,
         artOverlayContent: overlayStyle ? String(overlayStyle.content || '').replaceAll('"', '') : '',
@@ -353,6 +354,7 @@ async function test_picker_search_dedupes_results_and_renders_visible_thumbnails
         maskHeight: maskStyle ? Number.parseFloat(maskStyle.height || '0') : 0,
         maskTopRatio: maskRect && artRect && artRect.height > 0 ? (maskRect.top - artRect.top) / artRect.height : -1,
         maskBottomGap: maskRect && artRect ? Math.abs(artRect.bottom - maskRect.bottom) : -1,
+        thumbTopRatio: thumbRect && artRect && artRect.height > 0 ? (thumbRect.top - artRect.top) / artRect.height : -1,
         modalWidth: modal ? Number.parseFloat(getComputedStyle(modal).width) : 0,
         modalHeight: modal ? Number.parseFloat(getComputedStyle(modal).height) : 0
       };
@@ -366,7 +368,9 @@ async function test_picker_search_dedupes_results_and_renders_visible_thumbnails
     assert.equal(pickerState.thumbWidth >= 96 && pickerState.thumbHeight >= 96, true, "picker thumbnail should occupy an obviously visible on-screen size");
     assert.equal(pickerState.thumbTransform !== "none", true, "picker thumbnail should apply an explicit scale transform to cut down the transparent whitespace");
     assert.equal(pickerState.thumbClipPath !== "none", true, "picker thumbnail should apply a clip-path crop to trim transparent margins");
-    assert.equal(/24%|25%|26%|27%|28%/.test(pickerState.thumbClipPath), true, "picker thumbnail should use a stronger vertical crop so the top and bottom transparent whitespace shrink further");
+    assert.equal(pickerState.thumbWideClass, false, "regular picker thumbnails should not be misclassified into the wide-weapon layout branch");
+    assert.equal(/24%|25%|26%|27%|28%/.test(pickerState.thumbClipPath), false, "picker thumbnail should stop using the old heavy vertical crop that clipped some item art");
+    assert.equal(/5%/.test(pickerState.thumbClipPath), true, "picker thumbnail should keep the requested 5% vertical crop so the full item image stays visible");
     assert.equal(pickerState.badgeText.length > 0, true, "picker search card should show a rarity badge");
     assert.equal(["主产物", "辅产物", "主料", "辅料"].includes(pickerState.badgeText), false, "picker rarity badge should replace the old role text");
     assert.equal(pickerState.maskMetaText.includes(pickerState.badgeText), false, "picker mask meta should no longer repeat the rarity label that already appears in the badge");
@@ -380,8 +384,9 @@ async function test_picker_search_dedupes_results_and_renders_visible_thumbnails
     assert.equal(pickerState.maskDisplay !== "none", true, "picker artwork should render a dedicated bottom mask element");
     assert.equal(pickerState.maskBackgroundImage.includes("linear-gradient"), true, "picker artwork mask should use a dark gradient");
     assert.equal(pickerState.maskHeight >= 40, true, "picker artwork mask should cover the lower band of the image");
-    assert.equal(pickerState.maskTopRatio >= 0.42 && pickerState.maskTopRatio <= 0.58, true, "picker artwork mask should start around the middle-lower band instead of hugging only the bottom edge");
+    assert.equal(pickerState.maskTopRatio >= 0.72 && pickerState.maskTopRatio <= 0.78, true, "picker artwork mask should start around the lower quarter instead of swallowing half the card");
     assert.equal(pickerState.maskBottomGap <= 2, true, "picker artwork mask should stay anchored to the bottom edge of the art area");
+    assert.equal(pickerState.thumbTopRatio >= 0 && pickerState.thumbTopRatio <= 0.18, true, "picker thumbnail should sit near the top of the art area so the empty upper band is removed");
     assert.equal(pickerState.modalWidth <= 640, true, "picker modal should become narrower than the previous wide layout");
     assert.equal(pickerState.modalHeight > 0, true, "picker modal should stay measurable after opening");
   });
@@ -952,6 +957,129 @@ async function test_picker_search_results_render_compact_three_column_cards() {
   });
 }
 
+async function test_picker_wide_weapon_cards_reduce_mid_gap() {
+  await withBrowserPage(async ({cdp}) => {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: 1180,
+      height: 720,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await cdp.evaluate(`document.getElementById("navSimulation").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPage").classList.contains("hidden")`);
+    await waitForCondition(cdp, `document.getElementById("simulationOutputRoleChooser")`);
+    await sleep(300);
+
+    await cdp.evaluate(`document.getElementById("simulationOutputRoleChooser").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
+    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "蓝色裂纹"; document.getElementById("simulationPickerSearchBtn").click();`);
+    await waitForCondition(cdp, `(() => Array.from(document.querySelectorAll(".simulation-picker-item")).some((item) => String(item.querySelector(".simulation-picker-art-title")?.textContent || "").trim().includes("蓝色裂纹")))()`);
+    await waitForCondition(cdp, `(() => {
+      const item = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('蓝色裂纹'));
+      const thumb = item ? item.querySelector('.simulation-picker-item-thumb') : null;
+      return !!(thumb && thumb.complete && thumb.naturalWidth > 0 && thumb.naturalHeight > 0);
+    })()`);
+    await waitForCondition(cdp, `(() => {
+      const item = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('蓝色裂纹'));
+      const thumb = item ? item.querySelector('.simulation-picker-item-thumb') : null;
+      return !!(thumb && thumb.classList.contains('is-wide'));
+    })()`);
+
+    const pickerState = await cdp.evaluate(`(() => {
+      const target = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('蓝色裂纹'));
+      const art = target ? target.querySelector('.simulation-picker-item-art') : null;
+      const thumb = target ? target.querySelector('.simulation-picker-item-thumb') : null;
+      const mask = target ? target.querySelector('.simulation-picker-art-mask') : null;
+      if (!target || !art || !thumb || !mask) return null;
+      const artRect = art.getBoundingClientRect();
+      const thumbRect = thumb.getBoundingClientRect();
+      const maskRect = mask.getBoundingClientRect();
+      return {
+        titleText: String(target.querySelector('.simulation-picker-art-title')?.textContent || '').trim(),
+        thumbWideClass: thumb.classList.contains('is-wide'),
+        gapRatio: artRect.height > 0 ? (maskRect.top - thumbRect.bottom) / artRect.height : -1,
+        thumbBottomRatio: artRect.height > 0 ? (thumbRect.bottom - artRect.top) / artRect.height : -1
+      };
+    })()`);
+
+    assert.ok(pickerState, "expected wide-weapon picker card metrics");
+    assert.equal(pickerState.titleText.includes("蓝色裂纹"), true, "expected the inspected picker card to target the wide weapon case");
+    assert.equal(pickerState.thumbWideClass, true, "wide picker thumbnails should receive a dedicated layout class");
+    assert.equal(pickerState.gapRatio >= -0.04 && pickerState.gapRatio <= 0.06, true, "wide weapon picker cards should remove the large mid-gap without sinking too far under the lower caption mask");
+    assert.equal(pickerState.thumbBottomRatio >= 0.68 && pickerState.thumbBottomRatio <= 0.84, true, "wide weapon picker art should extend further downward while staying within the intended lower-band range");
+  });
+}
+
+async function test_picker_broken_thumbnail_falls_back_to_placeholder() {
+  await withBrowserPage(async ({cdp}) => {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: 1180,
+      height: 720,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await cdp.evaluate(`document.getElementById("navSimulation").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPage").classList.contains("hidden")`);
+    await waitForCondition(cdp, `document.getElementById("simulationOutputRoleChooser")`);
+    await sleep(300);
+
+    await cdp.evaluate(`document.getElementById("simulationOutputRoleChooser").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
+    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "AK"; document.getElementById("simulationPickerSearchBtn").click();`);
+    await waitForCondition(cdp, `document.querySelectorAll(".simulation-picker-item-thumb").length > 0`);
+
+    const fallbackState = await cdp.evaluate(`(() => {
+      const thumbProto = HTMLImageElement.prototype;
+      const completeDesc = Object.getOwnPropertyDescriptor(thumbProto, 'complete');
+      const naturalWidthDesc = Object.getOwnPropertyDescriptor(thumbProto, 'naturalWidth');
+      const naturalHeightDesc = Object.getOwnPropertyDescriptor(thumbProto, 'naturalHeight');
+      const restore = () => {
+        if (completeDesc) Object.defineProperty(thumbProto, 'complete', completeDesc);
+        if (naturalWidthDesc) Object.defineProperty(thumbProto, 'naturalWidth', naturalWidthDesc);
+        if (naturalHeightDesc) Object.defineProperty(thumbProto, 'naturalHeight', naturalHeightDesc);
+      };
+      try {
+        Object.defineProperty(thumbProto, 'complete', {
+          configurable: true,
+          get() {
+            if (this.classList && this.classList.contains('simulation-picker-item-thumb')) return true;
+            return completeDesc && typeof completeDesc.get === 'function' ? completeDesc.get.call(this) : true;
+          }
+        });
+        Object.defineProperty(thumbProto, 'naturalWidth', {
+          configurable: true,
+          get() {
+            if (this.classList && this.classList.contains('simulation-picker-item-thumb')) return 0;
+            return naturalWidthDesc && typeof naturalWidthDesc.get === 'function' ? naturalWidthDesc.get.call(this) : 0;
+          }
+        });
+        Object.defineProperty(thumbProto, 'naturalHeight', {
+          configurable: true,
+          get() {
+            if (this.classList && this.classList.contains('simulation-picker-item-thumb')) return 0;
+            return naturalHeightDesc && typeof naturalHeightDesc.get === 'function' ? naturalHeightDesc.get.call(this) : 0;
+          }
+        });
+        renderTradeupSimulationPickerResults();
+        const firstArt = document.querySelector('.simulation-picker-item-art');
+        return {
+          hasThumb: !!document.querySelector('.simulation-picker-item-thumb'),
+          hasPlaceholder: !!document.querySelector('.simulation-picker-item-art .simulation-card-art-empty'),
+          artHasImage: firstArt ? firstArt.classList.contains('has-image') : true
+        };
+      } finally {
+        restore();
+        renderTradeupSimulationPickerResults();
+      }
+    })()`);
+
+    assert.ok(fallbackState, "expected broken-thumbnail fallback metrics");
+    assert.equal(fallbackState.hasThumb, false, "cached-failure thumbnails should be removed from picker cards");
+    assert.equal(fallbackState.hasPlaceholder, true, "cached-failure thumbnails should fall back to the empty-art placeholder");
+    assert.equal(fallbackState.artHasImage, false, "cached-failure thumbnails should also clear the has-image art state");
+  });
+}
+
 async function main() {
   await test_clicking_output_chooser_opens_picker_without_inline_slot_cards();
   await test_picker_search_dedupes_results_and_renders_visible_thumbnails();
@@ -962,6 +1090,8 @@ async function main() {
   await test_output_lane_expands_selected_output_collections();
   await test_picker_search_results_take_real_scrollable_height();
   await test_picker_search_results_render_compact_three_column_cards();
+  await test_picker_wide_weapon_cards_reduce_mid_gap();
+  await test_picker_broken_thumbnail_falls_back_to_placeholder();
   console.log("tradeup-simulation-picker-interaction tests passed");
 }
 
