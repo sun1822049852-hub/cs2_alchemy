@@ -16,10 +16,14 @@ class UiStateStore {
     const accounts = raw && typeof raw.accounts === "object" && raw.accounts ? raw.accounts : {};
     const lastSelected = asString(raw && raw.last_selected_username ? raw.last_selected_username : "").trim();
     const craftAssistPresets = Array.isArray(raw && raw.craft_assist_presets) ? raw.craft_assist_presets : [];
+    const tradeupSimulationPresets = Array.isArray(raw && raw.tradeup_simulation_presets)
+      ? raw.tradeup_simulation_presets
+      : [];
     return {
       accounts,
       last_selected_username: lastSelected,
-      craft_assist_presets: craftAssistPresets
+      craft_assist_presets: craftAssistPresets,
+      tradeup_simulation_presets: tradeupSimulationPresets
     };
   }
 
@@ -138,6 +142,20 @@ class UiStateStore {
 
   setCraftAssistPresets(presets) {
     this.data.craft_assist_presets = Array.isArray(presets) ? presets : [];
+    this.save();
+  }
+
+  getTradeupSimulationPresets() {
+    try {
+      const list = Array.isArray(this.data.tradeup_simulation_presets) ? this.data.tradeup_simulation_presets : [];
+      return JSON.parse(JSON.stringify(list));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  setTradeupSimulationPresets(presets) {
+    this.data.tradeup_simulation_presets = Array.isArray(presets) ? presets : [];
     this.save();
   }
 }

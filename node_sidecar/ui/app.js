@@ -27,6 +27,7 @@ const state = {
   craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 0,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "", craftProgressMode: "", craftProgressPercent: 0, craftProgressPercentTarget: 0,
   craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
+  simulationViewMode: "workspace", simulationOutputRole: "primary_output", simulationMaterialRole: "main_material", simulationOutputChooserOpen: false, simulationMaterialChooserOpen: false, simulationPresets: [], simulationActivePresetId: "", simulationWorkspacePreset: null, simulationWorkspaceSourcePresetId: "", simulationPickerOpen: false, simulationPickerMode: "", simulationPickerTitle: "", simulationPickerQuery: "", simulationPickerResults: [], simulationPickerError: "", simulationLoading: false, simulationPersisting: false, simulationSearchLoading: false, simulationRequestSeq: 0, simulationSearchSeq: 0, simulationModalOpen: false, simulationModalMode: "", simulationModalPresetId: "", simulationModalSlot: "", simulationModalItemType: "", simulationModalItemSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false, componentOpBusyAction: "",
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
   targetDrawerOpen: false, targetComponentChoices: [], targetComponentSelectedId: "", targetComponentExcludeId: "",
@@ -41,8 +42,8 @@ const state = {
 
 const ui = {
   navShell: document.getElementById("navShell"), navRailTrigger: document.getElementById("navRailTrigger"), mainSidebar: document.getElementById("mainSidebar"),
-  navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"),
-  accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"),
+  navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"), navSimulation: document.getElementById("navSimulation"),
+  accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
   loginSaveBtn: document.getElementById("loginSaveBtn"), clearAccountBtn: document.getElementById("clearAccountBtn"), accountStatus: document.getElementById("accountStatus"), savedAccountsWrap: document.getElementById("savedAccountsWrap"),
   fetchTimeText: document.getElementById("fetchTimeText"), statusText: document.getElementById("statusText"),
@@ -95,7 +96,8 @@ const ui = {
   craftAssistPresetModal: document.getElementById("craftAssistPresetModal"), craftAssistPresetModalInput: document.getElementById("craftAssistPresetModalInput"),
   craftAssistPresetModalClose: document.getElementById("craftAssistPresetModalClose"), craftAssistPresetModalSaveBtn: document.getElementById("craftAssistPresetModalSaveBtn"), craftAssistPresetModalCancelBtn: document.getElementById("craftAssistPresetModalCancelBtn"),
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel"),
-  craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionProgress: document.getElementById("craftExecutionProgress"), craftExecutionOverlayPercent: document.getElementById("craftExecutionOverlayPercent"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail")
+  craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionProgress: document.getElementById("craftExecutionProgress"), craftExecutionOverlayPercent: document.getElementById("craftExecutionOverlayPercent"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail"),
+  simulationModeSavedBtn: document.getElementById("simulationModeSavedBtn"), simulationModeWorkspaceBtn: document.getElementById("simulationModeWorkspaceBtn"), simulationSavedPresets: document.getElementById("simulationSavedPresets"), simulationWorkspace: document.getElementById("simulationWorkspace"), simulationWorkspaceActionsBar: document.getElementById("simulationWorkspaceActionsBar"), simulationSavePresetBtn: document.getElementById("simulationSavePresetBtn"), simulationCancelEditBtn: document.getElementById("simulationCancelEditBtn"), simulationLayout: document.getElementById("simulationLayout"), simulationOutputPanel: document.getElementById("simulationOutputPanel"), simulationMaterialPanel: document.getElementById("simulationMaterialPanel"), simulationOutputRoleChooser: document.getElementById("simulationOutputRoleChooser"), simulationOutputRoleChooserText: document.getElementById("simulationOutputRoleChooserText"), simulationOutputRoleSplit: document.getElementById("simulationOutputRoleSplit"), simulationMaterialRoleChooser: document.getElementById("simulationMaterialRoleChooser"), simulationMaterialRoleChooserText: document.getElementById("simulationMaterialRoleChooserText"), simulationMaterialRoleSplit: document.getElementById("simulationMaterialRoleSplit"), simulationOutputLane: document.getElementById("simulationOutputLane"), simulationMaterialLane: document.getElementById("simulationMaterialLane"), simulationPickerModal: document.getElementById("simulationPickerModal"), simulationPickerTitle: document.getElementById("simulationPickerTitle"), simulationPickerRoleBadge: document.getElementById("simulationPickerRoleBadge"), simulationPickerHint: document.getElementById("simulationPickerHint"), simulationPickerMeta: document.getElementById("simulationPickerMeta"), simulationPickerSearchInput: document.getElementById("simulationPickerSearchInput"), simulationPickerSearchBtn: document.getElementById("simulationPickerSearchBtn"), simulationPickerSearchResults: document.getElementById("simulationPickerSearchResults"), simulationPickerClose: document.getElementById("simulationPickerClose"), simulationPickerCancelBtn: document.getElementById("simulationPickerCancelBtn"), simulationCardModal: document.getElementById("simulationCardModal"), simulationCardModalTitle: document.getElementById("simulationCardModalTitle"), simulationCardModalBody: document.getElementById("simulationCardModalBody"), simulationCardModalField: document.getElementById("simulationCardModalField"), simulationCardModalWearInput: document.getElementById("simulationCardModalWearInput"), simulationCardModalWearHint: document.getElementById("simulationCardModalWearHint"), simulationCardModalReadonlyNote: document.getElementById("simulationCardModalReadonlyNote"), simulationCardModalClose: document.getElementById("simulationCardModalClose"), simulationCardModalSaveBtn: document.getElementById("simulationCardModalSaveBtn"), simulationCardModalCancelBtn: document.getElementById("simulationCardModalCancelBtn")
 };
 
 let searchTimer = null;
@@ -120,6 +122,7 @@ let lastErrorToastText = "";
 let lastErrorToastTs = 0;
 const CRAFT_UI_PREFS_KEY = "craft_ui_prefs_v2";
 const CRAFT_ASSIST_PRESETS_KEY = "craft_assist_presets_v1";
+const TRADEUP_SIMULATION_PRESETS_KEY = "tradeup_simulation_presets_v1";
 const ERROR_TOAST_DURATION_MS = 2800;
 
 async function api(path, options = {}) {
@@ -1636,10 +1639,12 @@ function showPage(pageId) {
   if (ui.navShell && ui.navShell.contains(document.activeElement) && typeof document.activeElement.blur === "function") {
     document.activeElement.blur();
   }
-  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft]]) {
+  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft], ["simulationPage", ui.navSimulation]]) {
     const active = id === pageId;
     document.getElementById(id).classList.toggle("hidden", !active);
-    btn.classList.toggle("active", active);
+    if (btn) {
+      btn.classList.toggle("active", active);
+    }
   }
   setNavDrawerOpen(false);
   if (pageId === "accountPage") renderSavedAccounts();
@@ -1647,6 +1652,12 @@ function showPage(pageId) {
   if (pageId === "craftPage") {
     applyCraftLayoutWidth();
     renderCraftPage();
+  }
+  if (pageId === "simulationPage") {
+    if (state.simulationViewMode === "workspace" && !state.simulationWorkspacePreset) {
+      openBlankTradeupSimulationWorkspaceDraft();
+    }
+    renderSimulationPage();
   }
 }
 function syncNavDrawerDom() {
@@ -2137,6 +2148,19 @@ function normalizeSkinImageUrl(value) {
 function cssUrlValue(value) {
   const text = String(value || "").replace(/[\r\n]/g, "").replace(/["\\]/g, "\\$&");
   return text ? `url("${text}")` : "";
+}
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+function escapeHtmlAttribute(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 function preferredRowSkinImageUrl(row) {
   if (!row || typeof row !== "object") return "";
@@ -4108,6 +4132,721 @@ function buildCurrentCraftAssistPresetSnapshot(name) {
     created_at: Date.now(),
     updated_at: Date.now()
   });
+}
+function makeTradeupSimulationUid(prefix = "simulation") {
+  return `${String(prefix || "simulation").trim() || "simulation"}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+function normalizeTradeupSimulationSlotName(slot) {
+  const value = String(slot || "").trim();
+  return ["primary_output", "aux_output", "main_material", "aux_material"].includes(value) ? value : "";
+}
+function isTradeupSimulationOutputSlot(slot) {
+  const value = normalizeTradeupSimulationSlotName(slot);
+  return value === "primary_output" || value === "aux_output";
+}
+function sanitizeTradeupSimulationTargetItem(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const markethashname = String(source.markethashname || "").trim();
+  if (!markethashname) return null;
+  const minfloat = source.minfloat === null || source.minfloat === undefined || source.minfloat === ""
+    ? null
+    : Number(source.minfloat);
+  const maxfloat = source.maxfloat === null || source.maxfloat === undefined || source.maxfloat === ""
+    ? null
+    : Number(source.maxfloat);
+  return {
+    markethashname,
+    name: String(source.name || source.markethashname || "").trim(),
+    basemarkethashname: String(source.basemarkethashname || source.basename || source.markethashname || "").trim() || markethashname,
+    basename: String(source.basename || source.basemarkethashname || source.markethashname || "").trim() || markethashname,
+    collection: String(source.collection || "").trim(),
+    rarity: String(source.rarity || "").trim(),
+    wearlevel: String(source.wearlevel || "").trim(),
+    wear_label: String(source.wear_label || source.wearlevel || "").trim(),
+    minfloat: Number.isFinite(minfloat) ? minfloat : null,
+    maxfloat: Number.isFinite(maxfloat) ? maxfloat : null,
+    wear_range: source.wear_range === null || source.wear_range === undefined || source.wear_range === ""
+      ? null
+      : (Number.isFinite(Number(source.wear_range)) ? Number(source.wear_range) : null),
+    absolute_wear: source.absolute_wear === null || source.absolute_wear === undefined || source.absolute_wear === ""
+      ? null
+      : (Number.isFinite(Number(source.absolute_wear)) ? Number(source.absolute_wear) : null),
+    editable: source.editable !== false,
+    goods_icon_url: String(source.goods_icon_url || "").trim(),
+    goods_original_icon_url: String(source.goods_original_icon_url || "").trim(),
+    goods_share_thumbnail_url: String(source.goods_share_thumbnail_url || "").trim()
+  };
+}
+function getTradeupSimulationDefaultName(source = {}) {
+  const item = sanitizeTradeupSimulationTargetItem(source.cover_output)
+    || sanitizeTradeupSimulationTargetItem(source.primary_output)
+    || sanitizeTradeupSimulationTargetItem(source.target_item)
+    || sanitizeTradeupSimulationTargetItem(source.aux_output);
+  return String((item && (item.basename || item.basemarkethashname || item.markethashname)) || "").trim();
+}
+function normalizeTradeupSimulationRows(source = {}, key, fallbackRows = []) {
+  if (Array.isArray(source && source[key])) return deepCopyPlain(source[key]);
+  if (Array.isArray(source && source.rows)) return deepCopyPlain(source.rows);
+  return deepCopyPlain(fallbackRows);
+}
+function finalizeTradeupSimulationPresetShape(source = {}) {
+  const primaryOutput = sanitizeTradeupSimulationTargetItem(source.primary_output)
+    || sanitizeTradeupSimulationTargetItem(source.cover_output)
+    || sanitizeTradeupSimulationTargetItem(source.target_item)
+    || sanitizeTradeupSimulationTargetItem(source.aux_output);
+  const auxOutput = sanitizeTradeupSimulationTargetItem(source.aux_output);
+  const mainMaterial = sanitizeTradeupSimulationTargetItem(source.main_material);
+  const auxMaterial = sanitizeTradeupSimulationTargetItem(source.aux_material);
+  const legacyAnchorItem = sanitizeTradeupSimulationTargetItem({
+    ...source.target_item,
+    markethashname: String(source.active_driver_markethashname || source.active_driver_item_key || "").trim(),
+    basemarkethashname: String(source.active_driver_item_key || "").trim(),
+    basename: String(source.active_driver_item_key || "").trim()
+  });
+  const coverOutput = sanitizeTradeupSimulationTargetItem(source.cover_output)
+    || primaryOutput
+    || auxOutput;
+  const activeAnchorItem = sanitizeTradeupSimulationTargetItem(source.active_anchor_item)
+    || legacyAnchorItem
+    || coverOutput
+    || mainMaterial
+    || auxMaterial;
+  const anchorWear = source.active_anchor_abs_wear === null || source.active_anchor_abs_wear === undefined || source.active_anchor_abs_wear === ""
+    ? (source.active_driver_abs_wear === null || source.active_driver_abs_wear === undefined || source.active_driver_abs_wear === ""
+      ? (activeAnchorItem && Number.isFinite(Number(activeAnchorItem.minfloat)) ? Number(activeAnchorItem.minfloat) : null)
+      : Number(source.active_driver_abs_wear))
+    : Number(source.active_anchor_abs_wear);
+  const createdAt = Math.max(0, Number(source.created_at || 0) || 0) || Date.now();
+  const updatedAt = Math.max(createdAt, Math.max(0, Number(source.updated_at || 0) || 0)) || createdAt;
+  const outputRows = normalizeTradeupSimulationRows(source, "output_rows");
+  const materialRows = normalizeTradeupSimulationRows(source, "material_rows", outputRows);
+  return {
+    id: String(source.id || makeTradeupSimulationUid("preset")).trim() || makeTradeupSimulationUid("preset"),
+    name: String(source.name || "").trim() || getTradeupSimulationDefaultName({
+      cover_output: coverOutput,
+      primary_output: primaryOutput,
+      aux_output: auxOutput
+    }),
+    primary_output: primaryOutput,
+    aux_output: auxOutput,
+    main_material: mainMaterial,
+    aux_material: auxMaterial,
+    cover_output: coverOutput,
+    active_anchor_item: activeAnchorItem,
+    active_anchor_abs_wear: Number.isFinite(anchorWear) ? anchorWear : null,
+    output_rows: outputRows,
+    material_rows: materialRows,
+    rows: deepCopyPlain(Array.isArray(source.rows) ? source.rows : outputRows),
+    output_candidates: deepCopyPlain(Array.isArray(source.output_candidates) ? source.output_candidates : []),
+    warnings: deepCopyPlain(Array.isArray(source.warnings) ? source.warnings : []),
+    dirty: !!source.dirty,
+    created_at: createdAt,
+    updated_at: updatedAt
+  };
+}
+function sanitizeTradeupSimulationPresetPayload(payload) {
+  const normalized = finalizeTradeupSimulationPresetShape(payload && typeof payload === "object" ? payload : {});
+  if (!normalized.primary_output && !normalized.cover_output) return null;
+  return normalized;
+}
+function sanitizeTradeupSimulationDraftPayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  return finalizeTradeupSimulationPresetShape({
+    ...source,
+    id: String(source.id || makeTradeupSimulationUid("draft")).trim() || makeTradeupSimulationUid("draft")
+  });
+}
+function getTradeupSimulationWorkspaceDraft(presetId = "") {
+  const draft = state.simulationWorkspacePreset && typeof state.simulationWorkspacePreset === "object"
+    ? state.simulationWorkspacePreset
+    : null;
+  if (!draft) return null;
+  const key = String(presetId || "").trim();
+  const draftId = String(draft.id || "").trim();
+  const sourceId = String(state.simulationWorkspaceSourcePresetId || "").trim();
+  if (!key || key === draftId || (sourceId && key === sourceId)) return draft;
+  return null;
+}
+function setTradeupSimulationWorkspaceDraft(preset, {sourcePresetId = ""} = {}) {
+  const draft = sanitizeTradeupSimulationDraftPayload(preset);
+  state.simulationWorkspacePreset = draft;
+  state.simulationWorkspaceSourcePresetId = String(sourcePresetId || "").trim();
+  closeTradeupSimulationPickerModal();
+  closeTradeupSimulationItemModal();
+  return draft;
+}
+function openBlankTradeupSimulationWorkspaceDraft() {
+  state.simulationViewMode = "workspace";
+  return setTradeupSimulationWorkspaceDraft({
+    id: makeTradeupSimulationUid("draft"),
+    name: "",
+    primary_output: null,
+    aux_output: null,
+    main_material: null,
+    aux_material: null,
+    cover_output: null,
+    active_anchor_item: null,
+    active_anchor_abs_wear: null,
+    output_rows: [],
+    material_rows: [],
+    rows: [],
+    output_candidates: [],
+    warnings: [],
+    dirty: true,
+    created_at: Date.now(),
+    updated_at: Date.now()
+  }, {
+    sourcePresetId: ""
+  });
+}
+function normalizeTradeupSimulationPresetList(values) {
+  return (Array.isArray(values) ? values : [])
+    .map((entry) => sanitizeTradeupSimulationPresetPayload(entry))
+    .filter(Boolean)
+    .slice(0, 40);
+}
+function serializeTradeupSimulationPresetList(values, {clearDirty = false} = {}) {
+  return normalizeTradeupSimulationPresetList(values)
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      primary_output: deepCopyPlain(entry.primary_output),
+      aux_output: deepCopyPlain(entry.aux_output),
+      main_material: deepCopyPlain(entry.main_material),
+      aux_material: deepCopyPlain(entry.aux_material),
+      cover_output: deepCopyPlain(entry.cover_output),
+      active_anchor_item: deepCopyPlain(entry.active_anchor_item),
+      active_anchor_abs_wear: entry.active_anchor_abs_wear,
+      output_rows: deepCopyPlain(entry.output_rows),
+      material_rows: deepCopyPlain(entry.material_rows),
+      output_candidates: deepCopyPlain(entry.output_candidates),
+      warnings: deepCopyPlain(entry.warnings),
+      dirty: clearDirty ? false : !!entry.dirty,
+      created_at: entry.created_at,
+      updated_at: clearDirty ? Date.now() : entry.updated_at
+    }));
+}
+function readTradeupSimulationPresetsFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(TRADEUP_SIMULATION_PRESETS_KEY);
+    if (!raw) return [];
+    return normalizeTradeupSimulationPresetList(JSON.parse(raw));
+  } catch (_) {
+    return [];
+  }
+}
+function writeTradeupSimulationPresetsToLocalStorage(presets) {
+  try {
+    localStorage.setItem(TRADEUP_SIMULATION_PRESETS_KEY, JSON.stringify(Array.isArray(presets) ? presets : []));
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+async function saveTradeupSimulationPresetsToServer(presets) {
+  try {
+    await api("/api/ui-state/tradeup-simulation-presets", {
+      method: "POST",
+      body: JSON.stringify({
+        presets: Array.isArray(presets) ? presets : []
+      })
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+async function loadTradeupSimulationPresetsFromServer() {
+  try {
+    const data = await api("/api/ui-state/tradeup-simulation-presets");
+    return normalizeTradeupSimulationPresetList(data && data.presets);
+  } catch (_) {
+    return null;
+  }
+}
+function saveTradeupSimulationPresetsToStorage() {
+  const payload = normalizeTradeupSimulationPresetList(state.simulationPresets);
+  state.simulationPresets = payload;
+  const storedPayload = serializeTradeupSimulationPresetList(payload);
+  writeTradeupSimulationPresetsToLocalStorage(storedPayload);
+  void saveTradeupSimulationPresetsToServer(storedPayload);
+}
+async function loadTradeupSimulationPresetsFromStorage() {
+  const localPresets = readTradeupSimulationPresetsFromLocalStorage();
+  const serverPresets = await loadTradeupSimulationPresetsFromServer();
+  if (Array.isArray(serverPresets)) {
+    if (serverPresets.length > 0) {
+      state.simulationPresets = serverPresets;
+      writeTradeupSimulationPresetsToLocalStorage(serverPresets);
+    } else if (localPresets.length > 0) {
+      state.simulationPresets = localPresets;
+      await saveTradeupSimulationPresetsToServer(localPresets);
+    } else {
+      state.simulationPresets = [];
+    }
+  } else {
+    state.simulationPresets = localPresets;
+  }
+  selectTradeupSimulationPreset(state.simulationActivePresetId, {
+    openWorkspace: false
+  });
+}
+async function persistTradeupSimulationPresets({clearDirty = false} = {}) {
+  const draft = sanitizeTradeupSimulationDraftPayload(state.simulationWorkspacePreset);
+  if (!draft || !(draft.primary_output || draft.cover_output)) return false;
+  const sourceId = String(state.simulationWorkspaceSourcePresetId || "").trim();
+  const currentList = Array.isArray(state.simulationPresets) ? [...state.simulationPresets] : [];
+  const sourceIndex = sourceId
+    ? currentList.findIndex((entry) => String(entry && entry.id || "").trim() === sourceId)
+    : -1;
+  const existing = sourceIndex >= 0 ? currentList[sourceIndex] : null;
+  const savedPreset = sanitizeTradeupSimulationPresetPayload({
+    ...draft,
+    id: sourceId || makeTradeupSimulationUid("preset"),
+    dirty: clearDirty ? false : !!draft.dirty,
+    created_at: Math.max(0, Number(existing && existing.created_at || 0) || 0) || draft.created_at || Date.now(),
+    updated_at: Date.now()
+  });
+  if (!savedPreset) return false;
+  if (sourceIndex >= 0) currentList[sourceIndex] = savedPreset;
+  else currentList.push(savedPreset);
+  const payload = normalizeTradeupSimulationPresetList(
+    clearDirty
+      ? currentList.map((entry) => ({
+        ...(entry && typeof entry === "object" ? entry : {}),
+        dirty: false
+      }))
+      : currentList
+  );
+  const savedId = String(savedPreset.id || "").trim();
+  state.simulationPresets = payload;
+  state.simulationActivePresetId = savedId;
+  state.simulationWorkspaceSourcePresetId = savedId;
+  state.simulationWorkspacePreset = sanitizeTradeupSimulationDraftPayload({
+    ...(payload.find((entry) => String(entry && entry.id || "").trim() === savedId) || savedPreset),
+    dirty: false
+  });
+  const storedPayload = serializeTradeupSimulationPresetList(payload, {clearDirty});
+  writeTradeupSimulationPresetsToLocalStorage(storedPayload);
+  state.simulationPersisting = true;
+  renderSimulationPage();
+  const synced = await saveTradeupSimulationPresetsToServer(storedPayload);
+  state.simulationPersisting = false;
+  renderSimulationPage();
+  return synced;
+}
+async function cancelTradeupSimulationEditing() {
+  state.simulationViewMode = "saved";
+  state.simulationWorkspacePreset = null;
+  state.simulationWorkspaceSourcePresetId = "";
+  closeTradeupSimulationPickerModal();
+  closeTradeupSimulationItemModal();
+  selectTradeupSimulationPreset(state.simulationActivePresetId, {openWorkspace: false});
+  renderSimulationPage();
+}
+async function deleteTradeupSimulationPreset(presetId) {
+  const key = String(presetId || "").trim();
+  if (!key) return false;
+  const currentList = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
+  if (!currentList.some((entry) => String(entry && entry.id || "").trim() === key)) return false;
+  const nextList = normalizeTradeupSimulationPresetList(
+    currentList.filter((entry) => String(entry && entry.id || "").trim() !== key)
+  );
+  state.simulationPresets = nextList;
+  if (String(state.simulationActivePresetId || "").trim() === key) {
+    state.simulationActivePresetId = nextList[0] ? String(nextList[0].id || "").trim() : "";
+  }
+  const workspacePresetId = String(state.simulationWorkspacePreset && state.simulationWorkspacePreset.id || "").trim();
+  const workspaceSourceId = String(state.simulationWorkspaceSourcePresetId || "").trim();
+  if (workspacePresetId === key || workspaceSourceId === key) {
+    state.simulationWorkspacePreset = null;
+    state.simulationWorkspaceSourcePresetId = "";
+  }
+  closeTradeupSimulationPickerModal();
+  closeTradeupSimulationItemModal();
+  const storedPayload = serializeTradeupSimulationPresetList(nextList);
+  writeTradeupSimulationPresetsToLocalStorage(storedPayload);
+  state.simulationPersisting = true;
+  renderSimulationPage();
+  const synced = await saveTradeupSimulationPresetsToServer(storedPayload);
+  state.simulationPersisting = false;
+  selectTradeupSimulationPreset(state.simulationActivePresetId, {openWorkspace: false});
+  renderSimulationPage();
+  return synced;
+}
+function findTradeupSimulationPresetIndex(presetId) {
+  const key = String(presetId || "").trim();
+  const list = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
+  return list.findIndex((entry) => String(entry && entry.id || "").trim() === key);
+}
+function getTradeupSimulationPresetById(presetId) {
+  const list = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
+  const key = String(presetId || "").trim();
+  if (!key) return null;
+  return list.find((entry) => String(entry && entry.id || "").trim() === key) || null;
+}
+function updateTradeupSimulationPresetRecord(presetId, updater) {
+  const activeDraft = getTradeupSimulationWorkspaceDraft();
+  const key = String(presetId || (activeDraft && activeDraft.id) || state.simulationActivePresetId || "").trim();
+  const draft = getTradeupSimulationWorkspaceDraft(key);
+  if (draft) {
+    const next = sanitizeTradeupSimulationDraftPayload(updater ? updater(deepCopyPlain(draft)) : draft);
+    state.simulationWorkspacePreset = next;
+    return next;
+  }
+  const index = findTradeupSimulationPresetIndex(key);
+  if (index < 0) return null;
+  const current = state.simulationPresets[index];
+  const next = sanitizeTradeupSimulationPresetPayload(updater ? updater(deepCopyPlain(current)) : current);
+  if (!next) return null;
+  state.simulationPresets[index] = next;
+  return next;
+}
+function closeTradeupSimulationPickerModal() {
+  state.simulationSearchSeq = Math.max(0, Number(state.simulationSearchSeq || 0) || 0) + 1;
+  state.simulationPickerQuery = "";
+  state.simulationPickerResults = [];
+  state.simulationPickerError = "";
+  state.simulationSearchLoading = false;
+  state.simulationPickerOpen = false;
+  state.simulationPickerMode = "";
+  state.simulationPickerTitle = "";
+}
+function closeTradeupSimulationRoleChoosers() {
+  const hadOpen = !!state.simulationOutputChooserOpen || !!state.simulationMaterialChooserOpen;
+  state.simulationOutputChooserOpen = false;
+  state.simulationMaterialChooserOpen = false;
+  return hadOpen;
+}
+function setTradeupSimulationRoleChooserOpen(kind, open) {
+  const chooserKind = String(kind || "").trim() === "material" ? "material" : "output";
+  const next = !!open;
+  if (chooserKind === "output") {
+    if (state.simulationOutputChooserOpen === next && (!next || !state.simulationMaterialChooserOpen)) return;
+    state.simulationOutputChooserOpen = next;
+    if (next) state.simulationMaterialChooserOpen = false;
+  } else {
+    if (state.simulationMaterialChooserOpen === next && (!next || !state.simulationOutputChooserOpen)) return;
+    state.simulationMaterialChooserOpen = next;
+    if (next) state.simulationOutputChooserOpen = false;
+  }
+  if (!next) {
+    setTradeupSimulationChooserActiveSlot(chooserKind, "");
+  } else {
+    setTradeupSimulationChooserActiveSlot(
+      chooserKind,
+      getTradeupSimulationPreferredSlot(chooserKind, getActiveTradeupSimulationPreset())
+    );
+  }
+  renderSimulationRoleChoosers(getActiveTradeupSimulationPreset());
+}
+function getTradeupSimulationChooserNodes(kind) {
+  const chooserKind = String(kind || "").trim() === "material" ? "material" : "output";
+  return {
+    chooserKind,
+    chooser: chooserKind === "material" ? ui.simulationMaterialRoleChooser : ui.simulationOutputRoleChooser,
+    split: chooserKind === "material" ? ui.simulationMaterialRoleSplit : ui.simulationOutputRoleSplit,
+    mainSlot: chooserKind === "material" ? "main_material" : "primary_output",
+    auxSlot: chooserKind === "material" ? "aux_material" : "aux_output"
+  };
+}
+function getTradeupSimulationPreferredSlot(kind, preset = null, currentSlot = "") {
+  const {chooserKind, mainSlot, auxSlot} = getTradeupSimulationChooserNodes(kind);
+  const activePreset = preset || getActiveTradeupSimulationPreset();
+  const normalizedCurrent = normalizeTradeupSimulationSlotName(currentSlot);
+  if (chooserKind === "output") {
+    const hasMain = !!sanitizeTradeupSimulationTargetItem(activePreset && activePreset.primary_output);
+    const hasAux = !!sanitizeTradeupSimulationTargetItem(activePreset && activePreset.aux_output);
+    if (!hasMain) return mainSlot;
+    if (!hasAux) return auxSlot;
+  } else {
+    const hasMain = !!sanitizeTradeupSimulationTargetItem(activePreset && activePreset.main_material);
+    const hasAux = !!sanitizeTradeupSimulationTargetItem(activePreset && activePreset.aux_material);
+    if (!hasMain) return mainSlot;
+    if (!hasAux) return auxSlot;
+  }
+  if (normalizedCurrent === mainSlot || normalizedCurrent === auxSlot) return normalizedCurrent;
+  const stateSlot = normalizeTradeupSimulationSlotName(
+    chooserKind === "material" ? state.simulationMaterialRole : state.simulationOutputRole
+  );
+  return stateSlot || mainSlot;
+}
+function setTradeupSimulationChooserActiveSlot(kind, slot = "") {
+  const {chooser, split, mainSlot, auxSlot} = getTradeupSimulationChooserNodes(kind);
+  const normalizedSlot = normalizeTradeupSimulationSlotName(slot);
+  if (chooser) {
+    if (normalizedSlot) chooser.dataset.activeSlot = normalizedSlot;
+    else delete chooser.dataset.activeSlot;
+  }
+  if (!split) return normalizedSlot || "";
+  const main = split.querySelector(".role-main");
+  const aux = split.querySelector(".role-aux");
+  if (main) main.classList.toggle("is-active", normalizedSlot === mainSlot);
+  if (aux) aux.classList.toggle("is-active", normalizedSlot === auxSlot);
+  return normalizedSlot || "";
+}
+function inferTradeupSimulationChooserSlot(kind, evt, fallbackSlot = "", {allowPointerPosition = true} = {}) {
+  const {chooser, mainSlot, auxSlot} = getTradeupSimulationChooserNodes(kind);
+  const target = evt && evt.target && typeof evt.target.closest === "function" ? evt.target : null;
+  if (target) {
+    if (target.closest(".role-main")) return mainSlot;
+    if (target.closest(".role-aux")) return auxSlot;
+  }
+  const clientX = evt && evt.clientX !== null && evt.clientX !== undefined
+    ? Number(evt.clientX)
+    : Number.NaN;
+  if (allowPointerPosition && chooser && Number.isFinite(clientX)) {
+    const rect = chooser.getBoundingClientRect();
+    if (rect.width > 0) {
+      return clientX < rect.left + rect.width / 2 ? mainSlot : auxSlot;
+    }
+  }
+  const normalizedFallback = normalizeTradeupSimulationSlotName(fallbackSlot);
+  return normalizedFallback || mainSlot;
+}
+function syncTradeupSimulationChooserHoverSlot(kind, evt, fallbackSlot = "") {
+  const slotName = inferTradeupSimulationChooserSlot(kind, evt, fallbackSlot, {allowPointerPosition: true});
+  return setTradeupSimulationChooserActiveSlot(kind, slotName);
+}
+function resolveTradeupSimulationChooserSlot(kind, evt, fallbackSlot = "") {
+  const {chooser, chooserKind, mainSlot} = getTradeupSimulationChooserNodes(kind);
+  const activeSlot = normalizeTradeupSimulationSlotName(chooser && chooser.dataset ? chooser.dataset.activeSlot : "");
+  const preferredSlot = getTradeupSimulationPreferredSlot(kind, getActiveTradeupSimulationPreset(), activeSlot || fallbackSlot);
+  const slotName = inferTradeupSimulationChooserSlot(kind, evt, preferredSlot, {allowPointerPosition: false});
+  if (slotName) return slotName;
+  const currentSlot = normalizeTradeupSimulationSlotName(
+    chooserKind === "material" ? state.simulationMaterialRole : state.simulationOutputRole
+  );
+  return currentSlot || preferredSlot || mainSlot;
+}
+function closeTradeupSimulationItemModal() {
+  state.simulationModalOpen = false;
+  state.simulationModalMode = "";
+  state.simulationModalPresetId = "";
+  state.simulationModalSlot = "";
+  state.simulationModalItemType = "";
+  state.simulationModalItemSnapshot = null;
+}
+function openTradeupSimulationPickerModal({slot = "", title = ""} = {}) {
+  const slotName = normalizeTradeupSimulationSlotName(slot);
+  if (!slotName) return false;
+  if (!state.simulationWorkspacePreset) {
+    openBlankTradeupSimulationWorkspaceDraft();
+  }
+  state.simulationViewMode = "workspace";
+  closeTradeupSimulationRoleChoosers();
+  state.simulationSearchSeq = Math.max(0, Number(state.simulationSearchSeq || 0) || 0) + 1;
+  state.simulationPickerQuery = "";
+  state.simulationPickerResults = [];
+  state.simulationPickerError = "";
+  state.simulationSearchLoading = false;
+  state.simulationPickerOpen = true;
+  state.simulationPickerMode = slotName;
+  state.simulationPickerTitle = String(title || "").trim() || `选择${slotName}`;
+  closeTradeupSimulationItemModal();
+  return true;
+}
+function openTradeupSimulationItemModal({presetId, slot = "", itemType = "output", item = null, mode = "edit"} = {}) {
+  const preset = getTradeupSimulationWorkspaceDraft(presetId || state.simulationActivePresetId)
+    || getTradeupSimulationPresetById(presetId || state.simulationActivePresetId)
+    || getActiveTradeupSimulationPreset();
+  const slotName = normalizeTradeupSimulationSlotName(slot);
+  const itemSnapshot = sanitizeTradeupSimulationTargetItem(item)
+    || sanitizeTradeupSimulationTargetItem(preset && preset[slotName]);
+  if (!preset || !itemSnapshot) return false;
+  state.simulationModalOpen = true;
+  state.simulationModalMode = slotName && String(mode || "").trim() !== "readonly"
+    ? "edit"
+    : "readonly";
+  state.simulationModalPresetId = String(preset.id || "").trim();
+  state.simulationModalSlot = slotName;
+  state.simulationModalItemType = String(itemType || "").trim() === "material" ? "material" : "output";
+  state.simulationModalItemSnapshot = deepCopyPlain(itemSnapshot);
+  closeTradeupSimulationPickerModal();
+  state.simulationViewMode = "workspace";
+  return true;
+}
+function getTradeupSimulationModalPreset() {
+  return getTradeupSimulationWorkspaceDraft(state.simulationModalPresetId || state.simulationActivePresetId)
+    || getTradeupSimulationPresetById(state.simulationModalPresetId || state.simulationActivePresetId)
+    || getActiveTradeupSimulationPreset();
+}
+function getTradeupSimulationModalItem() {
+  return sanitizeTradeupSimulationTargetItem(state.simulationModalItemSnapshot);
+}
+function getTradeupSimulationArtProps(item) {
+  const artUrl = preferredRowSkinImageUrl(item);
+  const rarityVisual = getTradeupSimulationRarityVisuals(item && item.rarity);
+  const styleParts = [`--simulation-card-rarity-color:${rarityVisual.color}`];
+  if (artUrl) {
+    styleParts.push(`--simulation-card-art-image:${cssUrlValue(artUrl)}`);
+  }
+  return {
+    artUrl,
+    artStyleAttr: ` style='${styleParts.join(";")}'`
+  };
+}
+function getTradeupSimulationRarityVisuals(value) {
+  const label = normalizeCraftPredictorRarityLabel(value) || "未分级";
+  const colorMap = {
+    "消费级": "#b0c3d9",
+    "工业级": "#5e98d9",
+    "军规级": "#4b69ff",
+    "受限": "#8847ff",
+    "保密": "#d32ce6",
+    "隐秘": "#eb4b4b",
+    "金": "#e4ae39",
+    "未分级": "#6d7c92"
+  };
+  return {
+    label,
+    color: colorMap[label] || colorMap["未分级"]
+  };
+}
+function bindSimulationInteractiveElement(element, handler) {
+  if (!element || typeof handler !== "function") return;
+  element.onclick = handler;
+  element.onkeydown = (evt) => {
+    if (evt.key !== "Enter" && evt.key !== " ") return;
+    evt.preventDefault();
+    handler(evt);
+  };
+}
+function selectTradeupSimulationPreset(presetId, {openWorkspace = false} = {}) {
+  const list = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
+  const key = String(presetId || "").trim();
+  if (key && list.some((entry) => String(entry && entry.id || "").trim() === key)) {
+    state.simulationActivePresetId = key;
+    const preset = list.find((entry) => String(entry && entry.id || "").trim() === key) || null;
+    if (!openWorkspace) {
+      closeTradeupSimulationPickerModal();
+      closeTradeupSimulationItemModal();
+      return preset;
+    }
+    state.simulationViewMode = "workspace";
+    return setTradeupSimulationWorkspaceDraft({
+      ...deepCopyPlain(preset),
+      dirty: false
+    }, {
+      sourcePresetId: key
+    });
+  }
+  state.simulationActivePresetId = list[0] ? String(list[0].id || "").trim() : "";
+  closeTradeupSimulationPickerModal();
+  closeTradeupSimulationItemModal();
+  if (!openWorkspace) return list[0] || null;
+  return openBlankTradeupSimulationWorkspaceDraft();
+}
+function setTradeupSimulationActivePreset(presetId) {
+  return selectTradeupSimulationPreset(presetId, {openWorkspace: true});
+}
+function applyTradeupSimulationResolveResult(presetId, result) {
+  if (!result || typeof result !== "object" || result.ok !== true) return false;
+  const rows = deepCopyPlain(Array.isArray(result.rows) ? result.rows : []);
+  const outputCandidates = rows.flatMap((row) => Array.isArray(row && row.outputs) ? row.outputs : []);
+  const next = updateTradeupSimulationPresetRecord(presetId, (current) => ({
+    ...current,
+    primary_output: current.primary_output || sanitizeTradeupSimulationTargetItem(result.target),
+    cover_output: current.cover_output || current.primary_output || sanitizeTradeupSimulationTargetItem(result.target),
+    active_anchor_item: sanitizeTradeupSimulationTargetItem(result.driver) || current.active_anchor_item,
+    output_rows: rows,
+    material_rows: rows,
+    rows,
+    output_candidates: outputCandidates,
+    warnings: deepCopyPlain(Array.isArray(result.warnings) ? result.warnings : []),
+    updated_at: Date.now()
+  }));
+  return !!next;
+}
+function applyTradeupSimulationResolveFailure(presetId, result) {
+  const message = String(result && result.message || "解析失败").trim() || "解析失败";
+  const invalidReason = String(result && result.invalid_reason || "").trim() || "resolve_failed";
+  const warnings = Array.isArray(result && result.warnings) && result.warnings.length
+    ? deepCopyPlain(result.warnings)
+    : [{
+      type: invalidReason,
+      message
+    }];
+  const next = updateTradeupSimulationPresetRecord(presetId, (current) => ({
+    ...current,
+    output_rows: [],
+    material_rows: [],
+    rows: [],
+    warnings,
+    updated_at: Date.now()
+  }));
+  return !!next;
+}
+function applyTradeupSimulationSlotSelection({presetId, slot = "", item = null, absoluteWear = null} = {}) {
+  const slotName = normalizeTradeupSimulationSlotName(slot);
+  const nextItem = sanitizeTradeupSimulationTargetItem(item);
+  if (!slotName || !nextItem) return false;
+  const numericWear = absoluteWear === null || absoluteWear === undefined || absoluteWear === ""
+    ? null
+    : Number(absoluteWear);
+  const next = updateTradeupSimulationPresetRecord(presetId, (current) => ({
+    ...current,
+    [slotName]: nextItem,
+    cover_output: slotName === "primary_output"
+      ? nextItem
+      : current.cover_output || (isTradeupSimulationOutputSlot(slotName) ? nextItem : null),
+    active_anchor_item: nextItem,
+    active_anchor_abs_wear: Number.isFinite(numericWear)
+      ? numericWear
+      : (Number.isFinite(Number(current.active_anchor_abs_wear))
+        ? Number(current.active_anchor_abs_wear)
+        : (Number.isFinite(Number(nextItem.minfloat)) ? Number(nextItem.minfloat) : null)),
+    dirty: true,
+    updated_at: Date.now()
+  }));
+  return !!next;
+}
+function adoptTradeupSimulationDerivedPrimaryOutput({presetId, candidates = []} = {}) {
+  const list = (Array.isArray(candidates) ? candidates : [])
+    .map((entry) => sanitizeTradeupSimulationTargetItem(entry))
+    .filter(Boolean);
+  if (!list.length) return false;
+  const next = updateTradeupSimulationPresetRecord(presetId, (current) => {
+    const currentPrimary = sanitizeTradeupSimulationTargetItem(current && current.primary_output);
+    const currentCover = sanitizeTradeupSimulationTargetItem(current && current.cover_output)
+      || currentPrimary;
+    const anchor = getTradeupSimulationActiveAnchorItem(current);
+    const anchorCollection = String(anchor && anchor.collection || "").trim();
+    const currentPrimaryCandidate = findTradeupSimulationCandidateByKey(list, currentPrimary);
+    const currentCoverCandidate = findTradeupSimulationCandidateByKey(list, currentCover);
+    const alignedCandidate = pickTradeupSimulationCandidateForCollection(list, anchorCollection);
+    const nextPrimary = currentPrimaryCandidate && (!anchorCollection || String(currentPrimaryCandidate.collection || "").trim() === anchorCollection)
+      ? currentPrimaryCandidate
+      : alignedCandidate || currentPrimaryCandidate || currentPrimary || list[0];
+    const nextCover = currentCoverCandidate && (!anchorCollection || String(currentCoverCandidate.collection || "").trim() === anchorCollection)
+      ? currentCoverCandidate
+      : nextPrimary || alignedCandidate || currentCoverCandidate || currentCover || list[0];
+    return {
+      ...current,
+      primary_output: nextPrimary,
+      cover_output: nextCover,
+      output_rows: [],
+      material_rows: [],
+      rows: [],
+      output_candidates: deepCopyPlain(list),
+      dirty: true,
+      updated_at: Date.now()
+    };
+  });
+  return !!next;
+}
+function applyTradeupSimulationModalEdit({absoluteWear} = {}) {
+  if (!state.simulationModalOpen || state.simulationModalMode !== "edit") return false;
+  const preset = getTradeupSimulationModalPreset();
+  const item = getTradeupSimulationModalItem();
+  if (!preset || !item) return false;
+  const updated = applyTradeupSimulationSlotSelection({
+    presetId: preset.id,
+    slot: state.simulationModalSlot,
+    item,
+    absoluteWear
+  });
+  if (updated) closeTradeupSimulationItemModal();
+  return updated;
 }
 function buildCraftAssistParentGroups() {
   const groups = buildCraftGroupRows(getCraftCandidates());
@@ -6591,6 +7330,1438 @@ function clearCraftQueue() {
   setCraftStatus("已清空配方预览");
   renderCraftPage();
 }
+function getActiveTradeupSimulationPreset() {
+  const draft = state.simulationWorkspacePreset && typeof state.simulationWorkspacePreset === "object"
+    ? state.simulationWorkspacePreset
+    : null;
+  if (draft) return draft;
+  const activeId = String(state.simulationActivePresetId || "").trim();
+  const list = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
+  if (!list.length) return null;
+  return list.find((entry) => String(entry && entry.id || "").trim() === activeId) || list[0] || null;
+}
+function formatTradeupSimulationWear(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "-";
+  return numeric.toFixed(6);
+}
+function summarizeTradeupSimulationWearLabel(label) {
+  const value = String(label || "").trim();
+  if (value === "Factory New") return "崭新出厂";
+  if (value === "Minimal Wear") return "略有磨损";
+  if (value === "Field-Tested") return "久经沙场";
+  if (value === "Well-Worn") return "破损不堪";
+  if (value === "Battle-Scarred") return "战痕累累";
+  return value || "-";
+}
+function findTradeupSimulationOutputByKey(preset, itemKey) {
+  const key = String(itemKey || "").trim();
+  if (!key) return null;
+  for (const row of Array.isArray(preset && preset.output_rows) ? preset.output_rows : []) {
+    const outputs = Array.isArray(row && row.outputs) ? row.outputs : [];
+    const match = outputs.find((entry) => String(entry && entry.basemarkethashname || "").trim() === key);
+    if (match) return match;
+  }
+  const candidate = (Array.isArray(preset && preset.output_candidates) ? preset.output_candidates : [])
+    .find((entry) => String(entry && (entry.basemarkethashname || entry.base_name || entry.markethashname) || "").trim() === key);
+  if (candidate) return candidate;
+  return null;
+}
+function findTradeupSimulationCandidateByKey(candidates, item) {
+  const key = String(item && (item.basemarkethashname || item.basename || item.markethashname) || "").trim();
+  if (!key) return null;
+  const list = Array.isArray(candidates) ? candidates : [];
+  return list.find((entry) => String(entry && (entry.basemarkethashname || entry.basename || entry.markethashname) || "").trim() === key) || null;
+}
+function pickTradeupSimulationCandidateForCollection(candidates, collection = "") {
+  const list = (Array.isArray(candidates) ? candidates : [])
+    .map((entry) => sanitizeTradeupSimulationTargetItem(entry))
+    .filter(Boolean);
+  if (!list.length) return null;
+  const collectionKey = String(collection || "").trim();
+  const scoped = collectionKey
+    ? list.filter((entry) => String(entry && entry.collection || "").trim() === collectionKey)
+    : list;
+  const pool = scoped.length ? scoped : list;
+  const pickIndex = Math.max(0, Math.min(pool.length - 1, Math.floor(Number(Math.random()) * pool.length)));
+  return pool[pickIndex] || pool[0] || null;
+}
+function getTradeupSimulationActiveAnchorItem(preset) {
+  return sanitizeTradeupSimulationTargetItem(preset && preset.active_anchor_item)
+    || sanitizeTradeupSimulationTargetItem(preset && preset.cover_output)
+    || sanitizeTradeupSimulationTargetItem(preset && preset.primary_output);
+}
+function getTradeupSimulationAnchorBounds(preset) {
+  const anchor = getTradeupSimulationActiveAnchorItem(preset);
+  const rowItem = findTradeupSimulationOutputByKey(preset, anchor && anchor.basemarkethashname);
+  if (rowItem) return rowItem;
+  if (anchor) return anchor;
+  if (preset && preset.cover_output) return preset.cover_output;
+  return null;
+}
+function getTradeupSimulationSelectedMaterialCollections(preset) {
+  const current = [preset && preset.main_material, preset && preset.aux_material]
+    .map((entry) => String(entry && entry.collection || "").trim())
+    .filter(Boolean);
+  const derived = (Array.isArray(preset && preset.rows) ? preset.rows : [])
+    .flatMap((row) => Array.isArray(row && row.materials) ? row.materials : [])
+    .map((item) => String(item && item.collection || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(current.concat(derived))).slice(0, 12);
+}
+function inferTradeupSimulationWearLabelFromName(value) {
+  const wearRules = [
+    ["崭新出厂", "崭新", "factory new", "factorynew"],
+    ["略有磨损", "略磨", "minimal wear", "minimalwear"],
+    ["久经沙场", "久经", "field tested", "field-tested", "fieldtested"],
+    ["破损不堪", "破损", "well worn", "well-worn", "wellworn"],
+    ["战痕累累", "战痕", "battle scarred", "battle-scarred", "battlescarred"]
+  ];
+  const normalizeToken = (text) => String(text || "")
+    .toLowerCase()
+    .replace(/[\s_\-（）()]/g, "");
+  const normalized = normalizeToken(value);
+  if (!normalized) return "";
+  for (const rule of wearRules) {
+    if (rule.some((key) => normalized.includes(normalizeToken(key)))) {
+      return String(rule && rule[0] || "").trim();
+    }
+  }
+  return "";
+}
+function getTradeupSimulationItemWearLabel(item) {
+  const normalized = summarizeTradeupSimulationWearLabel(item && item.wear_label);
+  if (normalized && normalized !== "-") return normalized;
+  return inferTradeupSimulationWearLabelFromName(
+    item && (item.markethashname || item.name || item.basename || item.basemarkethashname)
+  );
+}
+function getTradeupSimulationWearBadgeLabel(item) {
+  const label = getTradeupSimulationItemWearLabel(item);
+  return label || "-";
+}
+function getTradeupSimulationWearBadgeToneClass(value) {
+  const label = value && typeof value === "object"
+    ? getTradeupSimulationItemWearLabel(value)
+    : (summarizeTradeupSimulationWearLabel(value) || String(value || "").trim());
+  const normalized = String(label || "").trim().toLowerCase().replace(/[\s_\-]/g, "");
+  if (!normalized) return "";
+  if (normalized.includes("崭新出厂") || normalized.includes("崭新") || normalized.includes("factorynew")) return " tone-fn";
+  if (normalized.includes("略有磨损") || normalized.includes("略磨") || normalized.includes("minimalwear")) return " tone-mw";
+  if (normalized.includes("久经沙场") || normalized.includes("久经") || normalized.includes("fieldtested")) return " tone-ft";
+  if (normalized.includes("破损不堪") || normalized.includes("破损") || normalized.includes("wellworn")) return " tone-ww";
+  if (normalized.includes("战痕累累") || normalized.includes("战痕") || normalized.includes("battlescarred")) return " tone-bs";
+  return "";
+}
+function buildTradeupSimulationSavedCardSummary(preset) {
+  const target = sanitizeTradeupSimulationTargetItem(preset && preset.cover_output)
+    || sanitizeTradeupSimulationTargetItem(preset && preset.primary_output);
+  const anchor = getTradeupSimulationActiveAnchorItem(preset);
+  const relativeWear = getTradeupSimulationAnchorRelativeWear(preset);
+  return {
+    targetName: String(target && (target.basename || target.basemarkethashname || target.markethashname) || "未选择主产物").trim(),
+    anchorName: String(anchor && (anchor.basename || anchor.basemarkethashname || anchor.markethashname) || "未设锚定物品").trim(),
+    wearLabel: getTradeupSimulationItemWearLabel(target),
+    anchorWear: Number.isFinite(Number(preset && preset.active_anchor_abs_wear))
+      ? formatTradeupSimulationWear(preset.active_anchor_abs_wear)
+      : "-",
+    relativeWear: Number.isFinite(relativeWear)
+      ? formatTradeupSimulationWear(relativeWear)
+      : "-",
+    collections: getTradeupSimulationSelectedMaterialCollections(preset)
+  };
+}
+function getTradeupSimulationAnchorRelativeWear(preset) {
+  const item = getTradeupSimulationAnchorBounds(preset);
+  const absoluteWear = Number(preset && preset.active_anchor_abs_wear);
+  const minWear = Number(item && item.minfloat);
+  const maxWear = Number(item && item.maxfloat);
+  if (!Number.isFinite(absoluteWear) || !Number.isFinite(minWear) || !Number.isFinite(maxWear) || maxWear <= minWear) return null;
+  return Math.max(0, Math.min(1, (absoluteWear - minWear) / (maxWear - minWear)));
+}
+function mapTradeupSimulationPredictorOutcomeToItem(outcome) {
+  const markethashname = String(outcome && (outcome.markethashname || outcome.name || outcome.base_name) || "").trim();
+  if (!markethashname) return null;
+  return sanitizeTradeupSimulationTargetItem({
+    markethashname,
+    name: String(outcome && (outcome.name || outcome.markethashname || outcome.base_name) || "").trim(),
+    basemarkethashname: String(outcome && (outcome.base_name || outcome.markethashname || outcome.name) || "").trim(),
+    basename: String(outcome && (outcome.base_name || outcome.markethashname || outcome.name) || "").trim(),
+    collection: String(outcome && (outcome.collection_display || outcome.collection_key) || "").trim(),
+    rarity: "",
+    minfloat: outcome && outcome.minfloat,
+    maxfloat: outcome && outcome.maxfloat,
+    goods_icon_url: String(outcome && outcome.goods_icon_url || "").trim(),
+    goods_original_icon_url: String(outcome && outcome.goods_original_icon_url || "").trim(),
+    goods_share_thumbnail_url: String(outcome && outcome.goods_share_thumbnail_url || "").trim()
+  });
+}
+function buildTradeupSimulationDerivedOutputPayload(preset) {
+  const mainMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.main_material);
+  const auxMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.aux_material);
+  const materials = [mainMaterial, auxMaterial].filter(Boolean);
+  if (!materials.length) return null;
+  const rarity = String(materials[0] && materials[0].rarity || "").trim();
+  if (!rarity || materials.some((item) => String(item && item.rarity || "").trim() !== rarity)) return null;
+  const relativeWear = getTradeupSimulationAnchorRelativeWear(preset);
+  if (!Number.isFinite(relativeWear)) return null;
+  const groups = [];
+  const collectionCountMap = new Map();
+  collectionCountMap.set(String(mainMaterial && mainMaterial.collection || auxMaterial && auxMaterial.collection || "").trim(), materials.length === 1 ? 10 : 0);
+  if (mainMaterial && auxMaterial) {
+    collectionCountMap.clear();
+    collectionCountMap.set(String(mainMaterial.collection || "").trim(), 5);
+    collectionCountMap.set(String(auxMaterial.collection || "").trim(), (collectionCountMap.get(String(auxMaterial.collection || "").trim()) || 0) + 5);
+  }
+  for (const [collection, count] of collectionCountMap.entries()) {
+    if (!collection || !count) continue;
+    groups.push({collection, count});
+  }
+  if (!groups.length) return null;
+  return {
+    required_count: 10,
+    target_relative_wear: relativeWear,
+    input_rarity: rarity,
+    stattrak: false,
+    groups
+  };
+}
+function getTradeupSimulationResolveTargetKey(item) {
+  const normalized = sanitizeTradeupSimulationTargetItem(item);
+  if (!normalized) return "";
+  const collection = String(normalized.collection || "").trim();
+  const rarity = String(normalized.rarity || "").trim();
+  return collection && rarity
+    ? `${collection}|${rarity}`
+    : String(normalized.markethashname || "").trim();
+}
+function getTradeupSimulationResolveTargets(preset) {
+  const targets = [];
+  const seen = new Set();
+  const pushTarget = (value) => {
+    const item = sanitizeTradeupSimulationTargetItem(value);
+    if (!item) return;
+    const key = getTradeupSimulationResolveTargetKey(item);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    targets.push(item);
+  };
+  pushTarget(preset && preset.primary_output);
+  pushTarget(preset && preset.aux_output);
+  for (const candidate of Array.isArray(preset && preset.output_candidates) ? preset.output_candidates : []) {
+    pushTarget(candidate);
+  }
+  if (!targets.length) {
+    pushTarget(preset && preset.cover_output);
+  }
+  return targets;
+}
+function getTradeupSimulationPickerContext() {
+  const slot = normalizeTradeupSimulationSlotName(state.simulationPickerMode);
+  const meta = getTradeupSimulationRoleMeta(slot);
+  const roleText = String(meta && meta.title || "物品").trim() || "物品";
+  const outputSlot = isTradeupSimulationOutputSlot(slot);
+  return {
+    roleText,
+    hintText: slot
+      ? `${roleText}会直接写入当前配方，后续调整在下方${outputSlot ? "产物" : "材料"}列表卡片中完成。`
+      : "搜索后点击候选项即可写入当前配方。",
+    emptyText: slot
+      ? `输入名称或收藏品后，为${roleText}搜索候选物品`
+      : "输入关键字后搜索全量皮肤库",
+    actionText: slot ? `点击设为${roleText}` : "点击写入当前配方"
+  };
+}
+function getTradeupSimulationLockedRarity(preset, slot = "") {
+  const slotName = normalizeTradeupSimulationSlotName(slot);
+  const slotItems = (isTradeupSimulationOutputSlot(slotName)
+    ? ["primary_output", "aux_output"]
+    : ["main_material", "aux_material"])
+    .map((slotName) => sanitizeTradeupSimulationTargetItem(preset && preset[slotName]))
+    .filter(Boolean);
+  for (const item of slotItems) {
+    const rarity = getTradeupSimulationSafeRarityText(item && item.rarity);
+    if (rarity) return rarity;
+  }
+  return "";
+}
+function validateTradeupSimulationPickerSelection(preset, slot, item) {
+  const nextItem = sanitizeTradeupSimulationTargetItem(item);
+  if (!nextItem) {
+    return {ok: false, message: "未找到可添加的物品"};
+  }
+  const currentRarity = getTradeupSimulationLockedRarity(preset, slot);
+  const nextRarity = getTradeupSimulationSafeRarityText(nextItem && nextItem.rarity);
+  if (currentRarity && nextRarity && currentRarity !== nextRarity) {
+    return {
+      ok: false,
+      message: `单配方需同一稀有度：当前为 ${currentRarity}，不能添加 ${nextRarity}`
+    };
+  }
+  return {ok: true, item: nextItem};
+}
+async function selectTradeupSimulationPickerItem(pickIndex) {
+  const results = Array.isArray(state.simulationPickerResults) ? state.simulationPickerResults : [];
+  const index = Number(pickIndex);
+  const item = Number.isInteger(index) ? results[index] : null;
+  const slot = normalizeTradeupSimulationSlotName(state.simulationPickerMode);
+  const preset = getActiveTradeupSimulationPreset();
+  if (!slot || !item || !preset) return false;
+  const validation = validateTradeupSimulationPickerSelection(preset, slot, item);
+  if (!validation.ok) {
+    showErrorToast(String(validation.message || "当前物品无法加入该配方").trim() || "当前物品无法加入该配方");
+    return false;
+  }
+  const updated = applyTradeupSimulationSlotSelection({
+    slot,
+    item: validation.item,
+    absoluteWear: validation.item && validation.item.minfloat
+  });
+  if (!updated) return false;
+  closeTradeupSimulationPickerModal();
+  renderSimulationPage();
+  const refreshedPreset = getActiveTradeupSimulationPreset();
+  if (!refreshedPreset) return true;
+  if (isTradeupSimulationOutputSlot(slot)) {
+    await resolveTradeupSimulationPreset(refreshedPreset.id);
+    return true;
+  }
+  await refreshTradeupSimulationDerivedOutputs(refreshedPreset.id);
+  const resolvedPreset = getActiveTradeupSimulationPreset();
+  if (resolvedPreset && (resolvedPreset.cover_output || resolvedPreset.primary_output)) {
+    await resolveTradeupSimulationPreset(resolvedPreset.id);
+  }
+  return true;
+}
+function renderTradeupSimulationPickerResults() {
+  if (!ui.simulationPickerSearchResults) return;
+  const results = Array.isArray(state.simulationPickerResults) ? state.simulationPickerResults : [];
+  const context = getTradeupSimulationPickerContext();
+  const errorText = String(state.simulationPickerError || "").trim();
+  if (state.simulationSearchLoading) {
+    ui.simulationPickerSearchResults.innerHTML = `<div class="simulation-row-empty">正在搜索${context.roleText}候选...</div>`;
+    return;
+  }
+  if (errorText) {
+    ui.simulationPickerSearchResults.innerHTML = `<div class="simulation-row-empty">搜索失败：${escapeHtml(errorText)}</div>`;
+    return;
+  }
+  if (!results.length) {
+    ui.simulationPickerSearchResults.innerHTML = String(state.simulationPickerQuery || "").trim()
+      ? '<div class="simulation-row-empty">没有找到匹配的物品</div>'
+      : `<div class="simulation-row-empty">${context.emptyText}</div>`;
+    return;
+  }
+  ui.simulationPickerSearchResults.innerHTML = results.map((item, index) => {
+    const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
+    const itemLabel = String(item && (item.basename || item.basemarkethashname || item.markethashname) || "").trim();
+    const rarityVisual = getTradeupSimulationRarityVisuals(item && item.rarity);
+    const metaText = String(item && item.collection || "").trim() || "未标记收藏品";
+    const rarityStyleAttr = ` style="--simulation-picker-rarity-color:${escapeHtmlAttribute(rarityVisual.color)}"`;
+    return `
+      <button class="simulation-picker-item" type="button" data-simulation-pick-index="${index}"${rarityStyleAttr}>
+        <span class="simulation-picker-item-layout">
+          <span class="simulation-picker-item-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+            <span class="simulation-card-wear-badge simulation-picker-rarity-badge">${escapeHtml(rarityVisual.label)}</span>
+            ${artUrl
+              ? `<img class="simulation-picker-item-thumb" src="${escapeHtmlAttribute(artUrl)}" alt="${escapeHtmlAttribute(itemLabel)}" loading="eager" decoding="async" fetchpriority="high" />`
+              : '<span class="simulation-card-art-empty">暂无图</span>'}
+            <span class="simulation-picker-art-mask">
+              <span class="simulation-picker-art-title" title="${escapeHtmlAttribute(itemLabel)}">${escapeHtml(itemLabel)}</span>
+              <span class="simulation-picker-art-meta">${escapeHtml(metaText)}</span>
+            </span>
+          </span>
+        </span>
+      </button>
+    `;
+  }).join("");
+  for (const thumb of ui.simulationPickerSearchResults.querySelectorAll(".simulation-picker-item-thumb")) {
+    thumb.onerror = () => {
+      const art = thumb.closest(".simulation-picker-item-art");
+      if (!art) {
+        thumb.remove();
+        return;
+      }
+      art.classList.remove("has-image");
+      thumb.remove();
+      if (!art.querySelector(".simulation-card-art-empty")) {
+        const empty = document.createElement("span");
+        empty.className = "simulation-card-art-empty";
+        empty.textContent = "暂无图";
+        art.append(empty);
+      }
+    };
+  }
+  for (const button of ui.simulationPickerSearchResults.querySelectorAll("[data-simulation-pick-index]")) {
+    button.onclick = async () => {
+      const index = Number(button.getAttribute("data-simulation-pick-index"));
+      await selectTradeupSimulationPickerItem(index);
+    };
+  }
+}
+async function searchTradeupSimulationItems(query) {
+  const searchText = String(query != null ? query : state.simulationPickerQuery || "").trim();
+  state.simulationPickerQuery = searchText;
+  if (!searchText) {
+    state.simulationSearchSeq = Math.max(0, Number(state.simulationSearchSeq || 0) || 0) + 1;
+    state.simulationSearchLoading = false;
+    state.simulationPickerResults = [];
+    state.simulationPickerError = "";
+    renderTradeupSimulationPickerModal();
+    return;
+  }
+  state.simulationSearchLoading = true;
+  state.simulationPickerError = "";
+  state.simulationSearchSeq = Math.max(0, Number(state.simulationSearchSeq || 0) || 0) + 1;
+  const requestSeq = state.simulationSearchSeq;
+  renderTradeupSimulationPickerModal();
+  try {
+    const data = await api(`/api/simulation/tradeup/search-items?q=${encodeURIComponent(searchText)}`);
+    if (requestSeq !== state.simulationSearchSeq) return;
+    state.simulationSearchLoading = false;
+    state.simulationPickerResults = Array.isArray(data && data.items) ? data.items : [];
+    state.simulationPickerError = "";
+    renderTradeupSimulationPickerModal();
+  } catch (err) {
+    if (requestSeq !== state.simulationSearchSeq) return;
+    state.simulationSearchLoading = false;
+    state.simulationPickerResults = [];
+    state.simulationPickerError = String(err && err.message || err || "未知错误").trim();
+    renderTradeupSimulationPickerModal();
+  }
+}
+async function refreshTradeupSimulationDerivedOutputs(presetId) {
+  const preset = getTradeupSimulationWorkspaceDraft(presetId)
+    || getTradeupSimulationPresetById(presetId)
+    || getActiveTradeupSimulationPreset();
+  if (!preset) return false;
+  const payload = buildTradeupSimulationDerivedOutputPayload(preset);
+  if (!payload) return false;
+  try {
+    const data = await api("/api/craft/predict-outcomes", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    const candidates = (Array.isArray(data && data.outcomes) ? data.outcomes : [])
+      .map((entry) => mapTradeupSimulationPredictorOutcomeToItem(entry))
+      .filter(Boolean);
+    if (!candidates.length) return false;
+    const updated = updateTradeupSimulationPresetRecord(preset.id, (current) => ({
+      ...current,
+      output_candidates: deepCopyPlain(candidates),
+      warnings: [],
+      updated_at: Date.now()
+    }));
+    if (!updated) return false;
+    adoptTradeupSimulationDerivedPrimaryOutput({
+      presetId: preset.id,
+      candidates
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+function buildTradeupSimulationResolvePayloads(preset) {
+  const targets = getTradeupSimulationResolveTargets(preset);
+  if (!preset || !targets.length) return [];
+  const activeAnchorItem = getTradeupSimulationActiveAnchorItem(preset);
+  const driverMarkethashname = String(activeAnchorItem && activeAnchorItem.markethashname || targets[0] && targets[0].markethashname || "").trim();
+  const anchors = getTradeupSimulationSelectedMaterialCollections(preset).map((collection) => ({
+    type: "collection",
+    value: collection
+  }));
+  return targets.map((target) => ({
+    target_item: {
+      markethashname: String(target && target.markethashname || "").trim()
+    },
+    active_driver_item: {
+      markethashname: driverMarkethashname
+    },
+    active_driver_abs_wear: preset.active_anchor_abs_wear,
+    anchors
+  })).filter((payload) => String(payload.target_item && payload.target_item.markethashname || "").trim());
+}
+function mergeTradeupSimulationResolveResults(preset, results = [], failures = []) {
+  const successful = (Array.isArray(results) ? results : []).filter((entry) => entry && entry.ok === true);
+  if (!successful.length) return null;
+  const rowKeys = new Set();
+  const rows = [];
+  for (const result of successful) {
+    for (const row of Array.isArray(result && result.rows) ? result.rows : []) {
+      const outputs = Array.isArray(row && row.outputs) ? row.outputs : [];
+      const rowKey = `${String(row && (row.collection_key || row.collection) || "").trim()}|${String(outputs[0] && outputs[0].rarity || "").trim()}`;
+      if (rowKey && rowKeys.has(rowKey)) continue;
+      if (rowKey) rowKeys.add(rowKey);
+      rows.push(deepCopyPlain(row));
+    }
+  }
+  const warnings = [];
+  for (const result of successful) {
+    warnings.push(...deepCopyPlain(Array.isArray(result && result.warnings) ? result.warnings : []));
+  }
+  for (const failure of Array.isArray(failures) ? failures : []) {
+    const message = String(failure && failure.message || "").trim();
+    if (!message) continue;
+    warnings.push({
+      type: String(failure && failure.invalid_reason || "resolve_failed").trim() || "resolve_failed",
+      message
+    });
+  }
+  return {
+    ok: true,
+    invalid_reason: "",
+    message: "",
+    target: deepCopyPlain(successful[0] && successful[0].target),
+    driver: deepCopyPlain(successful[0] && successful[0].driver),
+    rows,
+    warnings
+  };
+}
+async function resolveTradeupSimulationPreset(presetId) {
+  const preset = getTradeupSimulationWorkspaceDraft(presetId)
+    || (Array.isArray(state.simulationPresets) ? state.simulationPresets : [])
+      .find((entry) => String(entry && entry.id || "").trim() === String(presetId || "").trim());
+  if (!preset) return;
+  if (!Number.isFinite(Number(preset.active_anchor_abs_wear))) {
+    renderSimulationPage();
+    return;
+  }
+  const payloads = buildTradeupSimulationResolvePayloads(preset);
+  if (!payloads.length) return;
+  state.simulationLoading = true;
+  state.simulationRequestSeq = Math.max(0, Number(state.simulationRequestSeq || 0) || 0) + 1;
+  const requestSeq = state.simulationRequestSeq;
+  renderSimulationPage();
+  try {
+    const responses = await Promise.all(payloads.map(async (payload) => {
+      try {
+        return await api("/api/simulation/tradeup/resolve", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        return {
+          ok: false,
+          invalid_reason: String(err && err.data && err.data.invalid_reason || "resolve_failed").trim() || "resolve_failed",
+          message: String(err && err.data && err.data.message || err && err.message || err || "解析失败").trim(),
+          warnings: deepCopyPlain(Array.isArray(err && err.data && err.data.warnings) ? err.data.warnings : []),
+          rows: []
+        };
+      }
+    }));
+    if (requestSeq !== state.simulationRequestSeq) return;
+    state.simulationLoading = false;
+    const successful = responses.filter((entry) => entry && entry.ok === true);
+    const failures = responses.filter((entry) => !entry || entry.ok !== true);
+    if (successful.length) {
+      const merged = mergeTradeupSimulationResolveResults(preset, successful, failures);
+      if (merged) {
+        applyTradeupSimulationResolveResult(preset.id, merged);
+      } else {
+        applyTradeupSimulationResolveFailure(preset.id, failures[0]);
+      }
+    } else {
+      applyTradeupSimulationResolveFailure(preset.id, failures[0]);
+    }
+    renderSimulationPage();
+  } catch (err) {
+    if (requestSeq !== state.simulationRequestSeq) return;
+    state.simulationLoading = false;
+    applyTradeupSimulationResolveFailure(preset.id, {
+      ok: false,
+      invalid_reason: "resolve_failed",
+      message: String(err && err.message || err || "解析失败").trim()
+    });
+    renderSimulationPage();
+  }
+}
+function renderSimulationModeTabs() {
+  const mode = state.simulationViewMode === "saved" ? "saved" : "workspace";
+  for (const [button, value] of [[ui.simulationModeSavedBtn, "saved"], [ui.simulationModeWorkspaceBtn, "workspace"]]) {
+    if (!button) continue;
+    const active = mode === value;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  }
+}
+function renderSimulationSavedPresets() {
+  if (!ui.simulationSavedPresets) return;
+  const list = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
+  ui.simulationSavedPresets.classList.toggle("hidden", state.simulationViewMode !== "saved");
+  if (!list.length) {
+    ui.simulationSavedPresets.innerHTML = '<div class="simulation-row-empty">还没有已保存配方，点击“选材页面”开始。</div>';
+    return;
+  }
+  ui.simulationSavedPresets.innerHTML = list.map((preset) => {
+    const summary = buildTradeupSimulationSavedCardSummary(preset);
+    const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(preset && (preset.cover_output || preset.primary_output));
+    const active = String(state.simulationActivePresetId || "").trim() === String(preset && preset.id || "").trim();
+    return `
+      <article class="simulation-saved-card simulation-card-button${active ? " is-active" : ""}" role="button" tabindex="0" data-simulation-preset-id="${String(preset && preset.id || "").trim()}">
+        <div class="simulation-card-art simulation-saved-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+          ${summary.wearLabel ? `<span class="simulation-card-wear-badge">${summary.wearLabel}</span>` : ""}
+          <button class="simulation-saved-remove-btn" type="button" data-simulation-delete-preset-id="${String(preset && preset.id || "").trim()}" aria-label="删除该配方" title="删除该配方">×</button>
+          ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+        </div>
+        <div class="simulation-saved-body">
+          <div class="simulation-card-name">${summary.targetName}</div>
+          <div class="simulation-saved-anchor-name">${summary.anchorName}</div>
+          <div class="simulation-card-meta">相对磨损：${summary.relativeWear}</div>
+          <div class="simulation-chip-row">
+            ${(summary.collections.length ? summary.collections : ["未指定辅料收藏品"]).map((entry) => `<span class="simulation-card-chip">${entry}</span>`).join("")}
+          </div>
+        </div>
+      </article>
+    `;
+  }).join("");
+  const updateSavedCardActiveState = () => {
+    const activeId = String(state.simulationActivePresetId || "").trim();
+    for (const item of ui.simulationSavedPresets.querySelectorAll("[data-simulation-preset-id]")) {
+      item.classList.toggle("is-active", String(item.getAttribute("data-simulation-preset-id") || "").trim() === activeId);
+    }
+  };
+  for (const card of ui.simulationSavedPresets.querySelectorAll("[data-simulation-preset-id]")) {
+    const removeBtn = card.querySelector("[data-simulation-delete-preset-id]");
+    if (removeBtn) {
+      removeBtn.onclick = async (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        const presetId = String(removeBtn.getAttribute("data-simulation-delete-preset-id") || "").trim();
+        if (!presetId) return;
+        const confirmed = await openConfirmModal({
+          title: "确认删除配方",
+          message: "确定要删除该配方吗？",
+          confirmText: "确认删除",
+          cancelText: "取消"
+        });
+        if (!confirmed) return;
+        await deleteTradeupSimulationPreset(presetId);
+      };
+    }
+    card.onclick = () => {
+      const presetId = String(card.getAttribute("data-simulation-preset-id") || "").trim();
+      selectTradeupSimulationPreset(presetId, {openWorkspace: false});
+      closeTradeupSimulationPickerModal();
+      updateSavedCardActiveState();
+    };
+    card.onkeydown = (evt) => {
+      if (evt.key !== "Enter" && evt.key !== " ") return;
+      evt.preventDefault();
+      const presetId = String(card.getAttribute("data-simulation-preset-id") || "").trim();
+      const preset = setTradeupSimulationActivePreset(presetId);
+      closeTradeupSimulationPickerModal();
+      renderSimulationPage();
+      if (preset && Number.isFinite(Number(preset.active_anchor_abs_wear))) {
+        void resolveTradeupSimulationPreset(preset.id);
+      }
+    };
+    card.ondblclick = () => {
+      const presetId = String(card.getAttribute("data-simulation-preset-id") || "").trim();
+      const preset = setTradeupSimulationActivePreset(presetId);
+      closeTradeupSimulationPickerModal();
+      renderSimulationPage();
+      if (preset && Number.isFinite(Number(preset.active_anchor_abs_wear))) {
+        void resolveTradeupSimulationPreset(preset.id);
+      }
+    };
+  }
+}
+function renderSimulationWorkspaceActionsBar(preset) {
+  if (!ui.simulationWorkspaceActionsBar) return;
+  const showActions = state.simulationViewMode === "workspace";
+  ui.simulationWorkspaceActionsBar.classList.toggle("hidden", !showActions);
+  if (ui.simulationSavePresetBtn) {
+    ui.simulationSavePresetBtn.disabled = !preset || !(preset.primary_output || preset.cover_output) || !!state.simulationLoading || !!state.simulationPersisting;
+    ui.simulationSavePresetBtn.textContent = state.simulationPersisting ? "保存中..." : "保存配置";
+  }
+  if (ui.simulationCancelEditBtn) {
+    ui.simulationCancelEditBtn.disabled = !!state.simulationPersisting;
+  }
+}
+function getTradeupSimulationRoleMeta(slotName) {
+  const slot = normalizeTradeupSimulationSlotName(slotName);
+  if (slot === "primary_output") return {title: "主产物", hint: "封面位", buttonTitle: "选择主产物"};
+  if (slot === "aux_output") return {title: "辅产物", hint: "结果参照位", buttonTitle: "选择辅产物"};
+  if (slot === "main_material") return {title: "主料", hint: "材料入口", buttonTitle: "选择主料"};
+  return {title: "辅料", hint: "补充材料", buttonTitle: "选择辅料"};
+}
+function buildTradeupSimulationChooserText(kind, preset) {
+  const chooserKind = String(kind || "").trim() === "material" ? "material" : "output";
+  const hasMain = chooserKind === "material"
+    ? !!sanitizeTradeupSimulationTargetItem(preset && preset.main_material)
+    : !!sanitizeTradeupSimulationTargetItem(preset && preset.primary_output);
+  const hasAux = chooserKind === "material"
+    ? !!sanitizeTradeupSimulationTargetItem(preset && preset.aux_material)
+    : !!sanitizeTradeupSimulationTargetItem(preset && preset.aux_output);
+  if (!hasMain && !hasAux) return chooserKind === "material" ? "添加材料" : "添加产物";
+  if (!hasMain) return chooserKind === "material" ? "添加主料" : "添加主产物";
+  if (!hasAux) return chooserKind === "material" ? "添加辅料" : "添加辅产物";
+  return chooserKind === "material" ? "修改材料" : "修改产物";
+}
+function renderSimulationRoleChoosers(preset) {
+  const outputText = buildTradeupSimulationChooserText("output", preset);
+  const materialText = buildTradeupSimulationChooserText("material", preset);
+
+  if (ui.simulationOutputRoleChooserText) {
+    ui.simulationOutputRoleChooserText.innerHTML = `<span class="simulation-role-chooser-plus" aria-hidden="true">+</span><span>${outputText}</span>`;
+  }
+  if (ui.simulationOutputRoleChooser) {
+    ui.simulationOutputRoleChooser.classList.toggle("split", !!state.simulationOutputChooserOpen);
+    ui.simulationOutputRoleChooser.setAttribute("aria-label", outputText);
+  }
+  if (ui.simulationOutputRoleSplit) {
+    ui.simulationOutputRoleSplit.classList.toggle("hidden", !state.simulationOutputChooserOpen);
+  }
+
+  if (ui.simulationMaterialRoleChooserText) {
+    ui.simulationMaterialRoleChooserText.innerHTML = `<span class="simulation-role-chooser-plus" aria-hidden="true">+</span><span>${materialText}</span>`;
+  }
+  if (ui.simulationMaterialRoleChooser) {
+    ui.simulationMaterialRoleChooser.classList.toggle("split", !!state.simulationMaterialChooserOpen);
+    ui.simulationMaterialRoleChooser.setAttribute("aria-label", materialText);
+  }
+  if (ui.simulationMaterialRoleSplit) {
+    ui.simulationMaterialRoleSplit.classList.toggle("hidden", !state.simulationMaterialChooserOpen);
+  }
+}
+function openTradeupSimulationRoleSlotPicker(slotName) {
+  const normalizedSlot = normalizeTradeupSimulationSlotName(slotName);
+  if (!normalizedSlot) return;
+  if (isTradeupSimulationOutputSlot(normalizedSlot)) {
+    state.simulationOutputRole = normalizedSlot;
+  } else {
+    state.simulationMaterialRole = normalizedSlot;
+  }
+  if (!openTradeupSimulationPickerModal({
+    slot: normalizedSlot,
+    title: getTradeupSimulationRoleMeta(normalizedSlot).buttonTitle
+  })) {
+    return;
+  }
+  renderSimulationPage();
+  focusTradeupSimulationModalPrimaryControl();
+}
+function renderSimulationRolePanel(preset) {
+  renderSimulationRoleChoosers(preset);
+}
+function getTradeupSimulationItemDisplayName(item) {
+  return String(item && (item.base_name || item.name || item.basename || item.basemarkethashname || item.markethashname) || "").trim();
+}
+function getTradeupSimulationItemDisplayWear(item, preset) {
+  const absoluteWear = Number(item && item.absolute_wear);
+  if (Number.isFinite(absoluteWear)) return absoluteWear;
+  const itemKey = String(item && (item.basemarkethashname || item.markethashname) || "").trim();
+  const activeAnchor = getTradeupSimulationActiveAnchorItem(preset);
+  const activeKey = String(activeAnchor && (activeAnchor.basemarkethashname || activeAnchor.markethashname) || "").trim();
+  const anchorWear = Number(preset && preset.active_anchor_abs_wear);
+  if (itemKey && activeKey && itemKey === activeKey && Number.isFinite(anchorWear)) return anchorWear;
+  const minWear = Number(item && item.minfloat);
+  return Number.isFinite(minWear) ? minWear : null;
+}
+function getTradeupSimulationItemKey(item) {
+  return String(item && (item.basemarkethashname || item.markethashname || item.basename) || "").trim();
+}
+function getTradeupSimulationSlotTagMeta(slotName) {
+  const slot = normalizeTradeupSimulationSlotName(slotName);
+  if (slot === "primary_output" || slot === "main_material") return {label: "主", className: "is-primary"};
+  if (slot === "aux_output" || slot === "aux_material") return {label: "辅", className: "is-aux"};
+  return null;
+}
+function resolveTradeupSimulationEditSlot(preset, item, itemType, preferredSlot = "") {
+  const explicitSlot = normalizeTradeupSimulationSlotName(preferredSlot);
+  if (explicitSlot) return explicitSlot;
+  const kind = String(itemType || "").trim() === "material" ? "material" : "output";
+  const slotNames = kind === "material"
+    ? ["main_material", "aux_material"]
+    : ["primary_output", "aux_output"];
+  const itemKey = getTradeupSimulationItemKey(item);
+  if (itemKey) {
+    for (const slotName of slotNames) {
+      const slotKey = getTradeupSimulationItemKey(sanitizeTradeupSimulationTargetItem(preset && preset[slotName]));
+      if (slotKey && slotKey === itemKey) return slotName;
+    }
+  }
+  const collectionKey = String(item && item.collection || "").trim();
+  if (collectionKey) {
+    for (const slotName of slotNames) {
+      const slotItem = sanitizeTradeupSimulationTargetItem(preset && preset[slotName]);
+      if (slotItem && String(slotItem.collection || "").trim() === collectionKey) {
+        return slotName;
+      }
+    }
+  }
+  for (const slotName of slotNames) {
+    if (sanitizeTradeupSimulationTargetItem(preset && preset[slotName])) return slotName;
+  }
+  return slotNames[0] || "";
+}
+function getTradeupSimulationCardActionBadge(item, preset) {
+  const itemKey = getTradeupSimulationItemKey(item);
+  const activeKey = getTradeupSimulationItemKey(getTradeupSimulationActiveAnchorItem(preset));
+  return itemKey && activeKey && itemKey === activeKey ? "当前锚定" : "";
+}
+function getTradeupSimulationItemSlotTags(preset, item, kind, slotName = "") {
+  const itemKey = getTradeupSimulationItemKey(item);
+  if (!itemKey) return [];
+  const explicitMeta = getTradeupSimulationSlotTagMeta(slotName);
+  if (explicitMeta) return [explicitMeta];
+  const slotNames = String(kind || "").trim() === "material"
+    ? ["main_material", "aux_material"]
+    : ["primary_output", "aux_output"];
+  const tags = [];
+  for (const name of slotNames) {
+    const slotKey = getTradeupSimulationItemKey(sanitizeTradeupSimulationTargetItem(preset && preset[name]));
+    if (!slotKey || slotKey !== itemKey) continue;
+    const meta = getTradeupSimulationSlotTagMeta(name);
+    if (meta && !tags.some((entry) => entry.label === meta.label)) {
+      tags.push(meta);
+    }
+  }
+  return tags;
+}
+function getTradeupSimulationCollectionSlotTags(preset, kind, collection) {
+  const collectionKey = String(collection || "").trim();
+  if (!collectionKey) return [];
+  const collectFromSlots = (slotNames) => {
+    const tags = [];
+    for (const name of slotNames) {
+      const item = sanitizeTradeupSimulationTargetItem(preset && preset[name]);
+      if (!item || String(item.collection || "").trim() !== collectionKey) continue;
+      const meta = getTradeupSimulationSlotTagMeta(name);
+      if (meta && !tags.some((entry) => entry.label === meta.label)) {
+        tags.push(meta);
+      }
+    }
+    return tags;
+  };
+  const outputTags = collectFromSlots(["primary_output", "aux_output"]);
+  if (outputTags.length) return outputTags;
+  return String(kind || "").trim() === "material"
+    ? collectFromSlots(["main_material", "aux_material"])
+    : outputTags;
+}
+function getTradeupSimulationSafeRarityText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const numericMatch = raw.match(/^r?(\d+)$/i);
+  if (numericMatch) {
+    const rarity = Number(numericMatch[1]);
+    return Number.isFinite(rarity) && rarity > 0 ? craftRarityLabel(rarity) : "";
+  }
+  return normalizeCraftPredictorRarityLabel(raw);
+}
+function getTradeupSimulationLaneRarityText(preset, kind, collection, row, items) {
+  const list = Array.isArray(items) ? items : [];
+  const slotNames = String(kind || "").trim() === "material"
+    ? ["main_material", "aux_material"]
+    : ["primary_output", "aux_output"];
+  const slotRarities = slotNames
+    .map((name) => sanitizeTradeupSimulationTargetItem(preset && preset[name]))
+    .filter((item) => item && tradeupSimulationCollectionMatches(item.collection, collection))
+    .map((item) => item.rarity);
+  const candidates = slotRarities.concat([
+    row && row.rarity,
+    row && row.output_rarity,
+    row && row.input_rarity,
+    ...list.map((item) => item && item.rarity)
+  ]);
+  for (const value of candidates) {
+    const text = getTradeupSimulationSafeRarityText(value);
+    if (text) return text;
+  }
+  return "";
+}
+function tradeupSimulationCollectionMatches(value, collection) {
+  return String(value || "").trim() === String(collection || "").trim();
+}
+function isTradeupSimulationItemInCollection(value, collection) {
+  const item = sanitizeTradeupSimulationTargetItem(value);
+  return !!item && tradeupSimulationCollectionMatches(item.collection, collection);
+}
+function keepTradeupSimulationRowOutsideCollection(row, collection) {
+  return !tradeupSimulationCollectionMatches(
+    String(row && (row.collection || row.collection_key) || "").trim(),
+    collection
+  );
+}
+function renderTradeupSimulationCardSubline(item, preset, kind, slotName = "") {
+  return "";
+}
+function renderTradeupSimulationLaneRemoveButton(collection) {
+  const collectionText = String(collection || "").trim();
+  if (!collectionText) return "";
+  const label = `删除收藏品 ${collectionText}`;
+  return `
+    <button
+      class="simulation-lane-remove-btn"
+      type="button"
+      data-simulation-remove-collection="${escapeHtmlAttribute(collectionText)}"
+      aria-label="${escapeHtmlAttribute(label)}"
+      title="${escapeHtmlAttribute(label)}"
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  `;
+}
+function renderTradeupSimulationLaneMeta(preset, kind, collection, items = [], row = null) {
+  const rarityText = getTradeupSimulationLaneRarityText(preset, kind, collection, row, items);
+  const slotTags = getTradeupSimulationCollectionSlotTags(preset, kind, collection)
+    .map((entry) => `<span class="simulation-card-slot-tag ${entry.className}">${escapeHtml(entry.label)}</span>`)
+    .join("");
+  return {
+    rarityText,
+    slotTags
+  };
+}
+function renderSimulationOutputCard(output, preset, rowIndex, itemIndex) {
+  const wearValue = getTradeupSimulationItemDisplayWear(output, preset);
+  const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
+  const wearLabel = getTradeupSimulationWearBadgeLabel(output);
+  const wearToneClass = getTradeupSimulationWearBadgeToneClass(output);
+  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(output);
+  const outputKey = getTradeupSimulationItemKey(output);
+  const actionBadge = getTradeupSimulationCardActionBadge(output, preset);
+  return `
+    <article class="simulation-output-card simulation-card-button${actionBadge ? " simulation-anchor-active" : ""}" role="button" tabindex="0"
+      data-simulation-card-role="output"
+      data-simulation-card-mode="${output && output.editable === false ? "readonly" : "edit"}"
+      data-simulation-row-index="${rowIndex}"
+      data-simulation-item-index="${itemIndex}"
+      aria-label="编辑目标产物 ${getTradeupSimulationItemDisplayName(output)}">
+      <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+        <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
+        ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
+        ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
+      </div>
+      <div class="simulation-card-content">
+        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
+        <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(output)}</div>
+        ${renderTradeupSimulationCardSubline(output, preset, "output")}
+      </div>
+    </article>
+  `;
+}
+function renderSimulationMaterialCard(material, rowIndex, itemIndex) {
+  const preset = getActiveTradeupSimulationPreset();
+  const wearValue = getTradeupSimulationItemDisplayWear(material, preset);
+  const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
+  const wearLabel = getTradeupSimulationWearBadgeLabel(material);
+  const wearToneClass = getTradeupSimulationWearBadgeToneClass(material);
+  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(material);
+  const actionBadge = getTradeupSimulationCardActionBadge(material, preset);
+  return `
+    <article class="simulation-material-card simulation-card-button${actionBadge ? " simulation-anchor-active" : ""}" role="button" tabindex="0"
+      data-simulation-card-role="material"
+      data-simulation-card-mode="${material && material.editable === false ? "readonly" : "edit"}"
+      data-simulation-row-index="${rowIndex}"
+      data-simulation-item-index="${itemIndex}"
+      aria-label="编辑联动材料 ${getTradeupSimulationItemDisplayName(material)}">
+      <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+        <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
+        ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
+        ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
+      </div>
+      <div class="simulation-card-content">
+        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
+        <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(material)}</div>
+        ${renderTradeupSimulationCardSubline(material, preset, "material")}
+      </div>
+    </article>
+  `;
+}
+function renderSimulationSelectedOutputCard(output, preset, slotName) {
+  const item = sanitizeTradeupSimulationTargetItem(output);
+  if (!item) return "";
+  const roleMeta = getTradeupSimulationRoleMeta(slotName);
+  const actionBadge = getTradeupSimulationCardActionBadge(item, preset);
+  const wearValue = getTradeupSimulationItemDisplayWear(item, preset);
+  const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
+  const wearLabel = getTradeupSimulationWearBadgeLabel(item);
+  const wearToneClass = getTradeupSimulationWearBadgeToneClass(item);
+  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
+  return `
+    <article class="simulation-output-card simulation-card-button${actionBadge ? " simulation-anchor-active" : ""}" role="button" tabindex="0"
+      data-simulation-card-role="output"
+      data-simulation-card-mode="edit"
+      data-simulation-slot-name="${slotName}"
+      aria-label="编辑${roleMeta.title} ${getTradeupSimulationItemDisplayName(item)}">
+      <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+        <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
+        ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
+        ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
+      </div>
+      <div class="simulation-card-content">
+        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
+        <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(item)}</div>
+        ${renderTradeupSimulationCardSubline(item, preset, "output", slotName)}
+      </div>
+    </article>
+  `;
+}
+function renderSimulationSelectedMaterialCard(material, preset, slotName) {
+  const item = sanitizeTradeupSimulationTargetItem(material);
+  if (!item) return "";
+  const roleMeta = getTradeupSimulationRoleMeta(slotName);
+  const wearValue = getTradeupSimulationItemDisplayWear(item, preset);
+  const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
+  const wearLabel = getTradeupSimulationWearBadgeLabel(item);
+  const wearToneClass = getTradeupSimulationWearBadgeToneClass(item);
+  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
+  const actionBadge = getTradeupSimulationCardActionBadge(item, preset);
+  return `
+    <article class="simulation-material-card simulation-card-button${actionBadge ? " simulation-anchor-active" : ""}" role="button" tabindex="0"
+      data-simulation-card-role="material"
+      data-simulation-card-mode="${item && item.editable === false ? "readonly" : "edit"}"
+      data-simulation-slot-name="${slotName}"
+      aria-label="编辑${roleMeta.title} ${getTradeupSimulationItemDisplayName(item)}">
+      <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+        <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
+        ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
+        ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
+      </div>
+      <div class="simulation-card-content">
+        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
+        <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(item)}</div>
+        ${renderTradeupSimulationCardSubline(item, preset, "material", slotName)}
+      </div>
+    </article>
+  `;
+}
+function removeTradeupSimulationCollectionFromPreset(presetId, collection) {
+  const collectionKey = String(collection || "").trim();
+  if (!collectionKey) return false;
+  const next = updateTradeupSimulationPresetRecord(presetId, (current) => {
+    const filterItem = (value) => {
+      const item = sanitizeTradeupSimulationTargetItem(value);
+      return item && tradeupSimulationCollectionMatches(item.collection, collectionKey) ? null : item;
+    };
+    let primaryOutput = filterItem(current && current.primary_output);
+    let auxOutput = filterItem(current && current.aux_output);
+    if (!primaryOutput && auxOutput) {
+      primaryOutput = auxOutput;
+      auxOutput = null;
+    }
+    let mainMaterial = filterItem(current && current.main_material);
+    let auxMaterial = filterItem(current && current.aux_material);
+    if (!mainMaterial && auxMaterial) {
+      mainMaterial = auxMaterial;
+      auxMaterial = null;
+    }
+    const outputCandidates = (Array.isArray(current && current.output_candidates) ? current.output_candidates : [])
+      .map((entry) => sanitizeTradeupSimulationTargetItem(entry))
+      .filter((entry) => entry && !tradeupSimulationCollectionMatches(entry.collection, collectionKey));
+    const outputRows = (Array.isArray(current && current.output_rows) ? current.output_rows : [])
+      .filter((row) => keepTradeupSimulationRowOutsideCollection(row, collectionKey));
+    const materialRows = (Array.isArray(current && current.material_rows) ? current.material_rows : [])
+      .filter((row) => keepTradeupSimulationRowOutsideCollection(row, collectionKey));
+    const currentCover = filterItem(current && current.cover_output);
+    const currentAnchor = filterItem(current && current.active_anchor_item);
+    const fallbackAnchor = currentAnchor
+      || currentCover
+      || primaryOutput
+      || mainMaterial
+      || auxOutput
+      || auxMaterial
+      || outputCandidates[0]
+      || null;
+    const anchorWear = currentAnchor
+      ? Number(current && current.active_anchor_abs_wear)
+      : Number(fallbackAnchor && fallbackAnchor.minfloat);
+    return {
+      ...current,
+      primary_output: primaryOutput,
+      aux_output: auxOutput,
+      main_material: mainMaterial,
+      aux_material: auxMaterial,
+      cover_output: currentCover || primaryOutput || auxOutput || outputCandidates[0] || null,
+      active_anchor_item: fallbackAnchor,
+      active_anchor_abs_wear: Number.isFinite(anchorWear) ? anchorWear : null,
+      output_rows: outputRows,
+      material_rows: materialRows,
+      rows: outputRows,
+      output_candidates: outputCandidates,
+      warnings: [],
+      dirty: true,
+      updated_at: Date.now()
+    };
+  });
+  return !!next;
+}
+function renderSimulationLaneSection(title, subtitle, cardsHtml, meta = null, actionHtml = "", cardCount = 0) {
+  const metaParts = meta && typeof meta === "object"
+    ? meta
+    : {rarityText: "", slotTags: ""};
+  return `
+    <section class="simulation-lane-section">
+      <div class="simulation-lane-head">
+        <div class="simulation-lane-title-wrap">
+          ${metaParts.slotTags ? `<div class="simulation-lane-meta">${metaParts.slotTags}</div>` : ""}
+          ${metaParts.rarityText ? `<span class="simulation-lane-rarity">${escapeHtml(metaParts.rarityText)}</span>` : ""}
+          <strong>${escapeHtml(title)}</strong>
+        </div>
+        ${actionHtml || (subtitle ? `<span class="simulation-card-note">${escapeHtml(subtitle)}</span>` : "")}
+      </div>
+      <div class="simulation-card-grid${cardCount === 1 ? " is-single-card" : ""}">
+        ${cardsHtml}
+      </div>
+    </section>
+  `;
+}
+function focusTradeupSimulationModalPrimaryControl() {
+  requestAnimationFrame(() => {
+    if (
+      state.simulationPickerOpen &&
+      ui.simulationPickerSearchInput &&
+      !ui.simulationPickerSearchInput.disabled
+    ) {
+      ui.simulationPickerSearchInput.focus();
+      if (typeof ui.simulationPickerSearchInput.select === "function") {
+        ui.simulationPickerSearchInput.select();
+      }
+      return;
+    }
+    if (
+      state.simulationModalOpen &&
+      state.simulationModalMode === "edit" &&
+      ui.simulationCardModalWearInput &&
+      !ui.simulationCardModalWearInput.disabled
+    ) {
+      ui.simulationCardModalWearInput.focus();
+      if (typeof ui.simulationCardModalWearInput.select === "function") {
+        ui.simulationCardModalWearInput.select();
+      }
+      return;
+    }
+    if (ui.simulationCardModalCancelBtn) {
+      ui.simulationCardModalCancelBtn.focus();
+    }
+  });
+}
+function bindSimulationCardEvents(preset) {
+  const bindRoot = (root, itemType) => {
+    if (!root || root.dataset.simulationDelegated === itemType) return;
+    root.dataset.simulationDelegated = itemType;
+    const activateFromTarget = (rawTarget) => {
+      const target = rawTarget && typeof rawTarget.closest === "function" ? rawTarget : null;
+      if (!target) return;
+      const removeButton = target.closest("[data-simulation-remove-collection]");
+      if (removeButton && root.contains(removeButton)) {
+        const currentPreset = getActiveTradeupSimulationPreset();
+        const collection = String(removeButton.getAttribute("data-simulation-remove-collection") || "").trim();
+        if (!currentPreset || !collection) return;
+        if (!removeTradeupSimulationCollectionFromPreset(currentPreset.id, collection)) return;
+        closeTradeupSimulationItemModal();
+        renderSimulationPage();
+        return;
+      }
+      const detailCard = target.closest("[data-simulation-card-role]");
+      if (!detailCard || !root.contains(detailCard)) return;
+      const currentPreset = getActiveTradeupSimulationPreset();
+      if (!currentPreset) return;
+      const slotName = normalizeTradeupSimulationSlotName(detailCard.getAttribute("data-simulation-slot-name"));
+      const requestedMode = String(detailCard.getAttribute("data-simulation-card-mode") || "").trim() === "readonly"
+        ? "readonly"
+        : "edit";
+      if (slotName) {
+        const item = sanitizeTradeupSimulationTargetItem(currentPreset && currentPreset[slotName]);
+        if (!item) return;
+        if (!openTradeupSimulationItemModal({
+          presetId: currentPreset.id,
+          slot: slotName,
+          itemType,
+          item,
+          mode: requestedMode
+        })) {
+          return;
+        }
+        renderSimulationPage();
+        focusTradeupSimulationModalPrimaryControl();
+        return;
+      }
+      const rowIndex = Number(detailCard.getAttribute("data-simulation-row-index"));
+      const itemIndex = Number(detailCard.getAttribute("data-simulation-item-index"));
+      const rows = itemType === "material"
+        ? (Array.isArray(currentPreset && currentPreset.material_rows) ? currentPreset.material_rows : [])
+        : (Array.isArray(currentPreset && currentPreset.output_rows) ? currentPreset.output_rows : []);
+      const row = rows[rowIndex];
+      const lane = itemType === "material" ? "materials" : "outputs";
+      const item = Array.isArray(row && row[lane]) ? row[lane][itemIndex] : null;
+      const editSlot = resolveTradeupSimulationEditSlot(currentPreset, item, itemType);
+      if (!openTradeupSimulationItemModal({
+        presetId: currentPreset.id,
+        slot: editSlot,
+        itemType,
+        item,
+        mode: requestedMode
+      })) {
+        return;
+      }
+      renderSimulationPage();
+      focusTradeupSimulationModalPrimaryControl();
+    };
+    root.addEventListener("click", (evt) => {
+      activateFromTarget(evt.target);
+    });
+    root.addEventListener("keydown", (evt) => {
+      if (evt.key !== "Enter" && evt.key !== " ") return;
+      const target = evt.target && typeof evt.target.closest === "function" ? evt.target : null;
+      if (!target) return;
+      if (!target.closest("[data-simulation-card-role]")) return;
+      evt.preventDefault();
+      activateFromTarget(target);
+    });
+  };
+  bindRoot(ui.simulationOutputLane, "output");
+  bindRoot(ui.simulationMaterialLane, "material");
+}
+function renderTradeupSimulationCardModal() {
+  if (!ui.simulationCardModal) return;
+  if (!state.simulationModalOpen) {
+    ui.simulationCardModal.classList.add("hidden");
+    return;
+  }
+  const preset = getTradeupSimulationModalPreset();
+  const item = getTradeupSimulationModalItem();
+  if (!preset || !item) {
+    closeTradeupSimulationItemModal();
+    ui.simulationCardModal.classList.add("hidden");
+    return;
+  }
+  const itemType = String(state.simulationModalItemType || "").trim() === "material" ? "material" : "output";
+  const outputKey = String(item && item.basemarkethashname || "").trim();
+  const targetKey = String(preset && (preset.cover_output || preset.primary_output) && (preset.cover_output || preset.primary_output).basemarkethashname || "").trim();
+  const activeKey = String(getTradeupSimulationActiveAnchorItem(preset) && getTradeupSimulationActiveAnchorItem(preset).basemarkethashname || "").trim();
+  const roleMeta = state.simulationModalSlot
+    ? getTradeupSimulationRoleMeta(state.simulationModalSlot)
+    : {title: itemType === "material" ? "材料" : "产物"};
+  const roleLabel = roleMeta.title;
+  const editable = state.simulationModalMode === "edit";
+  const wearValue = Number.isFinite(Number(preset && preset.active_anchor_abs_wear)) && outputKey === activeKey
+    ? Number(preset.active_anchor_abs_wear)
+    : Number(item && item.absolute_wear);
+  const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
+  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
+  const minWear = Number(item && item.minfloat);
+  const maxWear = Number(item && item.maxfloat);
+  const hasBounds = Number.isFinite(minWear) && Number.isFinite(maxWear);
+  const actionBadge = editable ? "可精修" : "只读";
+  const wearLabel = getTradeupSimulationWearBadgeLabel(item);
+  const wearToneClass = getTradeupSimulationWearBadgeToneClass(item);
+  if (ui.simulationCardModalTitle) {
+    ui.simulationCardModalTitle.textContent = editable
+      ? `精修${roleLabel}`
+      : itemType === "material"
+        ? "查看材料详情"
+        : "查看产物详情";
+  }
+  if (ui.simulationCardModalBody) {
+    ui.simulationCardModalBody.innerHTML = `
+      <div class="simulation-card-modal-preview">
+        <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+          <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
+          <span class="simulation-card-action-badge">${actionBadge}</span>
+          ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+          <div class="simulation-card-float">绝对磨损 ${wearText}</div>
+        </div>
+        <div class="simulation-card-content">
+          <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(wearValue)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
+          <div class="simulation-card-name">${String(item && (item.base_name || item.name) || "").trim()}</div>
+          <div class="simulation-card-meta">${String(item && item.collection || "").trim()} · ${String(item && item.rarity || "").trim()}</div>
+          <div class="simulation-chip-row">
+            <span class="simulation-card-role">${roleLabel}</span>
+            ${hasBounds ? `<span class="simulation-card-chip">${formatTradeupSimulationWear(minWear)} - ${formatTradeupSimulationWear(maxWear)}</span>` : ""}
+          </div>
+        </div>
+      </div>
+      <div class="simulation-card-modal-lines">
+        <div class="simulation-card-modal-line"><span>当前绝对磨损</span><strong>${wearText}</strong></div>
+        <div class="simulation-card-modal-line"><span>所在收藏品</span><strong>${String(item && item.collection || "未标记").trim()}</strong></div>
+      </div>
+    `;
+  }
+  if (ui.simulationCardModalField) {
+    ui.simulationCardModalField.classList.toggle("hidden", !editable);
+  }
+  if (ui.simulationCardModalWearInput) {
+    ui.simulationCardModalWearInput.disabled = !editable || !!state.simulationLoading;
+    ui.simulationCardModalWearInput.value = editable && Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "";
+  }
+  if (ui.simulationCardModalWearHint) {
+    ui.simulationCardModalWearHint.textContent = editable
+      ? (hasBounds
+        ? `允许范围：${formatTradeupSimulationWear(minWear)} - ${formatTradeupSimulationWear(maxWear)}`
+        : "请输入新的绝对磨损，保存后会立即重算整组材料。")
+      : "";
+  }
+  if (ui.simulationCardModalReadonlyNote) {
+    ui.simulationCardModalReadonlyNote.textContent = itemType === "material"
+      ? "当前材料暂不可编辑，仅展示本次推导结果。"
+      : "当前产物暂不可编辑，仅展示本次推导结果。";
+    ui.simulationCardModalReadonlyNote.classList.toggle("hidden", editable);
+  }
+  if (ui.simulationCardModalSaveBtn) {
+    ui.simulationCardModalSaveBtn.classList.toggle("hidden", !editable);
+    ui.simulationCardModalSaveBtn.disabled = !editable || !!state.simulationLoading;
+    ui.simulationCardModalSaveBtn.textContent = state.simulationLoading ? "重算中..." : "应用精修";
+  }
+  if (ui.simulationCardModalCancelBtn) {
+    ui.simulationCardModalCancelBtn.textContent = editable ? "取消" : "关闭";
+  }
+  ui.simulationCardModal.classList.remove("hidden");
+}
+function renderSimulationOutputGrid(preset) {
+  if (!ui.simulationOutputLane) return;
+  const sections = [];
+  if (!preset) {
+    sections.push('<div class="simulation-row-empty">先添加主产物，或先添加主料后再推导候选产物。</div>');
+    ui.simulationOutputLane.innerHTML = sections.join("");
+    return;
+  }
+  const selectedOutputs = [
+    {slot: "primary_output", item: sanitizeTradeupSimulationTargetItem(preset && preset.primary_output)},
+    {slot: "aux_output", item: sanitizeTradeupSimulationTargetItem(preset && preset.aux_output)}
+  ].filter((entry) => entry.item);
+  const rows = Array.isArray(preset.output_rows) ? preset.output_rows : [];
+  if (!rows.length) {
+    if (selectedOutputs.length) {
+      sections.push(renderSimulationLaneSection(
+        "当前已选产物",
+        "搜索结果点击后会先写入这里，后续解析结果会继续追加在下方。",
+        selectedOutputs.map((entry) => renderSimulationSelectedOutputCard(entry.item, preset, entry.slot)).join(""),
+        null,
+        "",
+        selectedOutputs.length
+      ));
+    }
+    const warningText = Array.isArray(preset.warnings) && preset.warnings[0]
+      ? String(preset.warnings[0].message || "").trim()
+      : "等待根据当前槽位推导产物组合。";
+    if (!selectedOutputs.length || warningText) {
+      sections.push(`<div class="simulation-row-empty">${warningText}</div>`);
+    }
+    ui.simulationOutputLane.innerHTML = sections.join("");
+    return;
+  }
+  sections.push(...rows.map((row, rowIndex) => {
+    const outputs = Array.isArray(row && row.outputs) ? row.outputs : [];
+    const collection = String(row && row.collection || "").trim() || "目标产物";
+    return renderSimulationLaneSection(
+      collection,
+      `产物 ${outputs.length} 个`,
+      outputs.map((entry, itemIndex) => renderSimulationOutputCard(entry, preset, rowIndex, itemIndex)).join(""),
+      renderTradeupSimulationLaneMeta(preset, "output", collection, outputs, row),
+      renderTradeupSimulationLaneRemoveButton(collection),
+      outputs.length
+    );
+  }));
+  ui.simulationOutputLane.innerHTML = sections.join("");
+}
+function renderSimulationMaterialGrid(preset) {
+  if (!ui.simulationMaterialLane) return;
+  const sections = [];
+  if (!preset || !(preset.cover_output || preset.primary_output)) {
+    sections.push('<div class="simulation-row-empty">先添加主料或辅料，右侧会继续显示当前联动材料。</div>');
+    ui.simulationMaterialLane.innerHTML = sections.join("");
+    return;
+  }
+  const selectedMaterials = [
+    {slot: "main_material", item: sanitizeTradeupSimulationTargetItem(preset && preset.main_material)},
+    {slot: "aux_material", item: sanitizeTradeupSimulationTargetItem(preset && preset.aux_material)}
+  ].filter((entry) => entry.item);
+  const rows = Array.isArray(preset.material_rows) ? preset.material_rows : [];
+  if (!rows.length) {
+    if (selectedMaterials.length) {
+      sections.push(renderSimulationLaneSection(
+        "当前已选材料",
+        "搜索结果点击后会先写入这里，联动材料推导完成后会继续追加。",
+        selectedMaterials.map((entry) => renderSimulationSelectedMaterialCard(entry.item, preset, entry.slot)).join(""),
+        null,
+        "",
+        selectedMaterials.length
+      ));
+    }
+    const warningText = Array.isArray(preset.warnings) && preset.warnings[0]
+      ? String(preset.warnings[0].message || "").trim()
+      : "等待根据当前锚定物品生成材料。";
+    if (!selectedMaterials.length || warningText) {
+      sections.push(`<div class="simulation-row-empty">${warningText}</div>`);
+    }
+    ui.simulationMaterialLane.innerHTML = sections.join("");
+    return;
+  }
+  sections.push(...rows.map((row, rowIndex) => {
+    const materials = Array.isArray(row && row.materials) ? row.materials : [];
+    const collection = String(row && row.collection || "").trim() || "联动材料";
+    return renderSimulationLaneSection(
+      collection,
+      `材料 ${materials.length} 个`,
+      materials.map((entry, itemIndex) => renderSimulationMaterialCard(entry, rowIndex, itemIndex)).join(""),
+      renderTradeupSimulationLaneMeta(preset, "material", collection, materials, row),
+      renderTradeupSimulationLaneRemoveButton(collection),
+      materials.length
+    );
+  }));
+  ui.simulationMaterialLane.innerHTML = sections.join("");
+}
+function renderSimulationWorkspace(preset) {
+  if (!ui.simulationWorkspace) return;
+  const showWorkspace = state.simulationViewMode !== "saved";
+  ui.simulationWorkspace.classList.toggle("hidden", !showWorkspace);
+  if (!showWorkspace) return;
+  renderSimulationRolePanel(preset);
+  renderSimulationOutputGrid(preset);
+  renderSimulationMaterialGrid(preset);
+  bindSimulationCardEvents(preset);
+}
+function renderTradeupSimulationPickerModal() {
+  if (!ui.simulationPickerModal) return;
+  ui.simulationPickerModal.classList.toggle("hidden", !state.simulationPickerOpen);
+  const context = getTradeupSimulationPickerContext();
+  const results = Array.isArray(state.simulationPickerResults) ? state.simulationPickerResults : [];
+  const queryText = String(state.simulationPickerQuery || "").trim();
+  const errorText = String(state.simulationPickerError || "").trim();
+  if (ui.simulationPickerTitle) {
+    ui.simulationPickerTitle.textContent = String(state.simulationPickerTitle || "选择物品").trim() || "选择物品";
+  }
+  if (ui.simulationPickerRoleBadge) {
+    ui.simulationPickerRoleBadge.textContent = context.roleText;
+  }
+  if (ui.simulationPickerHint) {
+    ui.simulationPickerHint.textContent = context.hintText;
+  }
+  if (ui.simulationPickerMeta) {
+    ui.simulationPickerMeta.textContent = state.simulationSearchLoading
+      ? `正在搜索${context.roleText}候选...`
+      : errorText
+        ? `搜索失败：${errorText}`
+        : queryText
+          ? `关键字“${queryText}”共匹配 ${results.length} 个结果`
+          : "支持按物品名称或收藏品搜索。";
+  }
+  if (ui.simulationPickerSearchInput) {
+    ui.simulationPickerSearchInput.value = queryText;
+  }
+  if (ui.simulationPickerSearchBtn) {
+    ui.simulationPickerSearchBtn.disabled = !!state.simulationSearchLoading;
+    ui.simulationPickerSearchBtn.textContent = state.simulationSearchLoading ? "搜索中..." : "搜索";
+  }
+  renderTradeupSimulationPickerResults();
+}
+function renderSimulationPage() {
+  if (!ui.simulationPage) return;
+  const preset = getActiveTradeupSimulationPreset();
+  renderSimulationModeTabs();
+  renderSimulationWorkspaceActionsBar(preset);
+  renderSimulationSavedPresets();
+  renderSimulationWorkspace(preset);
+  renderTradeupSimulationPickerModal();
+  renderTradeupSimulationCardModal();
+}
 function renderCraftPage() {
   if (!ui.craftPage) return;
   syncCurrentCraftAssistRuntimeState();
@@ -8224,6 +10395,13 @@ function bindEvents() {
         renderCraftAssistPanel();
       }
     }
+    if (state.simulationOutputChooserOpen || state.simulationMaterialChooserOpen) {
+      const inOutputChooser = ui.simulationOutputRoleChooser && ui.simulationOutputRoleChooser.contains(target);
+      const inMaterialChooser = ui.simulationMaterialRoleChooser && ui.simulationMaterialRoleChooser.contains(target);
+      if (!inOutputChooser && !inMaterialChooser && closeTradeupSimulationRoleChoosers()) {
+        renderSimulationRoleChoosers(getActiveTradeupSimulationPreset());
+      }
+    }
   });
   if (ui.remarkModalClose) {
     ui.remarkModalClose.onclick = () => closeRemarkModal(null);
@@ -8361,7 +10539,236 @@ function bindEvents() {
   ui.navAccount.onclick = () => showPage("accountPage");
   ui.navInventory.onclick = () => showPage("inventoryPage");
   ui.navCraft.onclick = () => showPage("craftPage");
+  ui.navSimulation.onclick = () => showPage("simulationPage");
   syncNavDrawerDom();
+
+  if (ui.simulationModeSavedBtn) {
+    ui.simulationModeSavedBtn.onclick = () => {
+      state.simulationViewMode = "saved";
+      closeTradeupSimulationPickerModal();
+      closeTradeupSimulationItemModal();
+      renderSimulationPage();
+    };
+  }
+  if (ui.simulationModeWorkspaceBtn) {
+    ui.simulationModeWorkspaceBtn.onclick = () => {
+      openBlankTradeupSimulationWorkspaceDraft();
+      renderSimulationPage();
+    };
+  }
+  const focusSimulationSearchInput = () => {
+    if (!ui.simulationPickerSearchInput || typeof ui.simulationPickerSearchInput.focus !== "function") return;
+    ui.simulationPickerSearchInput.focus();
+    if (typeof ui.simulationPickerSearchInput.select === "function") {
+      ui.simulationPickerSearchInput.select();
+    }
+  };
+  if (ui.simulationSavePresetBtn) {
+    ui.simulationSavePresetBtn.onclick = async () => {
+      const preset = getActiveTradeupSimulationPreset();
+      if (!preset || state.simulationPersisting) return;
+      await persistTradeupSimulationPresets({clearDirty: true});
+    };
+  }
+  if (ui.simulationCancelEditBtn) {
+    ui.simulationCancelEditBtn.onclick = () => {
+      void cancelTradeupSimulationEditing();
+    };
+  }
+  if (ui.simulationOutputRoleChooser) {
+    const syncOutputChooserHover = (evt) => {
+      syncTradeupSimulationChooserHoverSlot(
+        "output",
+        evt,
+        getTradeupSimulationPreferredSlot("output", getActiveTradeupSimulationPreset())
+      );
+    };
+    ui.simulationOutputRoleChooser.onclick = (evt) => {
+      evt.preventDefault();
+      const slotName = resolveTradeupSimulationChooserSlot(
+        "output",
+        evt,
+        getTradeupSimulationPreferredSlot("output", getActiveTradeupSimulationPreset())
+      );
+      setTradeupSimulationRoleChooserOpen("output", false);
+      openTradeupSimulationRoleSlotPicker(slotName);
+    };
+    ui.simulationOutputRoleChooser.onmousemove = syncOutputChooserHover;
+    ui.simulationOutputRoleChooser.onmouseenter = syncOutputChooserHover;
+    ui.simulationOutputRoleChooser.onmouseleave = () => {
+      setTradeupSimulationChooserActiveSlot("output", "");
+    };
+    ui.simulationOutputRoleChooser.onkeydown = (evt) => {
+      if (evt.key !== "Enter" && evt.key !== " ") return;
+      evt.preventDefault();
+      const slotName = getTradeupSimulationPreferredSlot("output", getActiveTradeupSimulationPreset());
+      openTradeupSimulationRoleSlotPicker(slotName);
+    };
+    ui.simulationOutputRoleChooser.onfocus = () => {
+      setTradeupSimulationRoleChooserOpen("output", true);
+    };
+    ui.simulationOutputRoleChooser.onblur = () => {
+      setTradeupSimulationRoleChooserOpen("output", false);
+      setTradeupSimulationChooserActiveSlot("output", "");
+    };
+  }
+  if (ui.simulationMaterialRoleChooser) {
+    const syncMaterialChooserHover = (evt) => {
+      syncTradeupSimulationChooserHoverSlot(
+        "material",
+        evt,
+        getTradeupSimulationPreferredSlot("material", getActiveTradeupSimulationPreset())
+      );
+    };
+    ui.simulationMaterialRoleChooser.onclick = (evt) => {
+      evt.preventDefault();
+      const slotName = resolveTradeupSimulationChooserSlot(
+        "material",
+        evt,
+        getTradeupSimulationPreferredSlot("material", getActiveTradeupSimulationPreset())
+      );
+      setTradeupSimulationRoleChooserOpen("material", false);
+      openTradeupSimulationRoleSlotPicker(slotName);
+    };
+    ui.simulationMaterialRoleChooser.onmousemove = syncMaterialChooserHover;
+    ui.simulationMaterialRoleChooser.onmouseenter = syncMaterialChooserHover;
+    ui.simulationMaterialRoleChooser.onmouseleave = () => {
+      setTradeupSimulationChooserActiveSlot("material", "");
+    };
+    ui.simulationMaterialRoleChooser.onkeydown = (evt) => {
+      if (evt.key !== "Enter" && evt.key !== " ") return;
+      evt.preventDefault();
+      const slotName = getTradeupSimulationPreferredSlot("material", getActiveTradeupSimulationPreset());
+      openTradeupSimulationRoleSlotPicker(slotName);
+    };
+    ui.simulationMaterialRoleChooser.onfocus = () => {
+      setTradeupSimulationRoleChooserOpen("material", true);
+    };
+    ui.simulationMaterialRoleChooser.onblur = () => {
+      setTradeupSimulationRoleChooserOpen("material", false);
+      setTradeupSimulationChooserActiveSlot("material", "");
+    };
+  }
+  if (ui.simulationPickerSearchBtn) {
+    ui.simulationPickerSearchBtn.onclick = () => {
+      void searchTradeupSimulationItems(ui.simulationPickerSearchInput ? ui.simulationPickerSearchInput.value : state.simulationPickerQuery);
+    };
+  }
+  if (ui.simulationPickerSearchInput) {
+    ui.simulationPickerSearchInput.oninput = () => {
+      state.simulationPickerQuery = String(ui.simulationPickerSearchInput.value || "").trim();
+    };
+    ui.simulationPickerSearchInput.onkeydown = (evt) => {
+      if (evt.key === "Enter") {
+        evt.preventDefault();
+        void searchTradeupSimulationItems(ui.simulationPickerSearchInput.value);
+        return;
+      }
+      if (evt.key === "Escape") {
+        evt.preventDefault();
+        closeTradeupSimulationPickerModal();
+        renderSimulationPage();
+      }
+    };
+  }
+  if (ui.simulationPickerClose) {
+    ui.simulationPickerClose.onclick = () => {
+      closeTradeupSimulationPickerModal();
+      renderSimulationPage();
+    };
+  }
+  if (ui.simulationPickerCancelBtn) {
+    ui.simulationPickerCancelBtn.onclick = () => {
+      closeTradeupSimulationPickerModal();
+      renderSimulationPage();
+    };
+  }
+  if (ui.simulationPickerModal) {
+    ui.simulationPickerModal.addEventListener("click", (evt) => {
+      if (evt.target !== ui.simulationPickerModal) return;
+      closeTradeupSimulationPickerModal();
+      renderSimulationPage();
+    });
+    ui.simulationPickerModal.addEventListener("keydown", (evt) => {
+      if (evt.key !== "Escape") return;
+      evt.preventDefault();
+      closeTradeupSimulationPickerModal();
+      renderSimulationPage();
+    });
+  }
+  if (ui.simulationCardModalClose) {
+    ui.simulationCardModalClose.onclick = () => {
+      closeTradeupSimulationItemModal();
+      renderSimulationPage();
+    };
+  }
+  if (ui.simulationCardModalCancelBtn) {
+    ui.simulationCardModalCancelBtn.onclick = () => {
+      closeTradeupSimulationItemModal();
+      renderSimulationPage();
+    };
+  }
+  if (ui.simulationCardModalSaveBtn) {
+    ui.simulationCardModalSaveBtn.onclick = async () => {
+      const preset = getTradeupSimulationModalPreset();
+      const item = getTradeupSimulationModalItem();
+      const raw = String(ui.simulationCardModalWearInput ? ui.simulationCardModalWearInput.value : "").trim();
+      const numeric = Number(raw);
+      const minWear = Number(item && item.minfloat);
+      const maxWear = Number(item && item.maxfloat);
+      if (!Number.isFinite(numeric)) {
+        setSummary("请输入有效的绝对磨损数值");
+        if (ui.simulationCardModalWearInput) ui.simulationCardModalWearInput.focus();
+        return;
+      }
+      if (Number.isFinite(minWear) && numeric < minWear) {
+        setSummary(`绝对磨损不能低于 ${formatTradeupSimulationWear(minWear)}`);
+        if (ui.simulationCardModalWearInput) ui.simulationCardModalWearInput.focus();
+        return;
+      }
+      if (Number.isFinite(maxWear) && numeric > maxWear) {
+        setSummary(`绝对磨损不能高于 ${formatTradeupSimulationWear(maxWear)}`);
+        if (ui.simulationCardModalWearInput) ui.simulationCardModalWearInput.focus();
+        return;
+      }
+      if (!applyTradeupSimulationModalEdit({absoluteWear: numeric})) {
+        setSummary("应用精修失败，请重新选择卡片后再试");
+        renderSimulationPage();
+        return;
+      }
+      renderSimulationPage();
+      if (preset) {
+        await resolveTradeupSimulationPreset(preset.id);
+      }
+    };
+  }
+  if (ui.simulationCardModalWearInput) {
+    ui.simulationCardModalWearInput.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter" && ui.simulationCardModalSaveBtn && !ui.simulationCardModalSaveBtn.classList.contains("hidden")) {
+        evt.preventDefault();
+        ui.simulationCardModalSaveBtn.click();
+        return;
+      }
+      if (evt.key === "Escape") {
+        evt.preventDefault();
+        closeTradeupSimulationItemModal();
+        renderSimulationPage();
+      }
+    });
+  }
+  if (ui.simulationCardModal) {
+    ui.simulationCardModal.addEventListener("click", (evt) => {
+      if (evt.target !== ui.simulationCardModal) return;
+      closeTradeupSimulationItemModal();
+      renderSimulationPage();
+    });
+    ui.simulationCardModal.addEventListener("keydown", (evt) => {
+      if (evt.key !== "Escape") return;
+      evt.preventDefault();
+      closeTradeupSimulationItemModal();
+      renderSimulationPage();
+    });
+  }
 
   ui.loginSaveBtn.onclick = loginAndSave;
   ui.clearAccountBtn.onclick = clearAccountForm;
@@ -8897,6 +11304,7 @@ function bindEvents() {
 async function init() {
   loadCraftUiPrefs();
   await loadCraftAssistPresetsFromStorage();
+  await loadTradeupSimulationPresetsFromStorage();
   bindEvents();
   initWearOptions();
   refreshRarityMenu();

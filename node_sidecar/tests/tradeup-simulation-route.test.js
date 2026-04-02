@@ -1,0 +1,193 @@
+const assert = require("node:assert/strict");
+const http = require("node:http");
+const Module = require("node:module");
+
+const originalLoad = Module._load;
+Module._load = function patchedLoad(request, parent, isMain) {
+  if (request === "steam-session") {
+    return {
+      LoginSession: class FakeLoginSession {},
+      EAuthSessionGuardType: {Unknown: 0, None: 1},
+      EAuthTokenPlatformType: {SteamClient: 0}
+    };
+  }
+  if (request === "steam-user") {
+    return class FakeSteamUser {};
+  }
+  if (request === "globaloffensive") {
+    return class FakeGlobalOffensive {};
+  }
+  return originalLoad(request, parent, isMain);
+};
+
+const {createServer} = require("../src/uiServer");
+Module._load = originalLoad;
+
+function listen(server) {
+  return new Promise((resolve, reject) => {
+    server.listen(0, "127.0.0.1", () => resolve(server.address()));
+    server.on("error", reject);
+  });
+}
+
+function closeServer(server) {
+  return new Promise((resolve, reject) => {
+    server.close((err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function requestJson({port, method = "POST", path, body}) {
+  return new Promise((resolve, reject) => {
+    const payload = body == null ? "" : JSON.stringify(body);
+    const req = http.request({
+      hostname: "127.0.0.1",
+      port,
+      method,
+      path,
+      headers: payload
+        ? {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(payload)
+          }
+        : {}
+    }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        resolve({
+          statusCode: res.statusCode,
+          body: raw ? JSON.parse(raw) : {}
+        });
+      });
+    });
+    req.on("error", reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function createMemoryUiStateStore() {
+  const data = {presets: []};
+  return {
+    getTradeupSimulationPresets() {
+      return JSON.parse(JSON.stringify(data.presets));
+    },
+    setTradeupSimulationPresets(presets) {
+      data.presets = Array.isArray(presets) ? JSON.parse(JSON.stringify(presets)) : [];
+    }
+  };
+}
+
+async function test_search_route_returns_catalog_items() {
+  const calls = [];
+  const server = createServer({
+    tradeupSimulationCatalog: {
+      searchItems(query) {
+        calls.push(query);
+        return [{markethashname: "AK-47 | Slate (Minimal Wear)"}];
+      }
+    }
+  });
+
+  try {
+    const address = await listen(server);
+    const response = await requestJson({
+      port: address.port,
+      method: "GET",
+      path: "/api/simulation/tradeup/search-items?q=slate"
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.ok, true);
+    assert.equal(response.body.items.length, 1);
+    assert.deepEqual(calls, ["slate"]);
+  } finally {
+    await closeServer(server);
+  }
+}
+
+async function test_resolve_route_returns_bad_request_for_invalid_payload() {
+  const server = createServer({
+    tradeupSimulationService: {
+      resolve(payload) {
+        return {
+          ok: false,
+          invalid_reason: "invalid_driver_absolute_wear",
+          message: "驱动绝对磨损越界",
+          payload
+        };
+      }
+    }
+  });
+
+  try {
+    const address = await listen(server);
+    const response = await requestJson({
+      port: address.port,
+      path: "/api/simulation/tradeup/resolve",
+      body: {
+        target_item: {markethashname: "AK-47 | Slate (Minimal Wear)"},
+        active_driver_abs_wear: 2
+      }
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.invalid_reason, "invalid_driver_absolute_wear");
+  } finally {
+    await closeServer(server);
+  }
+}
+
+async function test_tradeup_simulation_preset_routes_roundtrip() {
+  const uiStateStore = createMemoryUiStateStore();
+  const server = createServer({
+    uiStateStoreFactory() {
+      return uiStateStore;
+    }
+  });
+
+  try {
+    const address = await listen(server);
+
+    let response = await requestJson({
+      port: address.port,
+      method: "GET",
+      path: "/api/ui-state/tradeup-simulation-presets"
+    });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body.presets, []);
+
+    response = await requestJson({
+      port: address.port,
+      path: "/api/ui-state/tradeup-simulation-presets",
+      body: {
+        presets: [{id: "preset_1", name: "Snakebite Slate"}]
+      }
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.presets.length, 1);
+    assert.equal(response.body.presets[0].name, "Snakebite Slate");
+  } finally {
+    await closeServer(server);
+  }
+}
+
+async function main() {
+  await test_search_route_returns_catalog_items();
+  await test_resolve_route_returns_bad_request_for_invalid_payload();
+  await test_tradeup_simulation_preset_routes_roundtrip();
+  console.log("tradeup-simulation-route tests passed");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

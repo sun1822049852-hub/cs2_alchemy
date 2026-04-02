@@ -23,6 +23,8 @@ const {createCraftAssistWorkerPool} = require("./services/craftAssistWorkerPool"
 const {buildCraftCandidateContext} = require("./services/craftCandidateService");
 const {createCraftOutcomeCatalog} = require("./services/craftOutcomeCatalog");
 const {createCraftOutcomePredictor} = require("./services/craftOutcomePredictor");
+const {createTradeupSimulationCatalog} = require("./services/tradeupSimulationCatalog");
+const {createTradeupSimulationService} = require("./services/tradeupSimulationService");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {DedupLogger} = require("./logger");
 const {asString, toInt, nowString} = require("./utils");
@@ -48,6 +50,8 @@ const activeCraftRuns = new Map();
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
 let defaultCraftOutcomePredictor = null;
+let defaultTradeupSimulationCatalog = null;
+let defaultTradeupSimulationService = null;
 
 function getCraftOutcomePredictor(service) {
   if (service && typeof service.predict === "function") {
@@ -59,6 +63,36 @@ function getCraftOutcomePredictor(service) {
     });
   }
   return defaultCraftOutcomePredictor;
+}
+
+function getTradeupSimulationCatalog(service) {
+  if (service && typeof service.searchItems === "function") {
+    return service;
+  }
+  if (!defaultTradeupSimulationCatalog) {
+    defaultTradeupSimulationCatalog = createTradeupSimulationCatalog({dbPath: PATHS.SKIN_DB_FILE});
+  }
+  return defaultTradeupSimulationCatalog;
+}
+
+function getTradeupSimulationService(service, catalog) {
+  if (service && typeof service.resolve === "function") {
+    return service;
+  }
+  if (!defaultTradeupSimulationService) {
+    defaultTradeupSimulationService = createTradeupSimulationService({
+      catalog: catalog || getTradeupSimulationCatalog(),
+      outcomeCatalog: createCraftOutcomeCatalog({dbPath: PATHS.SKIN_DB_FILE})
+    });
+  }
+  return defaultTradeupSimulationService;
+}
+
+function getUiStateStore(deps = {}) {
+  if (typeof deps.uiStateStoreFactory === "function") {
+    return deps.uiStateStoreFactory();
+  }
+  return new UiStateStore();
 }
 
 function getCraftAssistWorkerPool() {
@@ -885,6 +919,27 @@ async function handleApi(req, res, urlObj, deps = {}) {
     return true;
   }
 
+  if (pathname === "/api/ui-state/tradeup-simulation-presets" && req.method === "GET") {
+    const uiState = getUiStateStore(deps);
+    writeJson(res, 200, {
+      ok: true,
+      presets: uiState.getTradeupSimulationPresets()
+    });
+    return true;
+  }
+
+  if (pathname === "/api/ui-state/tradeup-simulation-presets" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const presets = Array.isArray(body && body.presets) ? body.presets : [];
+    const uiState = getUiStateStore(deps);
+    uiState.setTradeupSimulationPresets(presets);
+    writeJson(res, 200, {
+      ok: true,
+      presets: uiState.getTradeupSimulationPresets()
+    });
+    return true;
+  }
+
   if (pathname === "/api/accounts/active" && req.method === "POST") {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
@@ -1361,6 +1416,39 @@ async function handleApi(req, res, urlObj, deps = {}) {
     return true;
   }
 
+  if (pathname === "/api/simulation/tradeup/search-items" && req.method === "GET") {
+    try {
+      const catalog = getTradeupSimulationCatalog(deps.tradeupSimulationCatalog);
+      const query = asString(urlObj.searchParams.get("q") || "").trim();
+      writeJson(res, 200, {
+        ok: true,
+        items: catalog.searchItems(query)
+      });
+    } catch (err) {
+      writeJson(res, 500, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
+  if (pathname === "/api/simulation/tradeup/resolve" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    try {
+      const catalog = getTradeupSimulationCatalog(deps.tradeupSimulationCatalog);
+      const service = getTradeupSimulationService(deps.tradeupSimulationService, catalog);
+      const result = service.resolve(body);
+      writeJson(res, result && result.ok ? 200 : 400, result || {ok: false, message: "simulation resolve failed"});
+    } catch (err) {
+      writeJson(res, 500, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
   if (pathname === "/api/craft/candidates" && req.method === "POST") {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
@@ -1778,7 +1866,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
 function createServer(options = {}) {
   ensureRuntimeBootstrapped();
   const apiDeps = {
-    craftOutcomePredictor: options.craftOutcomePredictor
+    craftOutcomePredictor: options.craftOutcomePredictor,
+    tradeupSimulationCatalog: options.tradeupSimulationCatalog,
+    tradeupSimulationService: options.tradeupSimulationService,
+    uiStateStoreFactory: options.uiStateStoreFactory
   };
   const server = http.createServer(async (req, res) => {
     try {

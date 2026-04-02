@@ -17,6 +17,7 @@
           <button class="nav-btn active" data-page="accountPage" id="navAccount">账号管理</button>
           <button class="nav-btn" data-page="inventoryPage" id="navInventory">库存总览</button>
           <button class="nav-btn" data-page="craftPage" id="navCraft">炼金汰换</button>
+          <button class="nav-btn" data-page="simulationPage" id="navSimulation">汰换模拟</button>
         </aside>
       </div>
 
@@ -346,6 +347,120 @@
             </section>
           </div>
         </section>
+
+        <section class="page hidden" id="simulationPage">
+              <header class="topbar simulation-topbar">
+                <div class="simulation-header-main simulation-title-wrap">
+                  <div class="simulation-title-row">
+                    <h1>汰换模拟</h1>
+                    <div class="simulation-mode-tabs" role="tablist" aria-label="汰换模拟模式">
+                      <button id="simulationModeSavedBtn" type="button" role="tab" aria-controls="simulationSavedPresets">已保存配方</button>
+                      <button id="simulationModeWorkspaceBtn" type="button" role="tab" aria-controls="simulationWorkspace">选材页面</button>
+                    </div>
+                  </div>
+                </div>
+                <section id="simulationWorkspaceActionsBar" class="simulation-workspace-actions-bar hidden" aria-label="选材页面操作">
+                  <div class="simulation-workspace-actions">
+                    <button id="simulationSavePresetBtn" type="button">保存配置</button>
+                    <button id="simulationCancelEditBtn" type="button">取消</button>
+                  </div>
+                </section>
+              </header>
+
+              <section class="panel simulation-shell">
+                <section id="simulationSavedPresets" class="simulation-saved-grid hidden" aria-label="已保存配方"></section>
+
+                <section id="simulationWorkspace" class="simulation-workspace-shell" aria-label="选材工作台">
+                  <div id="simulationLayout" class="simulation-layout">
+                    <section id="simulationOutputPanel" class="simulation-role-pane simulation-output-pane" aria-label="产物组合">
+                      <div class="simulation-role-pane-head">
+                        <div class="simulation-role-pane-copy">
+                          <h2>产物组合</h2>
+                        </div>
+                        <button id="simulationOutputRoleChooser" class="simulation-role-chooser" type="button" aria-label="悬停选择产物角色">
+                          <span id="simulationOutputRoleChooserText" class="simulation-role-chooser-text">
+                            <span class="simulation-role-chooser-plus" aria-hidden="true">+</span>
+                            <span>添加产物</span>
+                          </span>
+                          <span id="simulationOutputRoleSplit" class="simulation-role-split hidden" aria-hidden="true">
+                            <span class="role-main">主产物</span>
+                            <span class="role-aux">辅产物</span>
+                          </span>
+                        </button>
+                      </div>
+                      <section class="simulation-pane-section">
+                        <div id="simulationOutputLane" class="simulation-output-lane"></div>
+                      </section>
+                    </section>
+
+                    <section id="simulationMaterialPanel" class="simulation-role-pane simulation-material-pane" aria-label="材料组合">
+                      <div class="simulation-role-pane-head">
+                        <div class="simulation-role-pane-copy">
+                          <h2>材料组合</h2>
+                        </div>
+                        <button id="simulationMaterialRoleChooser" class="simulation-role-chooser" type="button" aria-label="悬停选择材料角色">
+                          <span id="simulationMaterialRoleChooserText" class="simulation-role-chooser-text">
+                            <span class="simulation-role-chooser-plus" aria-hidden="true">+</span>
+                            <span>添加材料</span>
+                          </span>
+                          <span id="simulationMaterialRoleSplit" class="simulation-role-split hidden" aria-hidden="true">
+                            <span class="role-main">主料</span>
+                            <span class="role-aux">辅料</span>
+                          </span>
+                        </button>
+                      </div>
+                      <section class="simulation-pane-section">
+                        <div id="simulationMaterialLane" class="simulation-material-lane"></div>
+                      </section>
+                    </section>
+                  </div>
+                </section>
+              </section>
+        </section>
+
+        <div id="simulationPickerModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="simulationPickerTitle">
+          <div class="modal-card simulation-picker-modal-card">
+            <div class="modal-header">
+              <h3 id="simulationPickerTitle">选择物品</h3>
+              <button id="simulationPickerClose" class="modal-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="simulation-picker-context">
+              <span id="simulationPickerRoleBadge" class="simulation-picker-role-badge">物品</span>
+              <div class="simulation-picker-context-copy">
+                <div id="simulationPickerHint" class="simulation-card-note">搜索后点击候选项即可写入当前配方。</div>
+                <div id="simulationPickerMeta" class="simulation-picker-meta">支持按物品名称或收藏品搜索。</div>
+              </div>
+            </div>
+            <div class="simulation-picker-head">
+              <input id="simulationPickerSearchInput" type="text" placeholder="搜索物品名称 / 收藏品" />
+              <button id="simulationPickerSearchBtn" type="button">搜索</button>
+            </div>
+            <div id="simulationPickerSearchResults" class="simulation-picker-results"></div>
+            <div class="row modal-actions">
+              <button id="simulationPickerCancelBtn" type="button">关闭</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="simulationCardModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="simulationCardModalTitle">
+          <div class="modal-card simulation-card-modal-card">
+            <div class="modal-header">
+              <h3 id="simulationCardModalTitle">查看配方卡片</h3>
+              <button id="simulationCardModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div id="simulationCardModalBody" class="simulation-card-modal-body"></div>
+            <div id="simulationCardModalField" class="form-row simulation-card-modal-field">
+              <label for="simulationCardModalWearInput">绝对磨损</label>
+              <input id="simulationCardModalWearInput" type="text" inputmode="decimal" placeholder="请输入绝对磨损" />
+              <div id="simulationCardModalWearHint" class="simulation-card-modal-hint"></div>
+            </div>
+            <div id="simulationCardModalReadonlyNote" class="simulation-card-modal-note hidden"></div>
+            <div class="row modal-actions">
+              <button id="simulationCardModalSaveBtn" type="button">应用精修</button>
+              <button id="simulationCardModalCancelBtn" type="button">关闭</button>
+            </div>
+          </div>
+        </div>
 
         <div id="craftAssistPresetModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="craftAssistPresetModalTitle">
           <div class="modal-card craft-assist-preset-modal-card">

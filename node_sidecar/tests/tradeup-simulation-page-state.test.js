@@ -1,0 +1,1245 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+
+const APP_PATH = path.resolve(__dirname, "../ui/app.js");
+const APP_SOURCE = fs.readFileSync(APP_PATH, "utf8");
+
+function extractConst(name) {
+  const match = APP_SOURCE.match(new RegExp(`^[\\uFEFF\\s]*const\\s+${name}\\s*=\\s*[^;]+;`, "m"));
+  assert.ok(match, `missing const ${name}`);
+  return match[0].replace(/^\uFEFF/, "");
+}
+
+function extractBlock(startMarker, endMarker) {
+  const start = APP_SOURCE.indexOf(startMarker);
+  assert.notEqual(start, -1, `missing marker: ${startMarker}`);
+  const end = APP_SOURCE.indexOf(endMarker, start);
+  assert.notEqual(end, -1, `missing marker: ${endMarker}`);
+  return APP_SOURCE.slice(start, end);
+}
+
+function createLocalStorageStub() {
+  const bucket = new Map();
+  return {
+    getItem(key) {
+      return bucket.has(key) ? bucket.get(key) : null;
+    },
+    setItem(key, value) {
+      bucket.set(String(key), String(value));
+    },
+    removeItem(key) {
+      bucket.delete(String(key));
+    }
+  };
+}
+
+function loadSimulationFns(initialState = {}) {
+  const source = [
+    extractConst("TRADEUP_SIMULATION_PRESETS_KEY"),
+    extractBlock("function makeTradeupSimulationUid(", "function renderCraftPage(")
+  ].join("\n");
+  const localStorage = createLocalStorageStub();
+  const apiCalls = [];
+  const errorToasts = [];
+  const math = Object.create(Math);
+  const context = {
+    Math: math,
+    Number,
+    String,
+    Array,
+    Object,
+    JSON,
+    Date,
+    Map,
+    Set,
+    console,
+    localStorage,
+    apiCalls,
+    errorToasts,
+    ui: {
+      simulationPickerModal: null,
+      simulationPickerTitle: null,
+      simulationPickerRoleBadge: null,
+      simulationPickerHint: null,
+      simulationPickerMeta: null,
+      simulationPickerSearchInput: null,
+      simulationPickerSearchBtn: null,
+      simulationPickerSearchResults: null
+    },
+    renderSimulationPage() {},
+    showErrorToast(message) {
+      errorToasts.push(String(message || "").trim());
+    },
+    escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    },
+    deepCopyPlain(value) {
+      return value == null ? value : JSON.parse(JSON.stringify(value));
+    },
+    state: {
+      simulationViewMode: "workspace",
+      simulationOutputRole: "primary_output",
+      simulationMaterialRole: "main_material",
+      simulationPickerOpen: false,
+      simulationPickerMode: "",
+      simulationPickerTitle: "",
+      simulationPickerQuery: "",
+      simulationPickerResults: [],
+      simulationPickerError: "",
+      simulationSearchLoading: false,
+      simulationSearchSeq: 0,
+      simulationPresets: [],
+      simulationActivePresetId: "",
+      simulationWorkspacePreset: null,
+      simulationWorkspaceSourcePresetId: "",
+      simulationModalOpen: false,
+      simulationModalMode: "",
+      simulationModalPresetId: "",
+      simulationModalSlot: "",
+      simulationPersisting: false,
+      ...initialState
+    },
+    api(path, options = {}) {
+      apiCalls.push({path, options});
+      if (path === "/api/ui-state/tradeup-simulation-presets" && (!options.method || options.method === "GET")) {
+        return Promise.resolve({ok: true, presets: []});
+      }
+      return Promise.resolve({ok: true, presets: []});
+    }
+  };
+  vm.runInNewContext(source, context, {filename: APP_PATH});
+  context.localStorageStub = localStorage;
+  return context;
+}
+
+async function flushMicrotasks(count = 4) {
+  for (let i = 0; i < count; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+function createSimulationItem({
+  markethashname,
+  basemarkethashname,
+  collection = "猎杀号收藏品",
+  rarity = "受限",
+  minfloat = 0,
+  maxfloat = 1
+}) {
+  return {
+    markethashname,
+    basemarkethashname,
+    basename: basemarkethashname,
+    name: markethashname,
+    collection,
+    rarity,
+    minfloat,
+    maxfloat
+  };
+}
+
+function createClassList(initial = []) {
+  const set = new Set(initial);
+  return {
+    add(...names) {
+      for (const name of names) set.add(String(name));
+    },
+    remove(...names) {
+      for (const name of names) set.delete(String(name));
+    },
+    toggle(name, force) {
+      const key = String(name);
+      if (force === undefined) {
+        if (set.has(key)) {
+          set.delete(key);
+          return false;
+        }
+        set.add(key);
+        return true;
+      }
+      if (force) set.add(key);
+      else set.delete(key);
+      return !!force;
+    },
+    contains(name) {
+      return set.has(String(name));
+    }
+  };
+}
+
+function test_normalize_tradeup_simulation_preset_list_preserves_dual_slot_shape() {
+  const app = loadSimulationFns();
+  assert.equal(typeof app.normalizeTradeupSimulationPresetList, "function");
+
+  const primaryOutput = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex",
+    minfloat: 0.06,
+    maxfloat: 0.8
+  });
+  const auxOutput = createSimulationItem({
+    markethashname: "P250 | 随便玩玩 (Field-Tested)",
+    basemarkethashname: "P250 | 随便玩玩",
+    minfloat: 0,
+    maxfloat: 0.55
+  });
+  const mainMaterial = createSimulationItem({
+    markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+    basemarkethashname: "Five-SeveN | 混沌点阵",
+    rarity: "军规级"
+  });
+  const auxMaterial = createSimulationItem({
+    markethashname: "MAG-7 | 失衡 (Field-Tested)",
+    basemarkethashname: "MAG-7 | 失衡",
+    rarity: "军规级"
+  });
+
+  const presets = app.normalizeTradeupSimulationPresetList([{
+    id: "preset_1",
+    name: "  猎杀号双栏样例  ",
+    primary_output: primaryOutput,
+    aux_output: auxOutput,
+    main_material: mainMaterial,
+    aux_material: auxMaterial,
+    cover_output: primaryOutput,
+    active_anchor_item: auxMaterial,
+    active_anchor_abs_wear: 0.1417,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: []
+  }]);
+
+  assert.equal(presets.length, 1);
+  assert.equal(presets[0].name, "猎杀号双栏样例");
+  assert.equal(presets[0].primary_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(presets[0].aux_output.basemarkethashname, "P250 | 随便玩玩");
+  assert.equal(presets[0].main_material.basemarkethashname, "Five-SeveN | 混沌点阵");
+  assert.equal(presets[0].aux_material.basemarkethashname, "MAG-7 | 失衡");
+  assert.equal(presets[0].cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(presets[0].active_anchor_item.basemarkethashname, "MAG-7 | 失衡");
+  assert.equal(presets[0].active_anchor_abs_wear, 0.1417);
+}
+
+function test_normalize_tradeup_simulation_preset_list_migrates_legacy_target_into_primary_cover() {
+  const app = loadSimulationFns();
+
+  const presets = app.normalizeTradeupSimulationPresetList([{
+    id: "preset_legacy",
+    target_item: createSimulationItem({
+      markethashname: "AK-47 | Slate (Minimal Wear)",
+      basemarkethashname: "AK-47 | Slate"
+    }),
+    active_driver_markethashname: "Desert Eagle | Trigger Discipline (Minimal Wear)",
+    active_driver_item_key: "Desert Eagle | Trigger Discipline",
+    active_driver_abs_wear: 0.1284
+  }]);
+
+  assert.equal(presets.length, 1);
+  assert.equal(presets[0].primary_output.basemarkethashname, "AK-47 | Slate");
+  assert.equal(presets[0].cover_output.basemarkethashname, "AK-47 | Slate");
+  assert.equal(presets[0].active_anchor_item.basemarkethashname, "Desert Eagle | Trigger Discipline");
+  assert.equal(presets[0].active_anchor_abs_wear, 0.1284);
+}
+
+async function test_save_tradeup_simulation_presets_to_storage_writes_new_slot_shape() {
+  const app = loadSimulationFns({
+    simulationPresets: [{
+      id: "preset_1",
+      name: "猎杀号样例",
+      primary_output: createSimulationItem({
+        markethashname: "USP-S | Cortex (Minimal Wear)",
+        basemarkethashname: "USP-S | Cortex"
+      }),
+      cover_output: createSimulationItem({
+        markethashname: "USP-S | Cortex (Minimal Wear)",
+        basemarkethashname: "USP-S | Cortex"
+      }),
+      active_anchor_item: createSimulationItem({
+        markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+        basemarkethashname: "Five-SeveN | 混沌点阵",
+        rarity: "军规级"
+      }),
+      active_anchor_abs_wear: 0.1417,
+      output_rows: [],
+      material_rows: [],
+      output_candidates: []
+    }]
+  });
+
+  app.saveTradeupSimulationPresetsToStorage();
+  await flushMicrotasks();
+
+  const raw = app.localStorageStub.getItem("tradeup_simulation_presets_v1");
+  assert.ok(raw, "expected simulation presets to be stored locally");
+  const stored = JSON.parse(raw);
+  assert.equal(stored[0].primary_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(stored[0].cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(stored[0].active_anchor_item.basemarkethashname, "Five-SeveN | 混沌点阵");
+  assert.equal(app.apiCalls[0].path, "/api/ui-state/tradeup-simulation-presets");
+}
+
+function test_open_blank_tradeup_simulation_workspace_draft_starts_with_empty_four_slots() {
+  const app = loadSimulationFns({
+    simulationViewMode: "saved",
+    simulationPresets: [{
+      id: "preset_1",
+      name: "A",
+      primary_output: createSimulationItem({
+        markethashname: "USP-S | Cortex (Minimal Wear)",
+        basemarkethashname: "USP-S | Cortex"
+      }),
+      cover_output: createSimulationItem({
+        markethashname: "USP-S | Cortex (Minimal Wear)",
+        basemarkethashname: "USP-S | Cortex"
+      })
+    }]
+  });
+
+  const draft = app.openBlankTradeupSimulationWorkspaceDraft();
+
+  assert.ok(draft, "expected blank workspace draft");
+  assert.equal(app.state.simulationViewMode, "workspace");
+  assert.equal(app.state.simulationWorkspaceSourcePresetId, "");
+  assert.equal(app.state.simulationWorkspacePreset.primary_output, null);
+  assert.equal(app.state.simulationWorkspacePreset.aux_output, null);
+  assert.equal(app.state.simulationWorkspacePreset.main_material, null);
+  assert.equal(app.state.simulationWorkspacePreset.aux_material, null);
+  assert.equal(app.state.simulationWorkspacePreset.cover_output, null);
+}
+
+function test_set_tradeup_simulation_active_preset_loads_workspace_draft_without_mutating_saved_entry() {
+  const primary = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex"
+  });
+  const app = loadSimulationFns({
+    simulationViewMode: "saved",
+    simulationPresets: [{
+      id: "preset_1",
+      name: "猎杀号样例",
+      primary_output: primary,
+      cover_output: primary,
+      active_anchor_item: primary,
+      active_anchor_abs_wear: 0.118,
+      output_rows: [],
+      material_rows: [],
+      output_candidates: []
+    }],
+    simulationActivePresetId: "preset_1"
+  });
+
+  const draft = app.setTradeupSimulationActivePreset("preset_1");
+  assert.ok(draft, "expected saved preset to open inside workspace");
+  assert.equal(app.state.simulationViewMode, "workspace");
+  assert.equal(app.state.simulationWorkspaceSourcePresetId, "preset_1");
+  assert.notEqual(app.state.simulationWorkspacePreset, app.state.simulationPresets[0]);
+
+  const updated = app.applyTradeupSimulationSlotSelection({
+    presetId: "preset_1",
+    slot: "aux_material",
+    item: createSimulationItem({
+      markethashname: "MAG-7 | 失衡 (Field-Tested)",
+      basemarkethashname: "MAG-7 | 失衡",
+      rarity: "军规级"
+    }),
+    absoluteWear: 0.1417
+  });
+
+  assert.equal(updated, true);
+  assert.equal(app.state.simulationWorkspacePreset.aux_material.basemarkethashname, "MAG-7 | 失衡");
+  assert.equal(app.state.simulationWorkspacePreset.cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.state.simulationWorkspacePreset.active_anchor_item.basemarkethashname, "MAG-7 | 失衡");
+  assert.equal(app.state.simulationWorkspacePreset.active_anchor_abs_wear, 0.1417);
+  assert.equal(app.state.simulationWorkspacePreset.dirty, true);
+  assert.equal(app.state.simulationPresets[0].cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.state.simulationPresets[0].active_anchor_abs_wear, 0.118);
+}
+
+async function test_persist_tradeup_simulation_presets_saves_workspace_draft_into_saved_list() {
+  const primary = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex"
+  });
+  const app = loadSimulationFns({
+    simulationViewMode: "workspace",
+    simulationPresets: []
+  });
+
+  app.state.simulationWorkspacePreset = {
+    id: "draft_1",
+    name: "猎杀号样例",
+    primary_output: primary,
+    cover_output: primary,
+    main_material: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      rarity: "军规级"
+    }),
+    active_anchor_item: primary,
+    active_anchor_abs_wear: 0.118,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: [],
+    warnings: [],
+    dirty: true,
+    created_at: 100,
+    updated_at: 100
+  };
+
+  const saved = await app.persistTradeupSimulationPresets({clearDirty: true});
+  await flushMicrotasks();
+
+  assert.equal(saved, true);
+  assert.equal(app.state.simulationPresets.length, 1);
+  assert.equal(app.state.simulationWorkspaceSourcePresetId, app.state.simulationPresets[0].id);
+  assert.equal(app.state.simulationWorkspacePreset.dirty, false);
+  assert.equal(app.state.simulationPresets[0].cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.apiCalls[app.apiCalls.length - 1].path, "/api/ui-state/tradeup-simulation-presets");
+}
+
+function test_apply_tradeup_simulation_slot_selection_sets_cover_for_primary_output() {
+  const app = loadSimulationFns();
+  app.openBlankTradeupSimulationWorkspaceDraft();
+
+  const updated = app.applyTradeupSimulationSlotSelection({
+    slot: "primary_output",
+    item: createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    }),
+    absoluteWear: 0.118
+  });
+
+  assert.equal(updated, true);
+  assert.equal(app.state.simulationWorkspacePreset.primary_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.state.simulationWorkspacePreset.cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.state.simulationWorkspacePreset.active_anchor_item.basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.state.simulationWorkspacePreset.active_anchor_abs_wear, 0.118);
+}
+
+function test_open_tradeup_simulation_picker_modal_records_slot_context() {
+  const app = loadSimulationFns({
+    simulationViewMode: "saved",
+    simulationPickerQuery: "旧查询",
+    simulationPickerResults: [createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    })],
+    simulationSearchLoading: true
+  });
+
+  const opened = app.openTradeupSimulationPickerModal({
+    slot: "main_material",
+    title: "选择主料"
+  });
+
+  assert.equal(opened, true);
+  assert.equal(app.state.simulationViewMode, "workspace");
+  assert.equal(app.state.simulationPickerOpen, true);
+  assert.equal(app.state.simulationPickerMode, "main_material");
+  assert.equal(app.state.simulationPickerTitle, "选择主料");
+  assert.equal(app.state.simulationPickerQuery, "");
+  assert.equal(Array.isArray(app.state.simulationPickerResults), true);
+  assert.equal(app.state.simulationPickerResults.length, 0);
+  assert.equal(app.state.simulationSearchLoading, false);
+}
+
+function test_adopt_tradeup_simulation_derived_primary_output_uses_random_cover_when_missing() {
+  const app = loadSimulationFns();
+  app.Math.random = () => 0.9;
+  app.openBlankTradeupSimulationWorkspaceDraft();
+
+  const adopted = app.adoptTradeupSimulationDerivedPrimaryOutput({
+    presetId: app.state.simulationWorkspacePreset.id,
+    candidates: [
+      createSimulationItem({
+        markethashname: "USP-S | Cortex (Minimal Wear)",
+        basemarkethashname: "USP-S | Cortex"
+      }),
+      createSimulationItem({
+        markethashname: "P250 | 随便玩玩 (Field-Tested)",
+        basemarkethashname: "P250 | 随便玩玩"
+      })
+    ]
+  });
+
+  assert.equal(adopted, true);
+  assert.equal(app.state.simulationWorkspacePreset.primary_output.basemarkethashname, "P250 | 随便玩玩");
+  assert.equal(app.state.simulationWorkspacePreset.cover_output.basemarkethashname, "P250 | 随便玩玩");
+}
+
+function test_apply_tradeup_simulation_slot_selection_preserves_cover_when_material_changes() {
+  const primary = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex"
+  });
+  const app = loadSimulationFns({
+    simulationWorkspacePreset: {
+      id: "draft_1",
+      name: "猎杀号样例",
+      primary_output: primary,
+      cover_output: primary,
+      active_anchor_item: primary,
+      active_anchor_abs_wear: 0.118,
+      dirty: false
+    }
+  });
+
+  const updated = app.applyTradeupSimulationSlotSelection({
+    slot: "main_material",
+    item: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      rarity: "军规级"
+    }),
+    absoluteWear: 0.222
+  });
+
+  assert.equal(updated, true);
+  assert.equal(app.state.simulationWorkspacePreset.main_material.basemarkethashname, "Five-SeveN | 混沌点阵");
+  assert.equal(app.state.simulationWorkspacePreset.cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.state.simulationWorkspacePreset.active_anchor_item.basemarkethashname, "Five-SeveN | 混沌点阵");
+  assert.equal(app.state.simulationWorkspacePreset.active_anchor_abs_wear, 0.222);
+}
+
+function test_render_simulation_lane_section_marks_single_card_rows() {
+  const app = loadSimulationFns();
+
+  const html = app.renderSimulationLaneSection(
+    "当前已选产物",
+    "",
+    '<article class="simulation-output-card"></article>',
+    null,
+    "",
+    1
+  );
+
+  assert.match(
+    html,
+    /class="simulation-card-grid is-single-card"/,
+    "single-card simulation lanes should render a dedicated class so one card keeps its compact width"
+  );
+}
+
+function test_build_tradeup_simulation_saved_card_summary_uses_wear_tier_and_relative_wear() {
+  const cover = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex",
+    minfloat: 0.06,
+    maxfloat: 0.8
+  });
+  cover.wear_label = "Minimal Wear";
+  const anchor = createSimulationItem({
+    markethashname: "XM1014 | 跑跑跑 (Field-Tested)",
+    basemarkethashname: "XM1014 | 跑跑跑",
+    minfloat: 0.15,
+    maxfloat: 0.55
+  });
+  const app = loadSimulationFns();
+
+  const summary = app.buildTradeupSimulationSavedCardSummary({
+    cover_output: cover,
+    primary_output: cover,
+    active_anchor_item: anchor,
+    active_anchor_abs_wear: 0.35,
+    main_material: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+      basemarkethashname: "Five-SeveN | 混沌点阵"
+    })
+  });
+
+  assert.equal(summary.targetName, "USP-S | Cortex");
+  assert.equal(summary.anchorName, "XM1014 | 跑跑跑");
+  assert.equal(summary.wearLabel, "略有磨损");
+  assert.equal(summary.relativeWear, "0.500000");
+}
+
+function test_render_simulation_selected_output_card_uses_item_rarity_color_even_when_anchor_active() {
+  const app = loadSimulationFns();
+  app.preferredRowSkinImageUrl = () => "";
+  const item = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex",
+    rarity: "军规级",
+    minfloat: 0.06,
+    maxfloat: 0.8
+  });
+  item.wear_label = "Minimal Wear";
+  const html = app.renderSimulationSelectedOutputCard(item, {
+    primary_output: item,
+    cover_output: item,
+    active_anchor_item: item,
+    active_anchor_abs_wear: 0.145714
+  }, "primary_output");
+
+  assert.match(
+    html,
+    /simulation-anchor-active/,
+    "anchor cards should still mark the selected item"
+  );
+  assert.match(
+    html,
+    /--simulation-card-rarity-color:#4b69ff/,
+    "selected simulation cards should keep their own rarity stripe color instead of being recolored by the anchor state"
+  );
+}
+
+function test_render_simulation_selected_output_card_applies_wear_tone_class_to_badge() {
+  const app = loadSimulationFns();
+  app.preferredRowSkinImageUrl = () => "";
+  const item = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex",
+    rarity: "军规级",
+    minfloat: 0.06,
+    maxfloat: 0.8
+  });
+  item.wear_label = "Minimal Wear";
+
+  const html = app.renderSimulationSelectedOutputCard(item, {
+    primary_output: item,
+    cover_output: item,
+    active_anchor_item: item,
+    active_anchor_abs_wear: 0.145714
+  }, "primary_output");
+
+  assert.match(
+    html,
+    /simulation-card-wear-badge tone-mw/,
+    "simulation card wear badges should inherit the correct wear tone class so the text color matches the displayed wear tier"
+  );
+}
+
+async function test_delete_tradeup_simulation_preset_removes_saved_entry_and_persists() {
+  const presetA = {
+    id: "preset_a",
+    name: "A",
+    primary_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    }),
+    cover_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    }),
+    active_anchor_item: createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    }),
+    active_anchor_abs_wear: 0.118,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: []
+  };
+  const presetB = {
+    id: "preset_b",
+    name: "B",
+    primary_output: createSimulationItem({
+      markethashname: "P250 | 随便玩玩 (Field-Tested)",
+      basemarkethashname: "P250 | 随便玩玩"
+    }),
+    cover_output: createSimulationItem({
+      markethashname: "P250 | 随便玩玩 (Field-Tested)",
+      basemarkethashname: "P250 | 随便玩玩"
+    }),
+    active_anchor_item: createSimulationItem({
+      markethashname: "P250 | 随便玩玩 (Field-Tested)",
+      basemarkethashname: "P250 | 随便玩玩"
+    }),
+    active_anchor_abs_wear: 0.228,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: []
+  };
+  const app = loadSimulationFns({
+    simulationViewMode: "saved",
+    simulationPresets: [presetA, presetB],
+    simulationActivePresetId: "preset_a",
+    simulationWorkspaceSourcePresetId: "preset_a",
+    simulationWorkspacePreset: {
+      ...presetA,
+      dirty: false
+    }
+  });
+
+  const deleted = await app.deleteTradeupSimulationPreset("preset_a");
+  await flushMicrotasks();
+
+  assert.equal(deleted, true);
+  assert.equal(app.state.simulationPresets.length, 1);
+  assert.equal(app.state.simulationPresets[0].id, "preset_b");
+  assert.equal(app.state.simulationActivePresetId, "preset_b");
+  assert.equal(app.state.simulationWorkspaceSourcePresetId, "");
+  assert.equal(app.state.simulationWorkspacePreset, null);
+  assert.equal(app.apiCalls[app.apiCalls.length - 1].path, "/api/ui-state/tradeup-simulation-presets");
+}
+
+async function test_tradeup_simulation_picker_search_ignores_stale_response_after_reopen() {
+  const app = loadSimulationFns();
+  let resolveFirstSearch = null;
+  app.renderTradeupSimulationPickerModal = () => {};
+  app.renderTradeupSimulationPickerResults = () => {};
+  app.api = () => new Promise((resolve) => {
+    resolveFirstSearch = resolve;
+  });
+  app.openTradeupSimulationPickerModal({
+    slot: "main_material",
+    title: "选择主料"
+  });
+
+  const pendingSearch = app.searchTradeupSimulationItems("旧查询");
+  app.closeTradeupSimulationPickerModal();
+  app.openTradeupSimulationPickerModal({
+    slot: "aux_material",
+    title: "选择辅料"
+  });
+  resolveFirstSearch({
+    items: [createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    })]
+  });
+  await pendingSearch;
+  await flushMicrotasks();
+
+  assert.equal(app.state.simulationPickerOpen, true);
+  assert.equal(app.state.simulationPickerMode, "aux_material");
+  assert.equal(app.state.simulationPickerTitle, "选择辅料");
+  assert.equal(app.state.simulationPickerQuery, "");
+  assert.equal(app.state.simulationPickerResults.length, 0);
+  assert.equal(app.state.simulationSearchLoading, false);
+}
+
+async function test_tradeup_simulation_picker_search_rerenders_full_modal_state() {
+  const app = loadSimulationFns();
+  let modalRenderCount = 0;
+  app.renderTradeupSimulationPickerModal = () => {
+    modalRenderCount += 1;
+  };
+  app.renderTradeupSimulationPickerResults = () => {};
+  app.api = () => Promise.resolve({items: []});
+
+  await app.searchTradeupSimulationItems("AK");
+
+  assert.equal(modalRenderCount >= 2, true);
+  assert.equal(app.state.simulationSearchLoading, false);
+}
+
+async function test_tradeup_simulation_picker_clear_search_invalidates_pending_response() {
+  const app = loadSimulationFns();
+  let resolveFirstSearch = null;
+  app.renderTradeupSimulationPickerModal = () => {};
+  app.renderTradeupSimulationPickerResults = () => {};
+  app.api = () => new Promise((resolve) => {
+    resolveFirstSearch = resolve;
+  });
+  app.openTradeupSimulationPickerModal({
+    slot: "primary_output",
+    title: "选择主产物"
+  });
+
+  const pendingSearch = app.searchTradeupSimulationItems("旧查询");
+  await app.searchTradeupSimulationItems("");
+  resolveFirstSearch({
+    items: [createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    })]
+  });
+  await pendingSearch;
+  await flushMicrotasks();
+
+  assert.equal(app.state.simulationPickerQuery, "");
+  assert.equal(app.state.simulationPickerResults.length, 0);
+  assert.equal(app.state.simulationSearchLoading, false);
+}
+
+async function test_tradeup_simulation_picker_ignores_out_of_order_search_responses() {
+  const app = loadSimulationFns();
+  const pendingResolves = [];
+  app.renderTradeupSimulationPickerModal = () => {};
+  app.renderTradeupSimulationPickerResults = () => {};
+  app.api = () => new Promise((resolve) => {
+    pendingResolves.push(resolve);
+  });
+  app.openTradeupSimulationPickerModal({
+    slot: "primary_output",
+    title: "选择主产物"
+  });
+
+  const firstSearch = app.searchTradeupSimulationItems("第一批");
+  const secondSearch = app.searchTradeupSimulationItems("第二批");
+  pendingResolves[0]({
+    items: [createSimulationItem({
+      markethashname: "AK-47 | Slate (Minimal Wear)",
+      basemarkethashname: "AK-47 | Slate"
+    })]
+  });
+  await firstSearch;
+  await flushMicrotasks();
+
+  assert.equal(app.state.simulationPickerResults.length, 0);
+  assert.equal(app.state.simulationSearchLoading, true);
+
+  pendingResolves[1]({
+    items: [createSimulationItem({
+      markethashname: "USP-S | Cortex (Minimal Wear)",
+      basemarkethashname: "USP-S | Cortex"
+    })]
+  });
+  await secondSearch;
+  await flushMicrotasks();
+
+  assert.equal(app.state.simulationPickerQuery, "第二批");
+  assert.equal(app.state.simulationPickerResults.length, 1);
+  assert.equal(app.state.simulationPickerResults[0].basemarkethashname, "USP-S | Cortex");
+  assert.equal(app.state.simulationSearchLoading, false);
+}
+
+async function test_tradeup_simulation_picker_search_failure_sets_consistent_error_state() {
+  const app = loadSimulationFns();
+  app.renderTradeupSimulationPickerResults = () => {};
+  app.api = () => Promise.reject(new Error("网络炸了"));
+  app.openTradeupSimulationPickerModal({
+    slot: "primary_output",
+    title: "选择主产物"
+  });
+
+  await app.searchTradeupSimulationItems("失败查询");
+  await flushMicrotasks();
+
+  assert.equal(app.state.simulationPickerQuery, "失败查询");
+  assert.equal(app.state.simulationPickerResults.length, 0);
+  assert.equal(app.state.simulationPickerError, "网络炸了");
+  assert.equal(app.state.simulationSearchLoading, false);
+}
+
+async function test_select_tradeup_simulation_picker_item_blocks_mixed_material_rarity_without_closing_picker() {
+  const lockedItem = createSimulationItem({
+    markethashname: "Five-SeveN | 混沌点阵 (Field-Tested)",
+    basemarkethashname: "Five-SeveN | 混沌点阵",
+    rarity: "军规级",
+    collection: "狂牙大行动收藏品"
+  });
+  const preset = {
+    id: "preset_rarity_lock",
+    name: "品级锁定",
+    primary_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Field-Tested)",
+      basemarkethashname: "USP-S | Cortex",
+      rarity: "受限",
+      collection: "狂牙大行动收藏品"
+    }),
+    aux_output: null,
+    main_material: lockedItem,
+    aux_material: null,
+    cover_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Field-Tested)",
+      basemarkethashname: "USP-S | Cortex",
+      rarity: "受限",
+      collection: "狂牙大行动收藏品"
+    }),
+    active_anchor_item: lockedItem,
+    active_anchor_abs_wear: 0.18,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: []
+  };
+  const app = loadSimulationFns({
+    simulationPresets: [preset],
+    simulationActivePresetId: "preset_rarity_lock",
+    simulationWorkspaceSourcePresetId: "preset_rarity_lock",
+    simulationWorkspacePreset: {
+      ...preset,
+      dirty: false
+    },
+    simulationPickerOpen: true,
+    simulationPickerMode: "aux_material",
+    simulationPickerQuery: "p90",
+    simulationPickerResults: [createSimulationItem({
+      markethashname: "P90 | 潜管作品 (Factory New)",
+      basemarkethashname: "P90 | 潜管作品",
+      rarity: "工业级",
+      collection: "2025 列车停放站收藏品"
+    })]
+  });
+  app.renderTradeupSimulationPickerModal = () => {};
+  app.renderTradeupSimulationPickerResults = () => {};
+
+  const selected = await app.selectTradeupSimulationPickerItem(0);
+
+  assert.equal(selected, false);
+  assert.equal(app.state.simulationPickerOpen, true);
+  assert.equal(app.state.simulationPickerMode, "aux_material");
+  assert.equal(app.state.simulationPickerQuery, "p90");
+  assert.equal(app.state.simulationPickerResults.length, 1);
+  assert.equal(app.state.simulationWorkspacePreset.aux_material, null);
+  assert.deepEqual(
+    app.errorToasts,
+    ["单配方需同一稀有度：当前为 军规级，不能添加 工业级"]
+  );
+}
+
+async function test_select_tradeup_simulation_picker_item_accepts_matching_rarity_and_closes_picker() {
+  const lockedItem = createSimulationItem({
+    markethashname: "USP-S | Cortex (Field-Tested)",
+    basemarkethashname: "USP-S | Cortex",
+    rarity: "军规级",
+    collection: "狂牙大行动收藏品"
+  });
+  const preset = {
+    id: "preset_rarity_match",
+    name: "品级匹配",
+    primary_output: lockedItem,
+    aux_output: null,
+    main_material: null,
+    aux_material: null,
+    cover_output: lockedItem,
+    active_anchor_item: lockedItem,
+    active_anchor_abs_wear: 0.18,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: []
+  };
+  const app = loadSimulationFns({
+    simulationPresets: [preset],
+    simulationActivePresetId: "preset_rarity_match",
+    simulationWorkspaceSourcePresetId: "preset_rarity_match",
+    simulationWorkspacePreset: {
+      ...preset,
+      dirty: false
+    },
+    simulationPickerOpen: true,
+    simulationPickerMode: "aux_material",
+    simulationPickerQuery: "mac10",
+    simulationPickerResults: [createSimulationItem({
+      markethashname: "MAC-10 | 脱轨 (Field-Tested)",
+      basemarkethashname: "MAC-10 | 脱轨",
+      rarity: "军规级",
+      collection: "2025 列车停放站收藏品",
+      minfloat: 0.05,
+      maxfloat: 0.7
+    })]
+  });
+  app.renderTradeupSimulationPickerModal = () => {};
+  app.renderTradeupSimulationPickerResults = () => {};
+  app.renderSimulationPage = () => {};
+  app.refreshTradeupSimulationDerivedOutputs = async () => true;
+  app.resolveTradeupSimulationPreset = async () => true;
+
+  const selected = await app.selectTradeupSimulationPickerItem(0);
+
+  assert.equal(selected, true);
+  assert.equal(app.state.simulationPickerOpen, false);
+  assert.equal(app.state.simulationWorkspacePreset.aux_material.basemarkethashname, "MAC-10 | 脱轨");
+  assert.deepEqual(app.errorToasts, []);
+}
+
+async function test_select_tradeup_simulation_picker_item_allows_material_rarity_to_differ_from_output_side_lock() {
+  const primaryOutput = createSimulationItem({
+    markethashname: "USP-S | Cortex (Field-Tested)",
+    basemarkethashname: "USP-S | Cortex",
+    rarity: "受限",
+    collection: "狂牙大行动收藏品"
+  });
+  const preset = {
+    id: "preset_independent_rarity_lock",
+    name: "左右分别锁品级",
+    primary_output: primaryOutput,
+    aux_output: createSimulationItem({
+      markethashname: "P250 | 随便玩玩 (Field-Tested)",
+      basemarkethashname: "P250 | 随便玩玩",
+      rarity: "受限",
+      collection: "裂网大行动收藏品"
+    }),
+    main_material: null,
+    aux_material: null,
+    cover_output: primaryOutput,
+    active_anchor_item: primaryOutput,
+    active_anchor_abs_wear: 0.18,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: [primaryOutput]
+  };
+  const app = loadSimulationFns({
+    simulationPresets: [preset],
+    simulationActivePresetId: "preset_independent_rarity_lock",
+    simulationWorkspaceSourcePresetId: "preset_independent_rarity_lock",
+    simulationWorkspacePreset: {
+      ...preset,
+      dirty: false
+    },
+    simulationPickerOpen: true,
+    simulationPickerMode: "main_material",
+    simulationPickerQuery: "five seven",
+    simulationPickerResults: [createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Field-Tested)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      rarity: "军规级",
+      collection: "狂牙大行动收藏品",
+      minfloat: 0.02,
+      maxfloat: 0.78
+    })]
+  });
+  app.renderTradeupSimulationPickerModal = () => {};
+  app.renderTradeupSimulationPickerResults = () => {};
+  app.renderSimulationPage = () => {};
+  app.refreshTradeupSimulationDerivedOutputs = async () => true;
+  app.resolveTradeupSimulationPreset = async () => true;
+
+  const selected = await app.selectTradeupSimulationPickerItem(0);
+
+  assert.equal(selected, true);
+  assert.equal(app.state.simulationPickerOpen, false);
+  assert.equal(app.state.simulationWorkspacePreset.main_material.basemarkethashname, "Five-SeveN | 混沌点阵");
+  assert.deepEqual(app.errorToasts, []);
+}
+
+async function test_select_tradeup_simulation_picker_item_blocks_mixed_output_rarity_without_closing_picker() {
+  const lockedItem = createSimulationItem({
+    markethashname: "USP-S | Cortex (Field-Tested)",
+    basemarkethashname: "USP-S | Cortex",
+    rarity: "军规级",
+    collection: "狂牙大行动收藏品"
+  });
+  const preset = {
+    id: "preset_output_rarity_lock",
+    name: "产物品级锁定",
+    primary_output: lockedItem,
+    aux_output: null,
+    main_material: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Field-Tested)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      rarity: "工业级",
+      collection: "狂牙大行动收藏品"
+    }),
+    aux_material: null,
+    cover_output: lockedItem,
+    active_anchor_item: lockedItem,
+    active_anchor_abs_wear: 0.18,
+    output_rows: [],
+    material_rows: [],
+    output_candidates: []
+  };
+  const app = loadSimulationFns({
+    simulationPresets: [preset],
+    simulationActivePresetId: "preset_output_rarity_lock",
+    simulationWorkspaceSourcePresetId: "preset_output_rarity_lock",
+    simulationWorkspacePreset: {
+      ...preset,
+      dirty: false
+    },
+    simulationPickerOpen: true,
+    simulationPickerMode: "aux_output",
+    simulationPickerQuery: "p90",
+    simulationPickerResults: [createSimulationItem({
+      markethashname: "P90 | 潜管作品 (Factory New)",
+      basemarkethashname: "P90 | 潜管作品",
+      rarity: "工业级",
+      collection: "2025 列车停放站收藏品"
+    })]
+  });
+  app.renderTradeupSimulationPickerModal = () => {};
+  app.renderTradeupSimulationPickerResults = () => {};
+
+  const selected = await app.selectTradeupSimulationPickerItem(0);
+
+  assert.equal(selected, false);
+  assert.equal(app.state.simulationPickerOpen, true);
+  assert.equal(app.state.simulationWorkspacePreset.aux_output, null);
+  assert.deepEqual(
+    app.errorToasts,
+    ["单配方需同一稀有度：当前为 军规级，不能添加 工业级"]
+  );
+}
+
+function test_open_tradeup_simulation_item_modal_allows_material_slot_editing() {
+  const mainMaterial = createSimulationItem({
+    markethashname: "Five-SeveN | 混沌点阵 (Field-Tested)",
+    basemarkethashname: "Five-SeveN | 混沌点阵",
+    collection: "狂牙大行动收藏品",
+    minfloat: 0.02,
+    maxfloat: 0.78
+  });
+  const preset = {
+    id: "preset_material_edit",
+    name: "材料精修",
+    primary_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Field-Tested)",
+      basemarkethashname: "USP-S | Cortex",
+      collection: "狂牙大行动收藏品"
+    }),
+    aux_output: null,
+    main_material: mainMaterial,
+    aux_material: null,
+    cover_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Field-Tested)",
+      basemarkethashname: "USP-S | Cortex",
+      collection: "狂牙大行动收藏品"
+    }),
+    active_anchor_item: mainMaterial,
+    active_anchor_abs_wear: 0.31,
+    output_rows: [],
+    material_rows: []
+  };
+  const app = loadSimulationFns({
+    simulationPresets: [preset],
+    simulationActivePresetId: "preset_material_edit",
+    simulationWorkspaceSourcePresetId: "preset_material_edit",
+    simulationWorkspacePreset: {
+      ...preset,
+      dirty: false
+    }
+  });
+
+  const opened = app.openTradeupSimulationItemModal({
+    presetId: "preset_material_edit",
+    slot: "main_material",
+    itemType: "material",
+    item: mainMaterial,
+    mode: "edit"
+  });
+
+  assert.equal(opened, true);
+  assert.equal(app.state.simulationModalOpen, true);
+  assert.equal(
+    app.state.simulationModalMode,
+    "edit",
+    "material slots should open an editable wear modal so clicking a material can modify absolute wear"
+  );
+}
+
+function test_resolve_tradeup_simulation_edit_slot_prefers_matching_material_collection() {
+  const app = loadSimulationFns();
+  const preset = {
+    main_material: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Field-Tested)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      collection: "狂牙大行动收藏品"
+    }),
+    aux_material: createSimulationItem({
+      markethashname: "P250 | 随便玩玩 (Field-Tested)",
+      basemarkethashname: "P250 | 随便玩玩",
+      collection: "裂网大行动收藏品"
+    })
+  };
+  const clickedItem = createSimulationItem({
+    markethashname: "Glock-18 | 锈蚀烈焰 (Minimal Wear)",
+    basemarkethashname: "Glock-18 | 锈蚀烈焰",
+    collection: "狂牙大行动收藏品"
+  });
+
+  const slot = app.resolveTradeupSimulationEditSlot(preset, clickedItem, "material");
+
+  assert.equal(
+    slot,
+    "main_material",
+    "material cards rendered under a collection lane should inherit the matching material slot so edits target the correct anchor"
+  );
+}
+
+function test_render_simulation_card_modal_renders_without_role_label_reference_error() {
+  const mainMaterial = createSimulationItem({
+    markethashname: "Five-SeveN | 混沌点阵 (Field-Tested)",
+    basemarkethashname: "Five-SeveN | 混沌点阵",
+    collection: "狂牙大行动收藏品",
+    rarity: "军规级",
+    minfloat: 0.02,
+    maxfloat: 0.78
+  });
+  const preset = {
+    id: "preset_modal_render",
+    name: "弹窗渲染",
+    primary_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Field-Tested)",
+      basemarkethashname: "USP-S | Cortex",
+      collection: "狂牙大行动收藏品"
+    }),
+    aux_output: null,
+    main_material: mainMaterial,
+    aux_material: null,
+    cover_output: createSimulationItem({
+      markethashname: "USP-S | Cortex (Field-Tested)",
+      basemarkethashname: "USP-S | Cortex",
+      collection: "狂牙大行动收藏品"
+    }),
+    active_anchor_item: mainMaterial,
+    active_anchor_abs_wear: 0.33,
+    output_rows: [],
+    material_rows: []
+  };
+  const app = loadSimulationFns({
+    simulationPresets: [preset],
+    simulationActivePresetId: "preset_modal_render",
+    simulationWorkspaceSourcePresetId: "preset_modal_render",
+    simulationWorkspacePreset: {
+      ...preset,
+      dirty: false
+    }
+  });
+  app.ui.simulationCardModal = {classList: createClassList(["hidden"])};
+  app.ui.simulationCardModalTitle = {textContent: ""};
+  app.ui.simulationCardModalBody = {innerHTML: ""};
+  app.ui.simulationCardModalField = {classList: createClassList(["hidden"])};
+  app.ui.simulationCardModalWearInput = {disabled: false, value: ""};
+  app.ui.simulationCardModalWearHint = {textContent: ""};
+  app.ui.simulationCardModalReadonlyNote = {textContent: "", classList: createClassList(["hidden"])};
+  app.ui.simulationCardModalSaveBtn = {disabled: false, textContent: "", classList: createClassList(["hidden"])};
+  app.ui.simulationCardModalCancelBtn = {textContent: ""};
+  app.preferredRowSkinImageUrl = () => "";
+
+  app.openTradeupSimulationItemModal({
+    presetId: "preset_modal_render",
+    slot: "main_material",
+    itemType: "material",
+    item: mainMaterial,
+    mode: "edit"
+  });
+
+  assert.doesNotThrow(() => app.renderTradeupSimulationCardModal());
+  assert.equal(app.ui.simulationCardModal.classList.contains("hidden"), false);
+  assert.match(app.ui.simulationCardModalBody.innerHTML, /主料|辅料|主产物|辅产物/);
+}
+
+async function main() {
+  test_normalize_tradeup_simulation_preset_list_preserves_dual_slot_shape();
+  test_normalize_tradeup_simulation_preset_list_migrates_legacy_target_into_primary_cover();
+  await test_save_tradeup_simulation_presets_to_storage_writes_new_slot_shape();
+  test_open_blank_tradeup_simulation_workspace_draft_starts_with_empty_four_slots();
+  test_set_tradeup_simulation_active_preset_loads_workspace_draft_without_mutating_saved_entry();
+  await test_persist_tradeup_simulation_presets_saves_workspace_draft_into_saved_list();
+  test_apply_tradeup_simulation_slot_selection_sets_cover_for_primary_output();
+  test_open_tradeup_simulation_picker_modal_records_slot_context();
+  test_adopt_tradeup_simulation_derived_primary_output_uses_random_cover_when_missing();
+  test_apply_tradeup_simulation_slot_selection_preserves_cover_when_material_changes();
+  test_render_simulation_lane_section_marks_single_card_rows();
+  test_build_tradeup_simulation_saved_card_summary_uses_wear_tier_and_relative_wear();
+  test_render_simulation_selected_output_card_uses_item_rarity_color_even_when_anchor_active();
+  test_render_simulation_selected_output_card_applies_wear_tone_class_to_badge();
+  await test_delete_tradeup_simulation_preset_removes_saved_entry_and_persists();
+  await test_tradeup_simulation_picker_search_ignores_stale_response_after_reopen();
+  await test_tradeup_simulation_picker_search_rerenders_full_modal_state();
+  await test_tradeup_simulation_picker_clear_search_invalidates_pending_response();
+  await test_tradeup_simulation_picker_ignores_out_of_order_search_responses();
+  await test_tradeup_simulation_picker_search_failure_sets_consistent_error_state();
+  await test_select_tradeup_simulation_picker_item_blocks_mixed_material_rarity_without_closing_picker();
+  await test_select_tradeup_simulation_picker_item_accepts_matching_rarity_and_closes_picker();
+  await test_select_tradeup_simulation_picker_item_allows_material_rarity_to_differ_from_output_side_lock();
+  await test_select_tradeup_simulation_picker_item_blocks_mixed_output_rarity_without_closing_picker();
+  test_open_tradeup_simulation_item_modal_allows_material_slot_editing();
+  test_resolve_tradeup_simulation_edit_slot_prefers_matching_material_collection();
+  test_render_simulation_card_modal_renders_without_role_label_reference_error();
+  console.log("tradeup-simulation-page-state tests passed");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
