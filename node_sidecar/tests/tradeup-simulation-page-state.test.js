@@ -939,6 +939,11 @@ async function test_select_tradeup_simulation_picker_item_accepts_matching_rarit
   assert.equal(selected, true);
   assert.equal(app.state.simulationPickerOpen, false);
   assert.equal(app.state.simulationWorkspacePreset.aux_material.basemarkethashname, "MAC-10 | 脱轨");
+  assert.equal(
+    app.state.simulationWorkspacePreset.active_anchor_abs_wear,
+    0.167,
+    "adding an auxiliary material should inherit the current relative wear onto the new item's range instead of resetting it to the new item's minfloat"
+  );
   assert.deepEqual(app.errorToasts, []);
 }
 

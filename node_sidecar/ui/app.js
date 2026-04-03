@@ -4780,9 +4780,6 @@ function applyTradeupSimulationSlotSelection({presetId, slot = "", item = null, 
   const slotName = normalizeTradeupSimulationSlotName(slot);
   const nextItem = sanitizeTradeupSimulationTargetItem(item);
   if (!slotName || !nextItem) return false;
-  const numericWear = absoluteWear === null || absoluteWear === undefined || absoluteWear === ""
-    ? null
-    : Number(absoluteWear);
   const next = updateTradeupSimulationPresetRecord(presetId, (current) => ({
     ...current,
     [slotName]: nextItem,
@@ -4790,11 +4787,7 @@ function applyTradeupSimulationSlotSelection({presetId, slot = "", item = null, 
       ? nextItem
       : current.cover_output || (isTradeupSimulationOutputSlot(slotName) ? nextItem : null),
     active_anchor_item: nextItem,
-    active_anchor_abs_wear: Number.isFinite(numericWear)
-      ? numericWear
-      : (Number.isFinite(Number(current.active_anchor_abs_wear))
-        ? Number(current.active_anchor_abs_wear)
-        : (Number.isFinite(Number(nextItem.minfloat)) ? Number(nextItem.minfloat) : null)),
+    active_anchor_abs_wear: inheritTradeupSimulationAbsoluteWear(current, nextItem, absoluteWear),
     dirty: true,
     updated_at: Date.now()
   }));
@@ -7479,6 +7472,26 @@ function getTradeupSimulationAnchorRelativeWear(preset) {
   if (!Number.isFinite(absoluteWear) || !Number.isFinite(minWear) || !Number.isFinite(maxWear) || maxWear <= minWear) return null;
   return Math.max(0, Math.min(1, (absoluteWear - minWear) / (maxWear - minWear)));
 }
+function inheritTradeupSimulationAbsoluteWear(preset, item, absoluteWear = null) {
+  const explicitWear = absoluteWear === null || absoluteWear === undefined || absoluteWear === ""
+    ? null
+    : Number(absoluteWear);
+  if (Number.isFinite(explicitWear)) return explicitWear;
+  const nextItem = sanitizeTradeupSimulationTargetItem(item);
+  const nextMinWear = Number(nextItem && nextItem.minfloat);
+  const nextMaxWear = Number(nextItem && nextItem.maxfloat);
+  const nextHasBounds = Number.isFinite(nextMinWear) && Number.isFinite(nextMaxWear) && nextMaxWear > nextMinWear;
+  const currentRelativeWear = getTradeupSimulationAnchorRelativeWear(preset);
+  if (nextHasBounds && Number.isFinite(currentRelativeWear)) {
+    return Number((nextMinWear + (nextMaxWear - nextMinWear) * currentRelativeWear).toFixed(12));
+  }
+  const currentAbsoluteWear = Number(preset && preset.active_anchor_abs_wear);
+  if (Number.isFinite(currentAbsoluteWear)) {
+    if (!nextHasBounds) return currentAbsoluteWear;
+    return Number(Math.min(nextMaxWear, Math.max(nextMinWear, currentAbsoluteWear)).toFixed(12));
+  }
+  return Number.isFinite(nextMinWear) ? nextMinWear : null;
+}
 function mapTradeupSimulationPredictorOutcomeToItem(outcome) {
   const markethashname = String(outcome && (outcome.markethashname || outcome.name || outcome.base_name) || "").trim();
   if (!markethashname) return null;
@@ -7614,8 +7627,7 @@ async function selectTradeupSimulationPickerItem(pickIndex) {
   }
   const updated = applyTradeupSimulationSlotSelection({
     slot,
-    item: validation.item,
-    absoluteWear: validation.item && validation.item.minfloat
+    item: validation.item
   });
   if (!updated) return false;
   closeTradeupSimulationPickerModal();
