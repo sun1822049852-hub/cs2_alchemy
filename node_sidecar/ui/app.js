@@ -37,10 +37,15 @@ const state = {
   rowsVersion: 0, filterCacheKey: "", filterCacheAllRows: [], filterCacheFilteredRows: [],
   groupCacheKey: "", groupCacheRows: [], lastPersistedSelected: "",
   profileHydratingUsernames: new Set(), profileHydratedUsernames: new Set(),
-  snapshotCacheByAccount: new Map(), craftAccountStateByAccount: new Map(), craftAssistRuntimeByAccount: new Map(), craftAssistActiveRunTokensByAccount: new Map()
+  snapshotCacheByAccount: new Map(), craftAccountStateByAccount: new Map(), craftAssistRuntimeByAccount: new Map(), craftAssistActiveRunTokensByAccount: new Map(),
+  appAuth: {checked: false, authenticated: false, needsBootstrap: false, user: null, permissions: [], membership: []},
+  workspaceInitialized: false
 };
 
 const ui = {
+  appAuthGate: document.getElementById("appAuthGate"), appAuthTitle: document.getElementById("appAuthTitle"), appAuthHint: document.getElementById("appAuthHint"),
+  appAuthUsername: document.getElementById("appAuthUsername"), appAuthPassword: document.getElementById("appAuthPassword"), appAuthStatus: document.getElementById("appAuthStatus"), appAuthSubmitBtn: document.getElementById("appAuthSubmitBtn"),
+  appAuthLogoutBtn: document.getElementById("appAuthLogoutBtn"), authUserPill: document.getElementById("authUserPill"), authUserName: document.getElementById("authUserName"),
   navShell: document.getElementById("navShell"), navRailTrigger: document.getElementById("navRailTrigger"), mainSidebar: document.getElementById("mainSidebar"),
   navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"), navSimulation: document.getElementById("navSimulation"),
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
@@ -93,7 +98,7 @@ const ui = {
   craftAssistBusyMask: document.getElementById("craftAssistBusyMask"), craftAssistBusyMaskTitle: document.getElementById("craftAssistBusyMaskTitle"), craftAssistBusyMaskDetail: document.getElementById("craftAssistBusyMaskDetail"),
   craftAssistPresetPanel: document.getElementById("craftAssistPresetPanel"), craftAssistPresetSaveBtn: document.getElementById("craftAssistPresetSaveBtn"), craftAssistPresetList: document.getElementById("craftAssistPresetList"),
   craftPredictorPanel: document.getElementById("craftPredictorPanel"), craftPredictorHandle: document.getElementById("craftPredictorHandle"), craftPredictorDrawer: document.getElementById("craftPredictorDrawer"), craftPredictorTitle: document.getElementById("craftPredictorTitle"), craftPredictorSubtitle: document.getElementById("craftPredictorSubtitle"), craftPredictorCloseBtn: document.getElementById("craftPredictorCloseBtn"), craftPredictorList: document.getElementById("craftPredictorList"),
-  craftAssistPresetModal: document.getElementById("craftAssistPresetModal"), craftAssistPresetModalInput: document.getElementById("craftAssistPresetModalInput"),
+  craftAssistPresetModal: document.getElementById("craftAssistPresetModal"), craftAssistPresetModalTitle: document.getElementById("craftAssistPresetModalTitle"), craftAssistPresetModalInput: document.getElementById("craftAssistPresetModalInput"),
   craftAssistPresetModalClose: document.getElementById("craftAssistPresetModalClose"), craftAssistPresetModalSaveBtn: document.getElementById("craftAssistPresetModalSaveBtn"), craftAssistPresetModalCancelBtn: document.getElementById("craftAssistPresetModalCancelBtn"),
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel"),
   craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionProgress: document.getElementById("craftExecutionProgress"), craftExecutionOverlayPercent: document.getElementById("craftExecutionOverlayPercent"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail"),
@@ -107,6 +112,7 @@ let remarkModalResolver = null;
 let remarkModalAccount = "";
 let confirmModalResolver = null;
 let craftAssistPresetModalResolver = null;
+let craftAssistPresetModalOptions = null;
 let targetDrawerDrag = {active: false, offsetX: 0, offsetY: 0};
 let craftSplitDrag = {active: false, startX: 0, startWidth: 360};
 let craftAssistOverlayDrag = {active: false, startY: 0, startHeight: 0};
@@ -172,6 +178,14 @@ async function api(path, options = {}) {
       const err = new Error(d.message || `http ${r.status}`);
       err.status = r.status;
       err.data = d;
+      if (
+        typeof window !== "undefined" &&
+        typeof window.__cs2AlchemyHandleApiAuthFailure === "function" &&
+        Number(r.status) === 401 &&
+        String(d && d.reason || "").trim() === "app_auth_required"
+      ) {
+        window.__cs2AlchemyHandleApiAuthFailure(err);
+      }
       throw err;
     }
     return d;
@@ -188,6 +202,186 @@ async function api(path, options = {}) {
     if (typeof detachExternalAbort === "function") detachExternalAbort();
   }
 }
+
+async function requestAuthJson(path, options = {}) {
+  const requestOptions = options && typeof options === "object" ? {...options} : {};
+  const requestHeaders = requestOptions.headers && typeof requestOptions.headers === "object"
+    ? {...requestOptions.headers}
+    : {};
+  delete requestOptions.headers;
+  const response = await fetch(path, {
+    headers: {"Content-Type": "application/json", ...requestHeaders},
+    ...requestOptions
+  });
+  const data = await response.json();
+  return {
+    ok: response.ok && data.ok !== false,
+    status: response.status,
+    data
+  };
+}
+
+function setAppAuthStatus(text, isError = false) {
+  if (!ui.appAuthStatus) return;
+  ui.appAuthStatus.textContent = String(text || "").trim();
+  ui.appAuthStatus.classList.toggle("error", !!isError);
+}
+
+function renderAppAuthShell() {
+  const auth = state.appAuth || {};
+  const authenticated = !!auth.authenticated;
+  const needsBootstrap = !authenticated && !!auth.needsBootstrap;
+  if (ui.appAuthGate) {
+    ui.appAuthGate.classList.toggle("hidden", authenticated);
+  }
+  if (ui.authUserPill) {
+    ui.authUserPill.classList.toggle("hidden", !authenticated);
+  }
+  if (ui.authUserName) {
+    const user = auth.user && typeof auth.user === "object" ? auth.user : null;
+    ui.authUserName.textContent = user ? (String(user.display_name || "").trim() || String(user.username || "").trim()) : "";
+  }
+  if (ui.appAuthTitle) {
+    ui.appAuthTitle.textContent = needsBootstrap ? "初始化管理员" : "管理员登录";
+  }
+  if (ui.appAuthHint) {
+    ui.appAuthHint.textContent = needsBootstrap
+      ? "首次启动需要设置 admin 密码。创建完成后会自动登录。"
+      : "请输入 admin 账号密码后继续。";
+  }
+  if (ui.appAuthSubmitBtn) {
+    ui.appAuthSubmitBtn.textContent = needsBootstrap ? "创建并登录" : "登录";
+    ui.appAuthSubmitBtn.disabled = false;
+  }
+  if (ui.appAuthUsername) {
+    const fallback = auth.user && auth.user.username ? auth.user.username : (String(ui.appAuthUsername.value || "").trim() || "admin");
+    ui.appAuthUsername.value = fallback;
+  }
+  if (!authenticated) {
+    setAppAuthStatus(
+      needsBootstrap ? "首次启动，请先初始化 admin 密码。" : "请输入管理员账号密码。",
+      false
+    );
+  }
+}
+
+async function initializeAuthenticatedWorkspace() {
+  if (state.workspaceInitialized) {
+    return;
+  }
+  loadCraftUiPrefs();
+  await loadCraftAssistPresetsFromStorage();
+  await loadTradeupSimulationPresetsFromStorage();
+  initWearOptions();
+  refreshRarityMenu();
+  setFilterPanel(state.filterPanel);
+  updateFilterDrawer();
+  applyCraftLayoutWidth();
+  setAccountStatus("准备就绪");
+  setNoAccountState({silentSummary: true});
+  try {
+    const uiState = await api("/api/ui-state");
+    const preferred = String(uiState.last_selected_username || "").trim();
+    await loadAccounts({preferUsername: preferred});
+    if (state.accountSelectedUsername) await switchAccountView(state.accountSelectedUsername);
+    else setNoAccountState({silentSummary: true});
+    showPage("accountPage");
+    state.workspaceInitialized = true;
+  } catch (err) {
+    setSummary(`初始化失败：${err.message}`);
+    setAccountStatus(`初始化失败：${err.message}`, true);
+  }
+}
+
+async function loadAppSession({hydrateWorkspace = true} = {}) {
+  const result = await requestAuthJson("/api/auth/session");
+  const data = result.data || {};
+  state.appAuth = {
+    checked: true,
+    authenticated: !!data.authenticated,
+    needsBootstrap: !!data.needs_bootstrap,
+    user: data.user && typeof data.user === "object" ? data.user : null,
+    permissions: Array.isArray(data.permissions) ? data.permissions : [],
+    membership: Array.isArray(data.membership) ? data.membership : []
+  };
+  renderAppAuthShell();
+  if (state.appAuth.authenticated && hydrateWorkspace) {
+    await initializeAuthenticatedWorkspace();
+  }
+  return state.appAuth;
+}
+
+async function submitAppAuth() {
+  const username = String((ui.appAuthUsername && ui.appAuthUsername.value) || "").trim() || "admin";
+  const password = String((ui.appAuthPassword && ui.appAuthPassword.value) || "").trim();
+  if (!password) {
+    setAppAuthStatus("请输入管理员密码", true);
+    return;
+  }
+  if (ui.appAuthSubmitBtn) {
+    ui.appAuthSubmitBtn.disabled = true;
+  }
+  setAppAuthStatus(state.appAuth.needsBootstrap ? "正在初始化管理员账号..." : "正在验证管理员会话...");
+  try {
+    const result = await requestAuthJson(
+      state.appAuth.needsBootstrap ? "/api/auth/bootstrap-admin" : "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(
+          state.appAuth.needsBootstrap
+            ? {password, display_name: "管理员"}
+            : {username, password}
+        )
+      }
+    );
+    if (!result.ok) {
+      setAppAuthStatus(String(result.data && result.data.message || "管理员认证失败"), true);
+      await loadAppSession({hydrateWorkspace: false});
+      return;
+    }
+    if (ui.appAuthPassword) {
+      ui.appAuthPassword.value = "";
+    }
+    setAppAuthStatus("管理员认证成功，正在载入工作台...");
+    await loadAppSession({hydrateWorkspace: true});
+  } catch (err) {
+    setAppAuthStatus(String(err && err.message ? err.message : err || "管理员认证失败"), true);
+  } finally {
+    if (ui.appAuthSubmitBtn) {
+      ui.appAuthSubmitBtn.disabled = false;
+    }
+  }
+}
+
+async function logoutAppSession() {
+  try {
+    await requestAuthJson("/api/auth/logout", {method: "POST"});
+  } finally {
+    window.location.reload();
+  }
+}
+
+async function handleApiAuthFailure() {
+  state.appAuth = {
+    checked: true,
+    authenticated: false,
+    needsBootstrap: false,
+    user: null,
+    permissions: [],
+    membership: []
+  };
+  renderAppAuthShell();
+  setAppAuthStatus("登录已失效，请重新登录管理员账号。", true);
+  try {
+    await loadAppSession({hydrateWorkspace: false});
+  } catch (_) {
+    // ignore session refresh failures
+  }
+}
+
+window.__cs2AlchemyHandleApiAuthFailure = () => {
+  void handleApiAuthFailure();
+};
 
 function parseEventData(raw) {
   try {
@@ -1022,18 +1216,37 @@ function openConfirmModal({title = "请确认操作", message = "确认继续吗
   });
 }
 
+function resolveCraftAssistPresetModalOptions(options = {}) {
+  return {
+    title: String(options.title || "保存辅助配置").trim() || "保存辅助配置",
+    confirmText: String(options.confirmText || "保存配置").trim() || "保存配置",
+    placeholder: String(options.placeholder || "请输入配置名称").trim() || "请输入配置名称",
+    emptyMessage: String(options.emptyMessage || "请先输入配置名称").trim() || "请先输入配置名称",
+    onEmpty: typeof options.onEmpty === "function" ? options.onEmpty : null
+  };
+}
+function applyCraftAssistPresetModalOptions(options = {}) {
+  const nextOptions = resolveCraftAssistPresetModalOptions(options);
+  craftAssistPresetModalOptions = nextOptions;
+  if (ui.craftAssistPresetModalTitle) ui.craftAssistPresetModalTitle.textContent = nextOptions.title;
+  if (ui.craftAssistPresetModalSaveBtn) ui.craftAssistPresetModalSaveBtn.textContent = nextOptions.confirmText;
+  if (ui.craftAssistPresetModalInput) ui.craftAssistPresetModalInput.placeholder = nextOptions.placeholder;
+  return nextOptions;
+}
 function closeCraftAssistPresetModal(value = null) {
   if (!ui.craftAssistPresetModal) return;
   ui.craftAssistPresetModal.classList.add("hidden");
   const resolver = craftAssistPresetModalResolver;
   craftAssistPresetModalResolver = null;
+  applyCraftAssistPresetModalOptions();
   if (typeof resolver === "function") {
     resolver(value);
   }
 }
 
-function openCraftAssistPresetModal(initialName = "") {
+function openCraftAssistPresetModal(initialName = "", options = {}) {
   const initValue = String(initialName || "").trim();
+  applyCraftAssistPresetModalOptions(options);
   if (!ui.craftAssistPresetModal) return Promise.resolve(initValue || null);
   return new Promise((resolve) => {
     craftAssistPresetModalResolver = resolve;
@@ -4174,7 +4387,11 @@ function sanitizeTradeupSimulationTargetItem(value) {
     editable: source.editable !== false,
     goods_icon_url: String(source.goods_icon_url || "").trim(),
     goods_original_icon_url: String(source.goods_original_icon_url || "").trim(),
-    goods_share_thumbnail_url: String(source.goods_share_thumbnail_url || "").trim()
+    goods_share_thumbnail_url: String(source.goods_share_thumbnail_url || "").trim(),
+    collection_lowest_rarity: String(source.collection_lowest_rarity || "").trim(),
+    is_collection_lowest_rarity: source.is_collection_lowest_rarity === true,
+    tradeup_restriction_reason: String(source.tradeup_restriction_reason || "").trim(),
+    is_tradeup_restricted: source.is_tradeup_restricted === true
   };
 }
 function getTradeupSimulationDefaultName(source = {}) {
@@ -4244,17 +4461,75 @@ function finalizeTradeupSimulationPresetShape(source = {}) {
     updated_at: updatedAt
   };
 }
+function enforceTradeupSimulationPresetRestrictions(preset) {
+  const source = preset && typeof preset === "object" ? preset : {};
+  const next = {...source};
+  let removedAny = false;
+  const clearBlockedSlot = (slotName) => {
+    const item = sanitizeTradeupSimulationTargetItem(source[slotName]);
+    if (!item) return;
+    if (!getTradeupSimulationPickerRestrictionMessage(item, slotName)) return;
+    next[slotName] = null;
+    removedAny = true;
+  };
+  clearBlockedSlot("primary_output");
+  clearBlockedSlot("aux_output");
+  clearBlockedSlot("main_material");
+  clearBlockedSlot("aux_material");
+  const coverOutput = sanitizeTradeupSimulationTargetItem(source.cover_output);
+  if (coverOutput && getTradeupSimulationPickerRestrictionMessage(coverOutput, "primary_output")) {
+    next.cover_output = null;
+    removedAny = true;
+  }
+  const materialKeys = new Set([
+    getTradeupSimulationItemKey(sanitizeTradeupSimulationTargetItem(next.main_material)),
+    getTradeupSimulationItemKey(sanitizeTradeupSimulationTargetItem(next.aux_material))
+  ].filter(Boolean));
+  const activeAnchorItem = sanitizeTradeupSimulationTargetItem(source.active_anchor_item);
+  if (activeAnchorItem) {
+    const anchorKey = getTradeupSimulationItemKey(activeAnchorItem);
+    const anchorMatchesMaterial = !!(anchorKey && materialKeys.has(anchorKey));
+    const anchorRestrictionMessage = anchorMatchesMaterial
+      ? (getTradeupSimulationTradeupRestrictionReason(activeAnchorItem) ? "限量版物品不能加入炼金" : "")
+      : getTradeupSimulationPickerRestrictionMessage(activeAnchorItem, "primary_output");
+    if (anchorRestrictionMessage) {
+      next.active_anchor_item = null;
+      removedAny = true;
+    }
+  }
+  const hasBlockedOutputCandidate = Array.isArray(source.output_candidates)
+    && source.output_candidates.some((entry) => getTradeupSimulationPickerRestrictionMessage(entry, "primary_output"));
+  if (hasBlockedOutputCandidate) {
+    removedAny = true;
+  }
+  if (!removedAny) {
+    return source;
+  }
+  next.cover_output = null;
+  next.active_anchor_item = null;
+  next.active_anchor_abs_wear = null;
+  next.output_rows = [];
+  next.material_rows = [];
+  next.rows = [];
+  next.output_candidates = [];
+  next.warnings = [];
+  return finalizeTradeupSimulationPresetShape(next);
+}
 function sanitizeTradeupSimulationPresetPayload(payload) {
-  const normalized = finalizeTradeupSimulationPresetShape(payload && typeof payload === "object" ? payload : {});
+  const normalized = enforceTradeupSimulationPresetRestrictions(
+    finalizeTradeupSimulationPresetShape(payload && typeof payload === "object" ? payload : {})
+  );
   if (!normalized.primary_output && !normalized.cover_output) return null;
   return normalized;
 }
 function sanitizeTradeupSimulationDraftPayload(payload) {
   const source = payload && typeof payload === "object" ? payload : {};
-  return finalizeTradeupSimulationPresetShape({
-    ...source,
-    id: String(source.id || makeTradeupSimulationUid("draft")).trim() || makeTradeupSimulationUid("draft")
-  });
+  return enforceTradeupSimulationPresetRestrictions(
+    finalizeTradeupSimulationPresetShape({
+      ...source,
+      id: String(source.id || makeTradeupSimulationUid("draft")).trim() || makeTradeupSimulationUid("draft")
+    })
+  );
 }
 function getTradeupSimulationWorkspaceDraft(presetId = "") {
   const draft = state.simulationWorkspacePreset && typeof state.simulationWorkspacePreset === "object"
@@ -4299,11 +4574,30 @@ function openBlankTradeupSimulationWorkspaceDraft() {
     sourcePresetId: ""
   });
 }
+function openTradeupSimulationWorkspaceDraft() {
+  state.simulationViewMode = "workspace";
+  const existingDraft = sanitizeTradeupSimulationDraftPayload(state.simulationWorkspacePreset);
+  if (existingDraft) {
+    return setTradeupSimulationWorkspaceDraft(existingDraft, {
+      sourcePresetId: state.simulationWorkspaceSourcePresetId
+    });
+  }
+  return openBlankTradeupSimulationWorkspaceDraft();
+}
 function normalizeTradeupSimulationPresetList(values) {
   return (Array.isArray(values) ? values : [])
     .map((entry) => sanitizeTradeupSimulationPresetPayload(entry))
     .filter(Boolean)
     .slice(0, 40);
+}
+function readRawTradeupSimulationPresetsFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(TRADEUP_SIMULATION_PRESETS_KEY);
+    if (!raw) return [];
+    return Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : [];
+  } catch (_) {
+    return [];
+  }
 }
 function serializeTradeupSimulationPresetList(values, {clearDirty = false} = {}) {
   return normalizeTradeupSimulationPresetList(values)
@@ -4327,13 +4621,64 @@ function serializeTradeupSimulationPresetList(values, {clearDirty = false} = {})
     }));
 }
 function readTradeupSimulationPresetsFromLocalStorage() {
+  return normalizeTradeupSimulationPresetList(readRawTradeupSimulationPresetsFromLocalStorage());
+}
+function shouldHydrateTradeupSimulationStoredItem(item, slotName = "") {
+  const normalized = sanitizeTradeupSimulationTargetItem(item);
+  if (!normalized) return false;
+  if (String(normalized.collection || "").trim() === "限量版物品") return false;
+  if (normalized.is_tradeup_restricted === true) return false;
+  if (String(normalized.tradeup_restriction_reason || "").trim()) return false;
+  if (normalized.is_collection_lowest_rarity === true) return false;
+  if (String(normalized.collection_lowest_rarity || "").trim()) return false;
+  return ["primary_output", "aux_output", "cover_output", "active_anchor_item", "output_candidate"].includes(String(slotName || "").trim());
+}
+async function fetchTradeupSimulationCatalogItem(markethashname) {
+  const key = String(markethashname || "").trim();
+  if (!key) return null;
   try {
-    const raw = localStorage.getItem(TRADEUP_SIMULATION_PRESETS_KEY);
-    if (!raw) return [];
-    return normalizeTradeupSimulationPresetList(JSON.parse(raw));
+    const data = await api(`/api/simulation/tradeup/item?markethashname=${encodeURIComponent(key)}`);
+    return sanitizeTradeupSimulationTargetItem(data && data.item);
   } catch (_) {
-    return [];
+    return null;
   }
+}
+async function hydrateTradeupSimulationStoredItem(item, cache, slotName = "") {
+  const normalized = sanitizeTradeupSimulationTargetItem(item);
+  if (!normalized) return null;
+  if (!shouldHydrateTradeupSimulationStoredItem(normalized, slotName)) {
+    return normalized;
+  }
+  const key = normalized.markethashname;
+  if (!cache.has(key)) {
+    cache.set(key, fetchTradeupSimulationCatalogItem(key).then((resolved) => resolved || normalized));
+  }
+  const resolved = await cache.get(key);
+  return deepCopyPlain(resolved || normalized);
+}
+async function hydrateTradeupSimulationStoredPreset(preset, cache) {
+  const source = preset && typeof preset === "object" ? deepCopyPlain(preset) : {};
+  const slotKeys = ["primary_output", "aux_output", "main_material", "aux_material", "cover_output", "active_anchor_item"];
+  const hydratedSlots = await Promise.all(slotKeys.map(async (key) => [key, await hydrateTradeupSimulationStoredItem(source[key], cache, key)]));
+  for (const [key, value] of hydratedSlots) {
+    source[key] = value;
+  }
+  if (Array.isArray(source.output_candidates)) {
+    source.output_candidates = (await Promise.all(
+      source.output_candidates.map((entry) => hydrateTradeupSimulationStoredItem(entry, cache, "output_candidate"))
+    )).filter(Boolean);
+  }
+  return source;
+}
+async function hydrateTradeupSimulationStoredPresets(presets) {
+  const list = Array.isArray(presets) ? presets : [];
+  if (!list.length) return [];
+  const cache = new Map();
+  const hydrated = [];
+  for (const preset of list) {
+    hydrated.push(await hydrateTradeupSimulationStoredPreset(preset, cache));
+  }
+  return hydrated;
 }
 function writeTradeupSimulationPresetsToLocalStorage(presets) {
   try {
@@ -4358,7 +4703,7 @@ async function saveTradeupSimulationPresetsToServer(presets) {
 async function loadTradeupSimulationPresetsFromServer() {
   try {
     const data = await api("/api/ui-state/tradeup-simulation-presets");
-    return normalizeTradeupSimulationPresetList(data && data.presets);
+    return Array.isArray(data && data.presets) ? data.presets : [];
   } catch (_) {
     return null;
   }
@@ -4371,8 +4716,13 @@ function saveTradeupSimulationPresetsToStorage() {
   void saveTradeupSimulationPresetsToServer(storedPayload);
 }
 async function loadTradeupSimulationPresetsFromStorage() {
-  const localPresets = readTradeupSimulationPresetsFromLocalStorage();
-  const serverPresets = await loadTradeupSimulationPresetsFromServer();
+  const localPresets = normalizeTradeupSimulationPresetList(
+    await hydrateTradeupSimulationStoredPresets(readRawTradeupSimulationPresetsFromLocalStorage())
+  );
+  const serverPresetList = await loadTradeupSimulationPresetsFromServer();
+  const serverPresets = Array.isArray(serverPresetList)
+    ? normalizeTradeupSimulationPresetList(await hydrateTradeupSimulationStoredPresets(serverPresetList))
+    : null;
   if (Array.isArray(serverPresets)) {
     if (serverPresets.length > 0) {
       state.simulationPresets = serverPresets;
@@ -4433,6 +4783,35 @@ async function persistTradeupSimulationPresets({clearDirty = false} = {}) {
   state.simulationPersisting = false;
   renderSimulationPage();
   return synced;
+}
+async function saveActiveTradeupSimulationPreset() {
+  const preset = getActiveTradeupSimulationPreset();
+  if (!preset || state.simulationPersisting) return false;
+  if (!(preset.primary_output || preset.cover_output)) {
+    setSummary("请先选择主产物", {isError: true});
+    return false;
+  }
+  const presetName = await openCraftAssistPresetModal(String(preset && preset.name || "").trim(), {
+    title: "保存汰换配置",
+    confirmText: "保存配方",
+    placeholder: "请输入配置名称",
+    emptyMessage: "请先输入配置名称",
+    onEmpty(message) {
+      setSummary(message, {isError: true});
+      showErrorToast(message);
+    }
+  });
+  if (presetName == null) return false;
+  const nextName = String(presetName || "").trim();
+  if (!nextName) return false;
+  state.simulationWorkspacePreset = sanitizeTradeupSimulationDraftPayload({
+    ...(state.simulationWorkspacePreset && typeof state.simulationWorkspacePreset === "object"
+      ? state.simulationWorkspacePreset
+      : preset),
+    name: nextName,
+    dirty: true
+  });
+  return persistTradeupSimulationPresets({clearDirty: true});
 }
 async function cancelTradeupSimulationEditing() {
   state.simulationViewMode = "saved";
@@ -7450,18 +7829,24 @@ function buildTradeupSimulationSavedCardSummary(preset) {
   const target = sanitizeTradeupSimulationTargetItem(preset && preset.cover_output)
     || sanitizeTradeupSimulationTargetItem(preset && preset.primary_output);
   const anchor = getTradeupSimulationActiveAnchorItem(preset);
-  const relativeWear = getTradeupSimulationAnchorRelativeWear(preset);
+  const anchorAbsoluteWearValue = Number(preset && preset.active_anchor_abs_wear);
+  const collections = getTradeupSimulationSelectedMaterialCollections(preset);
+  const fallbackCollection = String(target && target.collection || anchor && anchor.collection || "").trim();
   return {
+    presetName: String(preset && preset.name || "").trim() || getTradeupSimulationDefaultName({
+      cover_output: target,
+      primary_output: target
+    }) || "未命名配置",
     targetName: String(target && (target.basename || target.basemarkethashname || target.markethashname) || "未选择主产物").trim(),
-    anchorName: String(anchor && (anchor.basename || anchor.basemarkethashname || anchor.markethashname) || "未设锚定物品").trim(),
     wearLabel: getTradeupSimulationItemWearLabel(target),
-    anchorWear: Number.isFinite(Number(preset && preset.active_anchor_abs_wear))
-      ? formatTradeupSimulationWear(preset.active_anchor_abs_wear)
+    wearToneClass: getTradeupSimulationWearBadgeToneClass(target),
+    anchorWear: Number.isFinite(anchorAbsoluteWearValue)
+      ? formatTradeupSimulationWear(anchorAbsoluteWearValue)
       : "-",
-    relativeWear: Number.isFinite(relativeWear)
-      ? formatTradeupSimulationWear(relativeWear)
-      : "-",
-    collections: getTradeupSimulationSelectedMaterialCollections(preset)
+    anchorAbsoluteWearValue: Number.isFinite(anchorAbsoluteWearValue) ? anchorAbsoluteWearValue : null,
+    collectionText: (collections.length ? collections : [fallbackCollection])
+      .filter(Boolean)
+      .join(" / ") || "未指定收藏品"
   };
 }
 function getTradeupSimulationAnchorRelativeWear(preset) {
@@ -7512,7 +7897,13 @@ function mapTradeupSimulationPredictorOutcomeToItem(outcome) {
 function buildTradeupSimulationDerivedOutputPayload(preset) {
   const mainMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.main_material);
   const auxMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.aux_material);
-  const materials = [mainMaterial, auxMaterial].filter(Boolean);
+  const materialEntries = [
+    {slot: "main_material", item: mainMaterial},
+    {slot: "aux_material", item: auxMaterial}
+  ]
+    .filter(({item}) => !!item)
+    .filter(({slot, item}) => !getTradeupSimulationPickerRestrictionMessage(item, slot));
+  const materials = materialEntries.map(({item}) => item);
   if (!materials.length) return null;
   const rarity = String(materials[0] && materials[0].rarity || "").trim();
   if (!rarity || materials.some((item) => String(item && item.rarity || "").trim() !== rarity)) return null;
@@ -7520,11 +7911,13 @@ function buildTradeupSimulationDerivedOutputPayload(preset) {
   if (!Number.isFinite(relativeWear)) return null;
   const groups = [];
   const collectionCountMap = new Map();
-  collectionCountMap.set(String(mainMaterial && mainMaterial.collection || auxMaterial && auxMaterial.collection || "").trim(), materials.length === 1 ? 10 : 0);
-  if (mainMaterial && auxMaterial) {
-    collectionCountMap.clear();
-    collectionCountMap.set(String(mainMaterial.collection || "").trim(), 5);
-    collectionCountMap.set(String(auxMaterial.collection || "").trim(), (collectionCountMap.get(String(auxMaterial.collection || "").trim()) || 0) + 5);
+  if (materialEntries.length === 1) {
+    collectionCountMap.set(String(materialEntries[0].item && materialEntries[0].item.collection || "").trim(), 10);
+  } else if (materialEntries.length >= 2) {
+    for (const {item} of materialEntries) {
+      const collection = String(item && item.collection || "").trim();
+      collectionCountMap.set(collection, (collectionCountMap.get(collection) || 0) + 5);
+    }
   }
   for (const [collection, count] of collectionCountMap.entries()) {
     if (!collection || !count) continue;
@@ -7577,13 +7970,39 @@ function getTradeupSimulationPickerContext() {
   return {
     roleText,
     hintText: slot
-      ? `${roleText}会直接写入当前配方，后续调整在下方${outputSlot ? "产物" : "材料"}列表卡片中完成。`
+      ? `${roleText}会直接写入当前配方，后续调整在下方${outputSlot ? "产物" : "材料"}列表卡片中完成。${outputSlot ? " 最低级物品不能作为产物添加。" : ""}`
       : "搜索后点击候选项即可写入当前配方。",
     emptyText: slot
       ? `输入名称或收藏品后，为${roleText}搜索候选物品`
       : "输入关键字后搜索全量皮肤库",
     actionText: slot ? `点击设为${roleText}` : "点击写入当前配方"
   };
+}
+function getTradeupSimulationOutputRestrictionMessage(item, slot = "") {
+  const slotName = normalizeTradeupSimulationSlotName(slot);
+  if (!isTradeupSimulationOutputSlot(slotName)) return "";
+  const nextItem = sanitizeTradeupSimulationTargetItem(item);
+  if (!nextItem) return "";
+  const rarityText = getTradeupSimulationSafeRarityText(nextItem && nextItem.rarity);
+  const lowestRarity = getTradeupSimulationSafeRarityText(nextItem && nextItem.collection_lowest_rarity);
+  const isLowest = nextItem.is_collection_lowest_rarity === true
+    || (!!rarityText && !!lowestRarity && rarityText === lowestRarity);
+  return isLowest ? "该收藏品最低级，不能作为产物添加" : "";
+}
+function getTradeupSimulationTradeupRestrictionReason(item) {
+  const nextItem = sanitizeTradeupSimulationTargetItem(item);
+  if (!nextItem) return "";
+  const explicitReason = String(nextItem.tradeup_restriction_reason || "").trim();
+  if (explicitReason) return explicitReason;
+  if (nextItem.is_tradeup_restricted === true) return "tradeup_restricted";
+  return String(nextItem.collection || "").trim() === "限量版物品" ? "limited_collection" : "";
+}
+function getTradeupSimulationPickerRestrictionMessage(item, slot = "") {
+  const tradeupRestrictionReason = getTradeupSimulationTradeupRestrictionReason(item);
+  if (tradeupRestrictionReason === "limited_collection" || tradeupRestrictionReason === "tradeup_restricted") {
+    return "限量版物品不能加入炼金";
+  }
+  return getTradeupSimulationOutputRestrictionMessage(item, slot);
 }
 function getTradeupSimulationLockedRarity(preset, slot = "") {
   const slotName = normalizeTradeupSimulationSlotName(slot);
@@ -7602,6 +8021,10 @@ function validateTradeupSimulationPickerSelection(preset, slot, item) {
   const nextItem = sanitizeTradeupSimulationTargetItem(item);
   if (!nextItem) {
     return {ok: false, message: "未找到可添加的物品"};
+  }
+  const pickerRestrictionMessage = getTradeupSimulationPickerRestrictionMessage(nextItem, slot);
+  if (pickerRestrictionMessage) {
+    return {ok: false, message: pickerRestrictionMessage};
   }
   const currentRarity = getTradeupSimulationLockedRarity(preset, slot);
   const nextRarity = getTradeupSimulationSafeRarityText(nextItem && nextItem.rarity);
@@ -7666,12 +8089,15 @@ function renderTradeupSimulationPickerResults() {
   }
   ui.simulationPickerSearchResults.innerHTML = results.map((item, index) => {
     const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
+    const pickerRestrictionMessage = getTradeupSimulationPickerRestrictionMessage(item, state.simulationPickerMode);
+    const disabled = !!pickerRestrictionMessage;
     const itemLabel = String(item && (item.basename || item.basemarkethashname || item.markethashname) || "").trim();
     const rarityVisual = getTradeupSimulationRarityVisuals(item && item.rarity);
     const metaText = String(item && item.collection || "").trim() || "未标记收藏品";
     const rarityStyleAttr = ` style="--simulation-picker-rarity-color:${escapeHtmlAttribute(rarityVisual.color)}"`;
+    const disabledAttr = disabled ? ' disabled aria-disabled="true"' : "";
     return `
-      <button class="simulation-picker-item" type="button" data-simulation-pick-index="${index}"${rarityStyleAttr}>
+      <button class="simulation-picker-item${disabled ? " is-disabled" : ""}" type="button" data-simulation-pick-index="${index}"${rarityStyleAttr}${disabledAttr}>
         <span class="simulation-picker-item-layout">
           <span class="simulation-picker-item-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
             <span class="simulation-card-wear-badge simulation-picker-rarity-badge">${escapeHtml(rarityVisual.label)}</span>
@@ -7681,6 +8107,7 @@ function renderTradeupSimulationPickerResults() {
             <span class="simulation-picker-art-mask">
               <span class="simulation-picker-art-title" title="${escapeHtmlAttribute(itemLabel)}">${escapeHtml(itemLabel)}</span>
               <span class="simulation-picker-art-meta">${escapeHtml(metaText)}</span>
+              ${pickerRestrictionMessage ? `<span class="simulation-picker-art-warning">${escapeHtml(pickerRestrictionMessage)}</span>` : ""}
             </span>
           </span>
         </span>
@@ -7730,6 +8157,7 @@ function renderTradeupSimulationPickerResults() {
   }
   for (const button of ui.simulationPickerSearchResults.querySelectorAll("[data-simulation-pick-index]")) {
     button.onclick = async () => {
+      if (button.disabled) return;
       const index = Number(button.getAttribute("data-simulation-pick-index"));
       await selectTradeupSimulationPickerItem(index);
     };
@@ -7931,30 +8359,31 @@ function renderSimulationSavedPresets() {
   }
   ui.simulationSavedPresets.innerHTML = list.map((preset) => {
     const summary = buildTradeupSimulationSavedCardSummary(preset);
-    const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(preset && (preset.cover_output || preset.primary_output));
     const active = String(state.simulationActivePresetId || "").trim() === String(preset && preset.id || "").trim();
-    return `
-      <article class="simulation-saved-card simulation-card-button${active ? " is-active" : ""}" role="button" tabindex="0" data-simulation-preset-id="${String(preset && preset.id || "").trim()}">
-        <div class="simulation-card-art simulation-saved-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
-          ${summary.wearLabel ? `<span class="simulation-card-wear-badge">${summary.wearLabel}</span>` : ""}
-          <button class="simulation-saved-remove-btn" type="button" data-simulation-delete-preset-id="${String(preset && preset.id || "").trim()}" aria-label="删除该配方" title="删除该配方">×</button>
-          ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
-        </div>
-        <div class="simulation-saved-body">
-          <div class="simulation-card-name">${summary.targetName}</div>
-          <div class="simulation-saved-anchor-name">${summary.anchorName}</div>
-          <div class="simulation-card-meta">相对磨损：${summary.relativeWear}</div>
-          <div class="simulation-chip-row">
-            ${(summary.collections.length ? summary.collections : ["未指定辅料收藏品"]).map((entry) => `<span class="simulation-card-chip">${entry}</span>`).join("")}
-          </div>
-        </div>
-      </article>
-    `;
+    return renderTradeupSimulationSelectionStyleCard({
+      item: preset && (preset.cover_output || preset.primary_output),
+      preset,
+      kind: "output",
+      mode: "saved",
+      titleText: summary.presetName,
+      sublineHtml: renderTradeupSimulationSavedCardSubline(summary.collectionText),
+      extraClasses: `simulation-saved-card${active ? " simulation-anchor-active" : ""}`,
+      extraArtHtml: `<button class="simulation-saved-remove-btn" type="button" data-simulation-delete-preset-id="${String(preset && preset.id || "").trim()}" aria-label="删除该配方" title="删除该配方">×</button>`,
+      dataAttrs: `data-simulation-preset-id="${String(preset && preset.id || "").trim()}"`,
+      ariaLabel: `查看已保存配方 ${summary.presetName}`,
+      actionBadgeText: "",
+      wearValue: summary.anchorAbsoluteWearValue,
+      wearText: summary.anchorWear,
+      wearLabel: summary.wearLabel,
+      wearToneClass: summary.wearToneClass
+    });
   }).join("");
   const updateSavedCardActiveState = () => {
     const activeId = String(state.simulationActivePresetId || "").trim();
     for (const item of ui.simulationSavedPresets.querySelectorAll("[data-simulation-preset-id]")) {
-      item.classList.toggle("is-active", String(item.getAttribute("data-simulation-preset-id") || "").trim() === activeId);
+      const isActive = String(item.getAttribute("data-simulation-preset-id") || "").trim() === activeId;
+      item.classList.toggle("is-active", isActive);
+      item.classList.toggle("simulation-anchor-active", isActive);
     }
   };
   for (const card of ui.simulationSavedPresets.querySelectorAll("[data-simulation-preset-id]")) {
@@ -8250,6 +8679,15 @@ function renderTradeupSimulationLaneMeta(preset, kind, collection, items = [], r
     slotTags
   };
 }
+function renderTradeupSimulationWearStack(wearValue, wearText, wearToneClass = "") {
+  const resolvedWear = Number.isFinite(wearValue) ? wearValue : 0;
+  return `
+    <div class="simulation-card-wear-stack${wearToneClass}">
+      <div class="simulation-card-float">${wearText}</div>
+      <div class="simulation-card-bar${wearToneClass}" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(resolvedWear)}"><span style="width:${Math.max(0, Math.min(100, resolvedWear * 100))}%"></span></div>
+    </div>
+  `;
+}
 function renderSimulationOutputCard(output, preset, rowIndex, itemIndex) {
   const wearValue = getTradeupSimulationItemDisplayWear(output, preset);
   const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
@@ -8268,11 +8706,10 @@ function renderSimulationOutputCard(output, preset, rowIndex, itemIndex) {
       <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
         <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
         ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
+        ${renderTradeupSimulationWearStack(wearValue, wearText, wearToneClass)}
         ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
-        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
       </div>
       <div class="simulation-card-content">
-        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
         <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(output)}</div>
         ${renderTradeupSimulationCardSubline(output, preset, "output")}
       </div>
@@ -8297,13 +8734,89 @@ function renderSimulationMaterialCard(material, rowIndex, itemIndex) {
       <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
         <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
         ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
+        ${renderTradeupSimulationWearStack(wearValue, wearText, wearToneClass)}
         ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
-        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
       </div>
       <div class="simulation-card-content">
-        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
         <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(material)}</div>
         ${renderTradeupSimulationCardSubline(material, preset, "material")}
+      </div>
+    </article>
+  `;
+}
+function renderTradeupSimulationSavedCardSubline(collectionText = "") {
+  const value = String(collectionText || "").trim() || "未指定收藏品";
+  return `
+    <div class="simulation-card-subline">
+      <div class="simulation-card-subline-main">
+        <span class="simulation-card-collection">${escapeHtml(value)}</span>
+      </div>
+    </div>
+  `;
+}
+function renderTradeupSimulationSelectionStyleCard({
+  item,
+  preset,
+  kind = "output",
+  slotName = "",
+  mode = "edit",
+  titleText = "",
+  sublineHtml = "",
+  extraClasses = "",
+  extraArtHtml = "",
+  dataAttrs = "",
+  ariaLabel = "",
+  actionBadgeText = null,
+  wearValue = null,
+  wearText = "",
+  wearLabel = "",
+  wearToneClass = ""
+} = {}) {
+  const currentItem = sanitizeTradeupSimulationTargetItem(item);
+  if (!currentItem) return "";
+  const cardKind = String(kind || "").trim() === "material" ? "material" : "output";
+  const roleMeta = getTradeupSimulationRoleMeta(slotName);
+  const resolvedWearValue = Number.isFinite(Number(wearValue))
+    ? Number(wearValue)
+    : getTradeupSimulationItemDisplayWear(currentItem, preset);
+  const resolvedWearText = String(wearText || "").trim()
+    || (Number.isFinite(resolvedWearValue) ? formatTradeupSimulationWear(resolvedWearValue) : "-");
+  const resolvedWearLabel = String(wearLabel || "").trim() || getTradeupSimulationWearBadgeLabel(currentItem);
+  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(currentItem);
+  const resolvedActionBadge = actionBadgeText === null
+    ? getTradeupSimulationCardActionBadge(currentItem, preset)
+    : String(actionBadgeText || "").trim();
+  const articleClassName = [
+    cardKind === "material" ? "simulation-material-card" : "simulation-output-card",
+    "simulation-card-button",
+    String(extraClasses || "").trim()
+  ].filter(Boolean).join(" ");
+  const extraAttrText = String(dataAttrs || "").trim();
+  const resolvedTitleText = String(titleText || "").trim() || getTradeupSimulationItemDisplayName(currentItem);
+  const resolvedSublineHtml = sublineHtml || renderTradeupSimulationCardSubline(currentItem, preset, cardKind, slotName);
+  const resolvedMode = String(mode || "").trim() || "edit";
+  const resolvedAriaLabel = String(ariaLabel || "").trim() || `编辑${roleMeta.title || "卡片"} ${getTradeupSimulationItemDisplayName(currentItem)}`;
+  const explicitWearToneToken = String(wearToneClass || "").trim();
+  const resolvedWearToneClass = explicitWearToneToken
+    ? ` ${explicitWearToneToken}`
+    : getTradeupSimulationWearBadgeToneClass(currentItem);
+  return `
+    <article class="${articleClassName}" role="button" tabindex="0"
+      data-simulation-card-role="${cardKind}"
+      data-simulation-card-mode="${escapeHtmlAttribute(resolvedMode)}"
+      ${slotName ? `data-simulation-slot-name="${escapeHtmlAttribute(slotName)}"` : ""}
+      ${extraAttrText}
+      aria-label="${escapeHtmlAttribute(resolvedAriaLabel)}">
+      <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
+        <span class="simulation-card-wear-badge${resolvedWearToneClass}">${resolvedWearLabel}</span>
+        ${resolvedActionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(resolvedActionBadge)}</span>` : ""}
+        ${extraArtHtml}
+        ${renderTradeupSimulationWearStack(resolvedWearValue, resolvedWearText, resolvedWearToneClass)}
+        ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+      </div>
+      <div class="simulation-card-content">
+        <div class="simulation-card-name">${escapeHtml(resolvedTitleText)}</div>
+        ${resolvedSublineHtml}
       </div>
     </article>
   `;
@@ -8311,62 +8824,28 @@ function renderSimulationMaterialCard(material, rowIndex, itemIndex) {
 function renderSimulationSelectedOutputCard(output, preset, slotName) {
   const item = sanitizeTradeupSimulationTargetItem(output);
   if (!item) return "";
-  const roleMeta = getTradeupSimulationRoleMeta(slotName);
-  const actionBadge = getTradeupSimulationCardActionBadge(item, preset);
-  const wearValue = getTradeupSimulationItemDisplayWear(item, preset);
-  const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
-  const wearLabel = getTradeupSimulationWearBadgeLabel(item);
-  const wearToneClass = getTradeupSimulationWearBadgeToneClass(item);
-  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
-  return `
-    <article class="simulation-output-card simulation-card-button${actionBadge ? " simulation-anchor-active" : ""}" role="button" tabindex="0"
-      data-simulation-card-role="output"
-      data-simulation-card-mode="edit"
-      data-simulation-slot-name="${slotName}"
-      aria-label="编辑${roleMeta.title} ${getTradeupSimulationItemDisplayName(item)}">
-      <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
-        <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
-        ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
-        ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
-        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
-      </div>
-      <div class="simulation-card-content">
-        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
-        <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(item)}</div>
-        ${renderTradeupSimulationCardSubline(item, preset, "output", slotName)}
-      </div>
-    </article>
-  `;
+  return renderTradeupSimulationSelectionStyleCard({
+    item,
+    preset,
+    kind: "output",
+    slotName,
+    mode: "edit",
+    extraClasses: getTradeupSimulationCardActionBadge(item, preset) ? "simulation-anchor-active" : "",
+    ariaLabel: `编辑${getTradeupSimulationRoleMeta(slotName).title} ${getTradeupSimulationItemDisplayName(item)}`
+  });
 }
 function renderSimulationSelectedMaterialCard(material, preset, slotName) {
   const item = sanitizeTradeupSimulationTargetItem(material);
   if (!item) return "";
-  const roleMeta = getTradeupSimulationRoleMeta(slotName);
-  const wearValue = getTradeupSimulationItemDisplayWear(item, preset);
-  const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
-  const wearLabel = getTradeupSimulationWearBadgeLabel(item);
-  const wearToneClass = getTradeupSimulationWearBadgeToneClass(item);
-  const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
-  const actionBadge = getTradeupSimulationCardActionBadge(item, preset);
-  return `
-    <article class="simulation-material-card simulation-card-button${actionBadge ? " simulation-anchor-active" : ""}" role="button" tabindex="0"
-      data-simulation-card-role="material"
-      data-simulation-card-mode="${item && item.editable === false ? "readonly" : "edit"}"
-      data-simulation-slot-name="${slotName}"
-      aria-label="编辑${roleMeta.title} ${getTradeupSimulationItemDisplayName(item)}">
-      <div class="simulation-card-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
-        <span class="simulation-card-wear-badge${wearToneClass}">${wearLabel}</span>
-        ${actionBadge ? `<span class="simulation-card-action-badge">${escapeHtml(actionBadge)}</span>` : ""}
-        ${artUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
-        <div class="simulation-card-float">绝对磨损 ${wearText}</div>
-      </div>
-      <div class="simulation-card-content">
-        <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(Number.isFinite(wearValue) ? wearValue : 0)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
-        <div class="simulation-card-name">${getTradeupSimulationItemDisplayName(item)}</div>
-        ${renderTradeupSimulationCardSubline(item, preset, "material", slotName)}
-      </div>
-    </article>
-  `;
+  return renderTradeupSimulationSelectionStyleCard({
+    item,
+    preset,
+    kind: "material",
+    slotName,
+    mode: item && item.editable === false ? "readonly" : "edit",
+    extraClasses: getTradeupSimulationCardActionBadge(item, preset) ? "simulation-anchor-active" : "",
+    ariaLabel: `编辑${getTradeupSimulationRoleMeta(slotName).title} ${getTradeupSimulationItemDisplayName(item)}`
+  });
 }
 function removeTradeupSimulationCollectionFromPreset(presetId, collection) {
   const collectionKey = String(collection || "").trim();
@@ -8448,6 +8927,25 @@ function renderSimulationLaneSection(title, subtitle, cardsHtml, meta = null, ac
     </section>
   `;
 }
+function focusTradeupSimulationWearInput(input) {
+  if (!input || input.disabled) return;
+  if (typeof input.focus === "function") {
+    input.focus();
+  }
+  const value = String(input.value || "");
+  const prefixLength = /^[01]\./.test(value) ? 2 : 0;
+  if (typeof input.setSelectionRange === "function") {
+    try {
+      input.setSelectionRange(prefixLength, value.length);
+      return;
+    } catch (_) {
+      // ignore selection fallback failures
+    }
+  }
+  if (typeof input.select === "function") {
+    input.select();
+  }
+}
 function focusTradeupSimulationModalPrimaryControl() {
   requestAnimationFrame(() => {
     if (
@@ -8467,10 +8965,7 @@ function focusTradeupSimulationModalPrimaryControl() {
       ui.simulationCardModalWearInput &&
       !ui.simulationCardModalWearInput.disabled
     ) {
-      ui.simulationCardModalWearInput.focus();
-      if (typeof ui.simulationCardModalWearInput.select === "function") {
-        ui.simulationCardModalWearInput.select();
-      }
+      focusTradeupSimulationWearInput(ui.simulationCardModalWearInput);
       return;
     }
     if (ui.simulationCardModalCancelBtn) {
@@ -8605,10 +9100,10 @@ function renderTradeupSimulationCardModal() {
           <div class="simulation-card-float">绝对磨损 ${wearText}</div>
         </div>
         <div class="simulation-card-content">
-          <div class="simulation-card-bar" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(wearValue)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
+          <div class="simulation-card-bar${wearToneClass}" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(wearValue)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
           <div class="simulation-card-name">${String(item && (item.base_name || item.name) || "").trim()}</div>
           <div class="simulation-card-meta">${String(item && item.collection || "").trim()} · ${String(item && item.rarity || "").trim()}</div>
-          <div class="simulation-chip-row">
+          <div class="simulation-card-tag-row">
             <span class="simulation-card-role">${roleLabel}</span>
             ${hasBounds ? `<span class="simulation-card-chip">${formatTradeupSimulationWear(minWear)} - ${formatTradeupSimulationWear(maxWear)}</span>` : ""}
           </div>
@@ -10130,7 +10625,7 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
       const childCells = [
         "<td class=\"select-col\"></td>",
         "<td></td>",
-        `<td>Asset ${itemId || "-"}</td>`,
+        "<td></td>",
         "<td></td>",
         "<td></td>"
       ];
@@ -10361,6 +10856,23 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
 }
 
 function bindEvents() {
+  if (ui.appAuthSubmitBtn) {
+    ui.appAuthSubmitBtn.onclick = () => {
+      void submitAppAuth();
+    };
+  }
+  if (ui.appAuthPassword) {
+    ui.appAuthPassword.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      void submitAppAuth();
+    };
+  }
+  if (ui.appAuthLogoutBtn) {
+    ui.appAuthLogoutBtn.onclick = () => {
+      void logoutAppSession();
+    };
+  }
   window.addEventListener("beforeunload", () => {
     stopInventoryEventStream();
     closeTargetComponentDrawer();
@@ -10499,10 +11011,14 @@ function bindEvents() {
       }
     });
   }
+  applyCraftAssistPresetModalOptions();
   const confirmCraftAssistPresetModal = () => {
     const value = String(ui.craftAssistPresetModalInput ? ui.craftAssistPresetModalInput.value : "").trim();
     if (!value) {
-      setCraftStatus("请先输入配置名称", true);
+      const modalOptions = craftAssistPresetModalOptions || resolveCraftAssistPresetModalOptions();
+      const message = String(modalOptions.emptyMessage || "").trim() || "请先输入配置名称";
+      if (typeof modalOptions.onEmpty === "function") modalOptions.onEmpty(message);
+      else setCraftStatus(message, true);
       if (ui.craftAssistPresetModalInput) ui.craftAssistPresetModalInput.focus();
       return;
     }
@@ -10588,7 +11104,7 @@ function bindEvents() {
   }
   if (ui.simulationModeWorkspaceBtn) {
     ui.simulationModeWorkspaceBtn.onclick = () => {
-      openBlankTradeupSimulationWorkspaceDraft();
+      openTradeupSimulationWorkspaceDraft();
       renderSimulationPage();
     };
   }
@@ -10601,9 +11117,7 @@ function bindEvents() {
   };
   if (ui.simulationSavePresetBtn) {
     ui.simulationSavePresetBtn.onclick = async () => {
-      const preset = getActiveTradeupSimulationPreset();
-      if (!preset || state.simulationPersisting) return;
-      await persistTradeupSimulationPresets({clearDirty: true});
+      await saveActiveTradeupSimulationPreset();
     };
   }
   if (ui.simulationCancelEditBtn) {
@@ -10754,17 +11268,17 @@ function bindEvents() {
       const maxWear = Number(item && item.maxfloat);
       if (!Number.isFinite(numeric)) {
         setSummary("请输入有效的绝对磨损数值");
-        if (ui.simulationCardModalWearInput) ui.simulationCardModalWearInput.focus();
+        focusTradeupSimulationWearInput(ui.simulationCardModalWearInput);
         return;
       }
       if (Number.isFinite(minWear) && numeric < minWear) {
         setSummary(`绝对磨损不能低于 ${formatTradeupSimulationWear(minWear)}`);
-        if (ui.simulationCardModalWearInput) ui.simulationCardModalWearInput.focus();
+        focusTradeupSimulationWearInput(ui.simulationCardModalWearInput);
         return;
       }
       if (Number.isFinite(maxWear) && numeric > maxWear) {
         setSummary(`绝对磨损不能高于 ${formatTradeupSimulationWear(maxWear)}`);
-        if (ui.simulationCardModalWearInput) ui.simulationCardModalWearInput.focus();
+        focusTradeupSimulationWearInput(ui.simulationCardModalWearInput);
         return;
       }
       if (!applyTradeupSimulationModalEdit({absoluteWear: numeric})) {
@@ -11338,28 +11852,13 @@ function bindEvents() {
 }
 
 async function init() {
-  loadCraftUiPrefs();
-  await loadCraftAssistPresetsFromStorage();
-  await loadTradeupSimulationPresetsFromStorage();
   bindEvents();
-  initWearOptions();
-  refreshRarityMenu();
-  setFilterPanel(state.filterPanel);
-  updateFilterDrawer();
-  applyCraftLayoutWidth();
-  setAccountStatus("准备就绪");
-  setNoAccountState({silentSummary: true});
   try {
-    const uiState = await api("/api/ui-state");
-    const preferred = String(uiState.last_selected_username || "").trim();
-    await loadAccounts({preferUsername: preferred});
-    if (state.accountSelectedUsername) await switchAccountView(state.accountSelectedUsername);
-    else setNoAccountState({silentSummary: true});
+    renderAppAuthShell();
+    await loadAppSession({hydrateWorkspace: true});
   } catch (err) {
-    setSummary(`初始化失败：${err.message}`);
-    setAccountStatus(`初始化失败：${err.message}`, true);
+    setAppAuthStatus(`管理员会话检查失败：${err.message}`, true);
   }
-  showPage("accountPage");
 }
 
 init();

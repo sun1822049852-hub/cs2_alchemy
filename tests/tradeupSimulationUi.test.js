@@ -95,6 +95,18 @@ assert.match(
   "tradeup simulation picker should expose role context and search status hints"
 );
 
+assert.match(
+  css,
+  /\.simulation-picker-context\s*\{[^}]*display:\s*none;[^}]*\}/m,
+  "tradeup simulation picker should visually remove the old role-context block so the search bar can sit directly under the modal header"
+);
+
+assert.match(
+  css,
+  /#simulationPickerModal\s+\.simulation-picker-modal-card\s*\{[^}]*gap:\s*10px;[^}]*\}/m,
+  "tradeup simulation picker modal should tighten its internal gap after removing the top context block"
+);
+
 assert.doesNotMatch(
   html,
   /封面永远锁定主产物|可从材料先推导主产物封面|产物列表|材料列表|后续查看与调整直接在下方产物列表卡片中完成|右侧直接展示当前封面产物对应的联动材料列表/m,
@@ -117,6 +129,42 @@ assert.match(
   css,
   /\.simulation-workspace-actions-bar\s*\{[\s\S]*min-height:\s*36px;/m,
   "tradeup simulation actions bar should tighten its vertical footprint after the helper copy is removed"
+);
+
+assert.match(
+  css,
+  /#simulationPage\s*\{[\s\S]*gap:\s*10px;/m,
+  "tradeup simulation page should pull the workspace closer to the topbar for a tighter overall layout"
+);
+
+assert.match(
+  css,
+  /\.simulation-topbar\s*\{[\s\S]*padding:\s*10px 16px;/m,
+  "tradeup simulation topbar should trim excess padding so the lower workspace can sit higher"
+);
+
+assert.match(
+  css,
+  /\.simulation-mode-tabs button\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*height:\s*38px;[\s\S]*padding:\s*0 16px;[\s\S]*text-align:\s*center;/m,
+  "tradeup simulation mode-tab labels should use an explicit flex-centered button box so the text stays visually centered inside the pill"
+);
+
+assert.match(
+  css,
+  /\.simulation-shell\s*\{[\s\S]*gap:\s*12px;[\s\S]*padding:\s*12px;/m,
+  "tradeup simulation shell should reduce outer spacing to keep the page compact"
+);
+
+assert.match(
+  css,
+  /\.simulation-layout\s*\{[\s\S]*gap:\s*14px;/m,
+  "tradeup simulation dual-pane workspace should reduce inter-pane spacing"
+);
+
+assert.match(
+  css,
+  /\.simulation-role-pane\s*\{[\s\S]*gap:\s*10px;[\s\S]*padding:\s*14px;/m,
+  "tradeup simulation role panes should use tighter padding so the content starts closer to the top edge"
 );
 
 assert.doesNotMatch(
@@ -184,6 +232,7 @@ const requiredAppFragments = [
   "function applyTradeupSimulationSlotSelection(",
   "function adoptTradeupSimulationDerivedPrimaryOutput(",
   "function selectTradeupSimulationPreset(",
+  "function openTradeupSimulationWorkspaceDraft(",
   "function openBlankTradeupSimulationWorkspaceDraft(",
   "simulation-picker-item-thumb"
 ];
@@ -204,8 +253,8 @@ assert.match(
 
 assert.match(
   app,
-  /ui\.simulationModeWorkspaceBtn\.onclick\s*=\s*\(\)\s*=>\s*\{\s*openBlankTradeupSimulationWorkspaceDraft\(\);/m,
-  "tradeup simulation workspace tab should still open a blank draft"
+  /ui\.simulationModeWorkspaceBtn\.onclick\s*=\s*\(\)\s*=>\s*\{\s*openTradeupSimulationWorkspaceDraft\(\);/m,
+  "tradeup simulation workspace tab should reopen the in-progress draft instead of always clearing it to blank"
 );
 
 assert.match(
@@ -222,8 +271,14 @@ assert.match(
 
 assert.match(
   app,
-  /<span class="simulation-card-wear-badge">\$\{summary\.wearLabel\}<\/span>/m,
-  "tradeup simulation saved cards should surface the item's wear tier badge in the top-left corner"
+  /renderTradeupSimulationSelectionStyleCard\(\{[\s\S]*wearLabel:\s*summary\.wearLabel[\s\S]*wearToneClass:\s*summary\.wearToneClass/m,
+  "tradeup simulation saved cards should pass the saved summary wear tier into the shared card renderer so the top-left badge keeps the same tier label and tone"
+);
+
+assert.match(
+  css,
+  /\.simulation-saved-card\s+\.simulation-card-wear-badge\s*\{[\s\S]*top:\s*8px;[\s\S]*left:\s*12px;[\s\S]*z-index:\s*4;/m,
+  "tradeup simulation saved cards should pin the wear tier badge into the artwork top-left corner instead of letting it drift into the lower wear overlay area"
 );
 
 assert.match(
@@ -240,8 +295,32 @@ assert.match(
 
 assert.match(
   app,
-  /<div class="simulation-card-meta">相对磨损：\$\{summary\.relativeWear\}<\/div>/m,
-  "tradeup simulation saved cards should rename anchor wear to relative wear"
+  /function renderTradeupSimulationSelectionStyleCard\(/m,
+  "tradeup simulation should expose a shared selection-style card renderer so saved cards can reuse the same visual shell as the selection page"
+);
+
+assert.match(
+  app,
+  /function renderSimulationSavedPresets\(\)\s*\{[\s\S]*renderTradeupSimulationSelectionStyleCard\(\{[\s\S]*titleText:\s*summary\.presetName[\s\S]*summary\.collectionText[\s\S]*extraClasses:\s*`simulation-saved-card[\s\S]*extraArtHtml:\s*`<button class="simulation-saved-remove-btn"/m,
+  "tradeup simulation saved cards should reuse the shared selection-style renderer while only injecting preset-specific title, collection text, and delete action"
+);
+
+assert.match(
+  app,
+  /async function saveActiveTradeupSimulationPreset\(/m,
+  "tradeup simulation should expose a dedicated save helper that can request the preset name before persisting"
+);
+
+assert.match(
+  app,
+  /ui\.simulationSavePresetBtn\.onclick\s*=\s*async\s*\(\)\s*=>\s*\{[\s\S]*await saveActiveTradeupSimulationPreset\(\);/m,
+  "tradeup simulation save button should route through the preset-name prompt helper instead of persisting immediately"
+);
+
+assert.doesNotMatch(
+  app,
+  /<div class="simulation-saved-anchor-name">[\s\S]*<div class="simulation-card-meta">相对磨损：\$\{summary\.relativeWear\}<\/div>|<div class="simulation-card-tag-row">[\s\S]*simulation-saved-body|simulation-saved-collection/m,
+  "tradeup simulation saved cards should stop maintaining their own lower-body markup and instead rely on the shared selection-page card skeleton"
 );
 
 assert.match(
@@ -316,6 +395,18 @@ assert.match(
   "tradeup simulation picker failure state should flow through the unified modal renderer"
 );
 
+assert.match(
+  app,
+  /最低级物品不能作为产物添加/m,
+  "tradeup simulation output picker should explicitly warn that the lowest collection rarity cannot be added as an output"
+);
+
+assert.match(
+  app,
+  /function getTradeupSimulationOutputRestrictionMessage\(/m,
+  "tradeup simulation picker should expose a dedicated helper for blocking lowest-rarity collection items from output slots"
+);
+
 assert.doesNotMatch(
   app,
   /已选\s+\$\{outputCount\}\/2|已选\s+\$\{materialCount\}\/2/m,
@@ -341,9 +432,51 @@ assert.match(
 );
 
 assert.match(
+  app,
+  /<div class="simulation-card-wear-stack\$\{wearToneClass\}">[\s\S]*<div class="simulation-card-float">\$\{wearText\}<\/div>[\s\S]*<div class="simulation-card-bar\$\{wearToneClass\}"/m,
+  "tradeup simulation cards should carry the wear tone class into the wear stack and bar so each wear tier can style the bar itself"
+);
+
+assert.match(
+  app,
+  /function renderSimulationOutputCard\(output,\s*preset,\s*rowIndex,\s*itemIndex\)\s*\{[\s\S]*<div class="simulation-card-art\$\{artUrl \? " has-image" : ""\}"\$\{artStyleAttr\}>[\s\S]*\$\{renderTradeupSimulationWearStack\(wearValue,\s*wearText,\s*wearToneClass\)\}[\s\S]*<\/div>\s*<div class="simulation-card-content">\s*<div class="simulation-card-name">/m,
+  "tradeup simulation output cards should move the wear overlay into the artwork block so the name area no longer needs a full-width black mask"
+);
+
+assert.match(
+  app,
+  /function renderSimulationMaterialCard\(material,\s*rowIndex,\s*itemIndex\)\s*\{[\s\S]*<div class="simulation-card-art\$\{artUrl \? " has-image" : ""\}"\$\{artStyleAttr\}>[\s\S]*\$\{renderTradeupSimulationWearStack\(wearValue,\s*wearText,\s*wearToneClass\)\}[\s\S]*<\/div>\s*<div class="simulation-card-content">\s*<div class="simulation-card-name">/m,
+  "tradeup simulation derived material cards should also keep the wear overlay inside the artwork block instead of rebuilding the old lower black band"
+);
+
+assert.match(
+  app,
+  /function renderSimulationSelectedOutputCard\(output,\s*preset,\s*slotName\)\s*\{[\s\S]*return renderTradeupSimulationSelectionStyleCard\(/m,
+  "tradeup simulation selected output cards should route through the shared selection-style renderer"
+);
+
+assert.match(
+  app,
+  /function renderSimulationSelectedMaterialCard\(material,\s*preset,\s*slotName\)\s*\{[\s\S]*return renderTradeupSimulationSelectionStyleCard\(/m,
+  "tradeup simulation selected material cards should also route through the shared selection-style renderer"
+);
+
+assert.match(
   css,
-  /\.simulation-card-art::before\s*\{[\s\S]*background:\s*var\(--simulation-card-rarity-color,\s*#7d43ff\)/m,
-  "tradeup simulation card rarity stripes should come from each item's rarity color variable"
+  /\.simulation-card-art::before\s*\{[\s\S]*left:\s*8px;[\s\S]*background:\s*var\(--simulation-card-rarity-color,\s*#7d43ff\)/m,
+  "tradeup simulation default card rarity stripes should keep their original inset offset while still following each item's rarity color"
+);
+
+assert.match(
+  css,
+  /\.simulation-output-card\s*\{[\s\S]*border-radius:\s*8px;[\s\S]*\}\s*[\s\S]*\.simulation-material-card\s*\{[\s\S]*border-radius:\s*8px;/m,
+  "tradeup simulation output and material cards should keep shaving down the outer corner radius for a tighter silhouette"
+);
+
+assert.match(
+  css,
+  /\.simulation-output-card\s+\.simulation-card-art::before,\s*\.simulation-material-card\s+\.simulation-card-art::before\s*\{[\s\S]*left:\s*0;[\s\S]*bottom:\s*8px;[\s\S]*width:\s*5px;/m,
+  "tradeup simulation output and material rarity stripes should stop at the thin wear bar instead of reserving the old full black band"
 );
 
 assert.match(
@@ -366,8 +499,98 @@ assert.match(
 
 assert.match(
   css,
-  /\.simulation-output-card\s+\.simulation-card-content,\s*\.simulation-material-card\s+\.simulation-card-content\s*\{[\s\S]*margin-top:\s*-24px;[\s\S]*background:\s*rgba\(0,\s*0,\s*0,\s*0\.15\);/m,
-  "tradeup simulation output and material card captions should overlap the lower art area using a uniform 0.15 black mask"
+  /\.simulation-card-wear-badge\.tone-fn\s*\{[\s\S]*color:\s*#e6a5ff;/m,
+  "tradeup simulation factory-new wear badges should switch to a pink-violet tone so they are easier to distinguish from minimal wear"
+);
+
+assert.match(
+  css,
+  /\.simulation-card-wear-badge\.tone-mw\s*\{[\s\S]*color:\s*#8fdd7a;/m,
+  "tradeup simulation minimal-wear badges should stay green and must not be recolored pink with factory new"
+);
+
+assert.match(
+  css,
+  /\.simulation-card-bar\s*\{[\s\S]*background:\s*linear-gradient\(90deg,\s*#e6a5ff 0 7%,\s*#4aa84e 7% 15%,\s*#d1a746 15% 38%,\s*#c98a45 38% 45%,\s*#d56752 45% 100%\);/m,
+  "tradeup simulation wear bars should split the bottom range by real wear tiers so factory new and minimal wear no longer share the same color band"
+);
+
+assert.match(
+  css,
+  /\.simulation-card-bar\.tone-fn\s*>\s*span\s*\{[\s\S]*background:\s*#f0b0ff;[\s\S]*opacity:\s*0\.38;[\s\S]*min-width:\s*2px;/m,
+  "tradeup simulation factory-new wear bars should keep a pink-violet fill accent for quick recognition"
+);
+
+assert.match(
+  css,
+  /\.simulation-card-bar\.tone-fn::after\s*\{[\s\S]*border-top-color:\s*#f0b0ff;/m,
+  "tradeup simulation factory-new wear markers should also shift to pink-violet for quick recognition"
+);
+
+assert.match(
+  css,
+  /\.simulation-card-bar\s*\{[\s\S]*#e6a5ff 0 7%,\s*#4aa84e 7% 15%/m,
+  "tradeup simulation minimal-wear bars should keep their original green segment while factory new gets its own pink-violet segment ahead of it"
+);
+
+assert.match(
+  css,
+  /\.simulation-output-card\s+\.simulation-card-content,\s*\.simulation-material-card\s+\.simulation-card-content\s*\{[\s\S]*margin-top:\s*0;[\s\S]*background:\s*none;[\s\S]*gap:\s*4px;[\s\S]*padding:\s*8px 10px 10px;/m,
+  "tradeup simulation output and material card captions should return to a clean text block below the artwork after the wear overlay moves into the image area"
+);
+
+assert.match(
+  css,
+  /\.simulation-card-name\s*\{[\s\S]*font-weight:\s*600;[\s\S]*letter-spacing:\s*0\.01em;[\s\S]*line-height:\s*1\.2;/m,
+  "tradeup simulation weapon names should soften the typography with a lighter weight and cleaner spacing"
+);
+
+assert.match(
+  css,
+  /\.simulation-picker-item\.is-disabled,\s*\.simulation-picker-item:disabled\s*\{[\s\S]*cursor:\s*not-allowed;[\s\S]*opacity:\s*0\.72;/m,
+  "tradeup simulation picker should visibly disable lowest-rarity output candidates so they do not look selectable"
+);
+
+assert.match(
+  css,
+  /body\.theme-inkblue #simulationPage :is\(#simulationCancelEditBtn:hover,\s*\.simulation-picker-item:not\(\.is-disabled\):not\(:disabled\):hover\)\s*\{/m,
+  "tradeup simulation inkblue hover styling should exclude disabled picker cards so blocked candidates never light up on hover"
+);
+
+assert.match(
+  css,
+  /\.simulation-picker-art-warning\s*\{[\s\S]*color:\s*#ffbf70;[\s\S]*white-space:\s*normal;/m,
+  "tradeup simulation picker should render a wrapped amber warning for blocked output candidates"
+);
+
+assert.match(
+  css,
+  /\.simulation-output-card\s+\.simulation-card-wear-stack,\s*\.simulation-material-card\s+\.simulation-card-wear-stack\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*height:\s*18px;[\s\S]*background:\s*none;[\s\S]*background-color:\s*transparent;/m,
+  "tradeup simulation compact cards should anchor the wear overlay to the artwork bottom instead of rendering a full-width black strip below the image"
+);
+
+assert.match(
+  css,
+  /\.simulation-output-card\s+\.simulation-card-bar,\s*\.simulation-material-card\s+\.simulation-card-bar\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*border-radius:\s*0;/m,
+  "tradeup simulation compact cards should pin the wear bar to the artwork bottom as a thin rectangular strip"
+);
+
+assert.match(
+  css,
+  /\.simulation-output-card\s+\.simulation-card-float,\s*\.simulation-material-card\s+\.simulation-card-float\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*5px;[\s\S]*right:\s*auto;[\s\S]*bottom:\s*8px;[\s\S]*padding:\s*0 4px;[\s\S]*background:\s*rgba\(0,\s*0,\s*0,\s*0\.9\);[\s\S]*font-size:\s*12px;[\s\S]*line-height:\s*1;/m,
+  "tradeup simulation compact cards should dock the black wear chip into the bottom-left 90-degree corner formed by the rarity stripe and the wear bar"
+);
+
+assert.doesNotMatch(
+  css,
+  /\.simulation-card-wear-stack::(?:before|after)\s*\{/m,
+  "tradeup simulation wear stacks should not grow pseudo-element overlays that could silently recreate the old full-width black strip"
+);
+
+assert.doesNotMatch(
+  css,
+  /\.simulation-card-float::(?:before|after)\s*\{/m,
+  "tradeup simulation wear chips should not grow pseudo-element overlays that could silently recreate a full-width black strip"
 );
 
 assert.doesNotMatch(
@@ -380,6 +603,12 @@ assert.match(
   app,
   /<div class="simulation-card-grid\$\{cardCount === 1 \? " is-single-card" : ""\}">/m,
   "tradeup simulation lanes should mark single-card rows so a lone selected output keeps its fixed card width"
+);
+
+assert.match(
+  app,
+  /<button class="simulation-picker-item\$\{disabled \? " is-disabled" : ""\}" type="button" data-simulation-pick-index="\$\{index\}"\$\{rarityStyleAttr\}\$\{disabledAttr\}>[\s\S]*simulation-picker-art-warning/m,
+  "tradeup simulation picker results should mark blocked output candidates as disabled and show an inline warning in the search card"
 );
 
 const requiredCssFragments = [
@@ -473,6 +702,18 @@ assert.match(
   css,
   /\.simulation-card-modal-preview\s+\.simulation-card-content\s*\{[\s\S]*padding:\s*12px\s+12px\s+14px;/m,
   "tradeup simulation item modal should tighten content spacing for the portrait layout"
+);
+
+assert.match(
+  app,
+  /<div class="simulation-card-modal-preview">[\s\S]*<div class="simulation-card-art\$\{artUrl \? " has-image" : ""\}"\$\{artStyleAttr\}>[\s\S]*<div class="simulation-card-float">绝对磨损\s+\$\{wearText\}<\/div>[\s\S]*<\/div>\s*<div class="simulation-card-content">[\s\S]*<div class="simulation-card-bar\$\{wearToneClass\}"/m,
+  "tradeup simulation item modal should intentionally keep its portrait preview split layout instead of reusing the workspace overlay structure"
+);
+
+assert.doesNotMatch(
+  app,
+  /<div class="simulation-card-modal-preview">[\s\S]*renderTradeupSimulationWearStack/m,
+  "tradeup simulation item modal should remain an explicit preview exception and must not silently start sharing the workspace wear overlay helper"
 );
 
 assert.match(

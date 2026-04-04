@@ -20,6 +20,96 @@ body {
   background: linear-gradient(180deg, #f7f9fc 0%, #edf1f7 100%);
 }
 
+.app-auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.app-auth-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top, rgba(220, 164, 76, 0.16), transparent 42%),
+    rgba(6, 10, 16, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.app-auth-card {
+  position: relative;
+  width: min(100%, 420px);
+  border: 1px solid rgba(220, 164, 76, 0.24);
+  border-radius: 20px;
+  padding: 28px 26px;
+  background: linear-gradient(180deg, rgba(17, 22, 28, 0.96), rgba(12, 15, 20, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
+  color: #f7f3e8;
+}
+
+.app-auth-eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(243, 199, 121, 0.82);
+  margin-bottom: 10px;
+}
+
+.app-auth-card h1 {
+  margin: 0 0 10px;
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+.app-auth-hint {
+  margin: 0 0 18px;
+  color: #c7d0dc;
+  line-height: 1.6;
+}
+
+.app-auth-card .form-row label {
+  color: #d2d8e0;
+}
+
+.app-auth-card .form-row input {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(243, 199, 121, 0.18);
+  color: #f7f3e8;
+}
+
+.app-auth-card .form-row input::placeholder {
+  color: #8a94a3;
+}
+
+.app-auth-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.app-auth-actions button {
+  min-width: 128px;
+  border: none;
+  border-radius: 999px;
+  padding: 11px 18px;
+  background: linear-gradient(135deg, #f3c779, #dca44c);
+  color: #1d1406;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-auth-status {
+  margin-top: 14px;
+  min-height: 22px;
+  color: #c7d0dc;
+}
+
+.app-auth-status.error {
+  color: #ff9a9a;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 210px 1fr;
@@ -38,6 +128,44 @@ body {
   font-weight: 700;
   margin-bottom: 10px;
   text-align: center;
+}
+
+.auth-user-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(220, 164, 76, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(28, 33, 40, 0.9), rgba(16, 20, 26, 0.96));
+  color: #f7f3e8;
+}
+
+.auth-user-copy {
+  min-width: 0;
+}
+
+.auth-user-label {
+  font-size: 11px;
+  color: #9ba7b5;
+}
+
+.auth-user-name {
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.auth-user-logout {
+  border: 1px solid rgba(243, 199, 121, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f7f3e8;
+  padding: 7px 12px;
+  cursor: pointer;
 }
 
 .nav-btn {
@@ -1417,7 +1545,7 @@ select.small {
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - 32px);
-  gap: 18px;
+  gap: 10px;
 }
 
 .simulation-topbar {
@@ -1427,7 +1555,7 @@ select.small {
   gap: 10px;
   flex-wrap: wrap;
   flex: 0 0 auto;
-  padding: 12px 18px;
+  padding: 10px 16px;
   border: 1px solid rgba(102, 77, 33, 0.42);
   border-radius: 22px;
   background:
@@ -1471,13 +1599,20 @@ select.small {
 }
 
 .simulation-mode-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 118px;
-  padding: 10px 16px;
+  height: 38px;
+  padding: 0 16px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
   color: #c9bc9c;
   font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .simulation-mode-tabs button.is-active {
@@ -1489,10 +1624,10 @@ select.small {
 .simulation-shell {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px;
+  padding: 12px;
   border: 1px solid rgba(92, 70, 30, 0.4);
   border-radius: 24px;
   background:
@@ -1607,7 +1742,7 @@ select.small {
 .simulation-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
-  gap: 18px;
+  gap: 14px;
   align-items: stretch;
   flex: 1 1 auto;
   min-height: 0;
@@ -1616,10 +1751,10 @@ select.small {
 .simulation-role-pane {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   min-height: 0;
-  padding: 18px;
+  padding: 14px;
   border-radius: 22px;
   border: 1px solid rgba(105, 81, 38, 0.32);
   background:
@@ -1784,7 +1919,7 @@ select.small {
 .simulation-pane-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   flex: 1 1 auto;
   min-height: 0;
@@ -1828,7 +1963,7 @@ select.small {
 }
 
 .simulation-picker-context {
-  display: flex;
+  display: none;
   align-items: flex-start;
   gap: 12px;
   padding: 12px 14px;
@@ -1874,7 +2009,7 @@ select.small {
   max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .simulation-picker-results {
@@ -1934,6 +2069,21 @@ select.small {
   transform: translateY(-1px);
   border-color: rgba(132, 168, 219, 0.42);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+}
+
+.simulation-picker-item.is-disabled,
+.simulation-picker-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  border-color: rgba(173, 126, 88, 0.38);
+  box-shadow: none;
+}
+
+.simulation-picker-item.is-disabled:hover,
+.simulation-picker-item:disabled:hover {
+  transform: none;
+  border-color: rgba(173, 126, 88, 0.38);
+  box-shadow: none;
 }
 
 .simulation-picker-item-layout {
@@ -2038,6 +2188,16 @@ select.small {
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+.simulation-picker-art-warning {
+  width: 100%;
+  min-width: 0;
+  color: #ffbf70;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.42);
 }
 
 .simulation-picker-rarity-badge {
@@ -2167,7 +2327,7 @@ select.small {
   justify-content: start;
 }
 
-.simulation-chip-row {
+.simulation-card-tag-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -2192,7 +2352,7 @@ select.small {
   min-width: 0;
   align-self: start;
   border: 1px solid rgba(101, 79, 39, 0.5);
-  border-radius: 14px;
+  border-radius: 8px;
   overflow: hidden;
   background: linear-gradient(180deg, rgba(20, 22, 27, 0.98) 0%, rgba(11, 13, 17, 0.99) 100%);
   box-shadow: 0 12px 22px rgba(0, 0, 0, 0.2);
@@ -2205,7 +2365,7 @@ select.small {
   min-width: 0;
   align-self: start;
   border: 1px solid rgba(101, 79, 39, 0.5);
-  border-radius: 14px;
+  border-radius: 8px;
   overflow: hidden;
   background: linear-gradient(180deg, rgba(20, 22, 27, 0.98) 0%, rgba(11, 13, 17, 0.99) 100%);
   box-shadow: 0 12px 22px rgba(0, 0, 0, 0.2);
@@ -2265,6 +2425,13 @@ select.small {
   bottom: 0;
   width: 6px;
   background: var(--simulation-card-rarity-color, #7d43ff);
+}
+
+.simulation-output-card .simulation-card-art::before,
+.simulation-material-card .simulation-card-art::before {
+  left: 0;
+  bottom: 8px;
+  width: 5px;
 }
 
 .simulation-card-art.has-image::after {
@@ -2338,8 +2505,14 @@ select.small {
   line-height: 1.2;
 }
 
+.simulation-saved-card .simulation-card-wear-badge {
+  top: 8px;
+  left: 12px;
+  z-index: 4;
+}
+
 .simulation-card-wear-badge.tone-fn {
-  color: #cfe8ff;
+  color: #e6a5ff;
 }
 
 .simulation-card-wear-badge.tone-mw {
@@ -2417,9 +2590,80 @@ select.small {
 .simulation-output-card .simulation-card-content,
 .simulation-material-card .simulation-card-content {
   position: relative;
+  z-index: 1;
+  margin-top: 0;
+  background: none;
+  gap: 4px;
+  padding: 8px 10px 10px;
+}
+
+.simulation-saved-body {
+  gap: 4px;
+  padding: 8px 10px 10px;
+}
+
+.simulation-saved-card .simulation-card-wear-stack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  background-color: transparent;
   z-index: 3;
-  margin-top: -24px;
-  background: rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+
+.simulation-output-card .simulation-card-wear-stack,
+.simulation-material-card .simulation-card-wear-stack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  background-color: transparent;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.simulation-output-card .simulation-card-float,
+.simulation-material-card .simulation-card-float {
+  position: absolute;
+  left: 5px;
+  right: auto;
+  bottom: 8px;
+  z-index: 4;
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.9);
+  color: #d9d9d9;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.38);
+}
+
+.simulation-saved-card .simulation-card-float {
+  position: absolute;
+  left: 5px;
+  right: auto;
+  bottom: 8px;
+  z-index: 4;
+  padding: 0 4px;
+  background: rgba(0, 0, 0, 0.9);
+  color: #d9d9d9;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.38);
 }
 
 .simulation-card-role {
@@ -2435,10 +2679,11 @@ select.small {
 }
 
 .simulation-card-name {
-  color: #f0f2f6;
-  font-weight: 700;
+  color: #f2f4f8;
+  font-weight: 600;
   font-size: 13px;
-  line-height: 1.25;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -2506,10 +2751,10 @@ select.small {
   color: #bac8dc;
 }
 
-.simulation-saved-anchor-name {
+.simulation-saved-collection {
   font-size: 12px;
   line-height: 1.45;
-  color: #eef3fb;
+  color: #bac8dc;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -2544,9 +2789,26 @@ select.small {
 .simulation-card-bar {
   position: relative;
   height: 8px;
-  background: linear-gradient(90deg, #4aa84e 0 18%, #d1a746 18% 50%, #d56752 50% 100%);
+  background: linear-gradient(90deg, #e6a5ff 0 7%, #4aa84e 7% 15%, #d1a746 15% 38%, #c98a45 38% 45%, #d56752 45% 100%);
   overflow: hidden;
   border-radius: 999px;
+}
+
+.simulation-output-card .simulation-card-bar,
+.simulation-material-card .simulation-card-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0;
+}
+
+.simulation-saved-card .simulation-card-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0;
 }
 
 .simulation-card-bar > span {
@@ -2554,6 +2816,12 @@ select.small {
   height: 100%;
   opacity: 0.16;
   background: #ffffff;
+}
+
+.simulation-card-bar.tone-fn > span {
+  background: #f0b0ff;
+  opacity: 0.38;
+  min-width: 2px;
 }
 
 .simulation-card-bar::after {
@@ -2567,6 +2835,10 @@ select.small {
   border-right: 6px solid transparent;
   border-top: 8px solid #ffffff;
   transform: translateX(-50%);
+}
+
+.simulation-card-bar.tone-fn::after {
+  border-top-color: #f0b0ff;
 }
 
 .simulation-card-note {
@@ -2613,7 +2885,7 @@ select.small {
   white-space: normal;
 }
 
-.simulation-card-modal-preview .simulation-chip-row {
+.simulation-card-modal-preview .simulation-card-tag-row {
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -6080,6 +6352,28 @@ body.theme-inkblue {
     radial-gradient(circle at top left, rgba(220, 164, 76, 0.16), transparent 18%),
     radial-gradient(circle at top right, rgba(243, 199, 121, 0.08), transparent 24%),
     linear-gradient(180deg, #16181c 0%, #0f1114 100%);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(220, 164, 76, 0.72) rgba(12, 14, 18, 0.88);
+}
+
+body.theme-inkblue::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body.theme-inkblue::-webkit-scrollbar-track {
+  background: rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+body.theme-inkblue::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
+  border: 2px solid rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+body.theme-inkblue::-webkit-scrollbar-corner {
+  background: rgba(12, 14, 18, 0.88);
 }
 
 body.theme-inkblue .sidebar {
@@ -6402,7 +6696,7 @@ body.theme-inkblue #simulationPage :is(#simulationCancelEditBtn, .simulation-pic
 
 body.theme-inkblue #inventoryPage :is(.view-mode-btn:hover, .icon-btn:hover, .filter-nav-item:hover, .menu-actions button:hover, .task-float-actions button:hover, .drawer-actions button:hover, .task-queue-item:hover),
 body.theme-inkblue #craftPage :is(.craft-queue-icon-btn:hover, .craft-settings-btn:hover, .craft-assist-close:hover, .craft-assist-mode-option:hover, .craft-assist-picker-item:hover),
-body.theme-inkblue #simulationPage :is(#simulationCancelEditBtn:hover, .simulation-picker-item:hover) {
+body.theme-inkblue #simulationPage :is(#simulationCancelEditBtn:hover, .simulation-picker-item:not(.is-disabled):not(:disabled):hover) {
   background: var(--ops-control-bg-hover);
   border-color: rgba(243, 199, 121, 0.24);
   color: var(--ops-text-main);
