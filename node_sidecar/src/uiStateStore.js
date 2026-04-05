@@ -5,8 +5,9 @@ const {readJson, writeJson} = require("./jsonStore");
 const {asString} = require("./utils");
 
 class UiStateStore {
-  constructor(filePath = PATHS.UI_STATE_FILE) {
+  constructor(filePath = PATHS.UI_STATE_FILE, options = {}) {
     this.filePath = filePath;
+    this.viewerUsername = asString(options && options.viewerUsername ? options.viewerUsername : "").trim();
     this.data = this._load();
     this.processedDir = path.resolve(PATHS.PROCESSED_DIR);
   }
@@ -14,21 +15,40 @@ class UiStateStore {
   _load() {
     const raw = readJson(this.filePath, {});
     const accounts = raw && typeof raw.accounts === "object" && raw.accounts ? raw.accounts : {};
-    const lastSelected = asString(raw && raw.last_selected_username ? raw.last_selected_username : "").trim();
-    const craftAssistPresets = Array.isArray(raw && raw.craft_assist_presets) ? raw.craft_assist_presets : [];
-    const tradeupSimulationPresets = Array.isArray(raw && raw.tradeup_simulation_presets)
-      ? raw.tradeup_simulation_presets
-      : [];
+    const appUsers = raw && typeof raw.app_users === "object" && raw.app_users ? raw.app_users : {};
     return {
       accounts,
-      last_selected_username: lastSelected,
-      craft_assist_presets: craftAssistPresets,
-      tradeup_simulation_presets: tradeupSimulationPresets
+      app_users: appUsers
     };
   }
 
   save() {
     writeJson(this.filePath, this.data);
+  }
+
+  _viewerKey() {
+    return this.viewerUsername || "__global__";
+  }
+
+  _viewerBucket() {
+    const key = this._viewerKey();
+    if (!this.data.app_users || typeof this.data.app_users !== "object") {
+      this.data.app_users = {};
+    }
+    if (!this.data.app_users[key] || typeof this.data.app_users[key] !== "object") {
+      this.data.app_users[key] = {};
+    }
+    const bucket = this.data.app_users[key];
+    if (!Array.isArray(bucket.craft_assist_presets)) {
+      bucket.craft_assist_presets = [];
+    }
+    if (!Array.isArray(bucket.tradeup_simulation_presets)) {
+      bucket.tradeup_simulation_presets = [];
+    }
+    if (typeof bucket.last_selected_username !== "string") {
+      bucket.last_selected_username = "";
+    }
+    return bucket;
   }
 
   _normalizeSnapshotPath(filePath) {
@@ -123,17 +143,17 @@ class UiStateStore {
   }
 
   setLastSelected(username) {
-    this.data.last_selected_username = asString(username).trim();
+    this._viewerBucket().last_selected_username = asString(username).trim();
     this.save();
   }
 
   getLastSelected() {
-    return asString(this.data.last_selected_username || "").trim();
+    return asString(this._viewerBucket().last_selected_username || "").trim();
   }
 
   getCraftAssistPresets() {
     try {
-      const list = Array.isArray(this.data.craft_assist_presets) ? this.data.craft_assist_presets : [];
+      const list = Array.isArray(this._viewerBucket().craft_assist_presets) ? this._viewerBucket().craft_assist_presets : [];
       return JSON.parse(JSON.stringify(list));
     } catch (_) {
       return [];
@@ -141,13 +161,15 @@ class UiStateStore {
   }
 
   setCraftAssistPresets(presets) {
-    this.data.craft_assist_presets = Array.isArray(presets) ? presets : [];
+    this._viewerBucket().craft_assist_presets = Array.isArray(presets) ? presets : [];
     this.save();
   }
 
   getTradeupSimulationPresets() {
     try {
-      const list = Array.isArray(this.data.tradeup_simulation_presets) ? this.data.tradeup_simulation_presets : [];
+      const list = Array.isArray(this._viewerBucket().tradeup_simulation_presets)
+        ? this._viewerBucket().tradeup_simulation_presets
+        : [];
       return JSON.parse(JSON.stringify(list));
     } catch (_) {
       return [];
@@ -155,7 +177,7 @@ class UiStateStore {
   }
 
   setTradeupSimulationPresets(presets) {
-    this.data.tradeup_simulation_presets = Array.isArray(presets) ? presets : [];
+    this._viewerBucket().tradeup_simulation_presets = Array.isArray(presets) ? presets : [];
     this.save();
   }
 }

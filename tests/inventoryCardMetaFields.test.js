@@ -21,6 +21,7 @@ for (const fragment of requiredFragments) {
 
 const forbiddenFragments = [
   'lines.push(`Asset: ${itemId || "-"}`);',
+  '<td>Asset ${itemId || "-"}</td>',
   'lines.push(`品质/稀有度: ${qualityName(row)}(${Number(row.quality || 0)}) / ${rarityName(row)}(${Number(row.rarity || 0)})`);',
   'lines.push(`稀有度: ${rarityName(row)}(${Number(row.rarity || 0)})`);'
 ];

@@ -12,8 +12,10 @@ const PATHS = {
   PROCESSED_DIR,
   RAW_DIR,
   COMPONENT_DIR,
+  MACHINE_ID_FILE: path.join(ROOT_DIR, "machine_id.bin"),
   ACCOUNTS_FILE: path.join(ROOT_DIR, "accounts.json"),
   TOKENS_FILE: path.join(ROOT_DIR, "login_keys.json"),
+  LICENSE_STATE_FILE: path.join(ROOT_DIR, "client_license_state.json"),
   UI_STATE_FILE: path.join(ROOT_DIR, "inventory_ui_state.json"),
   SCHEMA_CACHE_FILE: path.join(ROOT_DIR, "schema_cache.json"),
   SKIN_DB_FILE: path.join(ROOT_DIR, "csgo_skins.db")

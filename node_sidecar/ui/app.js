@@ -38,14 +38,35 @@ const state = {
   groupCacheKey: "", groupCacheRows: [], lastPersistedSelected: "",
   profileHydratingUsernames: new Set(), profileHydratedUsernames: new Set(),
   snapshotCacheByAccount: new Map(), craftAccountStateByAccount: new Map(), craftAssistRuntimeByAccount: new Map(), craftAssistActiveRunTokensByAccount: new Map(),
-  appAuth: {checked: false, authenticated: false, needsBootstrap: false, user: null, permissions: [], membership: []},
+  clientLicense: {
+    checked: false,
+    authenticated: false,
+    code: "license_missing",
+    message: "",
+    user: null,
+    permissions: [],
+    membership: [],
+    featureFlags: {},
+    authMode: "debug_bundle",
+    allowManualImport: true,
+    authServiceConfigured: false,
+    authServiceBaseUrl: "",
+    expiresAt: "",
+    expiresInMs: 0
+  },
+  clientAuthView: "bundle",
   workspaceInitialized: false
 };
 
 const ui = {
-  appAuthGate: document.getElementById("appAuthGate"), appAuthTitle: document.getElementById("appAuthTitle"), appAuthHint: document.getElementById("appAuthHint"),
-  appAuthUsername: document.getElementById("appAuthUsername"), appAuthPassword: document.getElementById("appAuthPassword"), appAuthStatus: document.getElementById("appAuthStatus"), appAuthSubmitBtn: document.getElementById("appAuthSubmitBtn"),
-  appAuthLogoutBtn: document.getElementById("appAuthLogoutBtn"), authUserPill: document.getElementById("authUserPill"), authUserName: document.getElementById("authUserName"),
+  licenseGate: document.getElementById("licenseGate"), licenseTitle: document.getElementById("licenseTitle"), licenseHint: document.getElementById("licenseHint"),
+  clientAuthModeTabs: document.getElementById("clientAuthModeTabs"), clientAuthLoginTabBtn: document.getElementById("clientAuthLoginTabBtn"), clientAuthRegisterTabBtn: document.getElementById("clientAuthRegisterTabBtn"), clientAuthResetTabBtn: document.getElementById("clientAuthResetTabBtn"), clientAuthBundleTabBtn: document.getElementById("clientAuthBundleTabBtn"),
+  clientLoginPanel: document.getElementById("clientLoginPanel"), clientLoginUsername: document.getElementById("clientLoginUsername"), clientLoginPassword: document.getElementById("clientLoginPassword"), clientLoginSubmitBtn: document.getElementById("clientLoginSubmitBtn"),
+  clientRegisterPanel: document.getElementById("clientRegisterPanel"), clientRegisterEmail: document.getElementById("clientRegisterEmail"), clientRegisterCode: document.getElementById("clientRegisterCode"), clientRegisterSendCodeBtn: document.getElementById("clientRegisterSendCodeBtn"), clientRegisterUsername: document.getElementById("clientRegisterUsername"), clientRegisterPassword: document.getElementById("clientRegisterPassword"), clientRegisterSubmitBtn: document.getElementById("clientRegisterSubmitBtn"),
+  clientResetPanel: document.getElementById("clientResetPanel"), clientResetEmail: document.getElementById("clientResetEmail"), clientResetCode: document.getElementById("clientResetCode"), clientResetSendCodeBtn: document.getElementById("clientResetSendCodeBtn"), clientResetPassword: document.getElementById("clientResetPassword"), clientResetSubmitBtn: document.getElementById("clientResetSubmitBtn"),
+  clientBundlePanel: document.getElementById("clientBundlePanel"),
+  licenseBundleInput: document.getElementById("licenseBundleInput"), licenseImportBtn: document.getElementById("licenseImportBtn"), licenseClearBtn: document.getElementById("licenseClearBtn"), licenseStatus: document.getElementById("licenseStatus"),
+  licenseClearLocalBtn: document.getElementById("licenseClearLocalBtn"), licenseUserPill: document.getElementById("licenseUserPill"), licenseUserName: document.getElementById("licenseUserName"),
   navShell: document.getElementById("navShell"), navRailTrigger: document.getElementById("navRailTrigger"), mainSidebar: document.getElementById("mainSidebar"),
   navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"), navSimulation: document.getElementById("navSimulation"),
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
@@ -180,11 +201,13 @@ async function api(path, options = {}) {
       err.data = d;
       if (
         typeof window !== "undefined" &&
-        typeof window.__cs2AlchemyHandleApiAuthFailure === "function" &&
-        Number(r.status) === 401 &&
-        String(d && d.reason || "").trim() === "app_auth_required"
+        typeof window.__cs2AlchemyHandleApiLicenseFailure === "function" &&
+        Number(r.status) === 401
       ) {
-        window.__cs2AlchemyHandleApiAuthFailure(err);
+        const reason = String(d && d.reason || "").trim();
+        if (reason === "license_required" || reason === "license_expired" || reason === "license_invalid") {
+          window.__cs2AlchemyHandleApiLicenseFailure(err);
+        }
       }
       throw err;
     }
@@ -203,7 +226,7 @@ async function api(path, options = {}) {
   }
 }
 
-async function requestAuthJson(path, options = {}) {
+async function requestLicenseJson(path, options = {}) {
   const requestOptions = options && typeof options === "object" ? {...options} : {};
   const requestHeaders = requestOptions.headers && typeof requestOptions.headers === "object"
     ? {...requestOptions.headers}
@@ -221,46 +244,224 @@ async function requestAuthJson(path, options = {}) {
   };
 }
 
-function setAppAuthStatus(text, isError = false) {
-  if (!ui.appAuthStatus) return;
-  ui.appAuthStatus.textContent = String(text || "").trim();
-  ui.appAuthStatus.classList.toggle("error", !!isError);
+function setLicenseStatus(text, isError = false) {
+  if (!ui.licenseStatus) return;
+  ui.licenseStatus.textContent = String(text || "").trim();
+  ui.licenseStatus.classList.toggle("error", !!isError);
 }
 
-function renderAppAuthShell() {
-  const auth = state.appAuth || {};
-  const authenticated = !!auth.authenticated;
-  const needsBootstrap = !authenticated && !!auth.needsBootstrap;
-  if (ui.appAuthGate) {
-    ui.appAuthGate.classList.toggle("hidden", authenticated);
+function getClientAuthMode() {
+  const mode = String(state.clientLicense && state.clientLicense.authMode || "").trim();
+  if (mode === "prod_login") return "prod_login";
+  if (mode === "dev_auto_bundle") return "dev_auto_bundle";
+  return "debug_bundle";
+}
+
+function isManualImportAllowed() {
+  return !!(state.clientLicense && state.clientLicense.allowManualImport);
+}
+
+function isRemoteClientAuthConfigured() {
+  return !!(state.clientLicense && state.clientLicense.authServiceConfigured);
+}
+
+function getRemoteClientAuthDisabled() {
+  return getClientAuthMode() === "prod_login" && !isRemoteClientAuthConfigured();
+}
+
+function resolveDefaultClientAuthView() {
+  return getClientAuthMode() === "prod_login" ? "login" : "bundle";
+}
+
+function getAvailableClientAuthViews() {
+  const views = [];
+  if (getClientAuthMode() === "prod_login") {
+    views.push("login", "register", "reset");
   }
-  if (ui.authUserPill) {
-    ui.authUserPill.classList.toggle("hidden", !authenticated);
+  if (isManualImportAllowed()) {
+    views.push("bundle");
   }
-  if (ui.authUserName) {
-    const user = auth.user && typeof auth.user === "object" ? auth.user : null;
-    ui.authUserName.textContent = user ? (String(user.display_name || "").trim() || String(user.username || "").trim()) : "";
+  if (!views.length) {
+    views.push(resolveDefaultClientAuthView());
   }
-  if (ui.appAuthTitle) {
-    ui.appAuthTitle.textContent = needsBootstrap ? "初始化管理员" : "管理员登录";
+  return views;
+}
+
+function resolveClientAuthView() {
+  const current = String(state.clientAuthView || "").trim();
+  const availableViews = getAvailableClientAuthViews();
+  return availableViews.includes(current) ? current : availableViews[0];
+}
+
+function setButtonBusy(button, busy) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.busy = "true";
+    button.disabled = true;
+    return;
   }
-  if (ui.appAuthHint) {
-    ui.appAuthHint.textContent = needsBootstrap
-      ? "首次启动需要设置 admin 密码。创建完成后会自动登录。"
-      : "请输入 admin 账号密码后继续。";
+  delete button.dataset.busy;
+  if (button === ui.licenseImportBtn) {
+    button.disabled = !isManualImportAllowed();
+    return;
   }
-  if (ui.appAuthSubmitBtn) {
-    ui.appAuthSubmitBtn.textContent = needsBootstrap ? "创建并登录" : "登录";
-    ui.appAuthSubmitBtn.disabled = false;
+  button.disabled = getRemoteClientAuthDisabled();
+}
+
+function syncClientAuthControlStates() {
+  setButtonBusy(ui.clientLoginSubmitBtn, false);
+  setButtonBusy(ui.clientRegisterSendCodeBtn, false);
+  setButtonBusy(ui.clientRegisterSubmitBtn, false);
+  setButtonBusy(ui.clientResetSendCodeBtn, false);
+  setButtonBusy(ui.clientResetSubmitBtn, false);
+  setButtonBusy(ui.licenseImportBtn, false);
+}
+
+function setClientAuthView(view) {
+  state.clientAuthView = String(view || "").trim() || resolveDefaultClientAuthView();
+  renderLicenseGate();
+}
+
+function applyClientLicenseState(data) {
+  const payload = data && typeof data === "object" ? data : {};
+  state.clientLicense = {
+    checked: true,
+    authenticated: !!payload.authenticated,
+    code: String(payload.code || "").trim() || "license_missing",
+    message: String(payload.message || "").trim(),
+    user: payload.user && typeof payload.user === "object" ? payload.user : null,
+    permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+    membership: Array.isArray(payload.membership) ? payload.membership : [],
+    featureFlags: payload.feature_flags && typeof payload.feature_flags === "object" ? payload.feature_flags : {},
+    authMode: (function () {
+      const mode = String(payload.auth_mode || "").trim();
+      if (mode === "prod_login") return "prod_login";
+      if (mode === "dev_auto_bundle") return "dev_auto_bundle";
+      return "debug_bundle";
+    })(),
+    allowManualImport: !!payload.allow_manual_import,
+    authServiceConfigured: !!payload.auth_service_configured,
+    authServiceBaseUrl: String(payload.auth_service_base_url || "").trim(),
+    expiresAt: String(payload.expires_at || "").trim(),
+    expiresInMs: Number(payload.expires_in_ms) || 0
+  };
+  state.clientAuthView = resolveClientAuthView();
+}
+
+function renderLicenseGate() {
+  const license = state.clientLicense || {};
+  const authenticated = !!license.authenticated;
+  const readyForWorkspace = authenticated && !!state.workspaceInitialized;
+  const expired = String(license.code || "").trim() === "license_expired";
+  const authMode = getClientAuthMode();
+  const allowManualImport = isManualImportAllowed();
+  const remoteAuthDisabled = getRemoteClientAuthDisabled();
+  const clientAuthView = resolveClientAuthView();
+  const showRemotePanels = authMode === "prod_login";
+  const showModeTabs = showRemotePanels;
+  state.clientAuthView = clientAuthView;
+  if (ui.licenseGate) {
+    ui.licenseGate.classList.toggle("hidden", readyForWorkspace);
   }
-  if (ui.appAuthUsername) {
-    const fallback = auth.user && auth.user.username ? auth.user.username : (String(ui.appAuthUsername.value || "").trim() || "admin");
-    ui.appAuthUsername.value = fallback;
+  if (ui.licenseUserPill) {
+    ui.licenseUserPill.classList.toggle("hidden", !readyForWorkspace);
   }
-  if (!authenticated) {
-    setAppAuthStatus(
-      needsBootstrap ? "首次启动，请先初始化 admin 密码。" : "请输入管理员账号密码。",
-      false
+  if (ui.licenseUserName) {
+    const user = license.user && typeof license.user === "object" ? license.user : null;
+    ui.licenseUserName.textContent = user ? (String(user.username || "").trim()) : "";
+  }
+  let licenseTitleText = "客户端授权";
+  if (readyForWorkspace) {
+    licenseTitleText = "客户端授权就绪";
+  } else if (authenticated) {
+    licenseTitleText = "正在载入工作台";
+  } else if (authMode === "prod_login") {
+    licenseTitleText = expired ? "登录已过期" : "账号登录";
+  } else if (authMode === "dev_auto_bundle") {
+    licenseTitleText = expired ? "开发授权已过期" : "开发直通授权";
+  } else {
+    licenseTitleText = expired ? "授权已过期" : "客户端授权";
+  }
+  if (ui.licenseTitle) {
+    ui.licenseTitle.textContent = licenseTitleText;
+  }
+  let licenseHintText = "";
+  if (readyForWorkspace) {
+    licenseHintText = `当前授权已生效${license.expiresAt ? `，到期时间：${license.expiresAt}` : ""}。`;
+  } else if (authenticated) {
+    licenseHintText = "授权已验证，正在初始化本地工作台，请稍候。";
+  } else if (authMode === "prod_login") {
+    licenseHintText = remoteAuthDisabled
+      ? "正式登录模式已启用，但远程认证服务尚未配置。"
+      : "登录入口为用户名和密码，邮箱仅用于注册验证与重置密码。";
+  } else if (authMode === "dev_auto_bundle") {
+    licenseHintText = expired
+      ? "开发直通模式下的本地调试授权已过期，请重启客户端或检查本地私钥配置。"
+      : "开发直通模式已启用，客户端会在启动时自动注入本地调试授权。";
+  } else {
+    licenseHintText = expired
+      ? "当前授权已过期，请导入新的签名授权包。"
+      : "请导入有效的签名授权包后继续。";
+  }
+  if (ui.licenseHint) {
+    ui.licenseHint.textContent = licenseHintText;
+  }
+  if (ui.clientAuthModeTabs) {
+    ui.clientAuthModeTabs.classList.toggle("hidden", !showModeTabs);
+  }
+  if (ui.clientAuthLoginTabBtn) {
+    ui.clientAuthLoginTabBtn.classList.toggle("hidden", !showRemotePanels);
+    ui.clientAuthLoginTabBtn.classList.toggle("active", clientAuthView === "login");
+  }
+  if (ui.clientAuthRegisterTabBtn) {
+    ui.clientAuthRegisterTabBtn.classList.toggle("hidden", !showRemotePanels);
+    ui.clientAuthRegisterTabBtn.classList.toggle("active", clientAuthView === "register");
+  }
+  if (ui.clientAuthResetTabBtn) {
+    ui.clientAuthResetTabBtn.classList.toggle("hidden", !showRemotePanels);
+    ui.clientAuthResetTabBtn.classList.toggle("active", clientAuthView === "reset");
+  }
+  if (ui.clientAuthBundleTabBtn) {
+    ui.clientAuthBundleTabBtn.classList.toggle("hidden", !showModeTabs || !allowManualImport);
+    ui.clientAuthBundleTabBtn.classList.toggle("active", clientAuthView === "bundle");
+  }
+  if (ui.clientLoginPanel) {
+    ui.clientLoginPanel.classList.toggle("hidden", !(showRemotePanels && clientAuthView === "login"));
+  }
+  if (ui.clientRegisterPanel) {
+    ui.clientRegisterPanel.classList.toggle("hidden", !(showRemotePanels && clientAuthView === "register"));
+  }
+  if (ui.clientResetPanel) {
+    ui.clientResetPanel.classList.toggle("hidden", !(showRemotePanels && clientAuthView === "reset"));
+  }
+  if (ui.clientBundlePanel) {
+    ui.clientBundlePanel.classList.toggle("hidden", !(allowManualImport && clientAuthView === "bundle"));
+  }
+  if (ui.licenseClearLocalBtn) {
+    ui.licenseClearLocalBtn.textContent = authMode === "prod_login" ? "退出登录" : "清除授权";
+  }
+  syncClientAuthControlStates();
+  if (!readyForWorkspace) {
+    let statusText = "";
+    if (authenticated) {
+      statusText = "授权已通过，正在载入本地工作台...";
+    } else if (authMode === "prod_login") {
+      statusText = remoteAuthDisabled
+        ? "认证服务未配置，当前无法执行登录。"
+        : (String(license.message || "").trim() || "请输入账号密码登录。");
+    } else if (authMode === "dev_auto_bundle") {
+      statusText = expired
+        ? "开发授权已过期，请重启客户端或检查本地私钥配置。"
+        : (String(license.message || "").trim() || "正在自动加载本地开发授权。");
+    } else {
+      statusText = expired
+        ? "授权已过期，请导入新的授权包。"
+        : (String(license.message || "").trim() || "当前未导入客户端授权。");
+    }
+    const isError = !authenticated && (expired || remoteAuthDisabled);
+    setLicenseStatus(
+      statusText,
+      isError
     );
   }
 }
@@ -293,94 +494,235 @@ async function initializeAuthenticatedWorkspace() {
   }
 }
 
-async function loadAppSession({hydrateWorkspace = true} = {}) {
-  const result = await requestAuthJson("/api/auth/session");
-  const data = result.data || {};
-  state.appAuth = {
-    checked: true,
-    authenticated: !!data.authenticated,
-    needsBootstrap: !!data.needs_bootstrap,
-    user: data.user && typeof data.user === "object" ? data.user : null,
-    permissions: Array.isArray(data.permissions) ? data.permissions : [],
-    membership: Array.isArray(data.membership) ? data.membership : []
-  };
-  renderAppAuthShell();
-  if (state.appAuth.authenticated && hydrateWorkspace) {
+async function loadLicenseState({hydrateWorkspace = true} = {}) {
+  const result = await requestLicenseJson("/api/client-auth/state");
+  applyClientLicenseState(result.data || {});
+  renderLicenseGate();
+  if (state.clientLicense.authenticated && hydrateWorkspace) {
+    setLicenseStatus("授权已验证，正在载入工作台...");
     await initializeAuthenticatedWorkspace();
+    renderLicenseGate();
   }
-  return state.appAuth;
+  return state.clientLicense;
 }
 
-async function submitAppAuth() {
-  const username = String((ui.appAuthUsername && ui.appAuthUsername.value) || "").trim() || "admin";
-  const password = String((ui.appAuthPassword && ui.appAuthPassword.value) || "").trim();
-  if (!password) {
-    setAppAuthStatus("请输入管理员密码", true);
+async function submitClientLogin() {
+  const username = String((ui.clientLoginUsername && ui.clientLoginUsername.value) || "").trim();
+  const password = String((ui.clientLoginPassword && ui.clientLoginPassword.value) || "").trim();
+  if (!username) {
+    setLicenseStatus("请输入登录账号", true);
     return;
   }
-  if (ui.appAuthSubmitBtn) {
-    ui.appAuthSubmitBtn.disabled = true;
+  if (!password) {
+    setLicenseStatus("请输入登录密码", true);
+    return;
   }
-  setAppAuthStatus(state.appAuth.needsBootstrap ? "正在初始化管理员账号..." : "正在验证管理员会话...");
+  setButtonBusy(ui.clientLoginSubmitBtn, true);
+  setLicenseStatus("正在登录并获取授权...");
   try {
-    const result = await requestAuthJson(
-      state.appAuth.needsBootstrap ? "/api/auth/bootstrap-admin" : "/api/auth/login",
-      {
-        method: "POST",
-        body: JSON.stringify(
-          state.appAuth.needsBootstrap
-            ? {password, display_name: "管理员"}
-            : {username, password}
-        )
-      }
-    );
+    const result = await requestLicenseJson("/api/client-auth/login", {
+      method: "POST",
+      body: JSON.stringify({username, password})
+    });
     if (!result.ok) {
-      setAppAuthStatus(String(result.data && result.data.message || "管理员认证失败"), true);
-      await loadAppSession({hydrateWorkspace: false});
+      setLicenseStatus(String(result.data && result.data.message || "登录失败"), true);
       return;
     }
-    if (ui.appAuthPassword) {
-      ui.appAuthPassword.value = "";
+    if (ui.clientLoginPassword) {
+      ui.clientLoginPassword.value = "";
     }
-    setAppAuthStatus("管理员认证成功，正在载入工作台...");
-    await loadAppSession({hydrateWorkspace: true});
+    await loadLicenseState({hydrateWorkspace: true});
   } catch (err) {
-    setAppAuthStatus(String(err && err.message ? err.message : err || "管理员认证失败"), true);
+    setLicenseStatus(String(err && err.message ? err.message : err || "登录失败"), true);
   } finally {
-    if (ui.appAuthSubmitBtn) {
-      ui.appAuthSubmitBtn.disabled = false;
-    }
+    setButtonBusy(ui.clientLoginSubmitBtn, false);
   }
 }
 
-async function logoutAppSession() {
+async function sendClientRegisterCode() {
+  const email = String((ui.clientRegisterEmail && ui.clientRegisterEmail.value) || "").trim();
+  if (!email) {
+    setLicenseStatus("请输入注册邮箱", true);
+    return;
+  }
+  setButtonBusy(ui.clientRegisterSendCodeBtn, true);
+  setLicenseStatus("正在发送注册验证码...");
   try {
-    await requestAuthJson("/api/auth/logout", {method: "POST"});
+    const result = await requestLicenseJson("/api/client-auth/register/send-code", {
+      method: "POST",
+      body: JSON.stringify({email})
+    });
+    setLicenseStatus(String(result.data && result.data.message || "注册验证码已发送，请查收邮箱。"));
+  } catch (err) {
+    setLicenseStatus(String(err && err.message ? err.message : err || "发送注册验证码失败"), true);
+  } finally {
+    setButtonBusy(ui.clientRegisterSendCodeBtn, false);
+  }
+}
+
+async function submitClientRegister() {
+  const email = String((ui.clientRegisterEmail && ui.clientRegisterEmail.value) || "").trim();
+  const code = String((ui.clientRegisterCode && ui.clientRegisterCode.value) || "").trim();
+  const username = String((ui.clientRegisterUsername && ui.clientRegisterUsername.value) || "").trim();
+  const password = String((ui.clientRegisterPassword && ui.clientRegisterPassword.value) || "").trim();
+  if (!email || !code || !username || !password) {
+    setLicenseStatus("请完整填写邮箱、验证码、用户名和密码", true);
+    return;
+  }
+  setButtonBusy(ui.clientRegisterSubmitBtn, true);
+  setLicenseStatus("正在提交注册...");
+  try {
+    const result = await requestLicenseJson("/api/client-auth/register", {
+      method: "POST",
+      body: JSON.stringify({email, code, username, password})
+    });
+    if (!result.ok) {
+      setLicenseStatus(String(result.data && result.data.message || "注册失败"), true);
+      return;
+    }
+    if (ui.clientLoginUsername) {
+      ui.clientLoginUsername.value = username;
+    }
+    if (ui.clientRegisterCode) ui.clientRegisterCode.value = "";
+    if (ui.clientRegisterPassword) ui.clientRegisterPassword.value = "";
+    setClientAuthView("login");
+    setLicenseStatus(String(result.data && result.data.message || "注册成功，请使用账号密码登录。"));
+  } catch (err) {
+    setLicenseStatus(String(err && err.message ? err.message : err || "注册失败"), true);
+  } finally {
+    setButtonBusy(ui.clientRegisterSubmitBtn, false);
+  }
+}
+
+async function sendClientResetCode() {
+  const email = String((ui.clientResetEmail && ui.clientResetEmail.value) || "").trim();
+  if (!email) {
+    setLicenseStatus("请输入重置邮箱", true);
+    return;
+  }
+  setButtonBusy(ui.clientResetSendCodeBtn, true);
+  setLicenseStatus("正在发送重置验证码...");
+  try {
+    const result = await requestLicenseJson("/api/client-auth/password/send-reset-code", {
+      method: "POST",
+      body: JSON.stringify({email})
+    });
+    setLicenseStatus(String(result.data && result.data.message || "重置验证码已发送，请查收邮箱。"));
+  } catch (err) {
+    setLicenseStatus(String(err && err.message ? err.message : err || "发送重置验证码失败"), true);
+  } finally {
+    setButtonBusy(ui.clientResetSendCodeBtn, false);
+  }
+}
+
+async function submitClientReset() {
+  const email = String((ui.clientResetEmail && ui.clientResetEmail.value) || "").trim();
+  const code = String((ui.clientResetCode && ui.clientResetCode.value) || "").trim();
+  const newPassword = String((ui.clientResetPassword && ui.clientResetPassword.value) || "").trim();
+  if (!email || !code || !newPassword) {
+    setLicenseStatus("请完整填写邮箱、验证码和新密码", true);
+    return;
+  }
+  setButtonBusy(ui.clientResetSubmitBtn, true);
+  setLicenseStatus("正在重置密码...");
+  try {
+    const result = await requestLicenseJson("/api/client-auth/password/reset", {
+      method: "POST",
+      body: JSON.stringify({email, code, new_password: newPassword})
+    });
+    if (!result.ok) {
+      setLicenseStatus(String(result.data && result.data.message || "重置密码失败"), true);
+      return;
+    }
+    if (ui.clientResetCode) ui.clientResetCode.value = "";
+    if (ui.clientResetPassword) ui.clientResetPassword.value = "";
+    setClientAuthView("login");
+    setLicenseStatus(String(result.data && result.data.message || "密码已重置，请使用账号密码重新登录。"));
+  } catch (err) {
+    setLicenseStatus(String(err && err.message ? err.message : err || "重置密码失败"), true);
+  } finally {
+    setButtonBusy(ui.clientResetSubmitBtn, false);
+  }
+}
+
+async function submitLicenseImport() {
+  const raw = String((ui.licenseBundleInput && ui.licenseBundleInput.value) || "").trim();
+  if (!raw) {
+    setLicenseStatus("请输入授权包 JSON", true);
+    return;
+  }
+  let bundle = null;
+  try {
+    bundle = JSON.parse(raw);
+  } catch (_) {
+    setLicenseStatus("授权包 JSON 格式错误", true);
+    return;
+  }
+  setButtonBusy(ui.licenseImportBtn, true);
+  setLicenseStatus("正在导入并校验客户端授权...");
+  try {
+    const result = await requestLicenseJson("/api/license/import", {
+      method: "POST",
+      body: JSON.stringify({bundle})
+    });
+    if (!result.ok) {
+      setLicenseStatus(String(result.data && result.data.message || "客户端授权导入失败"), true);
+      await loadLicenseState({hydrateWorkspace: false});
+      return;
+    }
+    setLicenseStatus("客户端授权导入成功，正在载入工作台...");
+    await loadLicenseState({hydrateWorkspace: true});
+  } catch (err) {
+    setLicenseStatus(String(err && err.message ? err.message : err || "客户端授权导入失败"), true);
+  } finally {
+    setButtonBusy(ui.licenseImportBtn, false);
+  }
+}
+
+async function clearLocalLicense() {
+  try {
+    await requestLicenseJson(
+      getClientAuthMode() === "prod_login" ? "/api/client-auth/logout" : "/api/license/clear",
+      {method: "POST"}
+    );
   } finally {
     window.location.reload();
   }
 }
 
-async function handleApiAuthFailure() {
-  state.appAuth = {
+async function handleApiLicenseFailure() {
+  state.clientLicense = {
     checked: true,
     authenticated: false,
-    needsBootstrap: false,
+    code: "license_required",
+    message: "客户端授权已失效",
     user: null,
     permissions: [],
-    membership: []
+    membership: [],
+    featureFlags: {},
+    authMode: getClientAuthMode(),
+    allowManualImport: isManualImportAllowed(),
+    authServiceConfigured: isRemoteClientAuthConfigured(),
+    authServiceBaseUrl: String(state.clientLicense && state.clientLicense.authServiceBaseUrl || "").trim(),
+    expiresAt: "",
+    expiresInMs: 0
   };
-  renderAppAuthShell();
-  setAppAuthStatus("登录已失效，请重新登录管理员账号。", true);
+  renderLicenseGate();
+  setLicenseStatus(
+    getClientAuthMode() === "prod_login"
+      ? "客户端登录授权已失效，请重新登录。"
+      : "客户端授权已失效，请重新导入授权包。",
+    true
+  );
   try {
-    await loadAppSession({hydrateWorkspace: false});
+    await loadLicenseState({hydrateWorkspace: false});
   } catch (_) {
-    // ignore session refresh failures
+    // ignore refresh failures
   }
 }
 
-window.__cs2AlchemyHandleApiAuthFailure = () => {
-  void handleApiAuthFailure();
+window.__cs2AlchemyHandleApiLicenseFailure = () => {
+  void handleApiLicenseFailure();
 };
 
 function parseEventData(raw) {
@@ -8511,7 +8853,7 @@ function renderSimulationRolePanel(preset) {
   renderSimulationRoleChoosers(preset);
 }
 function getTradeupSimulationItemDisplayName(item) {
-  return String(item && (item.base_name || item.name || item.basename || item.basemarkethashname || item.markethashname) || "").trim();
+  return String(item && (item.base_name || item.basename || item.name || item.basemarkethashname || item.markethashname) || "").trim();
 }
 function getTradeupSimulationItemDisplayWear(item, preset) {
   const absoluteWear = Number(item && item.absolute_wear);
@@ -10856,21 +11198,82 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
 }
 
 function bindEvents() {
-  if (ui.appAuthSubmitBtn) {
-    ui.appAuthSubmitBtn.onclick = () => {
-      void submitAppAuth();
+  if (ui.clientAuthLoginTabBtn) {
+    ui.clientAuthLoginTabBtn.onclick = () => {
+      setClientAuthView("login");
     };
   }
-  if (ui.appAuthPassword) {
-    ui.appAuthPassword.onkeydown = (evt) => {
+  if (ui.clientAuthRegisterTabBtn) {
+    ui.clientAuthRegisterTabBtn.onclick = () => {
+      setClientAuthView("register");
+    };
+  }
+  if (ui.clientAuthResetTabBtn) {
+    ui.clientAuthResetTabBtn.onclick = () => {
+      setClientAuthView("reset");
+    };
+  }
+  if (ui.clientAuthBundleTabBtn) {
+    ui.clientAuthBundleTabBtn.onclick = () => {
+      setClientAuthView("bundle");
+    };
+  }
+  if (ui.clientLoginSubmitBtn) {
+    ui.clientLoginSubmitBtn.onclick = () => {
+      void submitClientLogin();
+    };
+  }
+  if (ui.clientLoginPassword) {
+    ui.clientLoginPassword.onkeydown = (evt) => {
       if (evt.key !== "Enter") return;
       evt.preventDefault();
-      void submitAppAuth();
+      void submitClientLogin();
     };
   }
-  if (ui.appAuthLogoutBtn) {
-    ui.appAuthLogoutBtn.onclick = () => {
-      void logoutAppSession();
+  if (ui.clientRegisterSendCodeBtn) {
+    ui.clientRegisterSendCodeBtn.onclick = () => {
+      void sendClientRegisterCode();
+    };
+  }
+  if (ui.clientRegisterSubmitBtn) {
+    ui.clientRegisterSubmitBtn.onclick = () => {
+      void submitClientRegister();
+    };
+  }
+  if (ui.clientResetSendCodeBtn) {
+    ui.clientResetSendCodeBtn.onclick = () => {
+      void sendClientResetCode();
+    };
+  }
+  if (ui.clientResetSubmitBtn) {
+    ui.clientResetSubmitBtn.onclick = () => {
+      void submitClientReset();
+    };
+  }
+  if (ui.licenseImportBtn) {
+    ui.licenseImportBtn.onclick = () => {
+      void submitLicenseImport();
+    };
+  }
+  if (ui.licenseBundleInput) {
+    ui.licenseBundleInput.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      if (!evt.ctrlKey && !evt.metaKey) return;
+      evt.preventDefault();
+      void submitLicenseImport();
+    };
+  }
+  if (ui.licenseClearBtn) {
+    ui.licenseClearBtn.onclick = () => {
+      if (ui.licenseBundleInput) {
+        ui.licenseBundleInput.value = "";
+      }
+      setLicenseStatus("已清空导入框。");
+    };
+  }
+  if (ui.licenseClearLocalBtn) {
+    ui.licenseClearLocalBtn.onclick = () => {
+      void clearLocalLicense();
     };
   }
   window.addEventListener("beforeunload", () => {
@@ -11854,10 +12257,10 @@ function bindEvents() {
 async function init() {
   bindEvents();
   try {
-    renderAppAuthShell();
-    await loadAppSession({hydrateWorkspace: true});
+    renderLicenseGate();
+    await loadLicenseState({hydrateWorkspace: true});
   } catch (err) {
-    setAppAuthStatus(`管理员会话检查失败：${err.message}`, true);
+    setLicenseStatus(`客户端授权检查失败：${err.message}`, true);
   }
 }
 

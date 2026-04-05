@@ -52,6 +52,21 @@ npm run ui
 npm run ui:desktop
 ```
 
+从仓库根目录一键启动开发直通模式：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1
+```
+
+如需覆盖开发身份或会员档位：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1 `
+  -Username dev_local `
+  -Plan elite `
+  -TtlMinutes 43200
+```
+
 启动 CLI 菜单：
 
 ```powershell

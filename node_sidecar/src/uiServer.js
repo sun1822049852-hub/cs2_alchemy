@@ -4,6 +4,7 @@ const http = require("http");
 const {URL} = require("url");
 const {execSync} = require("child_process");
 const {AccountStore} = require("./accountStore");
+const {AppAuthStore} = require("./appAuthStore");
 const {TokenStore} = require("./tokenStore");
 const {UiStateStore} = require("./uiStateStore");
 const {loginAndSaveToken} = require("./authService");
@@ -27,10 +28,19 @@ const {createTradeupSimulationCatalog} = require("./services/tradeupSimulationCa
 const {createTradeupSimulationService} = require("./services/tradeupSimulationService");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {DedupLogger} = require("./logger");
+const {getLicenseConfig} = require("./licenseConfig");
+const {createControlPlaneAuthClient} = require("./controlPlaneAuthClient");
+const {resolveDeviceId} = require("./deviceIdentity");
+const {LicenseStore} = require("./licenseStore");
+const {createLicenseEnforcer} = require("./licenseEnforcer");
+const {createLicenseScheduler} = require("./licenseScheduler");
+const {bootstrapDevLicense} = require("./devLicenseBootstrap");
 const {asString, toInt, nowString} = require("./utils");
 const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./constants");
 
 const UI_DIR = path.resolve(__dirname, "..", "ui");
+const SESSION_COOKIE_NAME = "cs2_alchemy_session";
+const SESSION_TTL_DAYS = 7;
 const logger = new DedupLogger({windowMs: 800});
 const sessionPool = createSessionPool({logger});
 const componentOpsService = createComponentOpsService({sessionPool, logger});
@@ -88,11 +98,91 @@ function getTradeupSimulationService(service, catalog) {
   return defaultTradeupSimulationService;
 }
 
-function getUiStateStore(deps = {}) {
-  if (typeof deps.uiStateStoreFactory === "function") {
-    return deps.uiStateStoreFactory();
+function getAuthStore(deps = {}) {
+  if (typeof deps.authStoreFactory === "function") {
+    return deps.authStoreFactory();
   }
-  return new UiStateStore();
+  return new AppAuthStore();
+}
+
+function getUiStateStore(deps = {}, viewerUsername = "") {
+  if (typeof deps.uiStateStoreFactory === "function") {
+    return deps.uiStateStoreFactory({viewerUsername});
+  }
+  return new UiStateStore(undefined, {viewerUsername});
+}
+
+function getViewerAccountStore(auth, deps = {}) {
+  const viewerUsername = auth && Object.prototype.hasOwnProperty.call(auth, "accountViewerUsername")
+    ? asString(auth.accountViewerUsername).trim()
+    : asString(auth && auth.user && auth.user.username ? auth.user.username : "").trim();
+  if (typeof deps.accountStoreFactory === "function") {
+    const custom = deps.accountStoreFactory({viewerUsername});
+    if (custom) {
+      return custom;
+    }
+  }
+  return new AccountStore({
+    dbPath: auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE,
+    accountsFilePath: auth && auth.store ? auth.store.accountsFilePath : PATHS.ACCOUNTS_FILE,
+    viewerUsername
+  });
+}
+
+function getLicenseRuntime(deps = {}) {
+  if (deps.__licenseRuntime) {
+    return deps.__licenseRuntime;
+  }
+  const config = getClientLicenseConfig(deps);
+  if (typeof deps.licenseRuntimeFactory === "function") {
+    deps.__licenseRuntime = deps.licenseRuntimeFactory();
+    return deps.__licenseRuntime;
+  }
+  const store = new LicenseStore(config.licenseStateFile);
+  const deviceId = resolveDeviceId(config.machineIdFile);
+  const enforcer = createLicenseEnforcer({
+    publicKeyFile: config.publicKeyFile,
+    deviceId
+  });
+  const scheduler = createLicenseScheduler({
+    store,
+    enforcer,
+    refreshIntervalMs: config.refreshIntervalMs,
+    refreshThresholdMs: config.refreshIntervalMs
+  });
+  bootstrapDevLicense({
+    config,
+    scheduler,
+    deviceId
+  });
+  scheduler.start();
+  deps.__licenseRuntime = scheduler;
+  return deps.__licenseRuntime;
+}
+
+function getClientLicenseConfig(deps = {}) {
+  if (deps.__licenseConfig) {
+    return deps.__licenseConfig;
+  }
+  deps.__licenseConfig = getLicenseConfig(typeof deps.licenseConfigFactory === "function" ? deps.licenseConfigFactory() : {});
+  return deps.__licenseConfig;
+}
+
+function getControlPlaneAuthClient(deps = {}) {
+  if (deps.__controlPlaneAuthClient) {
+    return deps.__controlPlaneAuthClient;
+  }
+  if (typeof deps.controlPlaneAuthClientFactory === "function") {
+    deps.__controlPlaneAuthClient = deps.controlPlaneAuthClientFactory({
+      config: getClientLicenseConfig(deps)
+    });
+    return deps.__controlPlaneAuthClient;
+  }
+  const config = getClientLicenseConfig(deps);
+  deps.__controlPlaneAuthClient = createControlPlaneAuthClient({
+    baseUrl: config.controlPlaneBaseUrl
+  });
+  return deps.__controlPlaneAuthClient;
 }
 
 function getCraftAssistWorkerPool() {
@@ -218,13 +308,157 @@ function readJsonBody(req) {
   });
 }
 
-function writeJson(res, status, payload) {
+function writeJson(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload, null, 2);
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": Buffer.byteLength(body)
+    "Content-Length": Buffer.byteLength(body),
+    ...extraHeaders
   });
   res.end(body);
+}
+
+function parseCookies(headerValue) {
+  const raw = asString(headerValue).trim();
+  if (!raw) {
+    return {};
+  }
+  const out = {};
+  for (const item of raw.split(";")) {
+    const [key, ...rest] = item.split("=");
+    const name = asString(key).trim();
+    if (!name) {
+      continue;
+    }
+    out[name] = decodeURIComponent(rest.join("="));
+  }
+  return out;
+}
+
+function buildSessionCookie(token, expiresAt) {
+  const tokenText = encodeURIComponent(asString(token).trim());
+  const parsed = Date.parse(asString(expiresAt).trim().replace(" ", "T"));
+  const expires = Number.isFinite(parsed) ? new Date(parsed).toUTCString() : new Date(Date.now() + 7 * 86400000).toUTCString();
+  return `${SESSION_COOKIE_NAME}=${tokenText}; Path=/; HttpOnly; SameSite=Lax; Expires=${expires}`;
+}
+
+function buildExpiredSessionCookie() {
+  return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
+function isPublicApiRoute(pathname) {
+  return pathname === "/api/health"
+    || pathname === "/api/license/state"
+    || pathname === "/api/license/import"
+    || pathname === "/api/license/clear"
+    || pathname === "/api/client-auth/state"
+    || pathname === "/api/client-auth/login"
+    || pathname === "/api/client-auth/logout"
+    || pathname === "/api/client-auth/register/send-code"
+    || pathname === "/api/client-auth/register"
+    || pathname === "/api/client-auth/password/send-reset-code"
+    || pathname === "/api/client-auth/password/reset";
+}
+
+function resolveRequestAuth(req, deps = {}) {
+  const runtime = getLicenseRuntime(deps);
+  const state = runtime && typeof runtime.getState === "function" ? runtime.getState() : null;
+  const user = state && state.ok && state.user
+    ? {
+        username: asString(state.user.username).trim(),
+        display_name: asString(state.user.username).trim(),
+        is_super_admin: false
+      }
+    : null;
+  return {
+    store: {
+      dbPath: PATHS.SKIN_DB_FILE,
+      accountsFilePath: PATHS.ACCOUNTS_FILE,
+      canAccessSteamAccount() {
+        return true;
+      },
+      close() {}
+    },
+    token: "",
+    session: null,
+    licenseState: state,
+    licenseRuntime: runtime,
+    user,
+    permissions: Array.isArray(state && state.permissions) ? state.permissions : [],
+    membership: state && state.user && state.user.membership_plan ? [state.user.membership_plan] : [],
+    accountViewerUsername: ""
+  };
+}
+
+function hasPermission(auth, code) {
+  if (!auth || !auth.user) {
+    return false;
+  }
+  if (auth.user.is_super_admin) {
+    return true;
+  }
+  return auth.permissions.includes(asString(code).trim());
+}
+
+function requirePermission(res, auth, code, message = "当前登录用户无权执行该操作") {
+  if (hasPermission(auth, code)) {
+    return true;
+  }
+  writeJson(res, 403, {ok: false, reason: "permission_denied", message});
+  return false;
+}
+
+function buildLicenseStatePayload(state) {
+  const value = state && typeof state === "object" ? state : {};
+  return {
+    ok: true,
+    authenticated: !!value.ok,
+    code: asString(value.code || "license_missing").trim() || "license_missing",
+    message: asString(value.message || "缺少客户端授权").trim() || "缺少客户端授权",
+    user: value.user && typeof value.user === "object" ? value.user : null,
+    permissions: Array.isArray(value.permissions) ? value.permissions : [],
+    membership: value.user && value.user.membership_plan ? [value.user.membership_plan] : [],
+    feature_flags: value.featureFlags && typeof value.featureFlags === "object" ? value.featureFlags : {},
+    expires_at: asString(value.expiresAt).trim(),
+    expires_in_ms: Number(value.expiresInMs) || 0
+  };
+}
+
+function buildClientAuthStatePayload(state, deps = {}) {
+  const config = getClientLicenseConfig(deps);
+  const authClient = getControlPlaneAuthClient(deps);
+  const capabilities = authClient && typeof authClient.getCapabilities === "function"
+    ? authClient.getCapabilities()
+    : {configured: false, baseUrl: ""};
+  return {
+    ...buildLicenseStatePayload(state),
+    auth_mode: asString(config.authMode || "debug_bundle").trim() || "debug_bundle",
+    allow_manual_import: !!config.allowManualImport,
+    auth_service_configured: !!capabilities.configured,
+    auth_service_base_url: asString(capabilities.baseUrl || "").trim()
+  };
+}
+
+function writeClientAuthError(res, err, fallbackMessage = "认证请求失败") {
+  const status = Math.max(400, Number(err && err.status) || 500);
+  writeJson(res, status, {
+    ok: false,
+    reason: asString(err && err.code || "auth_request_failed").trim() || "auth_request_failed",
+    message: asString(err && err.message || fallbackMessage).trim() || fallbackMessage
+  });
+}
+
+function requireSteamAccountAccess(res, auth, username) {
+  const key = asString(username).trim();
+  if (!key) {
+    writeJson(res, 400, {ok: false, message: "username is required"});
+    return false;
+  }
+  if (auth && auth.store && auth.store.canAccessSteamAccount(auth.user && auth.user.username, key)) {
+    return true;
+  }
+  writeJson(res, 403, {ok: false, reason: "account_scope_denied", message: "当前登录用户无权访问该 Steam 账号"});
+  return false;
 }
 
 function normalizeLoginSaveError(err) {
@@ -498,8 +732,11 @@ function normalizeAvatarHash(value) {
   return /^[0-9a-fA-F]{40}$/.test(text) ? text.toLowerCase() : text;
 }
 
-async function resolveAccountProfile({username, password = ""} = {}) {
-  const accountStore = new AccountStore();
+async function resolveAccountProfile({username, password = "", viewerUsername = "", accountStoreOptions = {}} = {}) {
+  const accountStore = new AccountStore({
+    ...accountStoreOptions,
+    viewerUsername
+  });
   const account = username ? accountStore.get(username) : accountStore.getActive();
   if (!account) {
     throw new Error(`account not found: ${username || "(active)"}`);
@@ -803,34 +1040,243 @@ function buildComponentSummary(rows) {
 
 async function handleApi(req, res, urlObj, deps = {}) {
   const pathname = urlObj.pathname;
-  if (pathname === "/api/events" && req.method === "GET") {
-    const username = asString(urlObj.searchParams.get("username") || "").trim();
-    refreshRuntime.handleSseRequest(req, res, username);
-    return true;
-  }
+  const auth = resolveRequestAuth(req, deps);
+  const config = getClientLicenseConfig(deps);
+  const viewerUsername = asString(auth && auth.user && auth.user.username ? auth.user.username : "").trim();
+  try {
+    if (pathname === "/api/health" && req.method === "GET") {
+      writeJson(res, 200, {ok: true});
+      return true;
+    }
 
-  if (pathname === "/api/health" && req.method === "GET") {
-    writeJson(res, 200, {ok: true});
-    return true;
-  }
+    if (pathname === "/api/license/state" && req.method === "GET") {
+      writeJson(res, 200, buildLicenseStatePayload(auth.licenseState));
+      return true;
+    }
 
-  if (pathname === "/api/accounts" && req.method === "GET") {
-    const store = new AccountStore();
-    const uiState = new UiStateStore();
-    writeJson(res, 200, {
-      accounts: store.list(),
-      active: store.getActive(),
-      last_selected_username: uiState.getLastSelected()
-    });
-    return true;
-  }
+    if (pathname === "/api/client-auth/state" && req.method === "GET") {
+      writeJson(res, 200, buildClientAuthStatePayload(auth.licenseState, deps));
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/login" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const username = asString(body && body.username).trim();
+      const password = asString(body && body.password).trim();
+      if (!username) {
+        writeJson(res, 400, {ok: false, reason: "username_required", message: "username is required"});
+        return true;
+      }
+      if (!password) {
+        writeJson(res, 400, {ok: false, reason: "password_required", message: "password is required"});
+        return true;
+      }
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.login({
+          username,
+          password,
+          deviceId: resolveDeviceId(config.machineIdFile),
+          clientVersion: asString(body && body.client_version).trim()
+        });
+        if (!result || !result.bundle || typeof result.bundle !== "object") {
+          writeJson(res, 502, {ok: false, reason: "bundle_missing", message: "远端认证成功但未返回授权包"});
+          return true;
+        }
+        const state = auth.licenseRuntime.importBundle({
+          ...result.bundle,
+          refresh_credential: asString(result.refreshCredential).trim(),
+          source: "remote_login"
+        });
+        if (!state || !state.ok) {
+          writeJson(res, 502, {
+            ok: false,
+            reason: asString(state && state.code || "license_invalid").trim() || "license_invalid",
+            message: asString(state && state.message || "远端授权写入本地失败").trim() || "远端授权写入本地失败"
+          });
+          return true;
+        }
+        writeJson(res, 200, buildClientAuthStatePayload(state, deps));
+      } catch (err) {
+        writeClientAuthError(res, err, "登录失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/logout" && req.method === "POST") {
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        if (authClient && typeof authClient.logout === "function") {
+          try {
+            await authClient.logout({});
+          } catch (_) {
+            // local logout still succeeds even if remote revoke fails
+          }
+        }
+        const state = auth.licenseRuntime.clear();
+        writeJson(res, 200, buildClientAuthStatePayload(state, deps));
+      } catch (err) {
+        writeClientAuthError(res, err, "退出失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/register/send-code" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.sendRegisterCode({
+          email: asString(body && body.email).trim()
+        });
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+      } catch (err) {
+        writeClientAuthError(res, err, "发送注册验证码失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/register" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.register({
+          email: asString(body && body.email).trim(),
+          code: asString(body && body.code).trim(),
+          username: asString(body && body.username).trim(),
+          password: asString(body && body.password).trim()
+        });
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+      } catch (err) {
+        writeClientAuthError(res, err, "注册失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/password/send-reset-code" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.sendResetCode({
+          email: asString(body && body.email).trim()
+        });
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+      } catch (err) {
+        writeClientAuthError(res, err, "发送重置验证码失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/password/reset" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.resetPassword({
+          email: asString(body && body.email).trim(),
+          code: asString(body && body.code).trim(),
+          newPassword: asString(body && body.new_password).trim()
+        });
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+      } catch (err) {
+        writeClientAuthError(res, err, "重置密码失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/license/import" && req.method === "POST") {
+      if (!config.allowManualImport) {
+        writeJson(res, 403, {
+          ok: false,
+          reason: "manual_import_disabled",
+          message: "正式登录模式下禁止手工导入授权包"
+        });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const bundle = body && body.bundle && typeof body.bundle === "object" ? body.bundle : null;
+      if (!bundle) {
+        writeJson(res, 400, {ok: false, reason: "bundle_required", message: "bundle is required"});
+        return true;
+      }
+      const state = auth.licenseRuntime.importBundle(bundle);
+      if (!state || !state.ok) {
+        writeJson(res, 400, {
+          ok: false,
+          reason: asString(state && state.code || "license_invalid").trim() || "license_invalid",
+          message: asString(state && state.message || "客户端授权导入失败").trim() || "客户端授权导入失败"
+        });
+        return true;
+      }
+      writeJson(res, 200, buildLicenseStatePayload(state));
+      return true;
+    }
+
+    if (pathname === "/api/license/clear" && req.method === "POST") {
+      const state = auth.licenseRuntime.clear();
+      writeJson(res, 200, buildLicenseStatePayload(state));
+      return true;
+    }
+
+    if (pathname.startsWith("/api/auth/")) {
+      writeJson(res, 410, {
+        ok: false,
+        reason: "client_license_mode",
+        message: "当前客户端已切换为本地授权快照模式，旧 admin 登录接口已停用"
+      });
+      return true;
+    }
+
+    if (!isPublicApiRoute(pathname) && !auth.user) {
+      const reason = asString(auth && auth.licenseState && auth.licenseState.code || "").trim();
+      writeJson(res, 401, {
+        ok: false,
+        reason: reason === "license_expired" ? "license_expired" : "license_required",
+        message: reason === "license_expired" ? "客户端授权已过期，请重新导入或同步授权" : "请先导入有效的客户端授权"
+      });
+      return true;
+    }
+
+    if (pathname === "/api/events" && req.method === "GET") {
+      const username = asString(urlObj.searchParams.get("username") || "").trim();
+      if (username && !requireSteamAccountAccess(res, auth, username)) {
+        return true;
+      }
+      refreshRuntime.handleSseRequest(req, res, username);
+      return true;
+    }
+
+    if (pathname === "/api/accounts" && req.method === "GET") {
+      if (!requirePermission(res, auth, "accounts.read")) {
+        return true;
+      }
+      const store = getViewerAccountStore(auth, deps);
+      const uiState = getUiStateStore(deps, viewerUsername);
+      writeJson(res, 200, {
+        accounts: store.list(),
+        active: store.getActive(),
+        last_selected_username: uiState.getLastSelected()
+      });
+      return true;
+    }
 
   if (pathname === "/api/accounts/profile" && req.method === "GET") {
+    if (!requirePermission(res, auth, "accounts.read")) {
+      return true;
+    }
     const username = asString(urlObj.searchParams.get("username") || "").trim();
+    if (username && !requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
     try {
-      const profile = await resolveAccountProfile({username});
+      const profile = await resolveAccountProfile({
+        username,
+        viewerUsername,
+        accountStoreOptions: {
+          dbPath: auth.store.dbPath,
+          accountsFilePath: auth.store.accountsFilePath
+        }
+      });
       try {
-        const accountStore = new AccountStore();
+        const accountStore = getViewerAccountStore(auth, deps);
         const existed = accountStore.get(profile.username);
         if (existed) {
           const nextSteamId = asString(profile.steam_id64 || "").trim();
@@ -881,7 +1327,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/ui-state" && req.method === "GET") {
-    const uiState = new UiStateStore();
+    const uiState = getUiStateStore(deps, viewerUsername);
     writeJson(res, 200, {
       ok: true,
       last_selected_username: uiState.getLastSelected()
@@ -892,14 +1338,17 @@ async function handleApi(req, res, urlObj, deps = {}) {
   if (pathname === "/api/ui-state/last-selected" && req.method === "POST") {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
-    const uiState = new UiStateStore();
+    if (username && !requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const uiState = getUiStateStore(deps, viewerUsername);
     uiState.setLastSelected(username);
     writeJson(res, 200, {ok: true, last_selected_username: uiState.getLastSelected()});
     return true;
   }
 
   if (pathname === "/api/ui-state/craft-assist-presets" && req.method === "GET") {
-    const uiState = new UiStateStore();
+    const uiState = getUiStateStore(deps, viewerUsername);
     writeJson(res, 200, {
       ok: true,
       presets: uiState.getCraftAssistPresets()
@@ -910,7 +1359,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   if (pathname === "/api/ui-state/craft-assist-presets" && req.method === "POST") {
     const body = await readJsonBody(req);
     const presets = Array.isArray(body && body.presets) ? body.presets : [];
-    const uiState = new UiStateStore();
+    const uiState = getUiStateStore(deps, viewerUsername);
     uiState.setCraftAssistPresets(presets);
     writeJson(res, 200, {
       ok: true,
@@ -920,7 +1369,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/ui-state/tradeup-simulation-presets" && req.method === "GET") {
-    const uiState = getUiStateStore(deps);
+    const uiState = getUiStateStore(deps, viewerUsername);
     writeJson(res, 200, {
       ok: true,
       presets: uiState.getTradeupSimulationPresets()
@@ -931,7 +1380,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   if (pathname === "/api/ui-state/tradeup-simulation-presets" && req.method === "POST") {
     const body = await readJsonBody(req);
     const presets = Array.isArray(body && body.presets) ? body.presets : [];
-    const uiState = getUiStateStore(deps);
+    const uiState = getUiStateStore(deps, viewerUsername);
     uiState.setTradeupSimulationPresets(presets);
     writeJson(res, 200, {
       ok: true,
@@ -941,20 +1390,29 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/accounts/active" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
-    const store = new AccountStore();
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const store = getViewerAccountStore(auth, deps);
     if (!store.setActive(username)) {
       writeJson(res, 400, {ok: false, message: `account not found: ${username}`});
       return true;
     }
-    const uiState = new UiStateStore();
+    const uiState = getUiStateStore(deps, viewerUsername);
     uiState.setLastSelected(username);
     writeJson(res, 200, {ok: true, active: store.getActive()});
     return true;
   }
 
   if (pathname === "/api/accounts/login-save" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const password = asString(body.password).trim();
@@ -983,7 +1441,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         logger
       });
 
-      const accountStore = new AccountStore();
+      const accountStore = getViewerAccountStore(auth, deps);
       const existed = accountStore.get(username);
       const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
 
@@ -998,7 +1456,15 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
       let profile = null;
       try {
-        profile = await resolveAccountProfile({username, password});
+        profile = await resolveAccountProfile({
+          username,
+          password,
+          viewerUsername,
+          accountStoreOptions: {
+            dbPath: auth.store.dbPath,
+            accountsFilePath: auth.store.accountsFilePath
+          }
+        });
       } catch (profileErr) {
         logger.warn(
           "ui_server",
@@ -1019,7 +1485,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         });
       }
 
-      const uiState = new UiStateStore();
+      const uiState = getUiStateStore(deps, viewerUsername);
       uiState.setLastSelected(username);
       logger.info("ui_server", `login-save success: account=${username} token_saved=${Boolean(result.refresh_token)}`);
       writeJson(res, 200, {
@@ -1049,6 +1515,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/accounts/upsert" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const password = asString(body.password).trim();
@@ -1058,7 +1527,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       return true;
     }
 
-    const store = new AccountStore();
+    const store = getViewerAccountStore(auth, deps);
     const existed = store.get(username);
     const existedPassword = asString(existed && existed.password ? existed.password : "").trim();
     const finalPassword = password || existedPassword;
@@ -1068,7 +1537,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
     const finalRemark = remark || asString(existed && existed.remark ? existed.remark : "").trim();
     store.upsert({username, password: finalPassword, remark: finalRemark});
-    const uiState = new UiStateStore();
+    const uiState = getUiStateStore(deps, viewerUsername);
     uiState.setLastSelected(username);
     writeJson(res, 200, {
       ok: true,
@@ -1079,6 +1548,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/accounts/remark" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const remark = asString(body.remark).trim();
@@ -1087,7 +1559,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
       return true;
     }
 
-    const store = new AccountStore();
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const store = getViewerAccountStore(auth, deps);
     const ok = store.updateRemark(username, remark);
     if (!ok) {
       writeJson(res, 404, {ok: false, message: `account not found: ${username}`});
@@ -1095,7 +1570,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
 
     logger.info("ui_server", `account remark updated: account=${username}`);
-    const uiState = new UiStateStore();
+    const uiState = getUiStateStore(deps, viewerUsername);
     uiState.setLastSelected(username);
     writeJson(res, 200, {
       ok: true,
@@ -1106,13 +1581,19 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/accounts/delete" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
     }
-    const store = new AccountStore();
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const store = getViewerAccountStore(auth, deps);
     if (!store.remove(username)) {
       writeJson(res, 404, {ok: false, message: `account not found: ${username}`});
       return true;
@@ -1129,7 +1610,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       // ignore token cleanup errors
     }
     try {
-      const uiState = new UiStateStore();
+      const uiState = getUiStateStore(deps, viewerUsername);
       uiState.removeAccount(username);
     } catch (_) {
       // ignore ui state cleanup errors
@@ -1144,9 +1625,15 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/refresh" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const password = asString(body.password).trim();
+    if (username && !requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
     logger.info("ui_server", `refresh request: account=${username || "<active>"}`);
     try {
       const payload = await refreshRuntime.runRefreshJob({
@@ -1172,10 +1659,16 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/session/disconnect" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim() || resolveRefreshTarget("");
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
       return true;
     }
     const queueSnapshot = componentTaskQueue.getSnapshot(username);
@@ -1196,14 +1689,16 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/session/disconnect-others" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim() || resolveRefreshTarget("");
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
     }
-
-    const accountStore = new AccountStore();
+    const accountStore = getViewerAccountStore(auth, deps);
     const accountNames = accountStore.list()
       .map((row) => asString(row && row.username ? row.username : "").trim())
       .filter(Boolean);
@@ -1333,10 +1828,16 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/assist-select" && req.method === "POST") {
+    if (!requirePermission(res, auth, "craft.use")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
       return true;
     }
 
@@ -1402,6 +1903,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/predict-outcomes" && req.method === "POST") {
+    if (!requirePermission(res, auth, "craft.use")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     try {
       const predictor = getCraftOutcomePredictor(deps.craftOutcomePredictor);
@@ -1417,6 +1921,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/simulation/tradeup/search-items" && req.method === "GET") {
+    if (!requirePermission(res, auth, "simulation.use")) {
+      return true;
+    }
     try {
       const catalog = getTradeupSimulationCatalog(deps.tradeupSimulationCatalog);
       const query = asString(urlObj.searchParams.get("q") || "").trim();
@@ -1433,7 +1940,30 @@ async function handleApi(req, res, urlObj, deps = {}) {
     return true;
   }
 
+  if (pathname === "/api/simulation/tradeup/item" && req.method === "GET") {
+    if (!requirePermission(res, auth, "simulation.use")) {
+      return true;
+    }
+    try {
+      const catalog = getTradeupSimulationCatalog(deps.tradeupSimulationCatalog);
+      const markethashname = asString(urlObj.searchParams.get("markethashname") || "").trim();
+      writeJson(res, 200, {
+        ok: true,
+        item: markethashname ? catalog.getItemByMarketHashName(markethashname) : null
+      });
+    } catch (err) {
+      writeJson(res, 500, {
+        ok: false,
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
   if (pathname === "/api/simulation/tradeup/resolve" && req.method === "POST") {
+    if (!requirePermission(res, auth, "simulation.use")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     try {
       const catalog = getTradeupSimulationCatalog(deps.tradeupSimulationCatalog);
@@ -1450,10 +1980,16 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/candidates" && req.method === "POST") {
+    if (!requirePermission(res, auth, "craft.use")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
       return true;
     }
     let loaded = null;
@@ -1486,8 +2022,14 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/tradeup-with-components" && req.method === "POST") {
+    if (!requirePermission(res, auth, "craft.use")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
+    if (username && !requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
     if (!username || !refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
@@ -1570,10 +2112,16 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/pause" && req.method === "POST") {
+    if (!requirePermission(res, auth, "craft.use")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
       return true;
     }
     const activeRun = getActiveCraftRun(username);
@@ -1596,8 +2144,14 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/tradeup" && req.method === "POST") {
+    if (!requirePermission(res, auth, "craft.use")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
+    if (username && !requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
     if (!username || !refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
@@ -1722,12 +2276,18 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/snapshot/account" && req.method === "GET") {
+    if (!requirePermission(res, auth, "inventory.read")) {
+      return true;
+    }
     const username = asString(urlObj.searchParams.get("username") || "").trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
     }
-    const uiState = new UiStateStore();
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const uiState = getUiStateStore(deps, viewerUsername);
     const accountCache = uiState.getAccount(username);
     if (!accountCache || !accountCache.snapshot_path) {
       writeJson(res, 200, {
@@ -1765,25 +2325,28 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/snapshot/accounts" && req.method === "GET") {
+    if (!requirePermission(res, auth, "inventory.read")) {
+      return true;
+    }
     const csv = asString(urlObj.searchParams.get("usernames") || "").trim();
     let usernames = csv
       .split(",")
       .map((x) => asString(x).trim())
       .filter(Boolean);
     if (!usernames.length) {
-      const store = new AccountStore();
+      const store = getViewerAccountStore(auth, deps);
       usernames = store
         .list()
         .map((x) => asString(x.username).trim())
         .filter(Boolean);
     }
+    usernames = usernames.filter((username) => auth.store.canAccessSteamAccount(viewerUsername, username));
     usernames = [...new Set(usernames)];
     if (!usernames.length) {
       writeJson(res, 200, {ok: true, snapshots: []});
       return true;
     }
-
-    const uiState = new UiStateStore();
+    const uiState = getUiStateStore(deps, viewerUsername);
     const snapshots = await Promise.all(
       usernames.map(async (username) => {
         const accountCache = uiState.getAccount(username);
@@ -1842,12 +2405,18 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/snapshot/account/meta" && req.method === "GET") {
+    if (!requirePermission(res, auth, "inventory.read")) {
+      return true;
+    }
     const username = asString(urlObj.searchParams.get("username") || "").trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
     }
-    const uiState = new UiStateStore();
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const uiState = getUiStateStore(deps, viewerUsername);
     const accountCache = uiState.getAccount(username);
     const snapshotPath = asString(accountCache && accountCache.snapshot_path ? accountCache.snapshot_path : "").trim();
     writeJson(res, 200, {
@@ -1860,13 +2429,27 @@ async function handleApi(req, res, urlObj, deps = {}) {
     return true;
   }
 
-  return false;
+    return false;
+  } finally {
+    try {
+      if (auth && auth.store && typeof auth.store.close === "function") {
+        auth.store.close();
+      }
+    } catch (_) {
+      // ignore auth store close errors
+    }
+  }
 }
 
 function createServer(options = {}) {
   ensureRuntimeBootstrapped();
   const apiDeps = {
+    accountStoreFactory: options.accountStoreFactory,
+    authStoreFactory: options.authStoreFactory,
     craftOutcomePredictor: options.craftOutcomePredictor,
+    controlPlaneAuthClientFactory: options.controlPlaneAuthClientFactory,
+    licenseConfigFactory: options.licenseConfigFactory,
+    licenseRuntimeFactory: options.licenseRuntimeFactory,
     tradeupSimulationCatalog: options.tradeupSimulationCatalog,
     tradeupSimulationService: options.tradeupSimulationService,
     uiStateStoreFactory: options.uiStateStoreFactory
@@ -1896,6 +2479,14 @@ function createServer(options = {}) {
     }
   });
   server.once("close", () => {
+    try {
+      const runtime = getLicenseRuntime(apiDeps);
+      if (runtime && typeof runtime.stop === "function") {
+        runtime.stop();
+      }
+    } catch (_) {
+      // ignore license runtime shutdown errors
+    }
     sessionPool.shutdown();
     void closeCraftAssistWorkerPool();
   });

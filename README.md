@@ -36,6 +36,20 @@ node src/uiServer.js
 
 打开 `http://127.0.0.1:8787`。
 
+## 后台 admin 登录
+
+当前版本已增加应用级管理员登录门：
+
+- 首次打开页面时，如果还没有应用用户，会提示初始化 `admin` 超级管理员密码
+- 初始化完成后，所有业务 API 都需要先登录 `admin`
+- 现有 Steam 账号会从根目录下的 `accounts.json` 自动迁移到 SQLite 鉴权表中
+
+如果想在命令行直接初始化 `admin`：
+
+```powershell
+node tools/initAdminUser.js --password "你的管理员密码"
+```
+
 ## 常用命令
 
 ```powershell

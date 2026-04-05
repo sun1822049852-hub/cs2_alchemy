@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const Module = require("node:module");
+const {FEATURE_CODES} = require("../../shared/licensePolicy");
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
@@ -33,6 +34,34 @@ Module._load = function patchedLoad(request, parent, isMain) {
 
 const {createServer} = require("../src/uiServer");
 Module._load = originalLoad;
+
+function createReadyLicenseRuntime() {
+  const state = {
+    ok: true,
+    code: "ready",
+    user: {
+      id: "user_test",
+      username: "member_test",
+      membership_plan: "pro"
+    },
+    permissions: Object.values(FEATURE_CODES),
+    featureFlags: {},
+    expiresAt: "2099-01-01T00:15:00.000Z",
+    expiresInMs: 86400000
+  };
+  return {
+    getState() {
+      return state;
+    },
+    stop() {},
+    importBundle() {
+      return state;
+    },
+    clear() {
+      return state;
+    }
+  };
+}
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -88,6 +117,7 @@ function requestJson({port, method = "POST", path, body}) {
 async function testPredictOutcomeRouteReturnsSuccessPayload() {
   const calls = [];
   const server = createServer({
+    licenseRuntimeFactory: () => createReadyLicenseRuntime(),
     craftOutcomePredictor: {
       predict(payload) {
         calls.push(payload);
@@ -124,6 +154,7 @@ async function testPredictOutcomeRouteReturnsSuccessPayload() {
 
 async function testPredictOutcomeRouteReturnsInvalidReasonWithBadRequest() {
   const server = createServer({
+    licenseRuntimeFactory: () => createReadyLicenseRuntime(),
     craftOutcomePredictor: {
       predict() {
         return {

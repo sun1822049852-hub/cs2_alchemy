@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const {spawn} = require("node:child_process");
+const {FEATURE_CODES} = require("../../shared/licensePolicy");
 const {createServer} = require("../src/uiServer");
 
 const BROWSER_CANDIDATES = [
@@ -124,6 +125,36 @@ async function removeDirWithRetries(targetPath, {attempts = 6, delayMs = 250} = 
   if (lastError) throw lastError;
 }
 
+function createReadyLicenseRuntime() {
+  const state = {
+    ok: true,
+    code: "ready",
+    user: {
+      id: "user_test",
+      username: "member_test",
+      membership_plan: "pro"
+    },
+    permissions: Object.values(FEATURE_CODES),
+    featureFlags: {
+      simulation_enabled: true
+    },
+    expiresAt: "2099-01-01T00:15:00.000Z",
+    expiresInMs: 86400000
+  };
+  return {
+    getState() {
+      return state;
+    },
+    stop() {},
+    importBundle() {
+      return state;
+    },
+    clear() {
+      return state;
+    }
+  };
+}
+
 async function withBrowserPage(run) {
   const browserPath = findBrowserPath();
   if (!browserPath) {
@@ -131,7 +162,9 @@ async function withBrowserPage(run) {
     return;
   }
 
-  const server = createServer();
+  const server = createServer({
+    licenseRuntimeFactory: () => createReadyLicenseRuntime()
+  });
   let browser = null;
   let cdp = null;
   let userDataDir = "";
@@ -407,30 +440,53 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
 
     await cdp.evaluate(`document.getElementById("simulationOutputRoleChooser").click();`);
     await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
-    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "跑跑跑"; document.getElementById("simulationPickerSearchBtn").click();`);
+    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "Acheron"; document.getElementById("simulationPickerSearchBtn").click();`);
     await waitForCondition(cdp, `document.querySelectorAll(".simulation-picker-item").length > 0`);
     await sleep(350);
+    const selectedOutputName = await cdp.evaluate(`(() => String(document.querySelector(".simulation-picker-item .simulation-picker-art-title")?.textContent || "").trim())()`);
+    assert.ok(selectedOutputName, "expected a concrete output picker title before selection");
 
     await cdp.evaluate(`document.querySelector(".simulation-picker-item").click();`);
     await sleep(1200);
 
     const laneState = await cdp.evaluate(`(() => {
+      const selectedOutputName = ${JSON.stringify(selectedOutputName)};
       const outputLane = document.getElementById('simulationOutputLane');
       const firstCard = outputLane.querySelector('[data-simulation-card-role="output"]');
       const firstArt = firstCard ? firstCard.querySelector('.simulation-card-art') : null;
       const firstArtStyle = firstArt ? getComputedStyle(firstArt, '::after') : null;
       const firstFloat = firstCard ? firstCard.querySelector('.simulation-card-float') : null;
+      const firstBar = firstCard ? firstCard.querySelector('.simulation-card-bar') : null;
       const firstContent = firstCard ? firstCard.querySelector('.simulation-card-content') : null;
+      const firstWearStack = firstCard ? firstCard.querySelector('.simulation-card-wear-stack') : null;
       const firstSubline = firstCard ? firstCard.querySelector('.simulation-card-subline') : null;
       const cardNames = Array.from(outputLane.querySelectorAll('.simulation-card-name')).map((node) => String(node.textContent || '').trim());
       const chosenCard = Array.from(outputLane.querySelectorAll('[data-simulation-card-role="output"]')).find((card) => {
         const nameNode = card.querySelector('.simulation-card-name');
-        return String(nameNode && nameNode.textContent || '').trim() === 'XM1014 | 跑跑跑';
+        return String(nameNode && nameNode.textContent || '').trim() === selectedOutputName;
       });
       const chosenSection = chosenCard ? chosenCard.closest('.simulation-lane-section') : null;
       const chosenTitleWrap = chosenSection ? chosenSection.querySelector('.simulation-lane-title-wrap') : null;
       const chosenSectionTitle = chosenSection ? String(((chosenSection.querySelector('.simulation-lane-head strong')) || {}).textContent || '').trim() : '';
       const chosenRemoveButton = chosenSection ? chosenSection.querySelector('[data-simulation-remove-collection]') : null;
+      const targetCard = chosenCard || firstCard;
+      const targetArt = targetCard ? targetCard.querySelector('.simulation-card-art') : null;
+      const targetArtStyle = targetArt ? getComputedStyle(targetArt, '::after') : null;
+      const targetFloat = targetCard ? targetCard.querySelector('.simulation-card-float') : null;
+      const targetBar = targetCard ? targetCard.querySelector('.simulation-card-bar') : null;
+      const targetBarMarkerStyle = targetBar ? getComputedStyle(targetBar, '::after') : null;
+      const targetContent = targetCard ? targetCard.querySelector('.simulation-card-content') : null;
+      const targetWearStack = targetCard ? targetCard.querySelector('.simulation-card-wear-stack') : null;
+      const targetSubline = targetCard ? targetCard.querySelector('.simulation-card-subline') : null;
+      const targetArtStripeStyle = targetArt ? getComputedStyle(targetArt, '::before') : null;
+      const targetBarMarkerTop = targetBar && targetBarMarkerStyle
+        ? targetBar.getBoundingClientRect().top + Number.parseFloat(targetBarMarkerStyle.top || '0')
+        : null;
+      const targetArtStripeRight = targetArt && targetArtStripeStyle
+        ? targetArt.getBoundingClientRect().left
+          + Number.parseFloat(targetArtStripeStyle.left || '0')
+          + Number.parseFloat(targetArtStripeStyle.width || '0')
+        : null;
       const materialSection = chosenSectionTitle
         ? Array.from(document.querySelectorAll('#simulationMaterialLane .simulation-lane-section')).find((section) => {
             const titleNode = section.querySelector('.simulation-lane-head strong');
@@ -442,15 +498,52 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
         outputCardCount: outputLane.querySelectorAll('[data-simulation-card-role=\"output\"]').length,
         cardNames,
         laneText: String(outputLane.textContent || '').trim(),
-        firstCardMetaCount: firstCard ? firstCard.querySelectorAll('.simulation-card-meta').length : 0,
-        firstCardNoteCount: firstCard ? firstCard.querySelectorAll('.simulation-card-note').length : 0,
-        firstCardArtBackgroundSize: firstArtStyle ? String(firstArtStyle.backgroundSize || '') : '',
-        firstFloatText: firstFloat ? String(firstFloat.textContent || '').trim() : '',
-        firstFloatOverlap: firstFloat && firstContent
-          ? firstFloat.getBoundingClientRect().bottom - firstContent.getBoundingClientRect().top
+        targetCardName: targetCard ? String((targetCard.querySelector('.simulation-card-name')?.textContent || '')).trim() : '',
+        firstCardMetaCount: targetCard ? targetCard.querySelectorAll('.simulation-card-meta').length : 0,
+        firstCardNoteCount: targetCard ? targetCard.querySelectorAll('.simulation-card-note').length : 0,
+        firstCardArtBackgroundSize: targetArtStyle ? String(targetArtStyle.backgroundSize || '') : '',
+        firstFloatText: targetFloat ? String(targetFloat.textContent || '').trim() : '',
+        firstFloatMatchesWearPattern: targetFloat ? /^(?:-|\\d+\\.\\d{6})$/.test(String(targetFloat.textContent || '').trim()) : false,
+        firstFloatOverlap: targetFloat && targetContent
+          ? targetFloat.getBoundingClientRect().bottom - targetContent.getBoundingClientRect().top
           : -1,
-        firstCardCollectionText: firstSubline ? String((firstSubline.querySelector('.simulation-card-collection') || {}).textContent || '').trim() : '',
-        firstCardRarityText: firstSubline ? String((firstSubline.querySelector('.simulation-card-rarity') || {}).textContent || '').trim() : '',
+        firstFloatTopVsContentTop: targetFloat && targetContent
+          ? targetFloat.getBoundingClientRect().top - targetContent.getBoundingClientRect().top
+          : -1,
+        firstFloatHeight: targetFloat
+          ? targetFloat.getBoundingClientRect().height
+          : -1,
+        firstContentTopVsArtBottom: targetArt && targetContent
+          ? targetContent.getBoundingClientRect().top - targetArt.getBoundingClientRect().bottom
+          : -1,
+        firstFloatBottomVsBarTop: targetFloat && targetBar
+          ? targetFloat.getBoundingClientRect().bottom - targetBar.getBoundingClientRect().top
+          : -1,
+        firstFloatLeftVsStripeRight: targetFloat && targetArtStripeRight !== null
+          ? targetFloat.getBoundingClientRect().left - targetArtStripeRight
+          : -1,
+        firstFloatBottomVsBarMarkerTop: targetFloat && targetBarMarkerTop !== null
+          ? targetFloat.getBoundingClientRect().bottom - targetBarMarkerTop
+          : -1,
+        firstWearStackParentClass: targetWearStack && targetWearStack.parentElement
+          ? String(targetWearStack.parentElement.className || '')
+          : '',
+        firstContentHasWearStack: !!(targetContent && targetContent.querySelector('.simulation-card-wear-stack')),
+        firstWearStackBackgroundImage: targetWearStack ? String(getComputedStyle(targetWearStack).backgroundImage || '') : '',
+        firstWearStackBackgroundColor: targetWearStack ? String(getComputedStyle(targetWearStack).backgroundColor || '') : '',
+        firstWearStackBeforeBackgroundImage: targetWearStack ? String(getComputedStyle(targetWearStack, '::before').backgroundImage || '') : '',
+        firstWearStackBeforeBackgroundColor: targetWearStack ? String(getComputedStyle(targetWearStack, '::before').backgroundColor || '') : '',
+        firstWearStackAfterBackgroundImage: targetWearStack ? String(getComputedStyle(targetWearStack, '::after').backgroundImage || '') : '',
+        firstWearStackAfterBackgroundColor: targetWearStack ? String(getComputedStyle(targetWearStack, '::after').backgroundColor || '') : '',
+        firstFloatWidth: targetFloat ? targetFloat.getBoundingClientRect().width : -1,
+        firstArtWidth: targetArt ? targetArt.getBoundingClientRect().width : -1,
+        firstFloatBeforeBackgroundImage: targetFloat ? String(getComputedStyle(targetFloat, '::before').backgroundImage || '') : '',
+        firstFloatBeforeBackgroundColor: targetFloat ? String(getComputedStyle(targetFloat, '::before').backgroundColor || '') : '',
+        firstFloatAfterBackgroundImage: targetFloat ? String(getComputedStyle(targetFloat, '::after').backgroundImage || '') : '',
+        firstFloatAfterBackgroundColor: targetFloat ? String(getComputedStyle(targetFloat, '::after').backgroundColor || '') : '',
+        firstFloatBackgroundColor: targetFloat ? String(getComputedStyle(targetFloat).backgroundColor || '') : '',
+        firstCardCollectionText: targetSubline ? String((targetSubline.querySelector('.simulation-card-collection') || {}).textContent || '').trim() : '',
+        firstCardRarityText: targetSubline ? String((targetSubline.querySelector('.simulation-card-rarity') || {}).textContent || '').trim() : '',
         chosenCardCollectionText: chosenCard ? String(((chosenCard.querySelector('.simulation-card-collection')) || {}).textContent || '').trim() : '',
         chosenCardRarityText: chosenCard ? String(((chosenCard.querySelector('.simulation-card-rarity')) || {}).textContent || '').trim() : '',
         chosenCardSlotTags: chosenCard
@@ -486,12 +579,74 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
 
     assert.equal(laneState.modalHidden, true, "picker modal should close after choosing an output item");
     assert.equal(laneState.outputCardCount >= 1, true, "choosing an output item should immediately create a visible output card in the left lane");
-    assert.equal(laneState.cardNames.includes("XM1014 | 跑跑跑"), true, "the chosen output item should appear in the left output lane");
+    assert.equal(laneState.cardNames.includes(selectedOutputName), true, "the chosen output item should appear in the left output lane");
+    assert.equal(laneState.targetCardName, selectedOutputName, "the runtime wear-geometry assertions should inspect the specifically chosen output card, not whichever card happens to render first");
     assert.equal(laneState.firstCardMetaCount, 0, "simulation output cards should remove the extra collection/rarity meta block below the title");
     assert.equal(laneState.firstCardNoteCount, 0, "simulation output cards should remove the extra helper note block below the title");
     assert.equal(laneState.firstCardArtBackgroundSize !== "max(132px, 100%) auto", true, "simulation output card artwork should shrink from the previous oversized default");
-    assert.equal(laneState.firstFloatText.includes("绝对磨损"), true, "simulation output cards should still render the absolute wear label");
-    assert.equal(laneState.firstFloatOverlap <= 2, true, "simulation output card absolute wear label should stay above the overlapping content layer instead of getting covered");
+    assert.equal(laneState.firstFloatText.includes("绝对磨损"), false, "simulation output cards should remove the redundant absolute wear label text");
+    assert.equal(laneState.firstFloatMatchesWearPattern, true, "simulation output cards should show the compact wear chip as either a six-decimal wear value or the '-' fallback");
+    assert.equal(
+      laneState.firstContentTopVsArtBottom > -0.5 && laneState.firstContentTopVsArtBottom < 0.5,
+      true,
+      "simulation output cards should return the title block below the artwork instead of letting a full-width black mask overlap the image"
+    );
+    assert.equal(
+      laneState.firstWearStackParentClass.includes("simulation-card-art"),
+      true,
+      "simulation output cards should anchor the wear overlay inside the artwork container"
+    );
+    assert.equal(
+      laneState.firstContentHasWearStack,
+      false,
+      "simulation output cards should stop rendering the wear overlay inside the lower text content block"
+    );
+    assert.equal(
+      laneState.firstFloatLeftVsStripeRight > -1 && laneState.firstFloatLeftVsStripeRight < 1.5,
+      true,
+      "simulation output cards should align the wear chip flush to the inner edge of the left rarity stripe"
+    );
+    assert.equal(
+      laneState.firstFloatBottomVsBarTop > -1 && laneState.firstFloatBottomVsBarTop < 1.5,
+      true,
+      "simulation output cards should dock the wear chip directly onto the wear-bar top edge to form a bottom-left right angle"
+    );
+    assert.equal(
+      laneState.firstWearStackBackgroundImage === "none",
+      true,
+      "simulation output cards should remove the old full-width black wear-strip background"
+    );
+    assert.equal(
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(laneState.firstWearStackBackgroundColor),
+      true,
+      "simulation output cards should keep the wear-stack background itself transparent so a full-width black strip cannot silently return via background-color"
+    );
+    assert.equal(
+      laneState.firstWearStackBeforeBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(laneState.firstWearStackBeforeBackgroundColor) &&
+      laneState.firstWearStackAfterBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(laneState.firstWearStackAfterBackgroundColor),
+      true,
+      "simulation output cards should keep wear-stack pseudo-elements visually inert so the old black strip cannot return through ::before or ::after"
+    );
+    assert.equal(
+      laneState.firstFloatWidth > 0 && laneState.firstArtWidth > 0 && laneState.firstFloatWidth < laneState.firstArtWidth * 0.35,
+      true,
+      "simulation output cards should keep the wear chip much narrower than the artwork width so it stays a compact corner block"
+    );
+    assert.equal(
+      laneState.firstFloatBeforeBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(laneState.firstFloatBeforeBackgroundColor) &&
+      laneState.firstFloatAfterBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(laneState.firstFloatAfterBackgroundColor),
+      true,
+      "simulation output cards should keep wear-chip pseudo-elements visually inert so a hidden black strip cannot return through ::before or ::after"
+    );
+    assert.equal(
+      ["rgba(0, 0, 0, 0.9)", "rgba(0,0,0,0.9)"].includes(laneState.firstFloatBackgroundColor),
+      true,
+      "simulation output cards should keep only a compact black wear chip over the bar instead of the old wide black band"
+    );
     assert.equal(Boolean(laneState.firstCardCollectionText), false, "simulation output cards should remove the repeated collection signature line from the card body");
     assert.equal(Boolean(laneState.firstCardRarityText), false, "simulation output cards should remove the rarity text from the card bottom signature");
     assert.equal(Boolean(laneState.chosenCardCollectionText), false, "the chosen output card should remove the repeated collection signature line from the card body");
@@ -527,9 +682,146 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
       materialSectionTitles: Array.from(document.querySelectorAll('#simulationMaterialLane .simulation-lane-head strong')).map((node) => String(node.textContent || '').trim())
     }))()`);
 
-    assert.equal(afterDeleteState.outputLaneText.includes("XM1014 | 跑跑跑"), false, "deleting a collection should remove the chosen output card from the left lane");
+    assert.equal(afterDeleteState.outputLaneText.includes(selectedOutputName), false, "deleting a collection should remove the chosen output card from the left lane");
     assert.equal(afterDeleteState.outputSectionTitles.includes(laneState.chosenSectionTitle), false, "deleting a collection should remove that collection section from the output lane");
     assert.equal(afterDeleteState.materialSectionTitles.includes(laneState.chosenSectionTitle), false, "deleting a collection from the output lane should also remove the mirrored material section");
+  });
+}
+
+async function test_switching_pages_preserves_unsaved_simulation_workspace_draft() {
+  await withBrowserPage(async ({cdp}) => {
+    await cdp.evaluate(`document.getElementById("navSimulation").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPage").classList.contains("hidden")`);
+    await waitForCondition(cdp, `document.getElementById("simulationOutputRoleChooser")`);
+    await sleep(300);
+
+    await cdp.evaluate(`document.getElementById("simulationOutputRoleChooser").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
+    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "Acheron"; document.getElementById("simulationPickerSearchBtn").click();`);
+    await waitForCondition(cdp, `document.querySelectorAll(".simulation-picker-item").length > 0`);
+    await sleep(350);
+    const selectedOutputName = await cdp.evaluate(`(() => String(document.querySelector(".simulation-picker-item .simulation-picker-art-title")?.textContent || "").trim())()`);
+    assert.ok(selectedOutputName, "expected a concrete output picker title before page-switch draft preservation");
+
+    await cdp.evaluate(`document.querySelector(".simulation-picker-item").click();`);
+    await waitForCondition(cdp, `document.querySelectorAll('#simulationOutputLane [data-simulation-card-role="output"]').length >= 1`);
+
+    const beforeSwitch = await cdp.evaluate(`(() => ({
+      workspaceActive: document.getElementById('simulationModeWorkspaceBtn').classList.contains('is-active'),
+      outputNames: Array.from(document.querySelectorAll('#simulationOutputLane .simulation-card-name')).map((node) => String(node.textContent || '').trim())
+    }))()`);
+
+    await cdp.evaluate(`document.getElementById("navInventory").click();`);
+    await waitForCondition(cdp, `!document.getElementById("inventoryPage").classList.contains("hidden")`);
+    await waitForCondition(cdp, `document.getElementById("simulationPage").classList.contains("hidden")`);
+    await sleep(200);
+
+    await cdp.evaluate(`document.getElementById("navSimulation").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPage").classList.contains("hidden")`);
+    await sleep(350);
+
+    const afterSwitch = await cdp.evaluate(`(() => ({
+      workspaceActive: document.getElementById('simulationModeWorkspaceBtn').classList.contains('is-active'),
+      outputNames: Array.from(document.querySelectorAll('#simulationOutputLane .simulation-card-name')).map((node) => String(node.textContent || '').trim()),
+      savedHidden: document.getElementById('simulationSavedPresets').classList.contains('hidden'),
+      workspaceHidden: document.getElementById('simulationWorkspace').classList.contains('hidden')
+    }))()`);
+
+    assert.equal(beforeSwitch.workspaceActive, true, "choosing an unsaved simulation output should keep the workspace tab active before page switching");
+    assert.equal(beforeSwitch.outputNames.includes(selectedOutputName), true, "the unsaved workspace draft should exist before page switching");
+    assert.equal(afterSwitch.workspaceActive, true, "switching away from the simulation page and back should preserve workspace mode");
+    assert.equal(afterSwitch.outputNames.includes(selectedOutputName), true, "switching pages should not discard the in-progress simulation draft");
+    assert.equal(afterSwitch.savedHidden, true, "returning to the simulation page should not silently bounce the user back to the saved preset list");
+    assert.equal(afterSwitch.workspaceHidden, false, "returning to the simulation page should still show the active workspace");
+  });
+}
+
+async function test_switching_simulation_mode_tabs_preserves_unsaved_workspace_draft() {
+  await withBrowserPage(async ({cdp}) => {
+    await cdp.evaluate(`document.getElementById("navSimulation").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPage").classList.contains("hidden")`);
+    await waitForCondition(cdp, `document.getElementById("simulationOutputRoleChooser")`);
+    await sleep(300);
+
+    await cdp.evaluate(`document.getElementById("simulationOutputRoleChooser").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
+    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "Acheron"; document.getElementById("simulationPickerSearchBtn").click();`);
+    await waitForCondition(cdp, `document.querySelectorAll(".simulation-picker-item").length > 0`);
+    await sleep(350);
+    const selectedOutputName = await cdp.evaluate(`(() => String(document.querySelector(".simulation-picker-item .simulation-picker-art-title")?.textContent || "").trim())()`);
+    assert.ok(selectedOutputName, "expected a concrete output picker title before tab-switch draft preservation");
+
+    await cdp.evaluate(`document.querySelector(".simulation-picker-item").click();`);
+    await waitForCondition(cdp, `document.querySelectorAll('#simulationOutputLane .simulation-card-name').length >= 1`);
+
+    await cdp.evaluate(`document.getElementById("simulationModeSavedBtn").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationSavedPresets").classList.contains("hidden")`);
+
+    await cdp.evaluate(`document.getElementById("simulationModeWorkspaceBtn").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationWorkspace").classList.contains("hidden")`);
+    await sleep(250);
+
+    const workspaceState = await cdp.evaluate(`(() => ({
+      workspaceActive: document.getElementById('simulationModeWorkspaceBtn').classList.contains('is-active'),
+      outputNames: Array.from(document.querySelectorAll('#simulationOutputLane .simulation-card-name')).map((node) => String(node.textContent || '').trim()),
+      outputEmptyText: String(document.getElementById('simulationOutputLane').textContent || '').trim()
+    }))()`);
+
+    assert.equal(workspaceState.workspaceActive, true, "returning from the saved tab should reactivate the workspace tab");
+    assert.equal(workspaceState.outputNames.includes(selectedOutputName), true, "switching simulation tabs should not discard the unsaved workspace draft");
+    assert.equal(workspaceState.outputEmptyText.includes("等待根据当前槽位推导产物组合"), false, "returning to workspace should not reopen a blank draft");
+  });
+}
+
+async function test_limited_collection_picker_items_stay_disabled_and_ignore_clicks() {
+  await withBrowserPage(async ({cdp}) => {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: 1280,
+      height: 800,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await cdp.evaluate(`document.getElementById("navSimulation").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPage").classList.contains("hidden")`);
+    await waitForCondition(cdp, `document.getElementById("simulationMaterialRoleChooser")`);
+    await sleep(300);
+
+    await cdp.evaluate(`document.getElementById("simulationMaterialRoleChooser").click();`);
+    await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
+    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "Heat Treated"; document.getElementById("simulationPickerSearchBtn").click();`);
+    await waitForCondition(cdp, `(() => Array.from(document.querySelectorAll(".simulation-picker-item")).some((item) => item.classList.contains("is-disabled") && String(item.querySelector(".simulation-picker-art-warning")?.textContent || "").includes("限量版物品不能加入炼金")))()`);
+    await sleep(300);
+
+    const beforeClick = await cdp.evaluate(`(() => {
+      const blocked = Array.from(document.querySelectorAll('.simulation-picker-item')).find((item) => item.classList.contains('is-disabled') && String(item.querySelector('.simulation-picker-art-warning')?.textContent || '').includes('限量版物品不能加入炼金'));
+      return {
+        found: !!blocked,
+        disabled: !!(blocked && blocked.disabled),
+        ariaDisabled: blocked ? String(blocked.getAttribute('aria-disabled') || '').trim() : '',
+        warningText: blocked ? String((blocked.querySelector('.simulation-picker-art-warning') || {}).textContent || '').trim() : '',
+        materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
+      };
+    })()`);
+
+    assert.ok(beforeClick && beforeClick.found, "expected a disabled limited-edition picker card");
+    assert.equal(beforeClick.disabled, true, "limited-edition picker cards should carry the native disabled attribute");
+    assert.equal(beforeClick.ariaDisabled, "true", "limited-edition picker cards should also expose aria-disabled for accessibility");
+    assert.equal(beforeClick.warningText.includes("限量版物品不能加入炼金"), true, "limited-edition picker cards should show the inline restriction warning");
+    assert.equal(beforeClick.materialCardCount, 0, "before clicking the blocked card there should be no selected material cards");
+
+    await cdp.evaluate(`(() => {
+      const blocked = Array.from(document.querySelectorAll('.simulation-picker-item')).find((item) => item.classList.contains('is-disabled') && String(item.querySelector('.simulation-picker-art-warning')?.textContent || '').includes('限量版物品不能加入炼金'));
+      if (blocked) blocked.click();
+    })()`);
+    await sleep(300);
+
+    const afterClick = await cdp.evaluate(`(() => ({
+      modalHidden: document.getElementById('simulationPickerModal').classList.contains('hidden'),
+      materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
+    }))()`);
+
+    assert.equal(afterClick.modalHidden, false, "clicking a disabled limited-edition picker card should not close the picker");
+    assert.equal(afterClick.materialCardCount, 0, "clicking a disabled limited-edition picker card should not add anything to the material lane");
   });
 }
 
@@ -556,8 +848,137 @@ async function test_material_chooser_defaults_to_next_empty_slot() {
     await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "列车停放站"; document.getElementById("simulationPickerSearchBtn").click();`);
     await waitForCondition(cdp, `document.querySelectorAll(".simulation-picker-item").length > 0`);
     await sleep(300);
+    const selectedMaterialName = await cdp.evaluate(`(() => String(document.querySelector(".simulation-picker-item .simulation-picker-art-title")?.textContent || "").trim())()`);
+    assert.ok(selectedMaterialName, "expected a concrete material picker title before selection");
     await cdp.evaluate(`document.querySelector(".simulation-picker-item").click();`);
     await waitForCondition(cdp, `document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length >= 1`);
+
+    const materialCardState = await cdp.evaluate(`(() => {
+      const selectedMaterialName = ${JSON.stringify(selectedMaterialName)};
+      const firstCard = document.querySelector('#simulationMaterialLane [data-simulation-card-role="material"]');
+      const chosenCard = Array.from(document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]')).find((card) => {
+        const nameNode = card.querySelector('.simulation-card-name');
+        return String(nameNode && nameNode.textContent || '').trim() === selectedMaterialName;
+      });
+      const targetCard = chosenCard || firstCard;
+      const firstArt = targetCard ? targetCard.querySelector('.simulation-card-art') : null;
+      const firstFloat = targetCard ? targetCard.querySelector('.simulation-card-float') : null;
+      const firstBar = targetCard ? targetCard.querySelector('.simulation-card-bar') : null;
+      const firstBarMarkerStyle = firstBar ? getComputedStyle(firstBar, '::after') : null;
+      const firstContent = targetCard ? targetCard.querySelector('.simulation-card-content') : null;
+      const firstWearStack = targetCard ? targetCard.querySelector('.simulation-card-wear-stack') : null;
+      const firstArtStripeStyle = firstArt ? getComputedStyle(firstArt, '::before') : null;
+      const firstBarMarkerTop = firstBar && firstBarMarkerStyle
+        ? firstBar.getBoundingClientRect().top + Number.parseFloat(firstBarMarkerStyle.top || '0')
+        : null;
+      const firstArtStripeRight = firstArt && firstArtStripeStyle
+        ? firstArt.getBoundingClientRect().left
+          + Number.parseFloat(firstArtStripeStyle.left || '0')
+          + Number.parseFloat(firstArtStripeStyle.width || '0')
+        : null;
+      return {
+        targetCardName: targetCard ? String((targetCard.querySelector('.simulation-card-name')?.textContent || '')).trim() : '',
+        firstContentTopVsArtBottom: firstArt && firstContent
+          ? firstContent.getBoundingClientRect().top - firstArt.getBoundingClientRect().bottom
+          : -1,
+        firstFloatBottomVsBarTop: firstFloat && firstBar
+          ? firstFloat.getBoundingClientRect().bottom - firstBar.getBoundingClientRect().top
+          : -1,
+        firstFloatLeftVsStripeRight: firstFloat && firstArtStripeRight !== null
+          ? firstFloat.getBoundingClientRect().left - firstArtStripeRight
+          : -1,
+        firstFloatBottomVsBarMarkerTop: firstFloat && firstBarMarkerTop !== null
+          ? firstFloat.getBoundingClientRect().bottom - firstBarMarkerTop
+          : -1,
+        firstWearStackParentClass: firstWearStack && firstWearStack.parentElement
+          ? String(firstWearStack.parentElement.className || '')
+          : '',
+        firstContentHasWearStack: !!(firstContent && firstContent.querySelector('.simulation-card-wear-stack')),
+        firstWearStackBackgroundImage: firstWearStack ? String(getComputedStyle(firstWearStack).backgroundImage || '') : '',
+        firstWearStackBackgroundColor: firstWearStack ? String(getComputedStyle(firstWearStack).backgroundColor || '') : '',
+        firstWearStackBeforeBackgroundImage: firstWearStack ? String(getComputedStyle(firstWearStack, '::before').backgroundImage || '') : '',
+        firstWearStackBeforeBackgroundColor: firstWearStack ? String(getComputedStyle(firstWearStack, '::before').backgroundColor || '') : '',
+        firstWearStackAfterBackgroundImage: firstWearStack ? String(getComputedStyle(firstWearStack, '::after').backgroundImage || '') : '',
+        firstWearStackAfterBackgroundColor: firstWearStack ? String(getComputedStyle(firstWearStack, '::after').backgroundColor || '') : '',
+        firstFloatText: firstFloat ? String(firstFloat.textContent || '').trim() : '',
+        firstFloatMatchesWearPattern: firstFloat ? /^(?:-|\\d+\\.\\d{6})$/.test(String(firstFloat.textContent || '').trim()) : false,
+        firstFloatWidth: firstFloat ? firstFloat.getBoundingClientRect().width : -1,
+        firstArtWidth: firstArt ? firstArt.getBoundingClientRect().width : -1,
+        firstFloatBeforeBackgroundImage: firstFloat ? String(getComputedStyle(firstFloat, '::before').backgroundImage || '') : '',
+        firstFloatBeforeBackgroundColor: firstFloat ? String(getComputedStyle(firstFloat, '::before').backgroundColor || '') : '',
+        firstFloatAfterBackgroundImage: firstFloat ? String(getComputedStyle(firstFloat, '::after').backgroundImage || '') : '',
+        firstFloatAfterBackgroundColor: firstFloat ? String(getComputedStyle(firstFloat, '::after').backgroundColor || '') : '',
+        firstFloatBackgroundColor: firstFloat ? String(getComputedStyle(firstFloat).backgroundColor || '') : ''
+      };
+    })()`);
+
+    assert.equal(materialCardState.targetCardName, selectedMaterialName, "the runtime wear-geometry assertions should inspect the specifically chosen material card, not whichever card renders first");
+    assert.equal(
+      materialCardState.firstContentTopVsArtBottom > -0.5 && materialCardState.firstContentTopVsArtBottom < 0.5,
+      true,
+      "simulation material cards should return the title block below the artwork instead of keeping the old full-width black band"
+    );
+    assert.equal(
+      materialCardState.firstWearStackParentClass.includes("simulation-card-art"),
+      true,
+      "simulation material cards should anchor the wear overlay inside the artwork container"
+    );
+    assert.equal(
+      materialCardState.firstContentHasWearStack,
+      false,
+      "simulation material cards should stop rendering the wear overlay inside the lower text content block"
+    );
+    assert.equal(
+      materialCardState.firstFloatMatchesWearPattern,
+      true,
+      "simulation material cards should also keep the compact wear chip as either a six-decimal wear value or the '-' fallback"
+    );
+    assert.equal(
+      materialCardState.firstFloatLeftVsStripeRight > -1 && materialCardState.firstFloatLeftVsStripeRight < 1.5,
+      true,
+      "simulation material cards should align the wear chip flush to the inner edge of the left rarity stripe"
+    );
+    assert.equal(
+      materialCardState.firstFloatBottomVsBarTop > -1 && materialCardState.firstFloatBottomVsBarTop < 1.5,
+      true,
+      "simulation material cards should dock the wear chip directly onto the wear-bar top edge to form a bottom-left right angle"
+    );
+    assert.equal(
+      materialCardState.firstWearStackBackgroundImage === "none",
+      true,
+      "simulation material cards should remove the old full-width black wear-strip background"
+    );
+    assert.equal(
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(materialCardState.firstWearStackBackgroundColor),
+      true,
+      "simulation material cards should keep the wear-stack background itself transparent so a full-width black strip cannot silently return via background-color"
+    );
+    assert.equal(
+      materialCardState.firstWearStackBeforeBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(materialCardState.firstWearStackBeforeBackgroundColor) &&
+      materialCardState.firstWearStackAfterBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(materialCardState.firstWearStackAfterBackgroundColor),
+      true,
+      "simulation material cards should keep wear-stack pseudo-elements visually inert so the old black strip cannot return through ::before or ::after"
+    );
+    assert.equal(
+      materialCardState.firstFloatWidth > 0 && materialCardState.firstArtWidth > 0 && materialCardState.firstFloatWidth < materialCardState.firstArtWidth * 0.35,
+      true,
+      "simulation material cards should keep the wear chip much narrower than the artwork width so it stays a compact corner block"
+    );
+    assert.equal(
+      materialCardState.firstFloatBeforeBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(materialCardState.firstFloatBeforeBackgroundColor) &&
+      materialCardState.firstFloatAfterBackgroundImage === "none" &&
+      ["rgba(0, 0, 0, 0)", "rgba(0,0,0,0)", "transparent"].includes(materialCardState.firstFloatAfterBackgroundColor),
+      true,
+      "simulation material cards should keep wear-chip pseudo-elements visually inert so a hidden black strip cannot return through ::before or ::after"
+    );
+    assert.equal(
+      ["rgba(0, 0, 0, 0.9)", "rgba(0,0,0,0.9)"].includes(materialCardState.firstFloatBackgroundColor),
+      true,
+      "simulation material cards should keep only a compact black wear chip over the bar instead of the old wide black band"
+    );
 
     await cdp.evaluate(`document.getElementById("simulationMaterialRoleChooser").click();`);
     await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
@@ -1092,6 +1513,9 @@ async function main() {
   await test_clicking_output_chooser_opens_picker_without_inline_slot_cards();
   await test_picker_search_dedupes_results_and_renders_visible_thumbnails();
   await test_clicking_search_result_populates_output_lane_immediately();
+  await test_switching_pages_preserves_unsaved_simulation_workspace_draft();
+  await test_switching_simulation_mode_tabs_preserves_unsaved_workspace_draft();
+  await test_limited_collection_picker_items_stay_disabled_and_ignore_clicks();
   await test_material_chooser_defaults_to_next_empty_slot();
   await test_material_chooser_can_switch_to_a_different_collection();
   await test_material_picker_blocks_mixed_rarity_without_closing_modal();

@@ -79,12 +79,83 @@ body {
   color: #f7f3e8;
 }
 
+.app-auth-card .form-row textarea {
+  width: 100%;
+  min-height: 176px;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(243, 199, 121, 0.18);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: #f7f3e8;
+}
+
 .app-auth-card .form-row input::placeholder {
   color: #8a94a3;
 }
 
+.app-auth-card .form-row textarea::placeholder {
+  color: #8a94a3;
+}
+
+.app-auth-mode-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 18px 0 16px;
+}
+
+.app-auth-mode-tab {
+  min-width: 92px;
+  border: 1px solid rgba(243, 199, 121, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #c7d0dc;
+  font-weight: 600;
+}
+
+.app-auth-mode-tab.active {
+  background: linear-gradient(135deg, rgba(243, 199, 121, 0.22), rgba(220, 164, 76, 0.16));
+  border-color: rgba(243, 199, 121, 0.3);
+  color: #f7f3e8;
+}
+
+.app-auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-auth-panel + .app-auth-panel {
+  margin-top: 14px;
+}
+
+.app-auth-panel .form-row {
+  margin-bottom: 0;
+}
+
+.app-auth-inline {
+  display: flex;
+  gap: 10px;
+}
+
+.app-auth-inline input {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-auth-inline button {
+  min-width: 112px;
+  border: 1px solid rgba(243, 199, 121, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f7f3e8;
+  font-weight: 600;
+}
+
 .app-auth-actions {
   display: flex;
+  gap: 12px;
   justify-content: flex-end;
   margin-top: 16px;
 }
@@ -108,6 +179,25 @@ body {
 
 .app-auth-status.error {
   color: #ff9a9a;
+}
+
+@media (max-width: 540px) {
+  .app-auth-card {
+    width: min(100%, 100%);
+    padding: 24px 18px;
+  }
+
+  .app-auth-mode-tabs,
+  .app-auth-actions,
+  .app-auth-inline {
+    flex-direction: column;
+  }
+
+  .app-auth-mode-tab,
+  .app-auth-actions button,
+  .app-auth-inline button {
+    width: 100%;
+  }
 }
 
 .layout {

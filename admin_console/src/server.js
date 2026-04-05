@@ -1,0 +1,664 @@
+const fs = require("node:fs");
+const http = require("node:http");
+const path = require("node:path");
+const {ControlPlaneStore} = require("./controlPlaneStore");
+const {getMailConfig} = require("./mailConfig");
+const {createMailService} = require("./mailService");
+const {createEntitlementSigner} = require("./entitlementSigner");
+const {DEFAULTS, PATHS} = require("./constants");
+const {asString} = require("../../node_sidecar/src/utils");
+
+const MIME_TYPES = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8"
+};
+
+function isValidEmail(value) {
+  const text = asString(value).trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+}
+
+function writeBody(res, status, contentType, body) {
+  const payload = Buffer.from(body || "", "utf8");
+  res.writeHead(status, {
+    "Content-Type": contentType,
+    "Content-Length": payload.byteLength
+  });
+  res.end(payload);
+}
+
+function writeJson(res, status, payload) {
+  writeBody(res, status, "application/json; charset=utf-8", JSON.stringify(payload));
+}
+
+function writeError(res, status, reason, message) {
+  writeJson(res, status, {
+    ok: false,
+    reason: asString(reason).trim(),
+    message: asString(message).trim()
+  });
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8").trim();
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function createCodeGenerator() {
+  return () => String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function readBearerToken(req) {
+  const auth = asString(req && req.headers && req.headers.authorization).trim();
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+function resolveAdminAsset(urlPath = "") {
+  const pathname = asString(urlPath).trim();
+  const relative = pathname === "/admin" || pathname === "/admin/"
+    ? "index.html"
+    : pathname.replace(/^\/admin\/?/, "");
+  const target = path.resolve(PATHS.UI_DIR, relative);
+  if (!target.startsWith(path.resolve(PATHS.UI_DIR))) {
+    return "";
+  }
+  return target;
+}
+
+function serveAdminAsset(res, urlPath = "") {
+  const filePath = resolveAdminAsset(urlPath);
+  if (!filePath || !fs.existsSync(filePath)) {
+    writeError(res, 404, "not_found", "route not found");
+    return true;
+  }
+  const extname = path.extname(filePath).toLowerCase();
+  writeBody(res, 200, MIME_TYPES[extname] || "text/plain; charset=utf-8", fs.readFileSync(filePath, "utf8"));
+  return true;
+}
+
+function createServer({
+  dbPath = "",
+  storeFactory = null,
+  mailConfigFactory = null,
+  mailServiceFactory = null,
+  codeGenerator = null,
+  now = () => new Date()
+} = {}) {
+  const store = typeof storeFactory === "function"
+    ? storeFactory({dbPath})
+    : new ControlPlaneStore({dbPath});
+  const config = typeof mailConfigFactory === "function"
+    ? mailConfigFactory()
+    : getMailConfig();
+  const mailService = typeof mailServiceFactory === "function"
+    ? mailServiceFactory(config)
+    : createMailService({config});
+  const signer = createEntitlementSigner({
+    privateKeyFile: config.privateKeyFile,
+    snapshotTtlMinutes: config.snapshotTtlMinutes,
+    now
+  });
+  const nextCode = typeof codeGenerator === "function" ? codeGenerator : createCodeGenerator();
+
+  function issueUserBundle({user, deviceId, refreshCredential, source}) {
+    const entitlements = store.resolveUserEntitlements({userId: user.id, now: now()});
+    return signer.issueBundle({
+      user: {
+        ...user,
+        membership_plan: entitlements ? entitlements.membership_plan : user.membership_plan
+      },
+      deviceId,
+      permissions: entitlements ? entitlements.permissions : undefined,
+      featureFlags: entitlements ? entitlements.feature_flags : undefined,
+      refreshCredential,
+      source
+    });
+  }
+
+  function resolveAdminSessionFromRequest(req) {
+    const token = readBearerToken(req);
+    if (!token) {
+      return {ok: false, reason: "admin_auth_required"};
+    }
+    return store.resolveAdminSession({
+      sessionToken: token,
+      now: now()
+    });
+  }
+
+  function requireAdminSession(req, res) {
+    const resolved = resolveAdminSessionFromRequest(req);
+    if (!resolved.ok) {
+      writeError(res, 401, resolved.reason, "请先登录控制台管理员账号");
+      return null;
+    }
+    return resolved;
+  }
+
+  async function handleSendCode(res, body, scene) {
+    const email = asString(body && body.email).trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      writeError(res, 400, "email_invalid", "邮箱格式不正确");
+      return;
+    }
+    if (!config.configured) {
+      writeError(res, 503, "mail_service_not_configured", "邮件服务未配置");
+      return;
+    }
+    const cooldownMs = Math.max(1, Number(config.authCodeCooldownSeconds) || DEFAULTS.AUTH_CODE_COOLDOWN_SECONDS) * 1000;
+    if (!store.canSendCode({email, scene, cooldownMs, now: now()})) {
+      writeError(res, 429, "email_code_rate_limited", "验证码发送过于频繁，请稍后再试");
+      return;
+    }
+    const code = String(nextCode()).trim();
+    const row = store.createEmailCode({
+      email,
+      scene,
+      code,
+      ttlMs: Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60 * 1000,
+      now: now()
+    });
+    try {
+      await mailService.sendVerificationCode({
+        to: email,
+        code,
+        scene,
+        ttlMinutes: config.authCodeTtlMinutes
+      });
+    } catch (err) {
+      store.deleteEmailCode(row.id);
+      writeError(res, 502, "mail_send_failed", asString(err && err.message).trim() || "验证码邮件发送失败");
+      return;
+    }
+    writeJson(res, 200, {
+      ok: true,
+      message: scene === "reset_password" ? "重置验证码已发送，请查收邮箱。" : "注册验证码已发送，请查收邮箱。",
+      expires_in_seconds: Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60
+    });
+  }
+
+  function listAdminUsersPayload() {
+    return store.listClientUsers({now: now()}).map((user) => ({
+      ...user,
+      entitlements: store.resolveUserEntitlements({userId: user.id, now: now()}),
+      active_device_count: store.listUserDeviceSessions({userId: user.id}).length
+    }));
+  }
+
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
+    const pathname = url.pathname;
+    try {
+      if (pathname === "/admin" || pathname === "/admin/" || pathname.startsWith("/admin/")) {
+        serveAdminAsset(res, pathname);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/health") {
+        writeJson(res, 200, {ok: true, service: "admin_console"});
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/mail/config") {
+        writeJson(res, 200, {
+          ok: true,
+          configured: !!config.configured,
+          from_name: asString(config.fromName).trim(),
+          from_address: asString(config.fromAddress).trim(),
+          auth_service_base_url: asString(config.authServiceBaseUrl).trim()
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/admin/bootstrap/state") {
+        writeJson(res, 200, {
+          ok: true,
+          needs_bootstrap: store.needsAdminBootstrap()
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/admin/bootstrap") {
+        if (!store.needsAdminBootstrap()) {
+          writeError(res, 409, "admin_already_exists", "管理员已初始化");
+          return;
+        }
+        const body = await readJsonBody(req);
+        const username = asString(body && body.username).trim() || "admin";
+        const password = asString(body && body.password).trim();
+        if (!password) {
+          writeError(res, 400, "password_required", "管理员密码不能为空");
+          return;
+        }
+        const user = store.createOrUpdateAdminUser({
+          username,
+          password,
+          isSuperAdmin: true,
+          now: now()
+        });
+        writeJson(res, 200, {
+          ok: true,
+          message: "管理员初始化成功",
+          user
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/admin/login") {
+        const body = await readJsonBody(req);
+        const username = asString(body && body.username).trim() || "admin";
+        const password = asString(body && body.password).trim();
+        if (!password) {
+          writeError(res, 400, "password_required", "管理员密码不能为空");
+          return;
+        }
+        const auth = store.authenticateAdminUser({username, password});
+        if (!auth.ok) {
+          writeError(res, 401, auth.reason, "管理员账号或密码错误");
+          return;
+        }
+        const session = store.createAdminSession({
+          adminUserId: auth.user.id,
+          ttlHours: config.adminSessionHours,
+          now: now()
+        });
+        writeJson(res, 200, {
+          ok: true,
+          message: "管理员登录成功",
+          user: auth.user,
+          session_token: session.session_token,
+          expires_at: session.expires_at
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/admin/session") {
+        const token = readBearerToken(req);
+        if (!token) {
+          writeJson(res, 200, {
+            ok: true,
+            authenticated: false,
+            needs_bootstrap: store.needsAdminBootstrap()
+          });
+          return;
+        }
+        const resolved = store.resolveAdminSession({
+          sessionToken: token,
+          now: now()
+        });
+        if (!resolved.ok) {
+          writeError(res, 401, resolved.reason, "控制台登录态已失效");
+          return;
+        }
+        writeJson(res, 200, {
+          ok: true,
+          authenticated: true,
+          user: resolved.user,
+          expires_at: resolved.session.expires_at
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/admin/logout") {
+        const token = readBearerToken(req);
+        if (!token) {
+          writeJson(res, 200, {ok: true, message: "已退出"});
+          return;
+        }
+        const result = store.revokeAdminSession({
+          sessionToken: token,
+          now: now()
+        });
+        if (!result.ok) {
+          writeError(res, 401, result.reason, "控制台登录态已失效");
+          return;
+        }
+        writeJson(res, 200, {ok: true, message: "已退出"});
+        return;
+      }
+
+      if (pathname.startsWith("/api/admin/")) {
+        const admin = requireAdminSession(req, res);
+        if (!admin) {
+          return;
+        }
+
+        if (req.method === "GET" && pathname === "/api/admin/overview") {
+          const users = store.listClientUsers({now: now()});
+          writeJson(res, 200, {
+            ok: true,
+            stats: {
+              total_users: users.length,
+              active_users: users.filter((item) => item.status === "active").length,
+              plans: store.listMembershipPlans().length
+            },
+            admin: admin.user
+          });
+          return;
+        }
+
+        if (req.method === "GET" && pathname === "/api/admin/plans") {
+          writeJson(res, 200, {
+            ok: true,
+            items: store.listMembershipPlans()
+          });
+          return;
+        }
+
+        if (req.method === "GET" && pathname === "/api/admin/users") {
+          writeJson(res, 200, {
+            ok: true,
+            items: listAdminUsersPayload()
+          });
+          return;
+        }
+
+        const deviceRevokeMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/devices\/(\d+)\/revoke$/);
+        if (req.method === "POST" && deviceRevokeMatch) {
+          const userId = Number(deviceRevokeMatch[1]) || 0;
+          const sessionId = Number(deviceRevokeMatch[2]) || 0;
+          const target = store.listUserDeviceSessions({userId}).find((item) => item.id === sessionId);
+          if (!target) {
+            writeError(res, 404, "device_session_not_found", "设备会话不存在");
+            return;
+          }
+          const revoked = store.revokeRefreshSessionById({
+            sessionId,
+            now: now()
+          });
+          if (!revoked.ok) {
+            writeError(res, 404, revoked.reason, "设备会话不存在");
+            return;
+          }
+          writeJson(res, 200, {ok: true, message: "设备已吊销"});
+          return;
+        }
+
+        const devicesMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/devices$/);
+        if (req.method === "GET" && devicesMatch) {
+          const userId = Number(devicesMatch[1]) || 0;
+          const user = store.getClientUserById(userId, {now: now()});
+          if (!user) {
+            writeError(res, 404, "user_not_found", "用户不存在");
+            return;
+          }
+          writeJson(res, 200, {
+            ok: true,
+            user,
+            items: store.listUserDeviceSessions({userId})
+          });
+          return;
+        }
+
+        const userMatch = pathname.match(/^\/api\/admin\/users\/(\d+)$/);
+        if (req.method === "PATCH" && userMatch) {
+          const userId = Number(userMatch[1]) || 0;
+          const body = await readJsonBody(req);
+          const updated = store.updateClientUserControl({
+            userId,
+            status: asString(body && body.status).trim(),
+            membershipPlan: asString(body && body.membership_plan).trim(),
+            membershipExpiresAt: asString(body && body.membership_expires_at).trim(),
+            permissionOverrides: Array.isArray(body && body.permission_overrides) ? body.permission_overrides : null,
+            now: now()
+          });
+          if (!updated.ok) {
+            const status = updated.reason === "user_not_found" ? 404 : 400;
+            writeError(res, status, updated.reason, "用户更新失败");
+            return;
+          }
+          writeJson(res, 200, {
+            ok: true,
+            message: "用户权限已更新",
+            user: updated.user,
+            entitlements: updated.entitlements
+          });
+          return;
+        }
+
+        writeError(res, 404, "not_found", "route not found");
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/email/send-code") {
+        await handleSendCode(res, await readJsonBody(req), "register");
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/register") {
+        const body = await readJsonBody(req);
+        const email = asString(body && body.email).trim().toLowerCase();
+        const code = asString(body && body.code).trim();
+        const username = asString(body && body.username).trim();
+        const password = asString(body && body.password).trim();
+        if (!isValidEmail(email)) {
+          writeError(res, 400, "email_invalid", "邮箱格式不正确");
+          return;
+        }
+        if (!code || !username || !password) {
+          writeError(res, 400, "register_payload_invalid", "注册参数不完整");
+          return;
+        }
+        const verified = store.verifyEmailCode({email, scene: "register", code, now: now()});
+        if (!verified.ok) {
+          writeError(res, 400, verified.reason, "注册验证码无效或已过期");
+          return;
+        }
+        if (store.getClientUserByEmail(email)) {
+          writeError(res, 409, "email_already_exists", "该邮箱已注册");
+          return;
+        }
+        if (store.getClientUserByUsername(username)) {
+          writeError(res, 409, "username_already_exists", "用户名已存在");
+          return;
+        }
+        const user = store.createClientUser({
+          email,
+          username,
+          password,
+          now: now()
+        });
+        writeJson(res, 200, {
+          ok: true,
+          message: "注册成功",
+          user
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/login") {
+        const body = await readJsonBody(req);
+        const username = asString(body && body.username).trim();
+        const password = asString(body && body.password).trim();
+        const deviceId = asString(body && body.device_id).trim();
+        if (!username || !password || !deviceId) {
+          writeError(res, 400, "login_payload_invalid", "用户名、密码、device_id 不能为空");
+          return;
+        }
+        const auth = store.authenticateClientUser({username, password});
+        if (!auth.ok) {
+          writeError(res, 401, auth.reason, "用户名或密码错误");
+          return;
+        }
+        const session = store.createRefreshSession({
+          userId: auth.user.id,
+          deviceId,
+          ttlDays: config.refreshSessionDays,
+          now: now()
+        });
+        writeJson(res, 200, {
+          ok: true,
+          message: "登录成功",
+          user: auth.user,
+          access_bundle: issueUserBundle({
+            user: auth.user,
+            deviceId,
+            refreshCredential: session.refresh_token,
+            source: "remote_login"
+          }),
+          refresh_token: session.refresh_token
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/refresh") {
+        const body = await readJsonBody(req);
+        const refreshToken = asString(body && body.refresh_token).trim();
+        const deviceId = asString(body && body.device_id).trim();
+        if (!refreshToken || !deviceId) {
+          writeError(res, 400, "refresh_payload_invalid", "refresh_token 与 device_id 不能为空");
+          return;
+        }
+        const rotated = store.rotateRefreshSession({
+          refreshToken,
+          deviceId,
+          ttlDays: config.refreshSessionDays,
+          now: now()
+        });
+        if (!rotated.ok) {
+          const status = rotated.reason === "device_mismatch" ? 409 : 401;
+          writeError(res, status, rotated.reason, rotated.reason === "device_mismatch" ? "设备绑定不匹配" : "refresh_token 无效");
+          return;
+        }
+        writeJson(res, 200, {
+          ok: true,
+          message: "授权已刷新",
+          user: rotated.user,
+          access_bundle: issueUserBundle({
+            user: rotated.user,
+            deviceId,
+            refreshCredential: rotated.refresh_token,
+            source: "remote_refresh"
+          }),
+          refresh_token: rotated.refresh_token
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/logout") {
+        const body = await readJsonBody(req);
+        const refreshToken = asString(body && body.refresh_token).trim();
+        if (!refreshToken) {
+          writeJson(res, 200, {ok: true, message: "已退出"});
+          return;
+        }
+        const revoked = store.revokeRefreshSession({
+          refreshToken,
+          now: now()
+        });
+        if (!revoked.ok) {
+          writeError(res, 401, revoked.reason, "refresh_token 无效");
+          return;
+        }
+        writeJson(res, 200, {ok: true, message: "已退出"});
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/password/send-reset-code") {
+        await handleSendCode(res, await readJsonBody(req), "reset_password");
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/password/reset") {
+        const body = await readJsonBody(req);
+        const email = asString(body && body.email).trim().toLowerCase();
+        const code = asString(body && body.code).trim();
+        const newPassword = asString(body && body.new_password).trim();
+        if (!isValidEmail(email)) {
+          writeError(res, 400, "email_invalid", "邮箱格式不正确");
+          return;
+        }
+        if (!code || !newPassword) {
+          writeError(res, 400, "reset_payload_invalid", "重置参数不完整");
+          return;
+        }
+        const verified = store.verifyEmailCode({email, scene: "reset_password", code, now: now()});
+        if (!verified.ok) {
+          writeError(res, 400, verified.reason, "重置验证码无效或已过期");
+          return;
+        }
+        const updated = store.updateClientPassword({
+          email,
+          newPassword,
+          now: now()
+        });
+        if (!updated.ok) {
+          writeError(res, 404, updated.reason, "用户不存在");
+          return;
+        }
+        writeJson(res, 200, {ok: true, message: "密码已重置"});
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/dev/mail/test") {
+        if (!config.configured) {
+          writeError(res, 503, "mail_service_not_configured", "邮件服务未配置");
+          return;
+        }
+        const body = await readJsonBody(req);
+        const to = asString(body && body.to).trim() || asString(config.testTo).trim();
+        if (!isValidEmail(to)) {
+          writeError(res, 400, "email_invalid", "测试收件邮箱无效");
+          return;
+        }
+        const result = await mailService.sendTestMail({to});
+        writeJson(res, 200, {
+          ok: true,
+          message: "测试邮件已发送",
+          message_id: asString(result && result.messageId).trim()
+        });
+        return;
+      }
+
+      writeError(res, 404, "not_found", "route not found");
+    } catch (err) {
+      writeError(res, 500, "internal_error", asString(err && err.message).trim() || "internal error");
+    }
+  });
+
+  server.on("close", () => {
+    store.close();
+  });
+
+  return server;
+}
+
+async function main() {
+  const config = getMailConfig();
+  const server = createServer({
+    mailConfigFactory: () => config
+  });
+  await new Promise((resolve) => server.listen(config.port, config.host, resolve));
+  console.log(`[admin_console] listening on ${config.host}:${config.port}`);
+  console.log(`[admin_console] ui: http://${config.host}:${config.port}/admin`);
+  console.log(`[admin_console] env file: ${config.envFile}`);
+  console.log(`[admin_console] mail configured: ${config.configured ? "yes" : "no"}`);
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  createServer
+};

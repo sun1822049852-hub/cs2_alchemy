@@ -118,6 +118,18 @@ function buildCatalogFixtureDb() {
     wear_range: 1,
     goods_icon_url: "https://img.example/traitor.webp"
   });
+  insertSkinRow(db, {
+    markethashname: "Desert Eagle | Heat Treated (Factory New)",
+    basemarkethashname: "Desert Eagle | Heat Treated",
+    basename: "Desert Eagle | Heat Treated",
+    collection: "限量版物品",
+    rarity: "保密",
+    wearlevel: "Factory New",
+    minfloat: 0,
+    maxfloat: 1,
+    wear_range: 1,
+    goods_icon_url: "https://img.example/heat-treated.webp"
+  });
   db.close();
   return dbPath;
 }
@@ -189,6 +201,22 @@ function test_search_items_matches_collection_alias_queries() {
   assert.equal(results.every((entry) => entry.collection === "Snakebite Case"), true);
 }
 
+function test_search_items_marks_lowest_collection_rarity_items_as_output_blocked() {
+  const dbPath = buildCatalogFixtureDb();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+
+  const lowestResults = catalog.searchItems("AK-47 | Slate");
+  const higherResults = catalog.searchItems("USP-S | The Traitor");
+
+  assert.equal(lowestResults.length >= 1, true);
+  assert.equal(lowestResults[0].collection_lowest_rarity, "受限");
+  assert.equal(lowestResults[0].is_collection_lowest_rarity, true);
+
+  assert.equal(higherResults.length >= 1, true);
+  assert.equal(higherResults[0].collection_lowest_rarity, "受限");
+  assert.equal(higherResults[0].is_collection_lowest_rarity, false);
+}
+
 function test_get_item_by_market_hash_name_returns_concrete_item_details() {
   const dbPath = buildCatalogFixtureDb();
   const catalog = createTradeupSimulationCatalog({dbPath});
@@ -200,6 +228,18 @@ function test_get_item_by_market_hash_name_returns_concrete_item_details() {
   assert.equal(item.collection, "Snakebite Case");
   assert.equal(item.rarity, "受限");
   assert.equal(item.wearlevel, "Minimal Wear");
+}
+
+function test_search_items_marks_limited_edition_collection_items_as_tradeup_blocked() {
+  const dbPath = buildCatalogFixtureDb();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+
+  const results = catalog.searchItems("Heat Treated");
+
+  assert.equal(results.length >= 1, true);
+  assert.equal(results[0].collection, "限量版物品");
+  assert.equal(results[0].is_tradeup_restricted, true);
+  assert.equal(results[0].tradeup_restriction_reason, "limited_collection");
 }
 
 function test_search_items_keeps_fetching_until_limit_unique_items_are_collected() {
@@ -236,7 +276,9 @@ function test_search_items_returns_empty_when_query_normalizes_to_empty_text() {
 function main() {
   test_search_items_returns_normalized_picker_rows();
   test_search_items_matches_collection_alias_queries();
+  test_search_items_marks_lowest_collection_rarity_items_as_output_blocked();
   test_get_item_by_market_hash_name_returns_concrete_item_details();
+  test_search_items_marks_limited_edition_collection_items_as_tradeup_blocked();
   test_search_items_keeps_fetching_until_limit_unique_items_are_collected();
   test_search_items_matches_stattrak_queries_without_tm_symbol();
   test_search_items_returns_empty_when_query_normalizes_to_empty_text();

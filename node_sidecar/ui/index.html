@@ -7,6 +7,88 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="theme-inkblue">
+    <div id="licenseGate" class="app-auth-gate hidden" aria-live="polite">
+      <div class="app-auth-scrim"></div>
+      <section class="app-auth-card" aria-label="客户端授权">
+        <div class="app-auth-eyebrow">Client License</div>
+        <h1 id="licenseTitle">客户端授权</h1>
+        <p id="licenseHint" class="app-auth-hint">请完成登录或导入有效授权后继续。</p>
+        <div id="clientAuthModeTabs" class="app-auth-mode-tabs hidden" role="tablist" aria-label="客户端认证模式">
+          <button id="clientAuthLoginTabBtn" class="app-auth-mode-tab active" type="button" data-auth-view="login">账号登录</button>
+          <button id="clientAuthRegisterTabBtn" class="app-auth-mode-tab" type="button" data-auth-view="register">注册</button>
+          <button id="clientAuthResetTabBtn" class="app-auth-mode-tab" type="button" data-auth-view="reset">找回密码</button>
+          <button id="clientAuthBundleTabBtn" class="app-auth-mode-tab hidden" type="button" data-auth-view="bundle">调试导入</button>
+        </div>
+        <section id="clientLoginPanel" class="app-auth-panel hidden" aria-label="账号登录">
+          <div class="form-row">
+            <label for="clientLoginUsername">账号</label>
+            <input id="clientLoginUsername" type="text" autocomplete="username" spellcheck="false" placeholder="请输入用户名" />
+          </div>
+          <div class="form-row">
+            <label for="clientLoginPassword">密码</label>
+            <input id="clientLoginPassword" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          </div>
+          <div class="app-auth-actions">
+            <button id="clientLoginSubmitBtn" type="button">登录并获取授权</button>
+          </div>
+        </section>
+        <section id="clientRegisterPanel" class="app-auth-panel hidden" aria-label="账号注册">
+          <div class="form-row">
+            <label for="clientRegisterEmail">邮箱</label>
+            <input id="clientRegisterEmail" type="email" autocomplete="email" spellcheck="false" placeholder="用于接收验证码" />
+          </div>
+          <div class="form-row">
+            <label for="clientRegisterCode">验证码</label>
+            <div class="app-auth-inline">
+              <input id="clientRegisterCode" type="text" inputmode="numeric" spellcheck="false" placeholder="请输入邮箱验证码" />
+              <button id="clientRegisterSendCodeBtn" type="button">发送验证码</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="clientRegisterUsername">用户名</label>
+            <input id="clientRegisterUsername" type="text" autocomplete="username" spellcheck="false" placeholder="注册后用于登录" />
+          </div>
+          <div class="form-row">
+            <label for="clientRegisterPassword">密码</label>
+            <input id="clientRegisterPassword" type="password" autocomplete="new-password" placeholder="请设置登录密码" />
+          </div>
+          <div class="app-auth-actions">
+            <button id="clientRegisterSubmitBtn" type="button">注册账号</button>
+          </div>
+        </section>
+        <section id="clientResetPanel" class="app-auth-panel hidden" aria-label="找回密码">
+          <div class="form-row">
+            <label for="clientResetEmail">邮箱</label>
+            <input id="clientResetEmail" type="email" autocomplete="email" spellcheck="false" placeholder="请输入注册邮箱" />
+          </div>
+          <div class="form-row">
+            <label for="clientResetCode">验证码</label>
+            <div class="app-auth-inline">
+              <input id="clientResetCode" type="text" inputmode="numeric" spellcheck="false" placeholder="请输入重置验证码" />
+              <button id="clientResetSendCodeBtn" type="button">发送验证码</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="clientResetPassword">新密码</label>
+            <input id="clientResetPassword" type="password" autocomplete="new-password" placeholder="请输入新密码" />
+          </div>
+          <div class="app-auth-actions">
+            <button id="clientResetSubmitBtn" type="button">重置密码</button>
+          </div>
+        </section>
+        <section id="clientBundlePanel" class="app-auth-panel hidden" aria-label="调试授权导入">
+          <div class="form-row">
+            <label for="licenseBundleInput">授权包 JSON</label>
+            <textarea id="licenseBundleInput" rows="8" spellcheck="false" placeholder='{"snapshot": {...}, "signature": "..."}'></textarea>
+          </div>
+          <div class="app-auth-actions">
+            <button id="licenseImportBtn" type="button">导入授权</button>
+            <button id="licenseClearBtn" type="button">清空输入</button>
+          </div>
+        </section>
+        <div id="licenseStatus" class="app-auth-status">正在检查客户端授权...</div>
+      </section>
+    </div>
     <div class="layout">
       <div id="navShell" class="nav-shell">
         <button id="navRailTrigger" class="nav-rail-trigger" type="button" aria-label="展开功能导航" aria-controls="mainSidebar" aria-expanded="false">
@@ -14,6 +96,13 @@
         </button>
         <aside class="sidebar" id="mainSidebar">
           <div class="sidebar-title">功能导航</div>
+          <div id="licenseUserPill" class="auth-user-pill hidden">
+            <div class="auth-user-copy">
+              <div class="auth-user-label">当前授权</div>
+              <div id="licenseUserName" class="auth-user-name"></div>
+            </div>
+            <button id="licenseClearLocalBtn" class="auth-user-logout" type="button">清除</button>
+          </div>
           <button class="nav-btn active" data-page="accountPage" id="navAccount">账号管理</button>
           <button class="nav-btn" data-page="inventoryPage" id="navInventory">库存总览</button>
           <button class="nav-btn" data-page="craftPage" id="navCraft">炼金汰换</button>

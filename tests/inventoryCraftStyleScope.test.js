@@ -73,4 +73,22 @@ for (const fragment of cssFragments) {
   );
 }
 
+assert.match(
+  css,
+  /body\.theme-inkblue\s*\{[\s\S]*scrollbar-color:\s*rgba\(220,\s*164,\s*76,\s*0\.72\)\s*rgba\(12,\s*14,\s*18,\s*0\.88\);/m,
+  "inventory and craft pages should tint the window scrollbar to the shared yellow inkblue accent"
+);
+
+assert.match(
+  css,
+  /body\.theme-inkblue::-webkit-scrollbar\s*\{/m,
+  "inventory and craft pages should style the window scrollbar width in webkit browsers"
+);
+
+assert.match(
+  css,
+  /body\.theme-inkblue::-webkit-scrollbar-thumb\s*\{[\s\S]*linear-gradient\(180deg,\s*rgba\(243,\s*199,\s*121,\s*0\.82\),\s*rgba\(220,\s*164,\s*76,\s*0\.54\)\);/m,
+  "inventory and craft pages should style the window scrollbar thumb with the yellow accent gradient"
+);
+
 console.log("inventoryCraftStyleScope tests passed");

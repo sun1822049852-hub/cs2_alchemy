@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CS2 Alchemy Admin Console</title>
+    <link rel="stylesheet" href="/admin/vendor/tabler/tabler.min.css">
+    <link rel="stylesheet" href="/admin/styles.css">
+  </head>
+  <body>
+    <div id="adminConsoleApp" class="page">
+      <aside class="navbar navbar-vertical navbar-expand-lg shell-sidebar">
+        <div class="container-fluid">
+          <h1 class="navbar-brand navbar-brand-autodark">
+            <span class="brand-mark">CA</span>
+            <span class="brand-copy">
+              <strong>CS2 Alchemy</strong>
+              <small>Admin Console</small>
+            </span>
+          </h1>
+          <div class="navbar-nav flex-column">
+            <div class="nav-item">
+              <span class="nav-link active">
+                <span class="nav-link-title">用户权限控制</span>
+              </span>
+            </div>
+            <div class="nav-item">
+              <span class="nav-link">
+                <span class="nav-link-title">会员到期与功能开关</span>
+              </span>
+            </div>
+          </div>
+          <div class="sidebar-footer">
+            <div class="text-secondary" id="sessionSummary">尚未登录</div>
+            <button id="logoutButton" class="btn btn-outline-light btn-sm mt-3" type="button" hidden>退出控制台</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="page-wrapper">
+        <div class="page-header d-print-none border-bottom-0">
+          <div class="container-xl">
+            <div class="row g-2 align-items-center">
+              <div class="col">
+                <div class="page-pretitle">Remote Control Plane</div>
+                <h2 class="page-title">会员、权限与设备会话控制台</h2>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="page-body">
+          <div class="container-xl">
+            <section id="authPanel" class="row justify-content-center">
+              <div class="col-md-8 col-lg-5">
+                <div class="card">
+                  <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-4">
+                      <div class="auth-badge">Tabler Shell</div>
+                      <h2 id="authTitle" class="card-title mb-2">管理员登录</h2>
+                      <p id="authHint" class="text-secondary m-0">使用控制台管理员账号进入管理面。</p>
+                    </div>
+
+                    <div id="authMessage" class="alert auth-alert d-none" role="alert"></div>
+
+                    <form id="bootstrapForm" class="stacked-form" hidden>
+                      <div class="mb-3">
+                        <label class="form-label" for="bootstrapUsername">管理员用户名</label>
+                        <input id="bootstrapUsername" class="form-control" value="admin" autocomplete="username">
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label" for="bootstrapPassword">管理员密码</label>
+                        <input id="bootstrapPassword" class="form-control" type="password" autocomplete="new-password">
+                      </div>
+                      <button class="btn btn-primary w-100" type="submit">初始化超级管理员</button>
+                    </form>
+
+                    <form id="loginForm" class="stacked-form" hidden>
+                      <div class="mb-3">
+                        <label class="form-label" for="loginUsername">管理员用户名</label>
+                        <input id="loginUsername" class="form-control" value="admin" autocomplete="username">
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label" for="loginPassword">管理员密码</label>
+                        <input id="loginPassword" class="form-control" type="password" autocomplete="current-password">
+                      </div>
+                      <button class="btn btn-primary w-100" type="submit">登录控制台</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="workspace" hidden>
+              <div class="row row-deck row-cards mb-3">
+                <div id="statsGrid" class="col-12"></div>
+              </div>
+
+              <div class="row row-cards">
+                <div class="col-lg-7">
+                  <div class="card">
+                    <div class="card-header">
+                      <div>
+                        <h3 class="card-title">用户列表</h3>
+                        <p class="card-subtitle">查看用户会员状态、剩余天数和最终权限。</p>
+                      </div>
+                    </div>
+                    <div class="table-responsive">
+                      <div id="usersList"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-lg-5">
+                  <div class="card mb-3">
+                    <div class="card-header">
+                      <div>
+                        <h3 class="card-title">用户详情</h3>
+                        <p id="detailHint" class="card-subtitle">选择左侧用户后即可调整会员与权限。</p>
+                      </div>
+                    </div>
+                    <div class="card-body">
+                      <form id="userForm" hidden>
+                        <div class="row g-3">
+                          <div class="col-md-6">
+                            <label class="form-label" for="userPlan">会员计划</label>
+                            <select id="userPlan" class="form-select"></select>
+                          </div>
+                          <div class="col-md-6">
+                            <label class="form-label" for="userStatus">账号状态</label>
+                            <select id="userStatus" class="form-select">
+                              <option value="active">active</option>
+                              <option value="disabled">disabled</option>
+                            </select>
+                          </div>
+                          <div class="col-12">
+                            <label class="form-label" for="userExpiry">会员到期时间</label>
+                            <input id="userExpiry" class="form-control" type="datetime-local">
+                          </div>
+                          <div class="col-12">
+                            <div id="membershipMeta" class="alert alert-secondary py-2 px-3 mb-0"></div>
+                          </div>
+                          <div class="col-12">
+                            <label class="form-label">全功能开关</label>
+                            <div id="permissionList" class="permission-list"></div>
+                          </div>
+                        </div>
+                        <div class="mt-4">
+                          <button class="btn btn-primary w-100" type="submit">保存用户配置</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div class="card">
+                    <div class="card-header">
+                      <div>
+                        <h3 class="card-title">设备会话</h3>
+                        <p class="card-subtitle">吊销指定设备的 refresh session。</p>
+                      </div>
+                    </div>
+                    <div class="card-body">
+                      <div id="deviceList"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script defer src="/admin/vendor/tabler/tabler.min.js"></script>
+    <script src="/admin/app.js"></script>
+  </body>
+</html>
