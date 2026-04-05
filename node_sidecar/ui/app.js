@@ -2640,7 +2640,14 @@ async function connectByStatusBadge({preferCraft = false} = {}) {
       return;
     }
   }
-  await doRefresh({usernameOverride: username, force: true, silentRateLimit: true, silentInfo: true});
+  await refreshWithConnectionOverlay({
+    preferCraft,
+    usernameOverride: username,
+    force: true,
+    silentRateLimit: true,
+    silentInfo: true,
+    forceOverlay: true
+  });
 }
 
 function setNoAccountState({silentSummary = false} = {}) {
@@ -4235,6 +4242,48 @@ function clearCraftExecutionOverlayState() {
   state.craftProgressTitle = "";
   state.craftProgressDetail = "";
   renderCraftExecutionOverlay();
+}
+function createConnectProgressReporter() {
+  return ({percent = 0, title = "正在连接账号", detail = ""} = {}) => {
+    state.craftProgressEnabled = true;
+    setCraftExecutionOverlayState({
+      visible: true,
+      mode: "connecting",
+      percent,
+      title,
+      detail
+    });
+  };
+}
+async function refreshWithConnectionOverlay({
+  preferCraft = false,
+  usernameOverride = "",
+  force = false,
+  silentRateLimit = false,
+  silentInfo = false,
+  forceOverlay = false
+} = {}) {
+  const username = String(
+    usernameOverride ||
+    (preferCraft
+      ? ((ui.craftAccountSelect && ui.craftAccountSelect.value) || (ui.accountSelect && ui.accountSelect.value))
+      : ((ui.accountSelect && ui.accountSelect.value) || (ui.craftAccountSelect && ui.craftAccountSelect.value))) ||
+    state.currentAccountUsername ||
+    ""
+  ).trim();
+  const shouldShowOverlay = !!username && (forceOverlay || String(state.connectedUsername || "").trim() !== username);
+  const onProgress = shouldShowOverlay ? createConnectProgressReporter() : null;
+  try {
+    return await doRefresh({
+      usernameOverride: username,
+      force,
+      silentRateLimit,
+      silentInfo,
+      onProgress
+    });
+  } finally {
+    if (onProgress) clearCraftExecutionOverlayState();
+  }
 }
 function applyCraftComponentProgressEvent(data) {
   const display = buildCraftComponentProgressDisplay(data);
@@ -9747,16 +9796,7 @@ async function ensureCraftConnectedForExecution() {
     return false;
   }
   if (isCurrentAccountConnected()) return true;
-  const onProgress = ({percent = 0, title = "正在连接账号", detail = ""} = {}) => {
-    state.craftProgressEnabled = true;
-    setCraftExecutionOverlayState({
-      visible: true,
-      mode: "connecting",
-      percent,
-      title,
-      detail
-    });
-  };
+  const onProgress = createConnectProgressReporter();
   onProgress({percent: 10, detail: "正在准备连接账号..."});
   const result = await doRefresh({
     usernameOverride: username,
@@ -11742,7 +11782,7 @@ function bindEvents() {
     };
   }
 
-  ui.refreshBtn.onclick = () => doRefresh({force: false});
+  ui.refreshBtn.onclick = () => void refreshWithConnectionOverlay({preferCraft: false, force: false});
   if (ui.statusText) {
     ui.statusText.onclick = () => {
       if (!ui.statusText.classList.contains("status-clickable")) return;
@@ -11755,9 +11795,9 @@ function bindEvents() {
     });
   }
   if (ui.craftRefreshBtn) {
-    ui.craftRefreshBtn.onclick = () => doRefresh({
-      force: false,
-      usernameOverride: String((ui.craftAccountSelect && ui.craftAccountSelect.value) || "").trim()
+    ui.craftRefreshBtn.onclick = () => void refreshWithConnectionOverlay({
+      preferCraft: true,
+      force: false
     });
   }
   if (ui.craftTopStatusText) {

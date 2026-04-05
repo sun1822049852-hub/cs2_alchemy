@@ -117,9 +117,23 @@ function test_regular_user_only_sees_bound_steam_accounts() {
   }
 }
 
+function test_legacy_active_account_remains_available_for_unscoped_dev_viewer() {
+  const ctx = createStore();
+  try {
+    const active = ctx.store.getActiveSteamAccount("");
+    assert.equal(active && active.username, "countsteam01");
+    const rows = ctx.store.listSteamAccountsForUser("", {includeAll: true});
+    const activeRow = rows.find((row) => row.username === "countsteam01");
+    assert.equal(activeRow && activeRow.is_active, true);
+  } finally {
+    cleanup(ctx);
+  }
+}
+
 function main() {
   test_bootstrap_admin_creates_super_admin_and_imports_legacy_accounts();
   test_regular_user_only_sees_bound_steam_accounts();
+  test_legacy_active_account_remains_available_for_unscoped_dev_viewer();
   console.log("app-auth-store tests passed");
 }
 

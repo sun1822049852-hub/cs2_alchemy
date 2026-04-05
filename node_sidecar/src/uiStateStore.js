@@ -10,12 +10,155 @@ class UiStateStore {
     this.viewerUsername = asString(options && options.viewerUsername ? options.viewerUsername : "").trim();
     this.data = this._load();
     this.processedDir = path.resolve(PATHS.PROCESSED_DIR);
+    this.backupDir = path.resolve(path.dirname(this.filePath), "backup", "ui_state");
+  }
+
+  _cloneJson(value, fallback) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  _normalizeViewerBucket(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const bucket = {...source};
+    bucket.craft_assist_presets = Array.isArray(source.craft_assist_presets)
+      ? this._cloneJson(source.craft_assist_presets, [])
+      : [];
+    bucket.tradeup_simulation_presets = Array.isArray(source.tradeup_simulation_presets)
+      ? this._cloneJson(source.tradeup_simulation_presets, [])
+      : [];
+    bucket.last_selected_username = asString(source.last_selected_username || "").trim();
+    return bucket;
+  }
+
+  _bucketHasPersistedState(value) {
+    const bucket = this._normalizeViewerBucket(value);
+    return bucket.craft_assist_presets.length > 0
+      || bucket.tradeup_simulation_presets.length > 0
+      || !!bucket.last_selected_username;
+  }
+
+  _withMergedViewerBucket(target, source) {
+    const bucket = this._normalizeViewerBucket(target);
+    const incoming = this._normalizeViewerBucket(source);
+    bucket.craft_assist_presets = this._cloneJson(incoming.craft_assist_presets, []);
+    bucket.tradeup_simulation_presets = this._cloneJson(incoming.tradeup_simulation_presets, []);
+    bucket.last_selected_username = incoming.last_selected_username;
+    return bucket;
+  }
+
+  _buildLegacyViewerBucket(raw) {
+    const value = raw && typeof raw === "object" ? raw : {};
+    return this._normalizeViewerBucket({
+      craft_assist_presets: value.craft_assist_presets,
+      tradeup_simulation_presets: value.tradeup_simulation_presets,
+      last_selected_username: value.last_selected_username
+    });
+  }
+
+  _backupFilePrefix() {
+    const ext = path.extname(this.filePath) || ".json";
+    const base = path.basename(this.filePath, ext);
+    return `${base}.backup_`;
+  }
+
+  _backupFileName() {
+    const now = new Date();
+    const pad = (value, size = 2) => String(value).padStart(size, "0");
+    const stamp = [
+      now.getFullYear(),
+      pad(now.getMonth() + 1),
+      pad(now.getDate()),
+      "_",
+      pad(now.getHours()),
+      pad(now.getMinutes()),
+      pad(now.getSeconds()),
+      "_",
+      pad(now.getMilliseconds(), 3)
+    ].join("");
+    return `${this._backupFilePrefix()}${stamp}.json`;
+  }
+
+  _pruneBackups(limit = 12) {
+    try {
+      if (!fs.existsSync(this.backupDir)) {
+        return;
+      }
+      const prefix = this._backupFilePrefix();
+      const files = fs.readdirSync(this.backupDir)
+        .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
+        .map((name) => {
+          const full = path.join(this.backupDir, name);
+          return {
+            name,
+            full,
+            mtimeMs: fs.statSync(full).mtimeMs
+          };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+      for (const extra of files.slice(Math.max(0, limit))) {
+        try {
+          fs.unlinkSync(extra.full);
+        } catch (_) {
+          // ignore backup prune failures
+        }
+      }
+    } catch (_) {
+      // ignore backup prune failures
+    }
+  }
+
+  _writeBackupIfNeeded() {
+    try {
+      if (!fs.existsSync(this.filePath)) {
+        return;
+      }
+      const currentText = fs.readFileSync(this.filePath, "utf8");
+      const nextText = JSON.stringify(this.data, null, 2);
+      if (!asString(currentText).trim() || currentText === nextText) {
+        return;
+      }
+      fs.mkdirSync(this.backupDir, {recursive: true});
+      fs.writeFileSync(path.join(this.backupDir, this._backupFileName()), currentText, "utf8");
+      this._pruneBackups();
+    } catch (_) {
+      // ignore backup write failures
+    }
   }
 
   _load() {
     const raw = readJson(this.filePath, {});
     const accounts = raw && typeof raw.accounts === "object" && raw.accounts ? raw.accounts : {};
-    const appUsers = raw && typeof raw.app_users === "object" && raw.app_users ? raw.app_users : {};
+    const appUsersRaw = raw && typeof raw.app_users === "object" && raw.app_users ? raw.app_users : {};
+    const appUsers = {};
+    for (const [key, value] of Object.entries(appUsersRaw)) {
+      const normalizedKey = asString(key).trim();
+      if (!normalizedKey) {
+        continue;
+      }
+      appUsers[normalizedKey] = this._normalizeViewerBucket(value);
+    }
+    const legacyBucket = this._buildLegacyViewerBucket(raw);
+    if (this._bucketHasPersistedState(legacyBucket)) {
+      if (!this._bucketHasPersistedState(appUsers.__global__)) {
+        appUsers.__global__ = this._withMergedViewerBucket(appUsers.__global__, legacyBucket);
+      }
+      const viewerKey = this._viewerKey();
+      if (viewerKey !== "__global__" && !Object.prototype.hasOwnProperty.call(appUsers, viewerKey)) {
+        appUsers[viewerKey] = this._withMergedViewerBucket(appUsers[viewerKey], legacyBucket);
+      }
+    }
+    const viewerKey = this._viewerKey();
+    if (
+      viewerKey !== "__global__"
+      && !Object.prototype.hasOwnProperty.call(appUsers, viewerKey)
+      && this._bucketHasPersistedState(appUsers.__global__)
+    ) {
+      appUsers[viewerKey] = this._withMergedViewerBucket(appUsers[viewerKey], appUsers.__global__);
+    }
     return {
       accounts,
       app_users: appUsers
@@ -23,6 +166,7 @@ class UiStateStore {
   }
 
   save() {
+    this._writeBackupIfNeeded();
     writeJson(this.filePath, this.data);
   }
 
@@ -35,20 +179,8 @@ class UiStateStore {
     if (!this.data.app_users || typeof this.data.app_users !== "object") {
       this.data.app_users = {};
     }
-    if (!this.data.app_users[key] || typeof this.data.app_users[key] !== "object") {
-      this.data.app_users[key] = {};
-    }
-    const bucket = this.data.app_users[key];
-    if (!Array.isArray(bucket.craft_assist_presets)) {
-      bucket.craft_assist_presets = [];
-    }
-    if (!Array.isArray(bucket.tradeup_simulation_presets)) {
-      bucket.tradeup_simulation_presets = [];
-    }
-    if (typeof bucket.last_selected_username !== "string") {
-      bucket.last_selected_username = "";
-    }
-    return bucket;
+    this.data.app_users[key] = this._normalizeViewerBucket(this.data.app_users[key]);
+    return this.data.app_users[key];
   }
 
   _normalizeSnapshotPath(filePath) {

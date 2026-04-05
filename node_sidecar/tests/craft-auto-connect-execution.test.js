@@ -184,7 +184,10 @@ function loadRenderCraftPageFns(initialState = {}, {connected = false, executabl
 }
 
 function loadEnsureCraftConnectedFn(initialState = {}, {connectedInitially = false, refreshResult = {ok: true}} = {}) {
-  const source = extractFunctionSource("ensureCraftConnectedForExecution");
+  const source = [
+    extractBlock("function createConnectProgressReporter(", "function applyCraftComponentProgressEvent("),
+    extractFunctionSource("ensureCraftConnectedForExecution")
+  ].join("\n");
   const overlayStates = [];
   const context = {
     Math,

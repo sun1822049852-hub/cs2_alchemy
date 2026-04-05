@@ -1,6 +1,7 @@
 const {spawn} = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const {buildDesktopLauncherEnv} = require("./node_sidecar/src/devDesktopLaunchEnv");
 
 const sidecarDir = path.resolve(__dirname, "node_sidecar");
 const electronMain = path.join(sidecarDir, "electron-main.js");
@@ -20,13 +21,23 @@ if (!fs.existsSync(electronBin)) {
   process.exit(1);
 }
 
-const isWin = process.platform === "win32";
-const child = spawn(electronBin, [electronMain], {
-  cwd: sidecarDir,
-  stdio: "inherit",
-  shell: isWin
-});
+function startDesktopLauncher({baseEnv = process.env, spawnImpl = spawn} = {}) {
+  const isWin = process.platform === "win32";
+  return spawnImpl(electronBin, [electronMain], {
+    cwd: sidecarDir,
+    stdio: "inherit",
+    shell: isWin,
+    env: buildDesktopLauncherEnv(baseEnv, {projectRoot: __dirname})
+  });
+}
 
-child.on("exit", (code) => {
-  process.exit(code || 0);
-});
+if (require.main === module) {
+  const child = startDesktopLauncher();
+  child.on("exit", (code) => {
+    process.exit(code || 0);
+  });
+}
+
+module.exports = {
+  startDesktopLauncher
+};
