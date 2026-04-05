@@ -58,7 +58,10 @@ const state = {
     expiresInMs: 0
   },
   clientAuthView: "bundle",
-  workspaceInitialized: false
+  clientAuthModalOpen: false,
+  clientAuthPromptTitle: "",
+  clientAuthPromptHint: "",
+  workspaceHydratedFor: ""
 };
 
 const ui = {
@@ -354,7 +357,7 @@ function applyClientLicenseState(data) {
 function renderLicenseGate() {
   const license = state.clientLicense || {};
   const authenticated = !!license.authenticated;
-  const readyForWorkspace = authenticated && !!state.workspaceInitialized;
+  const readyForWorkspace = authenticated && !!state.workspaceHydratedFor;
   const expired = String(license.code || "").trim() === "license_expired";
   const authMode = getClientAuthMode();
   const allowManualImport = isManualImportAllowed();
@@ -470,7 +473,7 @@ function renderLicenseGate() {
 }
 
 async function initializeAuthenticatedWorkspace() {
-  if (state.workspaceInitialized) {
+  if (state.workspaceHydratedFor) {
     return;
   }
   loadCraftUiPrefs();
@@ -490,7 +493,7 @@ async function initializeAuthenticatedWorkspace() {
     if (state.accountSelectedUsername) await switchAccountView(state.accountSelectedUsername);
     else setNoAccountState({silentSummary: true});
     showPage("accountPage");
-    state.workspaceInitialized = true;
+    state.workspaceHydratedFor = preferred || "ready";
   } catch (err) {
     setSummary(`初始化失败：${err.message}`);
     setAccountStatus(`初始化失败：${err.message}`, true);
