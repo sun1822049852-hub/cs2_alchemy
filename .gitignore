@@ -17,6 +17,7 @@ login_keys.json
 machine_id.bin
 inventory_ui_state.json
 schema_cache.json
+client_license_state.json
 
 # node runtime
 node_sidecar/node_modules/
@@ -24,8 +25,11 @@ node_sidecar/.npm-cache/
 admin_console/node_modules/
 
 # local skin-db rebuild artifacts
+csgo_skins.backup_*.db
+csgo_skins.backup_trigger_*.db
 csgo_skins.backup_before_rebuild_*.db
 csgo_skins.pre_strict_rebuild_*.db
+backup/db/*.db
 steam_skins.db
 data/skin_json/*.json
 !data/skin_json/.gitkeep
@@ -36,4 +40,5 @@ excal.py
 
 # local exports / scratch docs
 csgo_skins_export_*.xlsx
+tmp_fullscreen_now.png
 极限卡磨损教程.md
