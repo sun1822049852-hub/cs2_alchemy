@@ -143,6 +143,10 @@ function normalizeCraftAssistFilterMode(mode) {
   return asString(mode).trim() === "absolute" ? "absolute" : "relative";
 }
 
+function normalizeCraftAssistApproachMode(mode) {
+  return asString(mode).trim() === "infinite" ? "infinite" : "below";
+}
+
 function normalizeCraftAssistWearOffsetPct(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT) {
   const fallbackNum = Number(fallback);
   const safeFallback = Number.isFinite(fallbackNum)
@@ -1107,12 +1111,16 @@ function hasOversizedCraftAssistGroup(groups, options) {
   ) > 0);
 }
 
-function isCraftAssistSolvedCandidate(solved, targetValue) {
+function isCraftAssistSolvedCandidate(solved, targetValue, approachMode = "below") {
+  const normalizedApproachMode = normalizeCraftAssistApproachMode(approachMode);
   return !!(
     solved
     && Array.isArray(solved.materialResults)
     && Number.isFinite(Number(solved.overall))
-    && Number(solved.overall) < Number(targetValue) - EPSILON
+    && (
+      normalizedApproachMode === "infinite"
+      || Number(solved.overall) < Number(targetValue) - EPSILON
+    )
   );
 }
 
@@ -1168,6 +1176,7 @@ function runCraftAssistContextRefine({
   groups,
   targetValue,
   initialSolved,
+  approachMode = "below",
   prefilterOptions,
   maxRounds = 1
 }) {
@@ -1202,9 +1211,10 @@ function runCraftAssistContextRefine({
       });
       const refinedCandidate = searchCraftAssistBestSolution({
         groups: refineGroups,
-        targetValue
+        targetValue,
+        approachMode
       });
-      const refinedSolved = isCraftAssistSolvedCandidate(refinedCandidate, targetValue)
+      const refinedSolved = isCraftAssistSolvedCandidate(refinedCandidate, targetValue, approachMode)
         ? refinedCandidate
         : null;
       const accepted = didCraftAssistSolvedCandidateImprove(beforeSolved, refinedSolved);
@@ -1237,9 +1247,10 @@ function runCraftAssistContextRefine({
   if (acceptedCount <= 0) {
     const jointSolvedCandidate = searchCraftAssistBestSolution({
       groups: sourceGroups,
-      targetValue
+      targetValue,
+      approachMode
     });
-    const jointSolved = isCraftAssistSolvedCandidate(jointSolvedCandidate, targetValue)
+    const jointSolved = isCraftAssistSolvedCandidate(jointSolvedCandidate, targetValue, approachMode)
       ? jointSolvedCandidate
       : null;
     const jointAccepted = didCraftAssistSolvedCandidateImprove(currentSolved, jointSolved);
@@ -1330,6 +1341,7 @@ function attachCraftAssistPrefilterTrace(selectionTrace, prefilterSummary) {
 async function solveCraftAssistGroupsForRarity({
   groups,
   targetValue,
+  approachMode = "below",
   recipeContext,
   prefilterOptionsOverride = null
 }) {
@@ -1342,7 +1354,8 @@ async function solveCraftAssistGroupsForRarity({
     return {
       solved: searchCraftAssistBestSolution({
         groups,
-        targetValue
+        targetValue,
+        approachMode
       }),
       prefilterSummary: null
     };
@@ -1361,7 +1374,8 @@ async function solveCraftAssistGroupsForRarity({
     return {
       solved: searchCraftAssistBestSolution({
         groups,
-        targetValue
+        targetValue,
+        approachMode
       }),
       prefilterSummary: buildCraftAssistPrefilterSummary({
         phaseTraces,
@@ -1372,9 +1386,10 @@ async function solveCraftAssistGroupsForRarity({
   }
   const baseSolvedCandidate = searchCraftAssistBestSolution({
     groups: basePhase.groups,
-    targetValue
+    targetValue,
+    approachMode
   });
-  const baseSolved = isCraftAssistSolvedCandidate(baseSolvedCandidate, targetValue)
+  const baseSolved = isCraftAssistSolvedCandidate(baseSolvedCandidate, targetValue, approachMode)
     ? baseSolvedCandidate
     : null;
 
@@ -1389,9 +1404,10 @@ async function solveCraftAssistGroupsForRarity({
   if (expandPhase.kind === "phase_ready") {
     const expandSolvedCandidate = searchCraftAssistBestSolution({
       groups: expandPhase.groups,
-      targetValue
+      targetValue,
+      approachMode
     });
-    const expandSolved = isCraftAssistSolvedCandidate(expandSolvedCandidate, targetValue)
+    const expandSolved = isCraftAssistSolvedCandidate(expandSolvedCandidate, targetValue, approachMode)
       ? expandSolvedCandidate
       : null;
     let bestPrefilterSolved = pickBetterCraftAssistSolvedCandidate(baseSolved, expandSolved);
@@ -1402,6 +1418,7 @@ async function solveCraftAssistGroupsForRarity({
           groups,
           targetValue,
           initialSolved: bestPrefilterSolved,
+          approachMode,
           prefilterOptions
         });
         bestPrefilterSolved = pickBetterCraftAssistSolvedCandidate(bestPrefilterSolved, contextRefined.solved);
@@ -1422,7 +1439,8 @@ async function solveCraftAssistGroupsForRarity({
   return {
     solved: searchCraftAssistBestSolution({
       groups,
-      targetValue
+      targetValue,
+      approachMode
     }),
     prefilterSummary: buildCraftAssistPrefilterSummary({
       phaseTraces,
@@ -1437,14 +1455,18 @@ async function runCraftAssistSelectionForRecipe({
   rowsByName,
   blockedIds,
   targetValue,
+  wearApproachMode = "below",
   useRelativeFilter = true,
   wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
   candidateCache = null,
   prefilterOptions = null
 }) {
   const blocked = blockedIds instanceof Set ? blockedIds : new Set();
+  const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
   const offsetHintText = getCraftAssistOffsetSettingHintText(wearOffsetPct);
-  const safeTargetValue = getCraftAssistOutcomeSafeTarget(targetValue);
+  const safeTargetValue = approachMode === "below"
+    ? getCraftAssistOutcomeSafeTarget(targetValue)
+    : Number(targetValue);
   const prepared = materials.map((material) => {
     const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, safeTargetValue, {
       useRelativeFilter,
@@ -1508,6 +1530,7 @@ async function runCraftAssistSelectionForRecipe({
     const {solved, prefilterSummary} = await solveCraftAssistGroupsForRarity({
       groups,
       targetValue: safeTargetValue,
+      approachMode,
       recipeContext: {
         recipeNo: 1,
         rarity,
@@ -1533,6 +1556,15 @@ async function runCraftAssistSelectionForRecipe({
     }
   }
   if (!bestSolved) {
+    if (approachMode === "infinite") {
+      return {
+        ok: false,
+        code: "overall_not_close_to_target",
+        overall: null,
+        target: Number(targetValue),
+        message: `当前条件下无法找到可用逼近结果：目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
+      };
+    }
     const lowerBound = findCraftAssistBestFeasibleSolution({
       prepared,
       raritySet: sharedRaritySet
@@ -1557,26 +1589,29 @@ async function runCraftAssistSelectionForRecipe({
 
   const outputOffset = getCraftAssistWearOffsetByTarget(safeTargetValue, wearOffsetPct);
   if (outputOffset > 0) {
-    const offsetLowerBound = Number(safeTargetValue) - Number(outputOffset);
-    const needOffsetRetry = overall < offsetLowerBound - EPSILON;
-    if (needOffsetRetry) {
-      applyCraftAssistOffsetWindowCorrection({
-        materialResults,
-        targetValue: safeTargetValue,
-        maxOffset: outputOffset
-      });
-      overall = calcCraftAssistOverallMean(materialResults);
-      if (overall == null) {
-        return {ok: false, code: "offset_result_invalid", message: "偏移修正后结果无效，请调整材料范围"};
-      }
-      if (!(overall < safeTargetValue - EPSILON)) {
-        return {
-          ok: false,
-          code: "offset_pullback_exceeds_target",
-          overall: Number(overall),
-          target: Number(targetValue),
-          message: `偏移回拉后超过目标磨损：当前 ${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
-        };
+    let needOffsetRetry = false;
+    if (approachMode === "below") {
+      const offsetLowerBound = Number(safeTargetValue) - Number(outputOffset);
+      needOffsetRetry = overall < offsetLowerBound - EPSILON;
+      if (needOffsetRetry) {
+        applyCraftAssistOffsetWindowCorrection({
+          materialResults,
+          targetValue: safeTargetValue,
+          maxOffset: outputOffset
+        });
+        overall = calcCraftAssistOverallMean(materialResults);
+        if (overall == null) {
+          return {ok: false, code: "offset_result_invalid", message: "偏移修正后结果无效，请调整材料范围"};
+        }
+        if (!(overall < safeTargetValue - EPSILON)) {
+          return {
+            ok: false,
+            code: "offset_pullback_exceeds_target",
+            overall: Number(overall),
+            target: Number(targetValue),
+            message: `偏移回拉后超过目标磨损：当前 ${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
+          };
+        }
       }
     }
     const delta = Math.abs(Number(overall) - Number(safeTargetValue));
@@ -1603,7 +1638,8 @@ async function runCraftAssistSelectionForRecipe({
     itemIds: normalizeCraftRecipeItemIds(resultIds),
     overall,
     rarity: selectedRarity,
-    selectionTrace
+    selectionTrace,
+    approachMode
   };
 }
 
@@ -1655,6 +1691,7 @@ async function selectCraftAssistForRecipe({
   selectionContext,
   targetWear,
   wearFilterMode,
+  wearApproachMode,
   materials,
   blockedIds,
   includeCooling,
@@ -1690,6 +1727,7 @@ async function selectCraftAssistForRecipe({
     rowsByName,
     blockedIds: blocked,
     targetValue,
+    wearApproachMode: normalizeCraftAssistApproachMode(wearApproachMode),
     useRelativeFilter: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
     wearOffsetPct: normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
     candidateCache: context.candidateCache instanceof Map ? context.candidateCache : null,
@@ -1707,6 +1745,7 @@ async function selectCraftAssistForRecipe({
     item_ids: itemIds,
     overall: Number(run.overall),
     rarity: Number(run.rarity || 0),
+    approach_mode: normalizeCraftAssistApproachMode(run.approachMode),
     selection_trace: run.selectionTrace || null,
     recipe_ok: !!recipeInfo.ok,
     recipe_reason: recipeInfo.ok ? "" : asString(recipeInfo.reason || "").trim(),

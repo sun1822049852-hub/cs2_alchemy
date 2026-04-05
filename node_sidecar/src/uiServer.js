@@ -1863,6 +1863,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     const workerArgs = {
       targetWear: body.target_wear,
       wearFilterMode: body.wear_filter_mode,
+      wearApproachMode: body.wear_approach_mode,
       materials: body.materials,
       blockedIds: body.blocked_ids,
       selectedItemIds: body.blocked_ids,

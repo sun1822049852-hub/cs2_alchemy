@@ -353,6 +353,47 @@ async function test_single_material_returns_selection_trace() {
   );
 }
 
+async function test_infinite_mode_allows_cross_target_when_it_is_closer() {
+  const rows = [
+    makeRow({id: "b1", name: "Solo", relative: 0.47}),
+    makeRow({id: "b2", name: "Solo", relative: 0.47}),
+    makeRow({id: "b3", name: "Solo", relative: 0.47}),
+    makeRow({id: "b4", name: "Solo", relative: 0.47}),
+    makeRow({id: "b5", name: "Solo", relative: 0.47}),
+    makeRow({id: "u1", name: "Solo", relative: 0.53}),
+    makeRow({id: "u2", name: "Solo", relative: 0.53}),
+    makeRow({id: "u3", name: "Solo", relative: 0.53}),
+    makeRow({id: "u4", name: "Solo", relative: 0.53}),
+    makeRow({id: "u5", name: "Solo", relative: 0.51}),
+    makeRow({id: "u6", name: "Solo", relative: 0.531})
+  ];
+  const materials = [
+    {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+  ];
+
+  const belowOnly = await runSelect({
+    rows,
+    targetWear: 0.50,
+    materials
+  });
+  const infinite = await runSelect({
+    rows,
+    targetWear: 0.50,
+    materials,
+    wearApproachMode: "infinite"
+  });
+
+  assert.equal(belowOnly.ok, true);
+  assert.equal(infinite.ok, true);
+  assert.equal(belowOnly.overall < 0.50, true);
+  assert.equal(infinite.overall > 0.50, true);
+  assert.equal(belowOnly.item_ids.includes("u5"), true);
+  assert.equal(belowOnly.item_ids.includes("u1"), false);
+  assert.equal(infinite.item_ids.includes("u5"), false);
+  assert.equal(infinite.item_ids.includes("u1"), true);
+  assert.equal(Math.abs(infinite.overall - 0.50) < Math.abs(belowOnly.overall - 0.50), true);
+}
+
 async function test_single_material_starts_with_balanced_split_then_pushes_upward() {
   const rows = [
     makeRow({id: "b1", name: "Solo", relative: 0.193232}),
@@ -732,6 +773,7 @@ async function test_fast_flag_runs_context_refine_after_expand_improves_multi_ov
   await test_single_material_falls_back_when_balanced_split_side_is_short();
   await test_single_material_non_unit_interval_still_uses_relative_centering();
   await test_single_material_returns_selection_trace();
+  await test_infinite_mode_allows_cross_target_when_it_is_closer();
   await test_single_material_starts_with_balanced_split_then_pushes_upward();
   await test_single_material_applies_compensation_refinement_after_push_limit();
   await test_single_material_keeps_hard_relative_cap_margin_near_target_edge();

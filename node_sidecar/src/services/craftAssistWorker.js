@@ -45,6 +45,7 @@ parentPort.on("message", async (message) => {
     const result = await craftAssistService.selectForRecipe({
       targetWear: payload.targetWear,
       wearFilterMode: payload.wearFilterMode,
+      wearApproachMode: payload.wearApproachMode,
       materials: payload.materials,
       blockedIds: payload.blockedIds,
       includeCooling,

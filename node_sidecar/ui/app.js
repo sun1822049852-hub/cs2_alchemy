@@ -27,7 +27,7 @@ const state = {
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
   craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 0,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "", craftProgressMode: "", craftProgressPercent: 0, craftProgressPercentTarget: 0,
-  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
+  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistApproachMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
   simulationViewMode: "workspace", simulationOutputRole: "primary_output", simulationMaterialRole: "main_material", simulationOutputChooserOpen: false, simulationMaterialChooserOpen: false, simulationPresets: [], simulationActivePresetId: "", simulationWorkspacePreset: null, simulationWorkspaceSourcePresetId: "", simulationPickerOpen: false, simulationPickerMode: "", simulationPickerTitle: "", simulationPickerQuery: "", simulationPickerResults: [], simulationPickerError: "", simulationLoading: false, simulationPersisting: false, simulationSearchLoading: false, simulationRequestSeq: 0, simulationSearchSeq: 0, simulationModalOpen: false, simulationModalMode: "", simulationModalPresetId: "", simulationModalSlot: "", simulationModalItemType: "", simulationModalItemSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false, componentOpBusyAction: "",
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
@@ -106,7 +106,7 @@ const ui = {
   craftSelectedText: document.getElementById("craftSelectedText"), craftRecipeText: document.getElementById("craftRecipeText"),
   craftStatusText: document.getElementById("craftStatusText"), craftCoolingHint: document.getElementById("craftCoolingHint"), craftSelectionTitle: document.getElementById("craftSelectionTitle"),
   craftLeftPanel: document.getElementById("craftLeftPanel"), craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
-  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistFastMode: document.getElementById("craftAssistFastMode"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
+  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistFastMode: document.getElementById("craftAssistFastMode"), craftAssistApproachMode: document.getElementById("craftAssistApproachMode"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
   craftAddRecipeBtn: document.getElementById("craftAddRecipeBtn"), craftExecuteQueueBtn: document.getElementById("craftExecuteQueueBtn"),
   craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftPreviewViewport: document.getElementById("craftPreviewViewport"), craftQueueList: document.getElementById("craftQueueList"),
   craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
@@ -1443,6 +1443,7 @@ function saveCraftUiPrefs() {
         craft_show_full_wear: !!state.craftShowFullWear,
         craft_show_cooling_time: !!state.craftShowCoolingTime,
         craft_assist_fast_mode: !!state.craftAssistFastMode,
+        craft_assist_approach_mode: !!state.craftAssistApproachMode,
         craft_assist_wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
         craft_right_width: clampCraftRightPanelWidth(state.craftRightPanelWidth),
         craft_assist_overlay_height: Number.isFinite(overlayHeight) ? overlayHeight : 0,
@@ -1465,6 +1466,7 @@ function loadCraftUiPrefs() {
     if (typeof prefs.craft_show_full_wear === "boolean") state.craftShowFullWear = prefs.craft_show_full_wear;
     if (typeof prefs.craft_show_cooling_time === "boolean") state.craftShowCoolingTime = prefs.craft_show_cooling_time;
     if (typeof prefs.craft_assist_fast_mode === "boolean") state.craftAssistFastMode = prefs.craft_assist_fast_mode;
+    if (typeof prefs.craft_assist_approach_mode === "boolean") state.craftAssistApproachMode = prefs.craft_assist_approach_mode;
     if (Number.isFinite(Number(prefs.craft_assist_wear_offset_pct))) {
       state.craftAssistWearOffsetPct = normalizeCraftAssistWearOffsetPct(prefs.craft_assist_wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
     }
@@ -4314,6 +4316,7 @@ function syncCraftSettingsControls(allCraftRows = null) {
   if (ui.craftShowCoolingTime) ui.craftShowCoolingTime.checked = showCoolingTime;
   if (ui.componentCraftShowCoolingTime) ui.componentCraftShowCoolingTime.checked = showCoolingTime;
   if (ui.craftAssistFastMode) ui.craftAssistFastMode.checked = fastMode;
+  if (ui.craftAssistApproachMode) ui.craftAssistApproachMode.checked = !!state.craftAssistApproachMode;
   if (ui.componentCraftAssistFastMode) ui.componentCraftAssistFastMode.checked = fastMode;
   if (ui.craftAssistWearOffsetPct && document.activeElement !== ui.craftAssistWearOffsetPct) {
     ui.craftAssistWearOffsetPct.value = craftAssistWearOffsetPctText(wearOffsetPct);
@@ -6925,6 +6928,7 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
           username: runUsername,
           target_wear: targetValue,
           wear_filter_mode: wearFilterMode,
+          wear_approach_mode: state.craftAssistApproachMode ? "infinite" : "below",
           materials,
           use_component_items: !!state.craftUseComponentItems,
           blocked_ids: [...blockedIds],
@@ -6994,7 +6998,11 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     }
 
     const raritySuffix = Number(run && run.rarity || 0) > 0 ? `，稀有度 ${craftRarityLabel(run.rarity)}` : "";
-    setScopedStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${createdEntry.item_ids.length}/${mode}${raritySuffix}，均值 ${wearTextFull(run.overall)} < 目标 ${wearTextFull(targetValue)}`);
+    if (String(run && run.approach_mode || "").trim() === "infinite") {
+      setScopedStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${createdEntry.item_ids.length}/${mode}${raritySuffix}，均值 ${wearTextFull(run.overall)} 逼近目标 ${wearTextFull(targetValue)}`);
+    } else {
+      setScopedStatus(`辅助选材完成${sourceSuffix}：已新增配方#${recipeNo}，${createdEntry.item_ids.length}/${mode}${raritySuffix}，均值 ${wearTextFull(run.overall)} < 目标 ${wearTextFull(targetValue)}`);
+    }
     return true;
   } finally {
     clearCraftAssistActiveRunToken(runUsername, {onlyIfToken: String(runtimeState && runtimeState.craftAssistRunToken || "").trim()});
@@ -12084,6 +12092,16 @@ function bindEvents() {
   if (ui.componentCraftAssistFastMode) {
     ui.componentCraftAssistFastMode.onchange = () => {
       applyCraftAssistFastMode(ui.componentCraftAssistFastMode.checked);
+    };
+  }
+  const applyCraftAssistApproachMode = (checked) => {
+    state.craftAssistApproachMode = !!checked;
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+  };
+  if (ui.craftAssistApproachMode) {
+    ui.craftAssistApproachMode.onchange = () => {
+      applyCraftAssistApproachMode(ui.craftAssistApproachMode.checked);
     };
   }
   const applyCraftAssistWearOffsetPct = (inputNode) => {

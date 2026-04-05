@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 
 const {
   refineSingleMaterialCompensation,
+  searchCraftAssistBestSolution,
   searchRoleAwarePushSolution
 } = require("../node_sidecar/src/services/craftAssistSearch");
 
@@ -352,6 +353,48 @@ function test_single_material_compensation_exposes_second_swap_pruning_trace() {
   assert.equal(attempt.secondSwap && attempt.secondSwap.best && attempt.secondSwap.best.addedId, "x0");
 }
 
+function test_search_best_solution_infinite_mode_can_cross_target_for_closer_single_material_match() {
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Solo", role: "main", count: 10},
+      candidates: [
+        makeCandidate("b1", 0.47, 0, "main"),
+        makeCandidate("b2", 0.47, 0, "main"),
+        makeCandidate("b3", 0.47, 0, "main"),
+        makeCandidate("b4", 0.47, 0, "main"),
+        makeCandidate("b5", 0.47, 0, "main"),
+        makeCandidate("u1", 0.53, 0, "main"),
+        makeCandidate("u2", 0.53, 0, "main"),
+        makeCandidate("u3", 0.53, 0, "main"),
+        makeCandidate("u4", 0.53, 0, "main"),
+        makeCandidate("u5", 0.51, 0, "main"),
+        makeCandidate("u6", 0.531, 0, "main")
+      ]
+    }
+  ];
+
+  const belowOnly = searchCraftAssistBestSolution({
+    groups,
+    targetValue: 0.50
+  });
+  const infinite = searchCraftAssistBestSolution({
+    groups,
+    targetValue: 0.50,
+    approachMode: "infinite"
+  });
+
+  assert.equal(!!belowOnly, true);
+  assert.equal(!!infinite, true);
+  assert.equal(belowOnly.overall < 0.50, true);
+  assert.equal(infinite.overall > 0.50, true);
+  assert.equal(pickedIds(belowOnly).includes("u5"), true);
+  assert.equal(pickedIds(belowOnly).includes("u1"), false);
+  assert.equal(pickedIds(infinite).includes("u5"), false);
+  assert.equal(pickedIds(infinite).includes("u1"), true);
+  assert.equal(Math.abs(infinite.overall - 0.50) < Math.abs(belowOnly.overall - 0.50), true);
+}
+
 test_role_aware_push_slides_aux_window_down_when_over_target();
 test_role_aware_push_slides_main_window_up_when_under_target();
 test_role_aware_push_prefers_closer_aux_raise_when_main_raise_would_block_it();
@@ -359,4 +402,5 @@ test_role_aware_push_returns_selection_trace();
 test_role_aware_push_applies_aux_compensation_refinement();
 test_single_material_compensation_chooses_closest_global_second_swap();
 test_single_material_compensation_exposes_second_swap_pruning_trace();
+test_search_best_solution_infinite_mode_can_cross_target_for_closer_single_material_match();
 console.log("craftAssistSearch tests passed");

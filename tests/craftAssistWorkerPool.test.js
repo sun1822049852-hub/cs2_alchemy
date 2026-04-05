@@ -184,6 +184,54 @@ async function test_worker_pool_accepts_inline_candidate_rows() {
   }
 }
 
+async function test_worker_pool_matches_direct_selection_for_infinite_approach_mode() {
+  const rows = [
+    makeRow({id: "b1", name: "Solo", relative: 0.47}),
+    makeRow({id: "b2", name: "Solo", relative: 0.47}),
+    makeRow({id: "b3", name: "Solo", relative: 0.47}),
+    makeRow({id: "b4", name: "Solo", relative: 0.47}),
+    makeRow({id: "b5", name: "Solo", relative: 0.47}),
+    makeRow({id: "u1", name: "Solo", relative: 0.53}),
+    makeRow({id: "u2", name: "Solo", relative: 0.53}),
+    makeRow({id: "u3", name: "Solo", relative: 0.53}),
+    makeRow({id: "u4", name: "Solo", relative: 0.53}),
+    makeRow({id: "u5", name: "Solo", relative: 0.51}),
+    makeRow({id: "u6", name: "Solo", relative: 0.531})
+  ];
+  const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 2000});
+  try {
+    const direct = await selectCraftAssistForRecipe({
+      rows,
+      targetWear: 0.50,
+      wearFilterMode: "relative",
+      wearApproachMode: "infinite",
+      materials: [
+        {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+      ],
+      blockedIds: [],
+      includeCooling: false,
+      wearOffsetPct: 100
+    });
+    const viaPool = await pool.selectForRecipe({
+      candidateRows: rows,
+      targetWear: 0.50,
+      wearFilterMode: "relative",
+      wearApproachMode: "infinite",
+      materials: [
+        {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+      ],
+      blockedIds: [],
+      includeCooling: false,
+      wearOffsetPct: 100
+    });
+    assert.deepEqual(viaPool, direct);
+    assert.equal(viaPool.approach_mode, "infinite");
+    assert.equal(viaPool.overall > 0.5, true);
+  } finally {
+    await pool.close();
+  }
+}
+
 async function test_worker_pool_reloads_snapshot_after_file_change() {
   await withTempDir(async (dir) => {
     const snapshotPath = path.join(dir, "snapshot.json");
@@ -293,6 +341,7 @@ async function test_worker_pool_handles_nested_prefilter_workers() {
 (async () => {
   await test_worker_pool_matches_direct_selection();
   await test_worker_pool_accepts_inline_candidate_rows();
+  await test_worker_pool_matches_direct_selection_for_infinite_approach_mode();
   await test_worker_pool_reloads_snapshot_after_file_change();
   await test_worker_pool_times_out_and_rejects();
   await test_worker_pool_retries_once_after_worker_crash();

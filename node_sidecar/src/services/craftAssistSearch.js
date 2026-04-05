@@ -6,6 +6,28 @@ function normalizeRole(role) {
   return String(role || "").trim() === "aux" ? "aux" : "main";
 }
 
+function normalizeApproachMode(value) {
+  return String(value || "").trim() === "infinite" ? "infinite" : "below";
+}
+
+function isBelowTarget(overall, targetValue) {
+  return Number(overall) < Number(targetValue) - EPSILON;
+}
+
+function buildApproachTuplePrefix(overall, targetValue, approachMode) {
+  const normalizedMode = normalizeApproachMode(approachMode);
+  const numericOverall = Number(overall);
+  if (!Number.isFinite(numericOverall)) return null;
+  if (normalizedMode === "below") {
+    if (!isBelowTarget(numericOverall, targetValue)) return null;
+    return [Number(targetValue) - numericOverall];
+  }
+  return [
+    Math.abs(Number(targetValue) - numericOverall),
+    numericOverall > Number(targetValue) + EPSILON ? 1 : 0
+  ];
+}
+
 function compareScoreTuples(a, b) {
   const len = Math.max(Array.isArray(a) ? a.length : 0, Array.isArray(b) ? b.length : 0);
   for (let i = 0; i < len; i += 1) {
@@ -95,20 +117,34 @@ function buildOrderedCandidates(group, targetValue, mode) {
   }));
 }
 
-function scoreCraftAssistSolutionSingleMaterial({selected, targetValue}) {
+function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode = "below"}) {
   const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  if (!(overall < Number(targetValue) - EPSILON)) return null;
   const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
   const above = values.filter((value) => value > Number(targetValue) + EPSILON).length;
   const below = values.filter((value) => value < Number(targetValue) - EPSILON).length;
   const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - Number(targetValue)), 0) / values.length;
+  if (normalizeApproachMode(approachMode) === "below") {
+    if (!isBelowTarget(overall, targetValue)) return null;
+    return {
+      overall,
+      tuple: [
+        radius,
+        Number(targetValue) - overall,
+        Math.abs(above - below),
+        calcVariance(values),
+        meanDistance
+      ]
+    };
+  }
+  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode);
+  if (!prefix) return null;
   return {
     overall,
     tuple: [
+      ...prefix,
       radius,
-      Number(targetValue) - overall,
       Math.abs(above - below),
       calcVariance(values),
       meanDistance
@@ -116,17 +152,30 @@ function scoreCraftAssistSolutionSingleMaterial({selected, targetValue}) {
   };
 }
 
-function scoreCraftAssistSolutionNeutral({selected, targetValue}) {
+function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = "below"}) {
   const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  if (!(overall < Number(targetValue) - EPSILON)) return null;
   const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
   const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - Number(targetValue)), 0) / values.length;
+  if (normalizeApproachMode(approachMode) === "below") {
+    if (!isBelowTarget(overall, targetValue)) return null;
+    return {
+      overall,
+      tuple: [
+        Number(targetValue) - overall,
+        radius,
+        calcVariance(values),
+        meanDistance
+      ]
+    };
+  }
+  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode);
+  if (!prefix) return null;
   return {
     overall,
     tuple: [
-      Number(targetValue) - overall,
+      ...prefix,
       radius,
       calcVariance(values),
       meanDistance
@@ -134,12 +183,11 @@ function scoreCraftAssistSolutionNeutral({selected, targetValue}) {
   };
 }
 
-function scoreCraftAssistSolutionMultiMaterial({selected, targetValue}) {
+function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode = "below"}) {
   const list = Array.isArray(selected) ? selected : [];
   const values = list.map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  if (!(overall < Number(targetValue) - EPSILON)) return null;
   const mains = list
     .filter((item) => normalizeRole(item && item.role) === "main")
     .map((item) => Number(item.value || 0));
@@ -151,10 +199,25 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue}) {
   const mainMean = mains.length ? mains.reduce((sum, value) => sum + value, 0) / mains.length : 0;
   const auxMean = auxes.length ? auxes.reduce((sum, value) => sum + value, 0) / auxes.length : 0;
   const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
+  if (normalizeApproachMode(approachMode) === "below") {
+    if (!isBelowTarget(overall, targetValue)) return null;
+    return {
+      overall,
+      tuple: [
+        Number(targetValue) - overall,
+        wrongSidePenalty,
+        -mainMean,
+        auxMean,
+        radius
+      ]
+    };
+  }
+  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode);
+  if (!prefix) return null;
   return {
     overall,
     tuple: [
-      Number(targetValue) - overall,
+      ...prefix,
       wrongSidePenalty,
       -mainMean,
       auxMean,
@@ -163,10 +226,10 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue}) {
   };
 }
 
-function scoreCompleteSelection(selected, targetValue, mode) {
-  if (mode === "single_material") return scoreCraftAssistSolutionSingleMaterial({selected, targetValue});
-  if (mode === "multi_material_role") return scoreCraftAssistSolutionMultiMaterial({selected, targetValue});
-  return scoreCraftAssistSolutionNeutral({selected, targetValue});
+function scoreCompleteSelection(selected, targetValue, mode, approachMode = "below") {
+  if (mode === "single_material") return scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode});
+  if (mode === "multi_material_role") return scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode});
+  return scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode});
 }
 
 function compareByValueDesc(a, b) {
@@ -1119,10 +1182,16 @@ function searchRoleAwarePushSolution({groups, targetValue} = {}) {
   };
 }
 
-function scorePartialState(state, totalSlots, targetValue, mode) {
+function scorePartialState(state, totalSlots, targetValue, mode, approachMode = "below") {
   const selected = Array.isArray(state && state.selected) ? state.selected : [];
   const count = selected.length;
   if (count <= 0) {
+    if (normalizeApproachMode(approachMode) === "infinite") {
+      const emptyGap = Math.abs(Number(targetValue));
+      if (mode === "single_material") return [emptyGap, 0, 0, 0, 0, 0];
+      if (mode === "multi_material_role") return [emptyGap, 0, 0, 0, 0, 0];
+      return [emptyGap, 0, 0, 0, 0];
+    }
     if (mode === "single_material") return [0, Number(targetValue), 0, 0, 0];
     return [Number(targetValue), 0, 0, 0, 0];
   }
@@ -1132,6 +1201,49 @@ function scorePartialState(state, totalSlots, targetValue, mode) {
     + Number(targetValue) * Math.max(0, totalSlots - count)
   ) / totalSlots;
   const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
+  if (normalizeApproachMode(approachMode) === "infinite") {
+    const projectedGap = Math.abs(Number(targetValue) - projectedOverall);
+    const projectedAbovePenalty = projectedOverall > Number(targetValue) + EPSILON ? 1 : 0;
+    if (mode === "single_material") {
+      const above = values.filter((value) => value > Number(targetValue) + EPSILON).length;
+      const below = values.filter((value) => value < Number(targetValue) - EPSILON).length;
+      return [
+        projectedGap,
+        projectedAbovePenalty,
+        radius,
+        Math.abs(above - below),
+        calcVariance(values),
+        values.reduce((sum, value) => sum + Math.abs(value - Number(targetValue)), 0) / values.length
+      ];
+    }
+    if (mode === "multi_material_role") {
+      const mains = selected
+        .filter((item) => normalizeRole(item && item.role) === "main")
+        .map((item) => Number(item.value || 0));
+      const auxes = selected
+        .filter((item) => normalizeRole(item && item.role) === "aux")
+        .map((item) => Number(item.value || 0));
+      const wrongSidePenalty = mains.filter((value) => value < Number(targetValue) - EPSILON).length
+        + auxes.filter((value) => value > Number(targetValue) + EPSILON).length;
+      const mainMean = mains.length ? mains.reduce((sum, value) => sum + value, 0) / mains.length : 0;
+      const auxMean = auxes.length ? auxes.reduce((sum, value) => sum + value, 0) / auxes.length : 0;
+      return [
+        projectedGap,
+        projectedAbovePenalty,
+        wrongSidePenalty,
+        -mainMean,
+        auxMean,
+        radius
+      ];
+    }
+    return [
+      projectedGap,
+      projectedAbovePenalty,
+      radius,
+      calcVariance(values),
+      values.reduce((sum, value) => sum + Math.abs(value - Number(targetValue)), 0) / values.length
+    ];
+  }
   if (mode === "single_material") {
     const above = values.filter((value) => value > Number(targetValue) + EPSILON).length;
     const below = values.filter((value) => value < Number(targetValue) - EPSILON).length;
@@ -1194,10 +1306,10 @@ function buildCanonicalStateKey(state) {
   return `${slotIndex}|${groupKey}`;
 }
 
-function pruneBeam(states, beamWidth, totalSlots, targetValue, mode) {
+function pruneBeam(states, beamWidth, totalSlots, targetValue, mode, approachMode = "below") {
   const bestByKey = new Map();
   for (const state of Array.isArray(states) ? states : []) {
-    const score = scorePartialState(state, totalSlots, targetValue, mode);
+    const score = scorePartialState(state, totalSlots, targetValue, mode, approachMode);
     const key = buildCanonicalStateKey(state);
     const existing = bestByKey.get(key);
     if (!existing || compareScoreTuples(score, existing.score) < 0) {
@@ -1209,10 +1321,10 @@ function pruneBeam(states, beamWidth, totalSlots, targetValue, mode) {
   return scored.slice(0, Math.max(1, Number(beamWidth) || 1)).map((entry) => entry.state);
 }
 
-function pickBestCompleteSolution(states, targetValue, mode) {
+function pickBestCompleteSolution(states, targetValue, mode, approachMode = "below") {
   let best = null;
   for (const state of Array.isArray(states) ? states : []) {
-    const scored = scoreCompleteSelection(state.selected, targetValue, mode);
+    const scored = scoreCompleteSelection(state.selected, targetValue, mode, approachMode);
     if (!scored) continue;
     if (!best || compareScoreTuples(scored.tuple, best.scoreTuple) < 0) {
       best = {
@@ -1241,7 +1353,7 @@ function candidateTouchesCapBoundary(selected, groupsWithOrdered, capExtra) {
   return false;
 }
 
-function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra}) {
+function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below"}) {
   let best = null;
   for (let extra = 0; extra <= capExtra; extra += 1) {
     const windows = groupsWithOrdered.map((group) => {
@@ -1285,11 +1397,11 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
           });
         }
       }
-      beam = pruneBeam(nextStates, beamWidth, totalSlots, targetValue, mode);
+      beam = pruneBeam(nextStates, beamWidth, totalSlots, targetValue, mode, approachMode);
       if (!beam.length) break;
     }
     if (!beam.length) continue;
-    const solved = pickBestCompleteSolution(beam, targetValue, mode);
+    const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode);
     if (solved && (!best || compareScoreTuples(solved.scoreTuple, best.scoreTuple) < 0)) {
       best = {
         ...solved,
@@ -1747,10 +1859,11 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
   };
 }
 
-function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200} = {}) {
+function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200, approachMode = "below"} = {}) {
   const sourceGroups = Array.isArray(groups) ? groups : [];
   const mode = resolveSearchMode(sourceGroups);
-  if (mode === "multi_material_role") {
+  const normalizedApproachMode = normalizeApproachMode(approachMode);
+  if (mode === "multi_material_role" && normalizedApproachMode === "below") {
     return searchRoleAwarePushSolution({
       groups: sourceGroups,
       targetValue
@@ -1762,7 +1875,7 @@ function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200} = 
     candidates: buildOrderedCandidates({...group, index}, targetValue, mode)
   }));
   if (!preparedGroups.length) return null;
-  if (mode === "single_material" && preparedGroups.length === 1) {
+  if (mode === "single_material" && preparedGroups.length === 1 && normalizedApproachMode === "below") {
     return searchSingleMaterialExact({
       group: preparedGroups[0],
       targetValue
@@ -1787,7 +1900,8 @@ function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200} = 
       beamWidth,
       mode,
       totalSlots,
-      capExtra
+      capExtra,
+      approachMode: normalizedApproachMode
     });
     if (solved && (!best || compareScoreTuples(solved.scoreTuple, best.scoreTuple) < 0)) {
       best = solved;
@@ -1815,7 +1929,7 @@ function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200} = 
     available: group.candidates,
     selected: selectedByGroup[index]
   }));
-  if (mode === "multi_material_role") {
+  if (mode === "multi_material_role" && normalizedApproachMode === "below") {
     const refined = refineRoleAwareMaterialResults({
       materialResults,
       targetValue
