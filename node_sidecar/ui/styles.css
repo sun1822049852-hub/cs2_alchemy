@@ -20,15 +20,13 @@ body {
   background: linear-gradient(180deg, #f7f9fc 0%, #edf1f7 100%);
 }
 
-.app-auth-gate {
+.client-auth-modal {
   position: fixed;
   inset: 0;
   z-index: 2000;
-  display: grid;
-  place-items: center;
-  padding: 24px;
 }
 
+.client-auth-modal-scrim,
 .app-auth-scrim {
   position: absolute;
   inset: 0;
@@ -36,6 +34,14 @@ body {
     radial-gradient(circle at top, rgba(220, 164, 76, 0.16), transparent 42%),
     rgba(6, 10, 16, 0.72);
   backdrop-filter: blur(10px);
+}
+
+.app-auth-gate {
+  position: relative;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
 }
 
 .app-auth-card {
@@ -47,6 +53,25 @@ body {
   background: linear-gradient(180deg, rgba(17, 22, 28, 0.96), rgba(12, 15, 20, 0.98));
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
   color: #f7f3e8;
+}
+
+.app-auth-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.client-auth-modal-close {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(243, 199, 121, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f7f3e8;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .app-auth-eyebrow {
@@ -198,6 +223,59 @@ body {
   .app-auth-inline button {
     width: 100%;
   }
+}
+
+.guest-workspace-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(220, 164, 76, 0.2);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(243, 199, 121, 0.18), transparent 38%),
+    linear-gradient(180deg, rgba(20, 26, 34, 0.92), rgba(14, 18, 24, 0.98));
+  color: #f7f3e8;
+}
+
+.guest-workspace-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(243, 199, 121, 0.7);
+  margin-bottom: 4px;
+}
+
+.guest-workspace-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.guest-workspace-text {
+  font-size: 13px;
+  color: #c7d0dc;
+}
+
+.guest-workspace-actions {
+  flex-shrink: 0;
+}
+
+.guest-workspace-actions button {
+  padding: 8px 16px;
+  border: 1px solid rgba(243, 199, 121, 0.3);
+  border-radius: 10px;
+  background: rgba(243, 199, 121, 0.08);
+  color: #f7f3e8;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.guest-workspace-notice.hidden {
+  display: none;
 }
 
 .layout {
