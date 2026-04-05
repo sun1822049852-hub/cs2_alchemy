@@ -8,6 +8,7 @@ const STORAGE_UNIT_CAPACITY = 1000;
 const MAIN_INVENTORY_CAPACITY = 1000;
 const STORAGE_UNIT_DEF_INDEX = 1201;
 const WEAR_INPUT_DECIMALS = 6;
+const TRADEUP_SIMULATION_WEAR_DECIMALS = 16;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
 const SNAPSHOT_REUSE_WINDOW_MS = 10 * 60 * 1000;
 const WEAR_SUFFIX_RANGES = [
@@ -8106,7 +8107,7 @@ function getActiveTradeupSimulationPreset() {
 function formatTradeupSimulationWear(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "-";
-  return numeric.toFixed(6);
+  return numeric.toFixed(TRADEUP_SIMULATION_WEAR_DECIMALS);
 }
 function summarizeTradeupSimulationWearLabel(label) {
   const value = String(label || "").trim();

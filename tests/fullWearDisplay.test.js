@@ -1,14 +1,17 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const appPath = path.join(__dirname, "..", "node_sidecar", "ui", "app.js");
 const app = fs.readFileSync(appPath, "utf8");
 
 const requiredFragments = [
+  "const TRADEUP_SIMULATION_WEAR_DECIMALS = 16;",
   "function wearTextFull(value) {",
   "function formatVisibleWearText(value, decimals = 8) {",
   "return state.craftShowFullWear ? wearTextFull(value) : numberTextTrunc(value, decimals);",
+  "return numeric.toFixed(TRADEUP_SIMULATION_WEAR_DECIMALS);",
   'const text = value == null ? "-" : formatVisibleWearText(value, 8);',
   "return wearTextFull(total / values.length);",
   'relative_wear: wearTextFull(getRelativeWearValue(row)),',
@@ -30,6 +33,7 @@ for (const fragment of requiredFragments) {
 }
 
 const forbiddenFragments = [
+  "const FULL_WEAR_DISPLAY_MIN_DECIMALS = 16;",
   'const text = value == null ? "-" : numberTextTrunc(value, WEAR_INPUT_DECIMALS);',
   'const text = value == null ? "-" : wearTextFull(value);',
   'relative_wear: numberTextTrunc(getRelativeWearValue(row), WEAR_INPUT_DECIMALS),',
@@ -50,5 +54,27 @@ for (const fragment of forbiddenFragments) {
     `full wear display should not keep truncated fragment: ${fragment}`
   );
 }
+
+const wearTextFullMatch = app.match(/function wearTextFull\(value\) \{[\s\S]*?\n\}/);
+assert.notEqual(wearTextFullMatch, null, "full wear display should expose wearTextFull");
+
+const simulationDecimalsMatch = app.match(/const TRADEUP_SIMULATION_WEAR_DECIMALS = \d+;/);
+assert.notEqual(simulationDecimalsMatch, null, "tradeup simulation should define a dedicated fixed wear precision");
+
+const formatTradeupSimulationWearMatch = app.match(/function formatTradeupSimulationWear\(value\) \{[\s\S]*?\n\}/);
+assert.notEqual(formatTradeupSimulationWearMatch, null, "tradeup simulation should expose its dedicated wear formatter");
+
+const runtime = {};
+vm.runInNewContext(
+  `${simulationDecimalsMatch[0]}\n${wearTextFullMatch[0]}\n${formatTradeupSimulationWearMatch[0]}\nresult = { TRADEUP_SIMULATION_WEAR_DECIMALS, wearTextFull, formatTradeupSimulationWear };`,
+  runtime
+);
+
+assert.equal(runtime.result.TRADEUP_SIMULATION_WEAR_DECIMALS, 16, "tradeup simulation should keep a dedicated 16-digit wear precision");
+assert.equal(runtime.result.wearTextFull(0), "0", "global full wear display should still omit redundant trailing zero padding");
+assert.equal(runtime.result.wearTextFull(0.1), "0.1", "global full wear display should preserve compact decimal output outside the simulation page");
+assert.equal(runtime.result.wearTextFull("0.1234567890123456"), "0.1234567890123456", "full wear display should preserve higher-precision string input");
+assert.equal(runtime.result.formatTradeupSimulationWear(0), "0.0000000000000000", "tradeup simulation should still render zero with 16 fixed decimal places");
+assert.equal(runtime.result.formatTradeupSimulationWear(0.1), "0.1000000000000000", "tradeup simulation should still render fixed 16-digit wear text");
 
 console.log("fullWearDisplay tests passed");
