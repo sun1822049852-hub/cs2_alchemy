@@ -367,7 +367,42 @@ body {
 }
 
 #inventoryPage {
-  position: relative;
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  bottom: 18px;
+  left: 42px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1;
+}
+
+#inventoryPage #listWrap {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(220, 164, 76, 0.82) rgba(12, 14, 18, 0.88);
+}
+
+#inventoryPage #listWrap::-webkit-scrollbar {
+  width: 8px;
+}
+
+#inventoryPage #listWrap::-webkit-scrollbar-track {
+  background: rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+#inventoryPage #listWrap::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
+  border: 2px solid rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+#inventoryPage #listWrap::-webkit-scrollbar-corner {
+  background: rgba(12, 14, 18, 0.88);
 }
 
 .panel {
@@ -1181,6 +1216,11 @@ select.small {
   min-width: 28px;
   max-width: 28px;
   padding: 2px 3px;
+}
+
+.group-table th:nth-child(2),
+.group-table td:nth-child(2) {
+  padding-left: 14px;
 }
 
 .group-name-heading,
@@ -4062,12 +4102,12 @@ select.small {
 }
 
 .craft-assist-content {
-  --craft-assist-preset-width: 240px;
+  --craft-assist-preset-width: 186px;
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 12px minmax(220px, var(--craft-assist-preset-width));
+  grid-template-columns: minmax(0, 1fr) 12px minmax(186px, var(--craft-assist-preset-width));
   gap: 6px;
   align-items: stretch;
 }
@@ -5129,7 +5169,7 @@ select.small {
 #craftPage:not(.hidden) {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 20px);
+  height: calc(100vh - 34px);
   min-height: 0;
 }
 
@@ -6234,11 +6274,35 @@ body.theme-inkblue .status {
   color: #dce8f8;
 }
 
+body.theme-inkblue .account-tools label {
+  color: #ffffff;
+}
+
+body.theme-inkblue .account-tools select {
+  appearance: none;
+  background-color: rgba(12, 14, 20, 0.88);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23f6c86a' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+  border: 1px solid rgba(243, 199, 121, 0.35);
+  border-radius: 8px;
+  color: #f7f3e8;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+body.theme-inkblue .account-tools select:hover {
+  border-color: rgba(243, 199, 121, 0.6);
+}
+
+body.theme-inkblue .account-tools select:focus {
+  outline: none;
+  border-color: rgba(243, 199, 121, 0.8);
+  box-shadow: 0 0 0 2px rgba(243, 199, 121, 0.15);
+}
+
 body.theme-inkblue .account-tools .status.status-connected,
-body.theme-inkblue .account-card-state.status.status-connected {
-  color: #d8ffea;
-  border-color: rgba(74, 222, 128, 0.28);
-  background: rgba(34, 197, 94, 0.14);
 }
 
 body.theme-inkblue .account-tools .status.status-disconnected,
@@ -6513,6 +6577,30 @@ body.theme-inkblue #accountPage #savedAccountsWrap .empty {
   border-radius: 16px;
   background: var(--account-surface-subtle);
   color: var(--account-text-soft);
+}
+
+body.theme-inkblue #accountPage .saved-accounts {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(220, 164, 76, 0.72) rgba(12, 14, 18, 0.88);
+}
+
+body.theme-inkblue #accountPage .saved-accounts::-webkit-scrollbar {
+  width: 8px;
+}
+
+body.theme-inkblue #accountPage .saved-accounts::-webkit-scrollbar-track {
+  background: rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+body.theme-inkblue #accountPage .saved-accounts::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
+  border: 2px solid rgba(12, 14, 18, 0.88);
+  border-radius: 999px;
+}
+
+body.theme-inkblue #accountPage .saved-accounts::-webkit-scrollbar-corner {
+  background: rgba(12, 14, 18, 0.88);
 }
 
 body.theme-inkblue {
@@ -7472,5 +7560,24 @@ body.theme-inkblue .nav-rail-trigger:hover {
 
   .workspace {
     padding: 12px 12px 12px 18px;
+  }
+}
+
+/* ── 库存页 fixed 定位响应式适配 ── */
+@media (max-width: 1120px) {
+  #inventoryPage {
+    top: 14px;
+    right: 14px;
+    bottom: 14px;
+    left: 24px;
+  }
+}
+
+@media (max-width: 720px) {
+  #inventoryPage {
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    left: 18px;
   }
 }

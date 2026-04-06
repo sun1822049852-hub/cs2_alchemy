@@ -44,6 +44,11 @@ function buildWindow(url) {
 
 async function bootstrap() {
   await app.whenReady();
+
+  // 开发模式：清除 Chromium 磁盘缓存，确保每次启动都加载最新 UI 文件
+  const ses = require("electron").session.defaultSession;
+  await ses.clearCache();
+
   const server = await startUiServer();
   const address = server.address();
   const port = address && typeof address === "object" ? address.port : 8787;

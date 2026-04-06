@@ -204,7 +204,10 @@ function normalizeCraftAssistMaterialForRun(entry) {
   const names = craftAssistMaterialNames(entry);
   if (!names.length) return null;
   const role = normalizeCraftAssistRole(entry && entry.role);
-  const count = normalizeCraftAssistEntryCount(entry && entry.count, 1);
+  // 兼容旧格式（count）和新格式（count_limit）
+  const countLimit = normalizeCraftAssistEntryCount(
+    entry && (entry.count_limit != null ? entry.count_limit : entry.count), 1
+  );
   let wearMin = clampWear01(entry && entry.wear_min, 0);
   let wearMax = clampWear01(entry && entry.wear_max, 1);
   if (wearMax < wearMin) {
@@ -218,7 +221,7 @@ function normalizeCraftAssistMaterialForRun(entry) {
     name: names[0],
     label: names.join(" / "),
     role,
-    count,
+    count: countLimit,
     direction: normalizeCraftAssistDirection(role, entry && entry.direction),
     disable_direction_limit: !!(entry && entry.disable_direction_limit),
     wear_min: wearMin,

@@ -18,7 +18,10 @@
           notice.classList.toggle("hidden", !open);
         }
         if (noticeText && text) {
-          noticeText.textContent = String(text || "").trim();
+          const nextText = String(text || "").trim();
+          if (noticeText.textContent !== nextText) {
+            noticeText.textContent = nextText;
+          }
         }
       },
       setModalCopy({titleText = "", hintText = ""} = {}) {

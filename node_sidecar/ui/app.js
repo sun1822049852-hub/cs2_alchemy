@@ -65,7 +65,7 @@ const state = {
 };
 
 const ui = {
-  licenseGate: document.getElementById("licenseGate"), licenseTitle: document.getElementById("licenseTitle"), licenseHint: document.getElementById("licenseHint"),
+  clientAuthModal: document.getElementById("clientAuthModal"), clientAuthModalCloseBtn: document.getElementById("clientAuthModalCloseBtn"), licenseGate: document.getElementById("licenseGate"), licenseTitle: document.getElementById("licenseTitle"), licenseHint: document.getElementById("licenseHint"),
   clientAuthModeTabs: document.getElementById("clientAuthModeTabs"), clientAuthLoginTabBtn: document.getElementById("clientAuthLoginTabBtn"), clientAuthRegisterTabBtn: document.getElementById("clientAuthRegisterTabBtn"), clientAuthResetTabBtn: document.getElementById("clientAuthResetTabBtn"), clientAuthBundleTabBtn: document.getElementById("clientAuthBundleTabBtn"),
   clientLoginPanel: document.getElementById("clientLoginPanel"), clientLoginUsername: document.getElementById("clientLoginUsername"), clientLoginPassword: document.getElementById("clientLoginPassword"), clientLoginSubmitBtn: document.getElementById("clientLoginSubmitBtn"),
   clientRegisterPanel: document.getElementById("clientRegisterPanel"), clientRegisterEmail: document.getElementById("clientRegisterEmail"), clientRegisterCode: document.getElementById("clientRegisterCode"), clientRegisterSendCodeBtn: document.getElementById("clientRegisterSendCodeBtn"), clientRegisterUsername: document.getElementById("clientRegisterUsername"), clientRegisterPassword: document.getElementById("clientRegisterPassword"), clientRegisterSubmitBtn: document.getElementById("clientRegisterSubmitBtn"),
@@ -75,6 +75,7 @@ const ui = {
   licenseClearLocalBtn: document.getElementById("licenseClearLocalBtn"), licenseUserPill: document.getElementById("licenseUserPill"), licenseUserName: document.getElementById("licenseUserName"),
   navShell: document.getElementById("navShell"), navRailTrigger: document.getElementById("navRailTrigger"), mainSidebar: document.getElementById("mainSidebar"),
   navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"), navSimulation: document.getElementById("navSimulation"),
+  guestWorkspaceNotice: document.getElementById("guestWorkspaceNotice"), guestWorkspaceNoticeText: document.getElementById("guestWorkspaceNoticeText"), guestWorkspaceLoginBtn: document.getElementById("guestWorkspaceLoginBtn"),
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
   loginSaveBtn: document.getElementById("loginSaveBtn"), clearAccountBtn: document.getElementById("clearAccountBtn"), accountStatus: document.getElementById("accountStatus"), savedAccountsWrap: document.getElementById("savedAccountsWrap"),
@@ -132,6 +133,28 @@ const ui = {
   simulationModeSavedBtn: document.getElementById("simulationModeSavedBtn"), simulationModeWorkspaceBtn: document.getElementById("simulationModeWorkspaceBtn"), simulationSavedPresets: document.getElementById("simulationSavedPresets"), simulationWorkspace: document.getElementById("simulationWorkspace"), simulationWorkspaceActionsBar: document.getElementById("simulationWorkspaceActionsBar"), simulationSavePresetBtn: document.getElementById("simulationSavePresetBtn"), simulationCancelEditBtn: document.getElementById("simulationCancelEditBtn"), simulationLayout: document.getElementById("simulationLayout"), simulationOutputPanel: document.getElementById("simulationOutputPanel"), simulationMaterialPanel: document.getElementById("simulationMaterialPanel"), simulationOutputRoleChooser: document.getElementById("simulationOutputRoleChooser"), simulationOutputRoleChooserText: document.getElementById("simulationOutputRoleChooserText"), simulationOutputRoleSplit: document.getElementById("simulationOutputRoleSplit"), simulationMaterialRoleChooser: document.getElementById("simulationMaterialRoleChooser"), simulationMaterialRoleChooserText: document.getElementById("simulationMaterialRoleChooserText"), simulationMaterialRoleSplit: document.getElementById("simulationMaterialRoleSplit"), simulationOutputLane: document.getElementById("simulationOutputLane"), simulationMaterialLane: document.getElementById("simulationMaterialLane"), simulationPickerModal: document.getElementById("simulationPickerModal"), simulationPickerTitle: document.getElementById("simulationPickerTitle"), simulationPickerRoleBadge: document.getElementById("simulationPickerRoleBadge"), simulationPickerHint: document.getElementById("simulationPickerHint"), simulationPickerMeta: document.getElementById("simulationPickerMeta"), simulationPickerSearchInput: document.getElementById("simulationPickerSearchInput"), simulationPickerSearchBtn: document.getElementById("simulationPickerSearchBtn"), simulationPickerSearchResults: document.getElementById("simulationPickerSearchResults"), simulationPickerClose: document.getElementById("simulationPickerClose"), simulationPickerCancelBtn: document.getElementById("simulationPickerCancelBtn"), simulationCardModal: document.getElementById("simulationCardModal"), simulationCardModalTitle: document.getElementById("simulationCardModalTitle"), simulationCardModalBody: document.getElementById("simulationCardModalBody"), simulationCardModalField: document.getElementById("simulationCardModalField"), simulationCardModalWearInput: document.getElementById("simulationCardModalWearInput"), simulationCardModalWearHint: document.getElementById("simulationCardModalWearHint"), simulationCardModalReadonlyNote: document.getElementById("simulationCardModalReadonlyNote"), simulationCardModalClose: document.getElementById("simulationCardModalClose"), simulationCardModalSaveBtn: document.getElementById("simulationCardModalSaveBtn"), simulationCardModalCancelBtn: document.getElementById("simulationCardModalCancelBtn")
 };
 
+const authSessionStore = typeof window !== "undefined" ? (window.cs2AlchemyAuthSessionStore || null) : null;
+const authUiController = typeof window !== "undefined" ? (window.cs2AlchemyAuthUiController || null) : null;
+const guestPreviewProvider = typeof window !== "undefined" ? (window.guestPreviewProvider || null) : null;
+const workspaceAccessGuard = (
+  typeof window !== "undefined"
+  && typeof window.createWorkspaceAccessGuard === "function"
+) ? window.createWorkspaceAccessGuard({
+  getMode: () => {
+    if (authSessionStore && typeof authSessionStore.getSnapshot === "function") {
+      return String(authSessionStore.getSnapshot().mode || "").trim() || "booting";
+    }
+    return state.clientLicense && state.clientLicense.authenticated ? "authenticated" : "guest";
+  },
+  onUnauthorized: ({reason = "", view = "login"} = {}) => {
+    openClientAuthModal({
+      title: "登录后可用当前功能",
+      hint: String(reason || "").trim() || "当前为访客预览态，登录后可继续刚才的操作。",
+      view
+    });
+  }
+}) : null;
+
 let searchTimer = null;
 let inventoryEventSource = null;
 let inventoryEventUsername = "";
@@ -162,12 +185,14 @@ async function api(path, options = {}) {
   const requestOptions = options && typeof options === "object" ? {...options} : {};
   const timeoutMs = Math.max(0, Number(requestOptions.timeoutMs) || 0);
   const timeoutMessage = String(requestOptions.timeoutMessage || "").trim();
+  const suppressAuthFailure = !!requestOptions.suppressAuthFailure;
   const requestHeaders = requestOptions.headers && typeof requestOptions.headers === "object"
     ? {...requestOptions.headers}
     : {};
   const externalSignal = requestOptions.signal || null;
   delete requestOptions.timeoutMs;
   delete requestOptions.timeoutMessage;
+  delete requestOptions.suppressAuthFailure;
   delete requestOptions.headers;
   delete requestOptions.signal;
 
@@ -206,6 +231,7 @@ async function api(path, options = {}) {
       err.status = r.status;
       err.data = d;
       if (
+        !suppressAuthFailure &&
         typeof window !== "undefined" &&
         typeof window.__cs2AlchemyHandleApiLicenseFailure === "function" &&
         Number(r.status) === 401
@@ -323,6 +349,188 @@ function syncClientAuthControlStates() {
   setButtonBusy(ui.licenseImportBtn, false);
 }
 
+function isGuestWorkspaceActive() {
+  return !(state.clientLicense && state.clientLicense.authenticated);
+}
+
+function syncAuthSessionStoreFromLicense() {
+  if (!authSessionStore) return;
+  if (typeof authSessionStore.setFromClientAuthState === "function") {
+    authSessionStore.setFromClientAuthState({
+      authenticated: !!(state.clientLicense && state.clientLicense.authenticated),
+      code: String(state.clientLicense && state.clientLicense.code || "").trim(),
+      expires_at: String(state.clientLicense && state.clientLicense.expiresAt || "").trim(),
+      user: state.clientLicense && state.clientLicense.user ? deepCopyPlain(state.clientLicense.user) : null,
+      auth_provider: getClientAuthMode() === "prod_login" ? "remote" : "bundle"
+    });
+    return;
+  }
+  if (state.clientLicense && state.clientLicense.authenticated && typeof authSessionStore.setAuthenticated === "function") {
+    authSessionStore.setAuthenticated({
+      authenticated: true,
+      expires_at: String(state.clientLicense.expiresAt || "").trim(),
+      user: state.clientLicense.user ? deepCopyPlain(state.clientLicense.user) : null,
+      auth_provider: getClientAuthMode() === "prod_login" ? "remote" : "bundle"
+    });
+    return;
+  }
+  if (typeof authSessionStore.setGuest === "function") {
+    authSessionStore.setGuest(String(state.clientLicense && state.clientLicense.code || "").trim());
+  }
+}
+
+function getGuestWorkspaceNoticeMessage() {
+  const code = String(state.clientLicense && state.clientLicense.code || "").trim();
+  if (code === "license_expired") {
+    return "当前授权已失效，已回落到访客预览态；登录后可继续使用真实功能。";
+  }
+  if (code === "license_invalid") {
+    return "当前授权不可用，已切换到访客预览态；登录后可继续使用真实功能。";
+  }
+  return "当前为访客预览态，可先浏览页面结构，受限功能需登录后使用。";
+}
+
+function renderGuestWorkspaceNotice() {
+  const visible = isGuestWorkspaceActive();
+  const text = getGuestWorkspaceNoticeMessage();
+  if (authUiController && typeof authUiController.setGuestNoticeVisible === "function") {
+    authUiController.setGuestNoticeVisible(visible, text);
+  } else {
+    if (ui.guestWorkspaceNotice) {
+      ui.guestWorkspaceNotice.classList.toggle("hidden", !visible);
+    }
+    if (ui.guestWorkspaceNoticeText) {
+      ui.guestWorkspaceNoticeText.textContent = text;
+    }
+  }
+}
+
+function openClientAuthModal({title = "", hint = "", view = ""} = {}) {
+  state.clientAuthModalOpen = true;
+  state.clientAuthPromptTitle = String(title || "").trim();
+  state.clientAuthPromptHint = String(hint || "").trim();
+  if (view) {
+    state.clientAuthView = String(view || "").trim();
+  }
+  renderLicenseGate();
+}
+
+function closeClientAuthModal() {
+  state.clientAuthModalOpen = false;
+  state.clientAuthPromptTitle = "";
+  state.clientAuthPromptHint = "";
+  renderLicenseGate();
+}
+
+function guardGuestAction({reason = "", view = "login", run = null} = {}) {
+  if (!isGuestWorkspaceActive()) {
+    if (typeof run === "function") {
+      return run();
+    }
+    return true;
+  }
+  if (workspaceAccessGuard && typeof workspaceAccessGuard.requireAuth === "function") {
+    workspaceAccessGuard.requireAuth({reason, view});
+  } else {
+    openClientAuthModal({
+      title: "登录后可用当前功能",
+      hint: String(reason || "").trim() || "当前为访客预览态，登录后可继续刚才的操作。",
+      view
+    });
+  }
+  return false;
+}
+
+function applyGuestWorkspacePreview({reason = ""} = {}) {
+  if (!guestPreviewProvider) return false;
+  const inventoryPreview = typeof guestPreviewProvider.getGuestInventoryPreview === "function"
+    ? guestPreviewProvider.getGuestInventoryPreview()
+    : null;
+  const craftPreview = typeof guestPreviewProvider.getGuestCraftPreview === "function"
+    ? guestPreviewProvider.getGuestCraftPreview()
+    : null;
+  const simulationPreview = typeof guestPreviewProvider.getGuestSimulationPreview === "function"
+    ? guestPreviewProvider.getGuestSimulationPreview()
+    : null;
+  if (!inventoryPreview || !craftPreview || !simulationPreview) return false;
+
+  state.clientAuthModalOpen = false;
+  state.clientAuthPromptTitle = "";
+  state.clientAuthPromptHint = "";
+  state.workspaceHydratedFor = "";
+  state.accounts = [];
+  state.activeAccount = "";
+  state.accountSelectedUsername = "";
+  state.currentAccountUsername = "";
+  state.connectedUsername = "";
+  state.selectedComponentItemIds.clear();
+  if (state.snapshotCacheByAccount instanceof Map) state.snapshotCacheByAccount.clear();
+  if (state.craftAccountStateByAccount instanceof Map) state.craftAccountStateByAccount.clear();
+  if (state.craftAssistRuntimeByAccount instanceof Map) state.craftAssistRuntimeByAccount.clear();
+  if (state.craftAssistActiveRunTokensByAccount instanceof Map) state.craftAssistActiveRunTokensByAccount.clear();
+  state.profileHydratingUsernames.clear();
+  state.profileHydratedUsernames.clear();
+  state.componentTaskQueue = {running: null, queued: []};
+  state.selectedQueueJobId = "";
+  state.targetDrawerOpen = false;
+  state.targetComponentChoices = [];
+  state.targetComponentSelectedId = "";
+  state.targetComponentExcludeId = "";
+  setAccountForm({username: "", password: "", totp: "", remark: ""});
+  setNoAccountState({silentSummary: true});
+  setRows(
+    deepCopyPlain(Array.isArray(inventoryPreview.rows) ? inventoryPreview.rows : []),
+    deepCopyPlain(inventoryPreview.component || {summary_map: {}, item_map: {}}),
+    String(inventoryPreview.snapshotPath || "").trim()
+  );
+  state.fetchTime = "";
+  state.craftCandidateRows = deepCopyPlain(Array.isArray(craftPreview.candidateRows) ? craftPreview.candidateRows : []);
+  state.craftCandidateStats = deepCopyPlain(craftPreview.candidateStats || null);
+  state.craftCandidateLoading = false;
+  state.craftCandidateRequestKey = "";
+  state.craftCandidateLoadedKey = "guest_preview";
+  state.craftRecipeQueue = deepCopyPlain(Array.isArray(craftPreview.recipeQueue) ? craftPreview.recipeQueue : []);
+  state.craftActiveRecipeId = String(craftPreview.activeRecipeId || "").trim();
+  state.craftPredictorResponse = deepCopyPlain(craftPreview.predictor || null);
+  state.craftPredictorError = "";
+  state.craftPredictorLoading = false;
+  state.craftSelectedItemIds.clear();
+  state.craftAssistOpen = false;
+  state.craftAssistPickerOpen = false;
+  state.craftAssistPickerTargetMaterialId = "";
+  state.craftAssistRoleChooserOpen = false;
+  state.craftAssistMaterials = [];
+  state.craftAssistPresets = [];
+  state.craftAssistPresetApplyCountMap = {};
+  state.craftAssistPresetEditingId = "";
+  state.craftAssistPresetEditingName = "";
+  state.craftAssistPresetEditingBackup = null;
+  state.craftAssistPresetEditingInitialSnapshot = null;
+  state.craftAssistPendingUiAction = "";
+  state.craftAssistPendingPresetId = "";
+  state.craftAssistRunToken = "";
+  state.simulationPresets = deepCopyPlain(Array.isArray(simulationPreview.savedPresets) ? simulationPreview.savedPresets : []);
+  state.simulationActivePresetId = String(
+    (simulationPreview.savedPresets && simulationPreview.savedPresets[0] && simulationPreview.savedPresets[0].id) || ""
+  ).trim();
+  state.simulationWorkspacePreset = deepCopyPlain(simulationPreview.workspacePreset || null);
+  state.simulationWorkspaceSourcePresetId = state.simulationActivePresetId;
+  state.simulationPickerOpen = false;
+  state.simulationModalOpen = false;
+  clearCraftExecutionOverlayState();
+  closeTargetComponentDrawer();
+  renderTaskQueueControls();
+  syncInventoryAccountSelect();
+  syncInventoryTop();
+  renderSavedAccounts();
+  renderCraftPage();
+  renderSimulationPage();
+  renderGuestWorkspaceNotice();
+  setAccountStatus("登录后可保存 Steam 账号并绑定到当前客户端身份。");
+  setSummary(String(reason || inventoryPreview.summary || "").trim());
+  return true;
+}
+
 function setClientAuthView(view) {
   state.clientAuthView = String(view || "").trim() || resolveDefaultClientAuthView();
   renderLicenseGate();
@@ -352,6 +560,7 @@ function applyClientLicenseState(data) {
     expiresInMs: Number(payload.expires_in_ms) || 0
   };
   state.clientAuthView = resolveClientAuthView();
+  syncAuthSessionStoreFromLicense();
 }
 
 function renderLicenseGate() {
@@ -365,9 +574,18 @@ function renderLicenseGate() {
   const clientAuthView = resolveClientAuthView();
   const showRemotePanels = authMode === "prod_login";
   const showModeTabs = showRemotePanels;
+  const modalOpen = !!state.clientAuthModalOpen;
   state.clientAuthView = clientAuthView;
+  if (authUiController && typeof authUiController.setModalOpen === "function") {
+    authUiController.setModalOpen(modalOpen);
+  } else if (ui.clientAuthModal) {
+    ui.clientAuthModal.classList.toggle("hidden", !modalOpen);
+  }
+  if (ui.clientAuthModalCloseBtn) {
+    ui.clientAuthModalCloseBtn.classList.toggle("hidden", !modalOpen);
+  }
   if (ui.licenseGate) {
-    ui.licenseGate.classList.toggle("hidden", readyForWorkspace);
+    ui.licenseGate.classList.toggle("hidden", !modalOpen);
   }
   if (ui.licenseUserPill) {
     ui.licenseUserPill.classList.toggle("hidden", !readyForWorkspace);
@@ -387,6 +605,9 @@ function renderLicenseGate() {
     licenseTitleText = expired ? "开发授权已过期" : "开发直通授权";
   } else {
     licenseTitleText = expired ? "授权已过期" : "客户端授权";
+  }
+  if (modalOpen && String(state.clientAuthPromptTitle || "").trim()) {
+    licenseTitleText = String(state.clientAuthPromptTitle || "").trim();
   }
   if (ui.licenseTitle) {
     ui.licenseTitle.textContent = licenseTitleText;
@@ -408,6 +629,9 @@ function renderLicenseGate() {
     licenseHintText = expired
       ? "当前授权已过期，请导入新的签名授权包。"
       : "请导入有效的签名授权包后继续。";
+  }
+  if (modalOpen && String(state.clientAuthPromptHint || "").trim()) {
+    licenseHintText = String(state.clientAuthPromptHint || "").trim();
   }
   if (ui.licenseHint) {
     ui.licenseHint.textContent = licenseHintText;
@@ -470,6 +694,7 @@ function renderLicenseGate() {
       isError
     );
   }
+  renderGuestWorkspaceNotice();
 }
 
 async function initializeAuthenticatedWorkspace() {
@@ -506,7 +731,16 @@ async function loadLicenseState({hydrateWorkspace = true} = {}) {
   renderLicenseGate();
   if (state.clientLicense.authenticated && hydrateWorkspace) {
     setLicenseStatus("授权已验证，正在载入工作台...");
+    state.clientAuthModalOpen = false;
+    state.clientAuthPromptTitle = "";
+    state.clientAuthPromptHint = "";
     await initializeAuthenticatedWorkspace();
+    renderLicenseGate();
+  } else if (hydrateWorkspace) {
+    applyGuestWorkspacePreview({
+      reason: String(state.clientLicense && state.clientLicense.message || "").trim()
+        || "当前未登录，已进入访客预览态。"
+    });
     renderLicenseGate();
   }
   return state.clientLicense;
@@ -692,7 +926,37 @@ async function clearLocalLicense() {
       {method: "POST"}
     );
   } finally {
-    window.location.reload();
+    state.workspaceHydratedFor = "";
+    state.clientAuthModalOpen = false;
+    state.clientAuthPromptTitle = "";
+    state.clientAuthPromptHint = "";
+    try {
+      await loadLicenseState({hydrateWorkspace: true});
+    } catch (_) {
+      applyClientLicenseState({
+        authenticated: false,
+        code: "license_missing",
+        message: getClientAuthMode() === "prod_login"
+          ? "已退出登录，当前为访客预览态。"
+          : "已清除授权，当前为访客预览态。",
+        user: null,
+        permissions: [],
+        membership: [],
+        feature_flags: {},
+        auth_mode: getClientAuthMode(),
+        allow_manual_import: isManualImportAllowed(),
+        auth_service_configured: isRemoteClientAuthConfigured(),
+        auth_service_base_url: String(state.clientLicense && state.clientLicense.authServiceBaseUrl || "").trim(),
+        expires_at: "",
+        expires_in_ms: 0
+      });
+      applyGuestWorkspacePreview({
+        reason: getClientAuthMode() === "prod_login"
+          ? "已退出登录，当前为访客预览态。"
+          : "已清除授权，当前为访客预览态。"
+      });
+      renderLicenseGate();
+    }
   }
 }
 
@@ -713,6 +977,16 @@ async function handleApiLicenseFailure() {
     expiresAt: "",
     expiresInMs: 0
   };
+  syncAuthSessionStoreFromLicense();
+  state.workspaceHydratedFor = "";
+  state.clientAuthModalOpen = false;
+  state.clientAuthPromptTitle = "";
+  state.clientAuthPromptHint = "";
+  applyGuestWorkspacePreview({
+    reason: getClientAuthMode() === "prod_login"
+      ? "登录已失效，已回落到访客预览态。"
+      : "授权已失效，已回落到访客预览态。"
+  });
   renderLicenseGate();
   setLicenseStatus(
     getClientAuthMode() === "prod_login"
@@ -1321,10 +1595,10 @@ function updateCraftActionLayout() {
 }
 
 function clampCraftAssistPresetWidth(width) {
-  const min = 220;
+  const min = CRAFT_ASSIST_PRESET_MIN_WIDTH;
   const contentWidth = Number(ui.craftAssistContent && ui.craftAssistContent.clientWidth || 0);
   const effective = contentWidth > 0 ? Math.max(0, contentWidth - 8) : 0;
-  const auto = effective > 0 ? Math.round(effective * 0.28) : 240;
+  const auto = effective > 0 ? Math.max(min, Math.round(effective * 0.28)) : min;
   const maxByPanel = effective > 0 ? Math.max(min, Math.floor(effective * 0.62)) : 460;
   const max = Math.min(520, maxByPanel);
   const value = Number(width);
@@ -1481,7 +1755,7 @@ function loadCraftUiPrefs() {
       // 兼容旧默认值 320：迁移为自动高度（贴近底部），减少中间空白。
       state.craftAssistOverlayHeight = savedOverlayHeight === 320 ? 0 : savedOverlayHeight;
     }
-    if (Number.isFinite(Number(prefs.craft_assist_preset_width))) state.craftAssistPresetWidth = Number(prefs.craft_assist_preset_width);
+    if (Number.isFinite(Number(prefs.craft_assist_preset_width))) state.craftAssistPresetWidth = CRAFT_ASSIST_PRESET_MIN_WIDTH;
   } catch (_) {
     // ignore storage errors
   }
@@ -2108,6 +2382,16 @@ function setConnectionStatusTone(el, connected) {
 function syncInventoryTop() {
   const applyTop = (fetchEl, statusEl, refreshBtn, disconnectBtn) => {
     if (!fetchEl || !statusEl || !refreshBtn) return;
+    if (isGuestWorkspaceActive()) {
+      fetchEl.textContent = "库存获取时间：-";
+      statusEl.textContent = "未登录";
+      setConnectionStatusTone(statusEl, false);
+      statusEl.classList.remove("status-clickable");
+      statusEl.title = "";
+      refreshBtn.textContent = "连接并刷新库存信息";
+      if (disconnectBtn) disconnectBtn.disabled = false;
+      return;
+    }
     if (!state.currentAccountUsername) {
       fetchEl.textContent = "库存获取时间：-";
       statusEl.textContent = "未连接";
@@ -2234,6 +2518,22 @@ function setNavDrawerOpen(open) {
 
 function syncInventoryAccountSelect() {
   const selects = [ui.accountSelect, ui.craftAccountSelect].filter(Boolean);
+  if (isGuestWorkspaceActive()) {
+    for (const selectEl of selects) {
+      selectEl.replaceChildren();
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "请先登录";
+      selectEl.append(option);
+      selectEl.value = "";
+      selectEl.disabled = true;
+    }
+    ui.refreshBtn.disabled = false;
+    if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = false;
+    if (ui.disconnectBtn) ui.disconnectBtn.disabled = false;
+    if (ui.craftDisconnectBtn) ui.craftDisconnectBtn.disabled = false;
+    return;
+  }
   for (const selectEl of selects) {
     selectEl.replaceChildren();
     for (const row of state.accounts) {
@@ -2251,6 +2551,72 @@ function syncInventoryAccountSelect() {
 }
 function renderSavedAccounts() {
   ui.savedAccountsWrap.replaceChildren();
+  if (isGuestWorkspaceActive()) {
+    const cards = guestPreviewProvider && typeof guestPreviewProvider.getGuestAccountCards === "function"
+      ? guestPreviewProvider.getGuestAccountCards()
+      : [];
+    if (!cards.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "登录后可保存 Steam 账号并绑定到当前客户端身份。";
+      ui.savedAccountsWrap.append(empty);
+      return;
+    }
+    for (const row of cards) {
+      const card = document.createElement("div");
+      card.className = "account-card";
+      const main = document.createElement("div");
+      main.className = "account-card-main";
+      const avatar = document.createElement("div");
+      avatar.className = "account-card-avatar";
+      const fallback = document.createElement("span");
+      fallback.className = "account-card-avatar-fallback";
+      fallback.textContent = String(row && (row.remark || row.username || "示") || "示").slice(0, 1).toUpperCase();
+      avatar.append(fallback);
+      const info = document.createElement("div");
+      info.className = "account-card-info";
+      const titleRow = document.createElement("div");
+      titleRow.className = "account-card-title-row";
+      const title = document.createElement("div");
+      title.className = "account-card-title";
+      title.textContent = String(row && (row.remark || row.username) || "示例账号").trim();
+      const badge = document.createElement("span");
+      badge.className = "account-card-state status status-disconnected";
+      badge.textContent = String(row && row.status || "示例").trim() || "示例";
+      const sub = document.createElement("div");
+      sub.className = "account-card-sub";
+      sub.textContent = `账号：${String(row && row.username || "").trim() || "-"}`;
+      const note = document.createElement("div");
+      note.className = "account-card-sub";
+      note.textContent = String(row && row.note || "").trim() || "登录后可保存真实 Steam 账号。";
+      const actions = document.createElement("div");
+      actions.className = "account-card-actions";
+      const loginBtn = document.createElement("button");
+      loginBtn.textContent = "登录后启用";
+      loginBtn.onclick = (evt) => {
+        evt.stopPropagation();
+        openClientAuthModal({
+          title: "登录后可保存 Steam 账号",
+          hint: "当前为访客预览态，登录后可保存 Steam 账号并绑定到当前客户端身份。",
+          view: "login"
+        });
+      };
+      actions.append(loginBtn);
+      titleRow.append(title, badge);
+      info.append(titleRow, sub, note, actions);
+      main.append(avatar, info);
+      card.append(main);
+      card.onclick = () => {
+        openClientAuthModal({
+          title: "登录后可保存 Steam 账号",
+          hint: "当前为访客预览态，登录后可保存 Steam 账号并绑定到当前客户端身份。",
+          view: "login"
+        });
+      };
+      ui.savedAccountsWrap.append(card);
+    }
+    return;
+  }
   const rows = [...state.accounts].sort((a, b) => {
     if (a.username === state.activeAccount && b.username !== state.activeAccount) return -1;
     if (b.username === state.activeAccount && a.username !== state.activeAccount) return 1;
@@ -2597,6 +2963,12 @@ async function deleteAccount(row) {
 }
 
 async function loginAndSave() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可保存 Steam 账号并绑定到当前客户端身份。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const username = String(ui.accountUsername.value || "").trim();
   const password = String(ui.accountPassword.value || "").trim();
   const totp = normalizeAccountTotpInput();
@@ -2708,7 +3080,14 @@ function rarityName(row) {
   return normalizeCraftPredictorRarityLabel(RARITY_MAP[id] || "") || `Unknown(${id})`;
 }
 const collectionName = (row) => String(row.collection || "").trim();
-const itemDisplayName = (row) => String(row.alchemy_name || "").trim() || String(row.name || "").trim();
+const itemDisplayName = (row) => {
+  const raw = String(row.alchemy_name || "").trim() || String(row.name || "").trim();
+  if (raw.toLowerCase().startsWith("storage unit")) {
+    const suffix = raw.slice("storage unit".length).replace(/^\s*\|\s*/, "").trim();
+    return suffix ? `库存组件（${suffix}）` : "库存组件";
+  }
+  return raw;
+};
 const itemSearchText = (row) => [row.name, row.market_hash_name, row.alchemy_name, row.collection, row.collection_en].map((x) => String(x || "").toLowerCase()).join(" ").trim();
 function normalizeSkinImageUrl(value) {
   const text = String(value || "").trim();
@@ -3211,6 +3590,7 @@ async function refreshCraftCandidateRows({force = false} = {}) {
   try {
     const data = await api("/api/craft/candidates", {
       method: "POST",
+      suppressAuthFailure: true,
       body: JSON.stringify({
         username,
         include_component_items: !!state.craftUseComponentItems,
@@ -3742,8 +4122,15 @@ function renderCraftQueueSlots({
     wrap.tabIndex = 0;
     wrap.setAttribute("role", "button");
     wrap.setAttribute("aria-label", "切换当前编辑配方");
+    let clickTimer = null;
     wrap.onclick = () => {
+      if (clickTimer) return;
+      clickTimer = setTimeout(() => { clickTimer = null; onActivate(); }, 220);
+    };
+    wrap.ondblclick = () => {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
       onActivate();
+      if (typeof setCraftPredictorPanelOpen === "function") setCraftPredictorPanelOpen(true);
     };
     wrap.onkeydown = (evt) => {
       if (evt.key !== "Enter" && evt.key !== " ") return;
@@ -4271,6 +4658,12 @@ async function refreshWithConnectionOverlay({
   silentInfo = false,
   forceOverlay = false
 } = {}) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可连接账号并刷新真实库存。",
+    view: "login"
+  }) === false) {
+    return {ok: false, message: "请先登录"};
+  }
   const username = String(
     usernameOverride ||
     (preferCraft
@@ -4659,6 +5052,7 @@ async function saveCraftAssistPresetsToServer(presets) {
   try {
     await api("/api/ui-state/craft-assist-presets", {
       method: "POST",
+      suppressAuthFailure: true,
       body: JSON.stringify({
         presets: Array.isArray(presets) ? presets : []
       })
@@ -4669,7 +5063,7 @@ async function saveCraftAssistPresetsToServer(presets) {
 }
 async function loadCraftAssistPresetsFromServer() {
   try {
-    const data = await api("/api/ui-state/craft-assist-presets");
+    const data = await api("/api/ui-state/craft-assist-presets", {suppressAuthFailure: true});
     return normalizeCraftAssistPresetList(data && data.presets);
   } catch (_) {
     return null;
@@ -5037,7 +5431,7 @@ async function fetchTradeupSimulationCatalogItem(markethashname) {
   const key = String(markethashname || "").trim();
   if (!key) return null;
   try {
-    const data = await api(`/api/simulation/tradeup/item?markethashname=${encodeURIComponent(key)}`);
+    const data = await api(`/api/simulation/tradeup/item?markethashname=${encodeURIComponent(key)}`, {suppressAuthFailure: true});
     return sanitizeTradeupSimulationTargetItem(data && data.item);
   } catch (_) {
     return null;
@@ -5091,6 +5485,7 @@ async function saveTradeupSimulationPresetsToServer(presets) {
   try {
     await api("/api/ui-state/tradeup-simulation-presets", {
       method: "POST",
+      suppressAuthFailure: true,
       body: JSON.stringify({
         presets: Array.isArray(presets) ? presets : []
       })
@@ -5102,7 +5497,7 @@ async function saveTradeupSimulationPresetsToServer(presets) {
 }
 async function loadTradeupSimulationPresetsFromServer() {
   try {
-    const data = await api("/api/ui-state/tradeup-simulation-presets");
+    const data = await api("/api/ui-state/tradeup-simulation-presets", {suppressAuthFailure: true});
     return Array.isArray(data && data.presets) ? data.presets : [];
   } catch (_) {
     return null;
@@ -5185,6 +5580,12 @@ async function persistTradeupSimulationPresets({clearDirty = false} = {}) {
   return synced;
 }
 async function saveActiveTradeupSimulationPreset() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可搜索物品、编辑并保存汰换模拟配置。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const preset = getActiveTradeupSimulationPreset();
   if (!preset || state.simulationPersisting) return false;
   if (!(preset.primary_output || preset.cover_output)) {
@@ -5223,6 +5624,12 @@ async function cancelTradeupSimulationEditing() {
   renderSimulationPage();
 }
 async function deleteTradeupSimulationPreset(presetId) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可管理真实的汰换模拟配置。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const key = String(presetId || "").trim();
   if (!key) return false;
   const currentList = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
@@ -5607,6 +6014,12 @@ function adoptTradeupSimulationDerivedPrimaryOutput({presetId, candidates = []} 
   return !!next;
 }
 function applyTradeupSimulationModalEdit({absoluteWear} = {}) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可编辑汰换模拟配置。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   if (!state.simulationModalOpen || state.simulationModalMode !== "edit") return false;
   const preset = getTradeupSimulationModalPreset();
   const item = getTradeupSimulationModalItem();
@@ -5694,6 +6107,12 @@ function setCraftAssistRoleChooserOpen(open) {
   renderCraftAssistPanel();
 }
 function openCraftAssistPicker({targetMaterialId = state.craftAssistPickerTargetMaterialId} = {}) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可使用辅助选材。",
+    view: "login"
+  }) === false) {
+    return;
+  }
   if (!state.craftAssistOpen) return;
   if (craftAssistPickerCloseTimer != null) {
     clearTimeout(craftAssistPickerCloseTimer);
@@ -6394,6 +6813,12 @@ function saveCurrentCraftAssistPreset(nameInput) {
 }
 
 async function promptAndSaveCurrentCraftAssistPreset() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可保存炼金辅助配置。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const preCheck = validateCurrentCraftAssistPresetBeforeNaming();
   if (!preCheck.ok) {
     setCraftStatus(preCheck.message, true);
@@ -6449,6 +6874,12 @@ async function applyCraftAssistPreset(presetId, {autoSelect = true, applyCount =
 }
 
 function saveCraftAssistPresetEditingSession() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可编辑炼金辅助配置。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const editingId = String(state.craftAssistPresetEditingId || "").trim();
   if (!editingId) return false;
   const backupPanelOpen = !!(state.craftAssistPresetEditingBackup && state.craftAssistPresetEditingBackup.panel_open);
@@ -6570,6 +7001,12 @@ function clearCraftAssistPresetDragMarkers() {
   }
 }
 function removeCraftAssistPreset(presetId) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可管理炼金辅助配置。",
+    view: "login"
+  }) === false) {
+    return;
+  }
   const id = String(presetId || "").trim();
   if (!id) return;
   const wasEditing = String(state.craftAssistPresetEditingId || "").trim() === id;
@@ -6797,6 +7234,12 @@ function normalizeCraftAssistMaterialsForRun({materials = state.craftAssistMater
   return normalized;
 }
 async function applyCraftAssistAutoSelection({accountUsername = "", sourcePresetName = "", draftSnapshot = null, pendingUiAction = "", pendingPresetId = ""} = {}) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可使用辅助选材生成真实炼金配方。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   if (state.craftBusy) {
     setCraftStatus("汰换执行中，请稍后再试", true);
     return false;
@@ -8079,6 +8522,12 @@ function renderCraftQueue() {
   ui.craftQueueList.scrollTop = Math.min(prevScrollTop, maxScrollTop);
 }
 function addCurrentSelectionToCraftQueue() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可编辑真实炼金配方。",
+    view: "login"
+  }) === false) {
+    return;
+  }
   if (isCraftRecipeEditLocked()) return;
   if (getCraftQueuePendingCount() >= 50) {
     setCraftStatus("配方预览最多 50 组配方", true);
@@ -8096,6 +8545,12 @@ function addCurrentSelectionToCraftQueue() {
   renderCraftPage();
 }
 function clearCraftQueue() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可编辑真实炼金配方。",
+    view: "login"
+  }) === false) {
+    return;
+  }
   if (!state.craftRecipeQueue.length) return;
   if (isCraftRecipeEditLocked()) return;
   state.craftRecipeQueue = [];
@@ -8569,6 +9024,12 @@ function renderTradeupSimulationPickerResults() {
   }
 }
 async function searchTradeupSimulationItems(query) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可搜索真实汰换物品库。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const searchText = String(query != null ? query : state.simulationPickerQuery || "").trim();
   state.simulationPickerQuery = searchText;
   if (!searchText) {
@@ -8688,6 +9149,12 @@ function mergeTradeupSimulationResolveResults(preset, results = [], failures = [
   };
 }
 async function resolveTradeupSimulationPreset(presetId) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可解析并编辑真实汰换模拟配置。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const preset = getTradeupSimulationWorkspaceDraft(presetId)
     || (Array.isArray(state.simulationPresets) ? state.simulationPresets : [])
       .find((entry) => String(entry && entry.id || "").trim() === String(presetId || "").trim());
@@ -8896,6 +9363,12 @@ function renderSimulationRoleChoosers(preset) {
   }
 }
 function openTradeupSimulationRoleSlotPicker(slotName) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可编辑汰换模拟的产物和材料槽位。",
+    view: "login"
+  }) === false) {
+    return;
+  }
   const normalizedSlot = normalizeTradeupSimulationSlotName(slotName);
   if (!normalizedSlot) return;
   if (isTradeupSimulationOutputSlot(normalizedSlot)) {
@@ -9701,9 +10174,10 @@ function renderSimulationPage() {
 function renderCraftPage() {
   if (!ui.craftPage) return;
   syncCurrentCraftAssistRuntimeState();
-  const connected = isCurrentAccountConnected();
+  const guestMode = isGuestWorkspaceActive();
+  const connected = !guestMode && isCurrentAccountConnected();
   if (ui.craftConnectText) {
-    ui.craftConnectText.textContent = `连接状态：${connected ? "已连接" : "未连接"}`;
+    ui.craftConnectText.textContent = `连接状态：${guestMode ? "未登录" : (connected ? "已连接" : "未连接")}`;
     setConnectionStatusTone(ui.craftConnectText, connected);
   }
   if (String(state.currentAccountUsername || "").trim() && String(state.snapshotPath || "").trim()) {
@@ -9774,7 +10248,8 @@ function renderCraftPage() {
   renderCraftAssistPanel();
 
   if (!state.craftStatusText) {
-    if (!connected && executableCount > 0) setCraftStatus("当前账号未连接，点击执行将自动连接账号");
+    if (guestMode) setCraftStatus("当前为访客预览态，可浏览样例布局；登录后可编辑配方、辅助选材并执行真实炼金操作");
+    else if (!connected && executableCount > 0) setCraftStatus("当前账号未连接，点击执行将自动连接账号");
     else if (!connected) setCraftStatus("请先连接并刷新库存");
     else if (state.craftCandidateLoading && !candidates.length) setCraftStatus("候选物品同步中...");
     else if (!candidates.length) {
@@ -9833,6 +10308,12 @@ async function ensureCraftConnectedForExecution() {
   return false;
 }
 async function runCraftTradeUpQueue() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可执行真实炼金配方。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const username = String(state.currentAccountUsername || "").trim();
   if (!username) {
     setCraftStatus("请先选用一个账号", true);
@@ -10705,6 +11186,12 @@ function toggleComponentGroupSelection(items) {
   render();
 }
 async function runComponentMove(action, itemIds, componentIdOverride = "") {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可执行组件存取操作。",
+    view: "login"
+  }) === false) {
+    return null;
+  }
   const actionName = String(action || "").trim() === "deposit" ? "deposit" : "withdraw";
   const componentId = String(componentIdOverride || selectedComponentId()).trim();
   const username = String(state.currentAccountUsername || "").trim();
@@ -10728,6 +11215,12 @@ async function runComponentMove(action, itemIds, componentIdOverride = "") {
   }
 }
 async function submitDepositToTarget(targetComponentId) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可执行组件存入操作。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   const selectedRows = getSelectedRows();
   if (!selectedRows.length) {
     setSummary("请先在库存列表中选择要存入的物品");
@@ -11004,6 +11497,7 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
       };
     }
     parent.onclick = () => {
+      if (componentGroup) return;
       if (!row.needs_expand) return;
       if (expanded) state.expandedGroups.delete(key);
       else state.expandedGroups.add(key);
@@ -11081,6 +11575,12 @@ function render() {
 }
 
 async function disconnectCurrentSession({usernameOverride = ""} = {}) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可管理真实账号连接状态。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
   if (state.refreshing) {
     setSummary("库存刷新中，请稍后再断开");
     return;
@@ -11328,6 +11828,20 @@ function bindEvents() {
   if (ui.licenseClearLocalBtn) {
     ui.licenseClearLocalBtn.onclick = () => {
       void clearLocalLicense();
+    };
+  }
+  if (ui.guestWorkspaceLoginBtn) {
+    ui.guestWorkspaceLoginBtn.onclick = () => {
+      openClientAuthModal({
+        title: "登录后可用当前功能",
+        hint: "当前为访客预览态，登录后可继续使用真实功能。",
+        view: "login"
+      });
+    };
+  }
+  if (ui.clientAuthModalCloseBtn) {
+    ui.clientAuthModalCloseBtn.onclick = () => {
+      closeClientAuthModal();
     };
   }
   window.addEventListener("beforeunload", () => {

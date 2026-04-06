@@ -21,6 +21,9 @@ function test_app_js_bootstraps_license_state_and_handlers() {
   assert.match(JS, /\/api\/client-auth\/login/);
   assert.match(JS, /submitClientLogin/);
   assert.match(JS, /clientAuthView/);
+  assert.match(JS, /clientAuthModalOpen/);
+  assert.match(JS, /clientAuthPromptTitle/);
+  assert.match(JS, /clientAuthPromptHint/);
   assert.match(JS, /\/api\/license\/import/);
   assert.match(JS, /__cs2AlchemyHandleApiLicenseFailure/);
 }
