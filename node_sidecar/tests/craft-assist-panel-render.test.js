@@ -335,6 +335,10 @@ function loadPanelFns(overrides = {}) {
     syncCraftSelectionListClearance: overrides.syncCraftSelectionListClearance,
     isCraftAssistPendingUiAction: overrides.isCraftAssistPendingUiAction,
     parseOptionalWear01: overrides.parseOptionalWear01,
+    wearTextFull: overrides.wearTextFull || ((value) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric.toFixed(6) : "";
+    }),
     wearText6: overrides.wearText6,
     getCraftAssistFilterMode: overrides.getCraftAssistFilterMode,
     normalizeCraftAssistCount: overrides.normalizeCraftAssistCount,
@@ -457,10 +461,20 @@ function loadRenderListFns(overrides = {}) {
 }
 
 function loadCraftAssistDecimalInputFns(overrides = {}) {
-  const source = extractBlock("function seedCraftAssistDecimalInput(", "function commitCraftAssistTargetWearInput(");
+  const source = extractBlock("function seedCraftAssistDecimalInput(", "function renderCraftAssistList(");
   const context = {
     requestAnimationFrame: overrides.requestAnimationFrame || ((callback) => {
       if (typeof callback === "function") callback();
+    }),
+    parseOptionalWear01: overrides.parseOptionalWear01 || ((value) => {
+      const text = String(value == null ? "" : value).trim();
+      if (!text) return null;
+      const numeric = Number(text);
+      return Number.isFinite(numeric) ? numeric : null;
+    }),
+    wearTextFull: overrides.wearTextFull || ((value) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric.toFixed(6) : "";
     }),
     console,
     String,
@@ -689,6 +703,54 @@ function testOpeningPanelAppliesReserveBeforeRenderingOverlay() {
     ["expand", "apply", "render"],
     "opening the panel should reserve the selection list before the overlay is rendered visible"
   );
+}
+
+function testTargetWearInputShowsZeroDisplayWhenStateIsEmpty() {
+  const document = createDocument();
+  const targetWearInput = document.createElement("input");
+  const app = loadPanelFns({
+    state: {
+      craftAssistOpen: true,
+      refreshing: false,
+      craftBusy: false,
+      craftAssistSelecting: false,
+      craftAssistRoleChooserOpen: false,
+      craftAssistMaterials: [],
+      craftAssistTargetWear: null,
+      craftAssistMainCount: 5,
+      craftAssistAuxCount: 5
+    },
+    ui: {
+      craftAssistPanel: {},
+      craftAssistOverlay: {classList: createClassList()},
+      craftAssistToggleBtn: createButton(),
+      craftAssistApplyBtn: createButton(),
+      craftAssistPresetSaveBtn: createButton(),
+      craftAssistTargetWear: targetWearInput
+    },
+    isCraftAssistPresetEditing: () => false,
+    stopCraftAssistOverlayDrag: () => {},
+    stopCraftAssistSplitDrag: () => {},
+    cancelCraftAssistPresetEditingSession: () => {},
+    expandCraftAssistOverlayToBottom: () => {},
+    applyCraftAssistOverlayHeight: () => {},
+    syncCraftSelectionListClearance: () => {},
+    isCraftAssistPendingUiAction: () => false,
+    parseOptionalWear01: (value) => value == null || String(value).trim() === "" ? null : Number(value),
+    wearTextFull: (value) => Number(value).toFixed(6),
+    wearText6: () => "0.000000",
+    getCraftAssistFilterMode: () => "relative",
+    normalizeCraftAssistCount: (value, fallback) => fallback,
+    renderCraftAssistPicker: () => {},
+    renderCraftAssistList: () => {},
+    renderCraftAssistPresetPanel: () => {}
+  });
+
+  app.renderCraftAssistPanel();
+
+  assert.equal(targetWearInput.placeholder, "0.000000", "empty target wear should expose 0.000000 as the placeholder baseline");
+  assert.equal(targetWearInput.value, "0.000000", "empty target wear should render a visible 0.000000 baseline");
+  assert.equal(targetWearInput.dataset.displayDefault, "1", "empty target wear baseline should be marked as a display-only default");
 }
 
 function testMaterialCardsRenderInsideOwningGroupAndLegacyStripIsGone() {
@@ -1109,11 +1171,32 @@ function testWearInputUsesPlaceholderAndZeroSeedForEditing() {
   assert.equal(emptyMinInput.selectionEnd, 2, "default range input should keep the caret after the seeded 0. prefix");
 }
 
+function testTargetWearDisplayDefaultStaysNullUntilUserActuallyEdits() {
+  const helperFns = loadCraftAssistDecimalInputFns();
+  const document = createDocument();
+  const input = document.createElement("input");
+  input.value = "0.000000";
+  input.dataset.displayDefault = "1";
+
+  helperFns.seedCraftAssistDecimalInput(input);
+  assert.equal(input.selectionStart, 2, "target wear focus should keep the 0. prefix and select the fractional suffix");
+  assert.equal(input.selectionEnd, input.value.length, "target wear focus should select through the end of the displayed default value");
+
+  const untouched = helperFns.commitCraftAssistTargetWearInput(input);
+  assert.equal(untouched, null, "leaving the displayed default untouched should keep target wear state empty");
+  assert.equal(input.dataset.displayDefault, undefined, "committing the untouched displayed default should clear the display-only marker");
+
+  input.value = "0.123456";
+  const edited = helperFns.commitCraftAssistTargetWearInput(input);
+  assert.equal(edited, 0.123456, "once the user edits target wear, the committed value should be parsed as a real number");
+}
+
 function main() {
   const tests = [
     testOrdinaryRenderDoesNotTriggerClearancePreserve,
     testOpeningPanelTriggersOnePreservedClearanceSync,
     testOpeningPanelAppliesReserveBeforeRenderingOverlay,
+    testTargetWearInputShowsZeroDisplayWhenStateIsEmpty,
     testMaterialCardsRenderInsideOwningGroupAndLegacyStripIsGone,
     testQuantityControlMovesIntoConditionHeaderRightSide,
     testRoleTagReplacesLegacyConditionTitleAndStaysCompact,
@@ -1123,7 +1206,8 @@ function main() {
     testPickerHidesRarityMismatchedAndUsedElsewhereCandidatesWhenContinuingToAdd,
     testRenderCoalescesDuplicateRoleBucketsIntoSingleMainAndAuxGroups,
     testItemCardsUseCompactRailLayout,
-    testWearInputUsesPlaceholderAndZeroSeedForEditing
+    testWearInputUsesPlaceholderAndZeroSeedForEditing,
+    testTargetWearDisplayDefaultStaysNullUntilUserActuallyEdits
   ];
   const failures = [];
   for (const testFn of tests) {

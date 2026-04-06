@@ -117,6 +117,7 @@ const ui = {
   craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftPreviewViewport: document.getElementById("craftPreviewViewport"), craftQueueList: document.getElementById("craftQueueList"),
   craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
   craftAssistOverlayHandle: document.getElementById("craftAssistOverlayHandle"), craftAssistPanel: document.getElementById("craftAssistPanel"), craftAssistCloseBtn: document.getElementById("craftAssistCloseBtn"),
+  craftAssistPresetNameField: document.getElementById("craftAssistPresetNameField"), craftAssistPresetNameInput: document.getElementById("craftAssistPresetNameInput"),
   craftAssistTargetWear: document.getElementById("craftAssistTargetWear"),
   craftAssistFilterModeRelative: document.getElementById("craftAssistFilterModeRelative"), craftAssistFilterModeAbsolute: document.getElementById("craftAssistFilterModeAbsolute"),
   craftAssistApplyBtn: document.getElementById("craftAssistApplyBtn"),
@@ -6608,11 +6609,16 @@ function seedCraftAssistDecimalInput(input, {seedWhenEmpty = false} = {}) {
 function commitCraftAssistTargetWearInput(input) {
   if (!input) return null;
   const raw = String(input.value || "").trim();
+  if (raw === wearTextFull(0) && String(input.dataset && input.dataset.displayDefault || "") === "1") {
+    delete input.dataset.displayDefault;
+    return null;
+  }
   const parsed = parseOptionalWear01(raw);
   if (parsed == null) {
     if (raw) input.value = "";
     return null;
   }
+  delete input.dataset.displayDefault;
   input.value = wearTextFull(parsed);
   return parsed;
 }
@@ -6753,15 +6759,19 @@ function renderCraftAssistList() {
     const qtyLabel = document.createElement("label");
     qtyLabel.className = "craft-assist-field qty craft-assist-head-qty";
     const qtyText = document.createElement("span");
+    qtyText.className = "craft-assist-head-qty-badge";
     qtyText.textContent = "数量";
+    const qtyShell = document.createElement("div");
+    qtyShell.className = "craft-assist-head-qty-shell";
     const qtyInput = document.createElement("input");
     qtyInput.type = "number";
     qtyInput.min = "1";
     qtyInput.max = "10";
     qtyInput.step = "1";
+    qtyInput.setAttribute("aria-label", "数量");
     const qtyFallback = 1;
     qtyInput.value = String(normalizeCraftAssistEntryCount(material && material.count, qtyFallback));
-    qtyInput.onchange = () => {
+    const commitQtyValue = (rawValue) => {
       const mode = craftAssistMaterialLimitFor(state.craftAssistMaterials);
       const currentId = String(materialId || "").trim();
       const otherTotal = calcCraftAssistLiveTotalCount(
@@ -6772,9 +6782,9 @@ function renderCraftAssistList() {
       if (maxAllowed <= 0) {
         qtyInput.value = String(normalizeCraftAssistEntryCount(material && material.count, 1));
         setCraftStatus(`材料数量上限 ${mode}，请先调整其他词条数量`, true);
-        return;
+        return normalizeCraftAssistEntryCount(material && material.count, 1);
       }
-      const requested = normalizeCraftAssistEntryCount(qtyInput.value, material && material.count);
+      const requested = normalizeCraftAssistEntryCount(rawValue, material && material.count);
       const nextCount = Math.max(1, Math.min(requested, maxAllowed));
       if (requested > maxAllowed) {
         setCraftStatus(`材料数量上限 ${mode}，该项最多可填 ${maxAllowed}`, true);
@@ -6782,8 +6792,42 @@ function renderCraftAssistList() {
       updateCraftAssistMaterial(materialId, (entry) => ({...entry, count: nextCount}));
       syncCraftAssistAutoDirectionLimit();
       renderCraftAssistPanel();
+      return nextCount;
     };
-    qtyLabel.append(qtyText, qtyInput);
+    qtyInput.onchange = () => {
+      commitQtyValue(qtyInput.value);
+    };
+    qtyInput.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      commitQtyValue(qtyInput.value);
+      qtyInput.blur();
+    };
+    const qtySpin = document.createElement("div");
+    qtySpin.className = "craft-assist-head-qty-spin";
+    const decrementBtn = document.createElement("button");
+    decrementBtn.type = "button";
+    decrementBtn.className = "craft-assist-head-qty-step decrement";
+    decrementBtn.title = "减少数量";
+    decrementBtn.setAttribute("aria-label", "减少数量");
+    decrementBtn.onclick = (evt) => {
+      if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
+      const current = normalizeCraftAssistEntryCount(qtyInput.value, material && material.count);
+      commitQtyValue(current - 1);
+    };
+    const incrementBtn = document.createElement("button");
+    incrementBtn.type = "button";
+    incrementBtn.className = "craft-assist-head-qty-step increment";
+    incrementBtn.title = "增加数量";
+    incrementBtn.setAttribute("aria-label", "增加数量");
+    incrementBtn.onclick = (evt) => {
+      if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
+      const current = normalizeCraftAssistEntryCount(qtyInput.value, material && material.count);
+      commitQtyValue(current + 1);
+    };
+    qtyShell.append(qtyInput, qtySpin);
+    qtySpin.append(incrementBtn, decrementBtn);
+    qtyLabel.append(qtyText, qtyShell);
     actions.append(qtyLabel, addNameBtn, removeBtn);
     head.append(headPrimary, actions);
 
@@ -7026,7 +7070,7 @@ function buildCraftAssistDraftSnapshotFromState() {
   };
 }
 
-function buildCraftAssistPresetComparableSnapshot({targetWear = null, wearFilterMode = "relative", materials = []} = {}) {
+function buildCraftAssistPresetComparableSnapshot({name = "", targetWear = null, wearFilterMode = "relative", materials = []} = {}) {
   const parsedTargetWear = parseOptionalWear01(targetWear);
   const normalizedMaterials = projectCraftAssistPersistedMaterialsFromState(normalizeCraftAssistMaterialList(materials, {
     targetWear: parsedTargetWear,
@@ -7035,6 +7079,7 @@ function buildCraftAssistPresetComparableSnapshot({targetWear = null, wearFilter
     rows: getAllInventoryCraftableRows()
   }));
   return {
+    name: String(name || "").trim(),
     target_wear: parsedTargetWear,
     materials: normalizedMaterials
   };
@@ -7043,6 +7088,7 @@ function buildCraftAssistPresetComparableSnapshot({targetWear = null, wearFilter
 function getCurrentCraftAssistPresetComparableSnapshot() {
   const filterMode = getCraftAssistFilterMode();
   return buildCraftAssistPresetComparableSnapshot({
+    name: state.craftAssistPresetEditingName,
     targetWear: state.craftAssistTargetWear,
     wearFilterMode: filterMode,
     materials: state.craftAssistMaterials
@@ -7235,7 +7281,12 @@ function saveCraftAssistPresetEditingSession() {
     setCraftStatus(materialCheck.message, true);
     return false;
   }
-  const snapshot = buildCurrentCraftAssistPresetSnapshot(String(existed.name || "").trim());
+  const editingName = String(state.craftAssistPresetEditingName || "").trim();
+  if (!editingName) {
+    setCraftStatus("请先填写配置名称", true);
+    return false;
+  }
+  const snapshot = buildCurrentCraftAssistPresetSnapshot(editingName);
   const check = validateCraftAssistPresetSnapshot(snapshot);
   if (!check.ok) {
     setCraftStatus(check.message, true);
@@ -7244,7 +7295,7 @@ function saveCraftAssistPresetEditingSession() {
   const next = {
     ...snapshot,
     id: String(existed.id || "").trim() || editingId,
-    name: String(existed.name || "").trim(),
+    name: editingName,
     created_at: Math.max(0, Number(existed.created_at || 0) || 0) || snapshot.created_at,
     updated_at: Date.now()
   };
@@ -7292,6 +7343,7 @@ function applyCraftAssistPresetForEdit(presetId) {
   }
   state.craftAssistPresetEditingBackup = buildCraftAssistDraftSnapshotFromState();
   state.craftAssistPresetEditingInitialSnapshot = buildCraftAssistPresetComparableSnapshot({
+    name: preset.name,
     targetWear: preset.target_wear,
     wearFilterMode: preset.wear_filter_mode,
     materials: preset.materials
@@ -7353,6 +7405,50 @@ function removeCraftAssistPreset(presetId) {
   }
   saveCraftAssistPresetsToStorage();
   if (target) setCraftStatus(`已删除配置：${String(target.name || "").trim()}`);
+  renderCraftAssistPanel();
+}
+function duplicateCraftAssistPreset(presetId) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可管理炼金辅助配置。",
+    view: "login"
+  }) === false) {
+    return;
+  }
+  const id = String(presetId || "").trim();
+  if (!id) return;
+  const list = Array.isArray(state.craftAssistPresets) ? [...state.craftAssistPresets] : [];
+  const idx = list.findIndex((entry) => String(entry && entry.id || "").trim() === id);
+  if (idx < 0) return;
+  const preset = sanitizeCraftAssistPresetPayload(list[idx]);
+  if (!preset) return;
+  const baseName = String(preset.name || "").trim() || "未命名配置";
+  const existingNames = new Set(list.map((entry) => String(entry && entry.name || "").trim()).filter(Boolean));
+  let duplicateName = `${baseName}（副本）`;
+  let suffix = 2;
+  while (existingNames.has(duplicateName)) {
+    duplicateName = `${baseName}（副本${suffix}）`;
+    suffix += 1;
+  }
+  const now = Date.now();
+  const duplicated = sanitizeCraftAssistPresetPayload({
+    ...preset,
+    id: makeCraftAssistUid("preset"),
+    name: duplicateName,
+    materials: (Array.isArray(preset.materials) ? preset.materials : []).map((entry) => ({
+      ...entry,
+      items: Array.isArray(entry && entry.items) ? entry.items.map((item) => ({...item})) : []
+    })),
+    created_at: now,
+    updated_at: now
+  });
+  if (!duplicated) {
+    setCraftStatus("复制配置失败，请稍后重试", true);
+    return;
+  }
+  list.splice(idx + 1, 0, duplicated);
+  state.craftAssistPresets = normalizeCraftAssistPresetList(list);
+  saveCraftAssistPresetsToStorage();
+  setCraftStatus(`已复制配置：${duplicated.name}`);
   renderCraftAssistPanel();
 }
 function renderCraftAssistPresetPanel() {
@@ -7514,6 +7610,17 @@ function renderCraftAssistPresetPanel() {
       const countValue = commitApplyCountValue(applyCountInput.value);
       void applyCraftAssistPreset(preset.id, {autoSelect: true, applyCount: countValue});
     };
+    const duplicateBtn = document.createElement("button");
+    duplicateBtn.type = "button";
+    duplicateBtn.textContent = "复制";
+    duplicateBtn.className = "craft-assist-preset-duplicate";
+    duplicateBtn.title = "复制该配置";
+    duplicateBtn.setAttribute("aria-label", "复制该配置");
+    duplicateBtn.disabled = inEditingMode || state.refreshing || state.craftBusy;
+    duplicateBtn.onclick = () => {
+      if (rejectCraftAssistBusyUiAction()) return;
+      duplicateCraftAssistPreset(preset.id);
+    };
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.textContent = "×";
@@ -7521,16 +7628,21 @@ function renderCraftAssistPresetPanel() {
     removeBtn.title = "删除该配置";
     removeBtn.setAttribute("aria-label", "删除该配置");
     removeBtn.disabled = inEditingMode || state.refreshing || state.craftBusy;
-    removeBtn.onclick = () => {
+    removeBtn.onclick = async () => {
       if (rejectCraftAssistBusyUiAction()) return;
-      const ok = window.confirm(`确认删除配置【${String(preset && preset.name || "").trim()}】？`);
-      if (!ok) return;
+      const confirmed = await openConfirmModal({
+        title: "确认删除配置",
+        message: `确定要删除配置【${String(preset && preset.name || "").trim() || "该配置"}】吗？`,
+        confirmText: "确认删除",
+        cancelText: "取消"
+      });
+      if (!confirmed) return;
       removeCraftAssistPreset(preset.id);
     };
     actions.append(editBtn, applyCountWrap, applyBtn);
     footer.append(actions);
 
-    item.append(body, footer, removeBtn);
+    item.append(body, footer, duplicateBtn, removeBtn);
     ui.craftAssistPresetList.append(item);
   }
 }
@@ -8619,12 +8731,27 @@ function renderCraftAssistPanel() {
     return;
   }
 
+  if (ui.craftAssistPresetNameField) {
+    ui.craftAssistPresetNameField.classList.toggle("hidden", !editingPreset);
+  }
+  if (ui.craftAssistPresetNameInput) {
+    ui.craftAssistPresetNameInput.disabled = !editingPreset || state.refreshing || state.craftBusy;
+    if (!editingPreset) {
+      if (document.activeElement !== ui.craftAssistPresetNameInput) {
+        ui.craftAssistPresetNameInput.value = "";
+      }
+    } else if (document.activeElement !== ui.craftAssistPresetNameInput) {
+      ui.craftAssistPresetNameInput.value = String(state.craftAssistPresetEditingName || "").trim();
+    }
+  }
   if (ui.craftAssistTargetWear) {
-    ui.craftAssistTargetWear.placeholder = "0.1234567890123456";
+    ui.craftAssistTargetWear.placeholder = wearTextFull(0);
   }
   if (ui.craftAssistTargetWear && document.activeElement !== ui.craftAssistTargetWear) {
     const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
-    ui.craftAssistTargetWear.value = targetWear == null ? "" : wearTextFull(targetWear);
+    ui.craftAssistTargetWear.value = targetWear == null ? wearTextFull(0) : wearTextFull(targetWear);
+    if (targetWear == null) ui.craftAssistTargetWear.dataset.displayDefault = "1";
+    else delete ui.craftAssistTargetWear.dataset.displayDefault;
   }
   const filterMode = getCraftAssistFilterMode();
   if (ui.craftAssistFilterModeRelative) {
@@ -11681,18 +11808,25 @@ function buildGroupRows(filteredRows) {
     const cmp = ca.localeCompare(cb);
     return state.collectionSort === "desc" ? -cmp : cmp;
   };
+  const compareGroupRarity = (a, b) => {
+    const ar = Math.max(...a[1].map((x) => Number(x.rarity || 0)));
+    const br = Math.max(...b[1].map((x) => Number(x.rarity || 0)));
+    if (ar === br) return 0;
+    return state.raritySort === "desc" ? br - ar : ar - br;
+  };
 
   wearGroups.sort((a, b) => {
+    const rarityDiff = compareGroupRarity(a, b);
+    if (rarityDiff !== 0) return rarityDiff;
     const collectionDiff = compareGroupCollection(a, b);
     if (collectionDiff !== 0) return collectionDiff;
     const quantityDiff = compareGroupQuantity(a, b);
     if (quantityDiff !== 0) return quantityDiff;
-    const ar = Math.max(...a[1].map((x) => Number(x.rarity || 0)));
-    const br = Math.max(...b[1].map((x) => Number(x.rarity || 0)));
-    if (ar !== br) return state.raritySort === "desc" ? br - ar : ar - br;
     return a[0].toLowerCase().localeCompare(b[0].toLowerCase());
   });
   noWearGroups.sort((a, b) => {
+    const rarityDiff = compareGroupRarity(a, b);
+    if (rarityDiff !== 0) return rarityDiff;
     const collectionDiff = compareGroupCollection(a, b);
     if (collectionDiff !== 0) return collectionDiff;
     const quantityDiff = compareGroupQuantity(a, b);
@@ -13049,6 +13183,9 @@ function bindEvents() {
     ui.craftAssistTargetWear.onfocus = () => {
       seedCraftAssistDecimalInput(ui.craftAssistTargetWear);
     };
+    ui.craftAssistTargetWear.oninput = () => {
+      delete ui.craftAssistTargetWear.dataset.displayDefault;
+    };
     ui.craftAssistTargetWear.onchange = commitTargetWear;
     ui.craftAssistTargetWear.onblur = commitTargetWear;
     ui.craftAssistTargetWear.onkeydown = (evt) => {
@@ -13056,6 +13193,29 @@ function bindEvents() {
       evt.preventDefault();
       commitTargetWear();
       ui.craftAssistTargetWear.blur();
+    };
+  }
+  if (ui.craftAssistPresetNameInput) {
+    const syncPresetEditingName = ({trim = false} = {}) => {
+      if (!isCraftAssistPresetEditing()) return;
+      const raw = String(ui.craftAssistPresetNameInput.value || "");
+      const next = trim ? raw.trim() : raw;
+      state.craftAssistPresetEditingName = next;
+      if (trim && ui.craftAssistPresetNameInput.value !== next) {
+        ui.craftAssistPresetNameInput.value = next;
+      }
+      if (ui.craftAssistPresetSaveBtn) {
+        ui.craftAssistPresetSaveBtn.title = `保存对配置【${String(state.craftAssistPresetEditingName || "").trim() || "-"}】的修改`;
+      }
+    };
+    ui.craftAssistPresetNameInput.oninput = () => {
+      syncPresetEditingName();
+    };
+    ui.craftAssistPresetNameInput.onchange = () => {
+      syncPresetEditingName({trim: true});
+    };
+    ui.craftAssistPresetNameInput.onblur = () => {
+      syncPresetEditingName({trim: true});
     };
   }
   if (ui.craftAssistFilterModeRelative) {
@@ -13164,4 +13324,3 @@ async function init() {
 }
 
 init();
-
