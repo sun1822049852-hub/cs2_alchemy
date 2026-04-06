@@ -1,8 +1,10 @@
 const assert = require("node:assert/strict");
 
 const {
+  createCraftAssistService,
   selectCraftAssistForRecipe,
-  buildCraftAssistSelectionContext
+  buildCraftAssistSelectionContext,
+  buildCraftAssistSelectionContextFromCandidateRows
 } = require("../node_sidecar/src/services/craftAssistService");
 
 function makeRow({
@@ -58,6 +60,45 @@ function runSelectWithContext({selectionContext, targetWear, materials, blockedI
 
 function pickedIds(result) {
   return Array.isArray(result && result.item_ids) ? [...result.item_ids].sort() : [];
+}
+
+function rawPickedIds(result) {
+  return Array.isArray(result && result.item_ids) ? [...result.item_ids] : [];
+}
+
+function pickedAssetIds(result) {
+  return Array.isArray(result && result.picks)
+    ? result.picks.map((entry) => String(entry && entry.asset_id || "")).filter(Boolean)
+    : [];
+}
+
+function traceEntrySummary(entry) {
+  return {
+    index: Number(entry && entry.index || 0),
+    materialName: String(entry && entry.materialName || ""),
+    primary_name: String(entry && entry.primary_name || ""),
+    item_names: Array.isArray(entry && entry.item_names) ? [...entry.item_names] : [],
+    label: String(entry && entry.label || ""),
+    role: String(entry && entry.role || ""),
+    selectedIds: Array.isArray(entry && entry.selectedIds) ? [...entry.selectedIds] : [],
+    removedIds: Array.isArray(entry && entry.removedIds) ? [...entry.removedIds] : [],
+    addedIds: Array.isArray(entry && entry.addedIds) ? [...entry.addedIds] : []
+  };
+}
+
+function traceParitySummary(result) {
+  const trace = result && result.selection_trace;
+  return {
+    steps: Array.isArray(trace && trace.steps)
+      ? trace.steps.map((step) => ({
+          stage: String(step && step.stage || ""),
+          overall: Number.isFinite(Number(step && step.overall)) ? Number(step.overall) : null,
+          selectedIds: Array.isArray(step && step.selectedIds) ? [...step.selectedIds] : [],
+          groups: Array.isArray(step && step.groups) ? step.groups.map(traceEntrySummary) : [],
+          changes: Array.isArray(step && step.changes) ? step.changes.map(traceEntrySummary) : []
+        }))
+      : []
+  };
 }
 
 async function withEnv(envMap, run) {
@@ -627,10 +668,111 @@ async function test_prebuilt_selection_context_matches_direct_selection_even_wit
 
   assert.equal(direct.ok, true);
   assert.equal(cached.ok, true);
+  assert.deepEqual(rawPickedIds(cached), rawPickedIds(direct));
+  assert.deepEqual(pickedAssetIds(cached), pickedAssetIds(direct));
+  assert.deepEqual(cached.picks, direct.picks);
   assert.deepEqual(pickedIds(cached), pickedIds(direct));
   assert.equal(cached.overall, direct.overall);
   assert.equal(cached.rarity, direct.rarity);
-  assert.deepEqual(cached.selection_trace, direct.selection_trace);
+  assert.equal(cached.approach_mode, direct.approach_mode);
+  assert.equal(cached.recipe_ok, direct.recipe_ok);
+  assert.equal(cached.recipe_reason, direct.recipe_reason);
+  assert.equal(cached.recipe_text, direct.recipe_text);
+  assert.deepEqual(traceParitySummary(cached), traceParitySummary(direct));
+}
+
+async function test_candidate_rows_sibling_rebuilds_stale_selection_context_even_when_asset_ids_match() {
+  const staleCandidateRows = [
+    makeRow({id: "m1", name: "Main", relative: 0.24}),
+    makeRow({id: "m2", name: "Main", relative: 0.245}),
+    makeRow({id: "m3", name: "Main", relative: 0.246}),
+    makeRow({id: "a1", name: "Aux", relative: 0.209}),
+    makeRow({id: "a2", name: "Aux", relative: 0.208}),
+    makeRow({id: "a3", name: "Aux", relative: 0.207}),
+    makeRow({id: "a4", name: "Aux", relative: 0.206}),
+    makeRow({id: "a5", name: "Aux", relative: 0.205}),
+    makeRow({id: "a6", name: "Aux", relative: 0.204}),
+    makeRow({id: "a7", name: "Aux", relative: 0.203}),
+    makeRow({id: "a8", name: "Aux", relative: 0.202}),
+    makeRow({id: "a9", name: "Aux", relative: 0.201}),
+    makeRow({id: "a10", name: "Aux", relative: 0.200})
+  ];
+  const freshCandidateRows = staleCandidateRows.map((row) => {
+    if (String(row && row.alchemy_name || "") !== "Aux") return {...row};
+    return {
+      ...row,
+      name: "Aux Fresh",
+      alchemy_name: "Aux Fresh"
+    };
+  });
+  const selectionContext = buildCraftAssistSelectionContextFromCandidateRows(staleCandidateRows, {
+    includeCooling: false
+  });
+  const request = {
+    targetWear: 0.22,
+    wearFilterMode: "relative",
+    materials: [
+      {role: "main", count: 2, items: [{name: "Main", wear_filter_mode: "relative", wear_min: 0, wear_max: 1}]},
+      {role: "aux", count: 8, items: [{name: "Aux Fresh", wear_filter_mode: "relative", wear_min: 0, wear_max: 1}]}
+    ],
+    blockedIds: [],
+    includeCooling: false,
+    wearOffsetPct: 100
+  };
+  const expected = await selectCraftAssistForRecipe({
+    candidateRows: freshCandidateRows,
+    ...request
+  });
+
+  const result = await selectCraftAssistForRecipe({
+    selectionContext,
+    candidateRows: freshCandidateRows,
+    ...request
+  });
+
+  assert.equal(expected.ok, true);
+  assert.equal(result.ok, true);
+  assert.deepEqual(rawPickedIds(result), rawPickedIds(expected));
+  assert.deepEqual(traceParitySummary(result), traceParitySummary(expected));
+}
+
+async function test_service_rebuilds_cached_context_when_rows_mutate_in_place() {
+  const service = createCraftAssistService({logger: null});
+  const rows = [];
+  for (let index = 0; index < 10; index += 1) {
+    rows.push(makeRow({
+      id: `s${index + 1}`,
+      name: "Solo",
+      relative: 0.05 + index * 0.01
+    }));
+  }
+  rows.push(makeRow({id: "s11", name: "Solo", relative: 0.4}));
+  const args = {
+    rows,
+    targetWear: 0.20,
+    wearFilterMode: "relative",
+    materials: [
+      {role: "main", count: 10, items: [{name: "Solo", wear_filter_mode: "relative", wear_min: 0, wear_max: 1}]}
+    ],
+    blockedIds: [],
+    includeCooling: false,
+    wearOffsetPct: 100
+  };
+
+  const first = await service.selectForRecipe(args);
+  assert.equal(first.ok, true);
+
+  rows[0].float_value = 0.95;
+  rows[10].float_value = 0.199;
+
+  const expected = await selectCraftAssistForRecipe(args);
+  const actual = await service.selectForRecipe(args);
+
+  assert.equal(expected.ok, true);
+  assert.equal(actual.ok, true);
+  assert.notDeepEqual(rawPickedIds(expected), rawPickedIds(first));
+  assert.deepEqual(rawPickedIds(actual), rawPickedIds(expected));
+  assert.deepEqual(traceParitySummary(actual), traceParitySummary(expected));
 }
 
 async function test_fast_flag_true_runs_expand_correction_before_returning() {
@@ -764,6 +906,208 @@ async function test_fast_flag_runs_context_refine_after_expand_improves_multi_ov
   });
 }
 
+async function test_item_level_material_items_support_mixed_relative_absolute_filters_and_preserve_candidate_ordering() {
+  const rows = [
+    makeRow({id: "fill-1", name: "Filler", relative: 0.10}),
+    makeRow({id: "fill-2", name: "Filler", relative: 0.11}),
+    makeRow({id: "fill-3", name: "Filler", relative: 0.12}),
+    makeRow({id: "fill-4", name: "Filler", relative: 0.13}),
+    makeRow({id: "fill-5", name: "Filler", relative: 0.14}),
+    makeRow({id: "fill-6", name: "Filler", relative: 0.15}),
+    makeRow({id: "fill-7", name: "Filler", relative: 0.16}),
+    makeRow({id: "fill-8", name: "Filler", relative: 0.17}),
+    makeRow({id: "rel-1", name: "Rel Skin", relative: 0.31}),
+    makeRow({id: "abs-close", name: "Abs Skin", relative: 0.55, min: 0.5, max: 0.9}),
+    makeRow({id: "abs-far", name: "Abs Skin", relative: 0.95, min: 0.5, max: 0.9})
+  ];
+
+  const result = await runSelect({
+    rows,
+    targetWear: 0.32,
+    materials: [
+      {
+        id: "mixed-main",
+        role: "main",
+        count: 2,
+        names: ["Rel Skin", "Abs Skin"],
+        wear_min: 0.30,
+        wear_max: 0.34,
+        custom_range: true,
+        items: [
+          {
+            id: "rel-card",
+            name: "Rel Skin",
+            wear_filter_mode: "relative",
+            wear_min: 0.30,
+            wear_max: 0.34,
+            custom_range: true
+          },
+          {
+            id: "abs-card",
+            name: "Abs Skin",
+            wear_filter_mode: "absolute",
+            wear_min: 0.70,
+            wear_max: 0.85,
+            custom_range: true
+          },
+          {
+            id: "rel-card-duplicate",
+            name: "Rel Skin",
+            wear_filter_mode: "relative",
+            wear_min: 0.30,
+            wear_max: 0.34,
+            custom_range: true
+          }
+        ]
+      },
+      {
+        id: "fill-aux",
+        role: "aux",
+        count: 8,
+        names: ["Filler"],
+        wear_min: 0,
+        wear_max: 1
+      }
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.item_ids, [
+    "rel-1",
+    "abs-close",
+    "fill-8",
+    "fill-7",
+    "fill-6",
+    "fill-5",
+    "fill-4",
+    "fill-3",
+    "fill-2",
+    "fill-1"
+  ]);
+  assert.equal(new Set(result.item_ids).size, result.item_ids.length);
+}
+
+async function test_context_refine_trace_uses_primary_name_projection_for_multi_item_materials() {
+  const rows = makeContextRefineRows();
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "20",
+    OVERSIZED_4_SHARDS_THRESHOLD: "999",
+    SHARD_TOP_K: "18",
+    SHARD_EDGE_KEEP_PER_SIDE: "2",
+    EXPAND_SHARD_TOP_K: "28",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHORTLIST_MIN: "22",
+    SHORTLIST_PER_REQUIRED: "4",
+    SHORTLIST_HARD_MAX: "64"
+  }, async () => {
+    const result = await runSelect({
+      rows,
+      targetWear: 0.2142,
+      enableFastCraftAssist: true,
+      materials: [
+        {
+          name: "Main",
+          names: ["Main"],
+          role: "main",
+          count: 2,
+          wear_min: 0,
+          wear_max: 1,
+          items: [
+            {
+              id: "main-card",
+              name: "Main",
+              wear_filter_mode: "relative",
+              wear_min: 0,
+              wear_max: 1,
+              custom_range: false
+            }
+          ]
+        },
+        {
+          name: "AuxA Variant",
+          names: ["AuxA Variant", "AuxA"],
+          role: "aux",
+          count: 4,
+          wear_min: 0,
+          wear_max: 1,
+          items: [
+            {
+              id: "aux-a-base",
+              name: "AuxA",
+              wear_filter_mode: "relative",
+              wear_min: 0,
+              wear_max: 1,
+              custom_range: false
+            },
+            {
+              id: "aux-a-variant",
+              name: "AuxA Variant",
+              wear_filter_mode: "relative",
+              wear_min: 0,
+              wear_max: 1,
+              custom_range: false
+            }
+          ]
+        },
+        {
+          name: "AuxB Variant",
+          names: ["AuxB Variant", "AuxB"],
+          role: "aux",
+          count: 4,
+          wear_min: 0,
+          wear_max: 1,
+          items: [
+            {
+              id: "aux-b-base",
+              name: "AuxB",
+              wear_filter_mode: "relative",
+              wear_min: 0,
+              wear_max: 1,
+              custom_range: false
+            },
+            {
+              id: "aux-b-variant",
+              name: "AuxB Variant",
+              wear_filter_mode: "relative",
+              wear_min: 0,
+              wear_max: 1,
+              custom_range: false
+            }
+          ]
+        }
+      ]
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(!!(result.selection_trace && result.selection_trace.prefilter && result.selection_trace.prefilter.contextRefine), true);
+    const attempts = result.selection_trace.prefilter.contextRefine.rounds[0].attempts;
+    const auxAAttempt = attempts.find((attempt) => attempt && attempt.materialName === "AuxA");
+    assert.equal(!!auxAAttempt, true);
+    assert.deepEqual(auxAAttempt.item_names, ["AuxA", "AuxA Variant"]);
+    assert.equal(auxAAttempt.label, "AuxA / AuxA Variant");
+  });
+}
+
+async function test_duplicate_names_across_materials_fail_after_canonicalize_reduces_total_count() {
+  const rows = [];
+  for (let index = 0; index < 10; index += 1) {
+    rows.push(makeRow({id: `same-${index + 1}`, name: "Same", relative: 0.1 + index * 0.01}));
+  }
+
+  const result = await runSelect({
+    rows,
+    targetWear: 0.25,
+    materials: [
+      {id: "main-same", role: "main", count: 5, names: ["Same"], wear_min: 0, wear_max: 1},
+      {id: "aux-same", role: "aux", count: 5, names: ["Same"], wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.message, /材料数量之和必须等于 10，当前 5/);
+}
+
 (async () => {
   await test_over_target_prefers_squeezing_aux_before_main();
   await test_under_target_prioritizes_closer_overall_before_aux_low_bias();
@@ -781,9 +1125,14 @@ async function test_fast_flag_runs_context_refine_after_expand_improves_multi_ov
   await test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
   await test_multi_material_returns_selection_trace();
   await test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids();
+  await test_candidate_rows_sibling_rebuilds_stale_selection_context_even_when_asset_ids_match();
+  await test_service_rebuilds_cached_context_when_rows_mutate_in_place();
   await test_fast_flag_true_runs_expand_correction_before_returning();
   await test_fast_flag_false_forces_old_logic_even_when_env_enabled();
   await test_fast_flag_runs_context_refine_after_expand_improves_multi_oversized_groups();
+  await test_item_level_material_items_support_mixed_relative_absolute_filters_and_preserve_candidate_ordering();
+  await test_context_refine_trace_uses_primary_name_projection_for_multi_item_materials();
+  await test_duplicate_names_across_materials_fail_after_canonicalize_reduces_total_count();
   console.log("craftAssistService tests passed");
 })().catch((err) => {
   console.error(err);

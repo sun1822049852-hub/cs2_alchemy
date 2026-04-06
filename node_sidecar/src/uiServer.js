@@ -17,11 +17,11 @@ const {createCraftService} = require("./services/craftService");
 const {createCraftTradeupWithComponentsService} = require("./services/craftTradeupWithComponentsService");
 const {requestUsesComponentSourceRecipes} = require("./services/craftExecutionGuard");
 const {
-  createCraftAssistService,
-  buildCraftAssistSelectionContextFromCandidateRows
+  createCraftAssistService
 } = require("./services/craftAssistService");
 const {createCraftAssistWorkerPool} = require("./services/craftAssistWorkerPool");
 const {buildCraftCandidateContext} = require("./services/craftCandidateService");
+const {normalizeCraftAssistMaterialListCanonical} = require("../ui/craftAssistItemWearShared");
 const {createCraftOutcomeCatalog} = require("./services/craftOutcomeCatalog");
 const {createCraftOutcomePredictor} = require("./services/craftOutcomePredictor");
 const {createTradeupSimulationCatalog} = require("./services/tradeupSimulationCatalog");
@@ -459,6 +459,56 @@ function requireSteamAccountAccess(res, auth, username) {
   }
   writeJson(res, 403, {ok: false, reason: "account_scope_denied", message: "当前登录用户无权访问该 Steam 账号"});
   return false;
+}
+
+function parseLooseBoolean(value) {
+  if (value === true || value === 1) return true;
+  const text = asString(value).trim().toLowerCase();
+  return text === "1" || text === "true";
+}
+
+function normalizeRouteItemIds(ids) {
+  return Array.from(new Set((Array.isArray(ids) ? ids : [])
+    .map((value) => asString(value).trim())
+    .filter(Boolean)));
+}
+
+function buildCraftAssistSelectRoutePayload(body, {rows = []} = {}) {
+  const includeComponentItems = parseLooseBoolean(
+    Object.prototype.hasOwnProperty.call(body || {}, "include_component_items")
+      ? body.include_component_items
+      : body && body.use_component_items
+  );
+  const includeCooling = parseLooseBoolean(body && body.include_cooling);
+  const enableFastCraftAssist = parseLooseBoolean(body && body.enable_fast_craft_assist);
+  const blockedIds = normalizeRouteItemIds(body && body.blocked_ids);
+  const selectedItemIds = normalizeRouteItemIds(body && body.selected_item_ids);
+  const effectiveSelectedItemIds = selectedItemIds.length ? selectedItemIds : blockedIds;
+  const candidateRows = buildCraftCandidateContext({
+    rows,
+    includeComponentItems,
+    includeCooling,
+    selectedItemIds: effectiveSelectedItemIds
+  }).candidateRows;
+  return {
+    request: {
+      targetWear: body && body.target_wear,
+      wearFilterMode: body && body.wear_filter_mode,
+      wearApproachMode: body && body.wear_approach_mode,
+      materials: normalizeCraftAssistMaterialListCanonical(body && body.materials, {
+        rows: candidateRows,
+        legacyWearFilterMode: body && body.wear_filter_mode,
+        source: "renormalize"
+      }),
+      blockedIds,
+      selectedItemIds: effectiveSelectedItemIds,
+      includeComponentItems,
+      includeCooling,
+      wearOffsetPct: body && body.wear_offset_pct,
+      enableFastCraftAssist
+    },
+    candidateRows
+  };
 }
 
 function normalizeLoginSaveError(err) {
@@ -1848,30 +1898,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
       writeJson(res, 409, {ok: false, message: asString(err && err.message ? err.message : err)});
       return true;
     }
-    const includeComponentItemsRaw = body.use_component_items;
-    const includeComponentItemsText = asString(includeComponentItemsRaw).trim().toLowerCase();
-    const includeComponentItems = includeComponentItemsRaw === true
-      || includeComponentItemsRaw === 1
-      || includeComponentItemsText === "1"
-      || includeComponentItemsText === "true";
-    const enableFastCraftAssistRaw = body.enable_fast_craft_assist;
-    const enableFastCraftAssistText = asString(enableFastCraftAssistRaw).trim().toLowerCase();
-    const enableFastCraftAssist = enableFastCraftAssistRaw === true
-      || enableFastCraftAssistRaw === 1
-      || enableFastCraftAssistText === "1"
-      || enableFastCraftAssistText === "true";
-    const workerArgs = {
-      targetWear: body.target_wear,
-      wearFilterMode: body.wear_filter_mode,
-      wearApproachMode: body.wear_approach_mode,
-      materials: body.materials,
-      blockedIds: body.blocked_ids,
-      selectedItemIds: body.blocked_ids,
-      includeComponentItems,
-      includeCooling: body.include_cooling,
-      wearOffsetPct: body.wear_offset_pct,
-      enableFastCraftAssist
-    };
+    const normalizedAssist = buildCraftAssistSelectRoutePayload(body, {
+      rows: loaded.rows
+    });
+    const workerArgs = normalizedAssist.request;
     const workerPool = getCraftAssistWorkerPool();
     const result = workerPool
       ? await workerPool.selectForRecipe({
@@ -1879,14 +1909,8 @@ async function handleApi(req, res, urlObj, deps = {}) {
         ...workerArgs
       })
       : await craftAssistService.selectForRecipe({
-        selectionContext: buildCraftAssistSelectionContextFromCandidateRows(buildCraftCandidateContext({
-          rows: loaded.rows,
-          includeComponentItems,
-          includeCooling: body.include_cooling,
-          selectedItemIds: body.blocked_ids
-        }).candidateRows, {
-          includeCooling: !!body.include_cooling
-        }),
+        rows: loaded.rows,
+        candidateRows: normalizedAssist.candidateRows,
         ...workerArgs
       });
     if (!result.ok) {

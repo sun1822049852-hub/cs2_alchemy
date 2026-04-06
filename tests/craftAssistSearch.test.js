@@ -395,6 +395,61 @@ function test_search_best_solution_infinite_mode_can_cross_target_for_closer_sin
   assert.equal(Math.abs(infinite.overall - 0.50) < Math.abs(belowOnly.overall - 0.50), true);
 }
 
+function test_role_aware_push_trace_uses_shared_material_projection() {
+  const groups = [
+    {
+      index: 0,
+      material: {
+        role: "main",
+        count: 2,
+        primary_name: "Main Alpha",
+        item_names: ["Main Alpha", "Main Beta"],
+        label: "Main Alpha / Main Beta"
+      },
+      candidates: [
+        makeCandidate("m1", 0.24, 0, "main"),
+        makeCandidate("m2", 0.245, 0, "main")
+      ]
+    },
+    {
+      index: 1,
+      material: {
+        role: "aux",
+        count: 8,
+        primary_name: "Aux Alpha",
+        item_names: ["Aux Alpha", "Aux Beta"],
+        label: "Aux Alpha / Aux Beta"
+      },
+      candidates: [
+        makeCandidate("a1", 0.209, 1, "aux"),
+        makeCandidate("a2", 0.208, 1, "aux"),
+        makeCandidate("a3", 0.207, 1, "aux"),
+        makeCandidate("a4", 0.206, 1, "aux"),
+        makeCandidate("a5", 0.205, 1, "aux"),
+        makeCandidate("a6", 0.204, 1, "aux"),
+        makeCandidate("a7", 0.203, 1, "aux"),
+        makeCandidate("a8", 0.202, 1, "aux"),
+        makeCandidate("a9", 0.201, 1, "aux"),
+        makeCandidate("a10", 0.200, 1, "aux"),
+        makeCandidate("a11", 0.199, 1, "aux"),
+        makeCandidate("a12", 0.198, 1, "aux")
+      ]
+    }
+  ];
+
+  const result = searchRoleAwarePushSolution({
+    groups,
+    targetValue: 0.21
+  });
+
+  assert.equal(result.trace.steps[0].groups[0].materialName, "Main Alpha");
+  assert.deepEqual(result.trace.steps[0].groups[0].item_names, ["Main Alpha", "Main Beta"]);
+  assert.equal(result.trace.steps[0].groups[0].label, "Main Alpha / Main Beta");
+  assert.equal(result.trace.steps[0].groups[1].materialName, "Aux Alpha");
+  assert.deepEqual(result.trace.steps[0].groups[1].item_names, ["Aux Alpha", "Aux Beta"]);
+  assert.equal(result.trace.steps[0].groups[1].label, "Aux Alpha / Aux Beta");
+}
+
 test_role_aware_push_slides_aux_window_down_when_over_target();
 test_role_aware_push_slides_main_window_up_when_under_target();
 test_role_aware_push_prefers_closer_aux_raise_when_main_raise_would_block_it();
@@ -403,4 +458,5 @@ test_role_aware_push_applies_aux_compensation_refinement();
 test_single_material_compensation_chooses_closest_global_second_swap();
 test_single_material_compensation_exposes_second_swap_pruning_trace();
 test_search_best_solution_infinite_mode_can_cross_target_for_closer_single_material_match();
+test_role_aware_push_trace_uses_shared_material_projection();
 console.log("craftAssistSearch tests passed");

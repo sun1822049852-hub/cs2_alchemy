@@ -1,3 +1,5 @@
+const {projectCraftAssistTraceMaterial} = require("../../ui/craftAssistItemWearShared");
+
 const EPSILON = 1e-9;
 const INITIAL_WINDOW_EXTRA_CAP = 24;
 const WINDOW_BOUNDARY_MARGIN = 4;
@@ -879,10 +881,20 @@ function collectSelectedIdsFromMaterialResults(materialResults) {
   return ids.sort();
 }
 
+function buildTraceMaterialFields(material) {
+  const projection = projectCraftAssistTraceMaterial(material);
+  return {
+    materialName: projection.materialName,
+    primary_name: projection.primary_name,
+    item_names: projection.item_names,
+    label: projection.label
+  };
+}
+
 function buildTraceGroupsFromMaterialResults(materialResults) {
   return (Array.isArray(materialResults) ? materialResults : []).map((entry, index) => ({
     index,
-    materialName: String(entry && entry.material && entry.material.name || ""),
+    ...buildTraceMaterialFields(entry && entry.material),
     role: normalizeRole(entry && entry.material && entry.material.role),
     selectedIds: (Array.isArray(entry && entry.selected) ? entry.selected : [])
       .map((candidate) => String(candidate && candidate.id || ""))
@@ -912,9 +924,10 @@ function describeMaterialResultsDelta(beforeResults, afterResults) {
     if (!removedIds.length && !addedIds.length) continue;
     changes.push({
       index,
-      materialName: String(afterList[index] && afterList[index].material && afterList[index].material.name
-        || beforeList[index] && beforeList[index].material && beforeList[index].material.name
-        || ""),
+      ...buildTraceMaterialFields(
+        afterList[index] && afterList[index].material
+        || beforeList[index] && beforeList[index].material
+      ),
       role: normalizeRole(
         afterList[index] && afterList[index].material && afterList[index].material.role
         || beforeList[index] && beforeList[index].material && beforeList[index].material.role
@@ -1519,13 +1532,13 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
               selected: singleMainScore.selected,
               overall: singleMainScore.overall,
               scoreTuple: singleMainScore.scoreTuple,
-              pattern: "main_up",
-              changes: [{
-                index: mainEntryIndex,
-                materialName: String(mainEntry && mainEntry.material && mainEntry.material.name || ""),
-                role: "main",
-                removedIds: [String(oldMain && oldMain.id || "")].filter(Boolean),
-                addedIds: [String(newMain && newMain.id || "")].filter(Boolean)
+                    pattern: "main_up",
+                    changes: [{
+                      index: mainEntryIndex,
+                      ...buildTraceMaterialFields(mainEntry && mainEntry.material),
+                      role: "main",
+                      removedIds: [String(oldMain && oldMain.id || "")].filter(Boolean),
+                      addedIds: [String(newMain && newMain.id || "")].filter(Boolean)
               }]
             };
           }
@@ -1596,14 +1609,14 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     changes: [
                       {
                         index: mainEntryIndex,
-                        materialName: String(mainEntry && mainEntry.material && mainEntry.material.name || ""),
+                        ...buildTraceMaterialFields(mainEntry && mainEntry.material),
                         role: "main",
                         removedIds: [String(oldMain && oldMain.id || "")].filter(Boolean),
                         addedIds: [String(newMain && newMain.id || "")].filter(Boolean)
                       },
                       {
                         index: auxEntryIndex,
-                        materialName: String(auxEntry && auxEntry.material && auxEntry.material.name || ""),
+                        ...buildTraceMaterialFields(auxEntry && auxEntry.material),
                         role: "aux",
                         removedIds: [String(oldAux && oldAux.id || "")].filter(Boolean),
                         addedIds: [String(newAux && newAux.id || "")].filter(Boolean)
@@ -1693,14 +1706,14 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     changes: [
                       {
                         index: mainEntryIndex,
-                        materialName: String(mainEntry && mainEntry.material && mainEntry.material.name || ""),
+                        ...buildTraceMaterialFields(mainEntry && mainEntry.material),
                         role: "main",
                         removedIds: [String(oldMain && oldMain.id || "")].filter(Boolean),
                         addedIds: [String(newMain && newMain.id || "")].filter(Boolean)
                       },
                       {
                         index: auxEntryIndex,
-                        materialName: String(auxEntry && auxEntry.material && auxEntry.material.name || ""),
+                        ...buildTraceMaterialFields(auxEntry && auxEntry.material),
                         role: "aux",
                         removedIds: [String(oldAux && oldAux.id || "")].filter(Boolean),
                         addedIds: [String(newAux && newAux.id || "")].filter(Boolean)
@@ -1814,14 +1827,14 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     changes: [
                       {
                         index: auxUpEntryIndex,
-                        materialName: String(auxUpEntry && auxUpEntry.material && auxUpEntry.material.name || ""),
+                        ...buildTraceMaterialFields(auxUpEntry && auxUpEntry.material),
                         role: "aux",
                         removedIds: [oldAuxUpId],
                         addedIds: [String(newAuxUp && newAuxUp.id || "")].filter(Boolean)
                       },
                       {
                         index: auxDownEntryIndex,
-                        materialName: String(auxDownEntry && auxDownEntry.material && auxDownEntry.material.name || ""),
+                        ...buildTraceMaterialFields(auxDownEntry && auxDownEntry.material),
                         role: "aux",
                         removedIds: [oldAuxDownId],
                         addedIds: [String(newAuxDown && newAuxDown.id || "")].filter(Boolean)

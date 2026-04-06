@@ -351,6 +351,35 @@ function testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools() {
   assert.equal(mixedPool.reason, "mixed_stattrak");
 }
 
+function testBuildCraftPredictorRequestFromDraftSupportsItemLevelMaterialsAndSharedRequiredCount() {
+  const app = loadPredictorPanelFns();
+  app.craftAssistItemWearShared = {
+    resolveCraftAssistRequiredCount() {
+      return 5;
+    }
+  };
+
+  const result = app.buildCraftPredictorRequestFromDraft({
+    targetWear: 0.18,
+    requiredCount: null,
+    materials: [
+      {role: "main", count: 3, items: [{name: "AK-47 | Slate"}]},
+      {role: "aux", count: 2, items: [{name: "USP-S | Cortex"}]}
+    ],
+    parentGroups: [
+      {name: "AK-47 | Slate", collection: "Fracture Case", rarity: "军规级", stattrak: false},
+      {name: "USP-S | Cortex", collection: "Clutch Case", rarity: "军规级", stattrak: false}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.payload.required_count, 5);
+  assert.deepEqual(Array.from(result.payload.groups), [
+    {collection: "Fracture Case", count: 3},
+    {collection: "Clutch Case", count: 2}
+  ]);
+}
+
 async function main() {
   testSelectCraftPredictorContextSetsRecipeTargetWithoutAutoOpen();
   testSetCraftAssistPanelOpenDoesNotHijackPredictorContextOrVisibility();
@@ -360,6 +389,7 @@ async function main() {
   await testFocusCraftPredictorOnActiveDraftKeepsImmediatePredictionAcrossFollowupRefresh();
   testBuildCraftPredictorRequestFromDraftAggregatesCollections();
   testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools();
+  testBuildCraftPredictorRequestFromDraftSupportsItemLevelMaterialsAndSharedRequiredCount();
   console.log("craft-predictor-panel-state tests passed");
 }
 

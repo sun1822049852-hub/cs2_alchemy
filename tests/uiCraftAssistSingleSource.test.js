@@ -30,6 +30,18 @@ assert.equal(
 );
 
 assert.equal(
+  source.includes("wear_filter_mode: wearFilterMode"),
+  false,
+  "frontend assist-select request should no longer write back legacy top-level wear_filter_mode"
+);
+
+assert.equal(
+  source.includes("function projectCraftAssistPersistedMaterialsFromState("),
+  true,
+  "frontend should centralize craft-assist persisted item-level projection"
+);
+
+assert.equal(
   source.includes('api("/api/craft/candidates"'),
   true,
   "frontend must fetch craft candidates from backend single source"

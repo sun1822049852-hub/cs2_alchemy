@@ -3,6 +3,7 @@
 const os = require("node:os");
 const path = require("node:path");
 const {Worker} = require("node:worker_threads");
+const {projectCraftAssistTraceMaterial} = require("../../ui/craftAssistItemWearShared");
 
 const DEFAULT_WORKER_PATH = path.resolve(__dirname, "craftAssistShardWorker.js");
 
@@ -508,9 +509,13 @@ async function processOversizedGroup({
   remainingCallTimeoutMs
 }) {
   const originalCandidates = Array.isArray(group && group.candidates) ? group.candidates : [];
+  const traceMaterial = projectCraftAssistTraceMaterial(group && group.material);
   const groupTrace = {
     groupIndex,
-    materialName: asString(group && group.material && group.material.name).trim(),
+    materialName: traceMaterial.materialName,
+    primary_name: traceMaterial.primary_name,
+    item_names: traceMaterial.item_names,
+    label: traceMaterial.label,
     shardCount: 0,
     candidateCountBefore: originalCandidates.length,
     candidateCountAfter: originalCandidates.length,

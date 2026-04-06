@@ -280,6 +280,32 @@ async function test_call_timeout_discards_partial_prefilter_results() {
   assert.deepEqual(result.prefilterTrace.groupFallbackIndexes, []);
 }
 
+async function test_prefilter_trace_uses_shared_material_projection() {
+  const group = {
+    index: 0,
+    material: {
+      role: "neutral",
+      count: 5,
+      primary_name: "Aux Alpha",
+      item_names: ["Aux Alpha", "Aux Beta"],
+      label: "Aux Alpha / Aux Beta"
+    },
+    candidates: makeRangeCandidates(520, {name: "Aux Alpha"})
+  };
+  const result = await runPrefilterPhase({
+    groups: [group],
+    targetValue: 0.42,
+    recipeContext: {recipeNo: 1},
+    phaseName: "prefilter/base",
+    options: makeBaseOptions()
+  });
+
+  assert.equal(result.kind, "phase_ready");
+  assert.equal(result.prefilterTrace.groups[0].materialName, "Aux Alpha");
+  assert.deepEqual(result.prefilterTrace.groups[0].item_names, ["Aux Alpha", "Aux Beta"]);
+  assert.equal(result.prefilterTrace.groups[0].label, "Aux Alpha / Aux Beta");
+}
+
 (async () => {
   test_resolve_shard_count_and_role_mapping();
   test_build_stride_shards_with_center_overlap_preserves_center_and_size();
@@ -292,6 +318,7 @@ async function test_call_timeout_discards_partial_prefilter_results() {
   await test_group_full_fallback_on_worker_crash();
   await test_group_full_fallback_on_group_timeout();
   await test_call_timeout_discards_partial_prefilter_results();
+  await test_prefilter_trace_uses_shared_material_projection();
   console.log("craftAssistShardPrefilter tests passed");
 })().catch((err) => {
   console.error(err);

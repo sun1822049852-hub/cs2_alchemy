@@ -147,8 +147,7 @@ function loadApplyCraftAssistAutoSelection() {
       return {
         panel_open: true,
         target_wear: 0.2142,
-        wear_filter_mode: "relative",
-        materials: [{id: "mat-1", names: ["AK"], role: "main", count: 10}],
+        materials: [{id: "mat-1", role: "main", count: 10, items: [{id: "mat-1__1", name: "AK", wear_filter_mode: "relative", wear_min: 0.1, wear_max: 0.2, custom_range: true}]}],
         pick_role: "main"
       };
     },
@@ -243,9 +242,12 @@ function loadApplyCraftAssistAutoSelection() {
 
 async function testSuccessfulAutoSelectionWritesBackFilledRecipeInsteadOfEmptyShell() {
   const app = loadApplyCraftAssistAutoSelection();
-  app.fetch = async () => ({
+  app.fetch = async (_path, options = {}) => ({
     ok: true,
     async json() {
+      const request = JSON.parse(String(options && options.body || "{}"));
+      assert.equal(Object.prototype.hasOwnProperty.call(request, "wear_filter_mode"), false);
+      assert.deepEqual(request.materials, [{id: "mat-1", role: "main", count: 10, items: [{id: "mat-1__1", name: "AK", wear_filter_mode: "relative", wear_min: 0.1, wear_max: 0.2, custom_range: true}]}]);
       return {
         item_ids: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
         overall: 0.214199,

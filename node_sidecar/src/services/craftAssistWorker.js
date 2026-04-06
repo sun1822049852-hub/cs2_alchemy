@@ -1,8 +1,7 @@
 const {parentPort} = require("worker_threads");
 
 const {
-  createCraftAssistService,
-  buildCraftAssistSelectionContextFromCandidateRows
+  createCraftAssistService
 } = require("./craftAssistService");
 const {buildCraftCandidateContext} = require("./craftCandidateService");
 const {createSnapshotRowsLoader} = require("./snapshotRowsLoader");
@@ -39,9 +38,6 @@ parentPort.on("message", async (message) => {
         includeCooling,
         selectedItemIds: payload.selectedItemIds || payload.blockedIds
       });
-    const selectionContext = buildCraftAssistSelectionContextFromCandidateRows(candidateContext.candidateRows, {
-      includeCooling
-    });
     const result = await craftAssistService.selectForRecipe({
       targetWear: payload.targetWear,
       wearFilterMode: payload.wearFilterMode,
@@ -52,7 +48,7 @@ parentPort.on("message", async (message) => {
       wearOffsetPct: payload.wearOffsetPct,
       enableFastCraftAssist: payload.enableFastCraftAssist,
       rows,
-      selectionContext
+      candidateRows: candidateContext.candidateRows
     });
     parentPort.postMessage({
       type: "result",

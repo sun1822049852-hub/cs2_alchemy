@@ -360,19 +360,6 @@
                           <span>目标相对磨损</span>
                           <input id="craftAssistTargetWear" type="text" inputmode="decimal" />
                         </label>
-                        <div class="craft-assist-field craft-assist-filter-mode">
-                          <span>筛选磨损</span>
-                          <div class="craft-assist-mode-toggle" role="group" aria-label="筛选磨损模式">
-                            <label class="craft-assist-mode-option">
-                              <input id="craftAssistFilterModeRelative" type="radio" name="craftAssistFilterMode" value="relative" />
-                              <span>相对</span>
-                            </label>
-                            <label class="craft-assist-mode-option">
-                              <input id="craftAssistFilterModeAbsolute" type="radio" name="craftAssistFilterMode" value="absolute" />
-                              <span>绝对</span>
-                            </label>
-                          </div>
-                        </div>
                         <button id="craftAssistPresetSaveBtn" class="btn-primary craft-assist-save-btn" type="button">保存当前</button>
                         <button id="craftAssistApplyBtn" class="btn-primary craft-assist-apply-btn" type="button">按配置选材</button>
                       </div>
@@ -594,6 +581,7 @@
     <script src="/authUiController.js"></script>
     <script src="/guestPreviewProvider.js"></script>
     <script src="/workspaceAccessGuard.js"></script>
+    <script src="/craftAssistItemWearShared.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

@@ -4576,10 +4576,10 @@ select.small {
   border: 1px solid #dbe4ef;
   border-radius: 8px;
   background: #fff;
-  padding: 8px;
+  padding: 6px 8px;
   display: grid;
   grid-template-rows: auto auto;
-  gap: 6px;
+  gap: 4px;
   position: relative;
 }
 
@@ -4587,34 +4587,70 @@ select.small {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding-right: 24px;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-right: 0;
 }
 
 .craft-assist-item-actions {
   display: inline-flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+:is(.craft-assist-item-head-primary, .craft-assist-item-head-main) {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.craft-assist-item-head-side {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
+  margin-left: auto;
+}
+
+:is(.craft-assist-item-actions, .craft-assist-item-head-side) .craft-assist-field.qty {
+  width: 88px;
+  min-width: 88px;
+}
+
+:is(.craft-assist-item-actions, .craft-assist-item-head-side) .craft-assist-item-remove {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .craft-assist-item-add {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border: 1px solid #9bc2f5;
   border-radius: 50%;
   background: #eef6ff;
   color: #1d4ed8;
-  font-size: 13px;
-  line-height: 13px;
+  font-size: 12px;
+  line-height: 12px;
   padding: 0;
   cursor: pointer;
 }
 
 .craft-assist-item-title {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  font-size: 12px;
   font-weight: 600;
   color: #0f172a;
-  line-height: 1.35;
+  line-height: 1.25;
   white-space: normal;
   word-break: break-word;
 }
@@ -4645,13 +4681,20 @@ select.small {
 .craft-assist-role-tag {
   display: inline-flex;
   align-items: center;
-  height: 22px;
-  padding: 0 8px;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 2px 10px;
   border-radius: 999px;
   font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
   border: 1px solid #cad8ea;
   background: #edf3fb;
   color: #1f2937;
+  justify-self: start;
+  white-space: nowrap;
 }
 
 .craft-assist-role-tag.main {
@@ -4696,7 +4739,13 @@ select.small {
 
 .craft-assist-range-wrap {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.craft-assist-range-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 6px;
   align-items: center;
 }
@@ -4714,6 +4763,139 @@ select.small {
 .craft-assist-item-hint {
   font-size: 12px;
   color: #64748b;
+}
+
+:is(.craft-assist-material-card-list, .craft-assist-item-cards) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  gap: 6px;
+  justify-items: start;
+  justify-content: start;
+  align-content: start;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) {
+  border: 1px solid #d6e2f0;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f2f7fd 100%);
+  padding: 6px;
+  display: grid;
+  width: fit-content;
+  max-width: 100%;
+  gap: 6px;
+  align-items: start;
+}
+
+:is(.craft-assist-material-card-head, .craft-assist-item-card-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+:is(.craft-assist-material-card-title, .craft-assist-item-card-title) {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+:is(.craft-assist-material-card-rail, .craft-assist-item-card-rail) {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  width: fit-content;
+  max-width: 100%;
+}
+
+:is(.craft-assist-material-card-meta, .craft-assist-item-card-meta) {
+  font-size: 11px;
+  color: #64748b;
+}
+
+:is(.craft-assist-material-card-controls, .craft-assist-item-card-controls) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) .craft-assist-mode-toggle {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) .craft-assist-mode-option {
+  background: #fff;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) .craft-assist-field {
+  gap: 2px;
+  font-size: 11px;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) .craft-assist-card-mode {
+  width: fit-content;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) .craft-assist-field.range {
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) .craft-assist-range-wrap {
+  gap: 4px;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card) .craft-assist-range-row {
+  grid-template-columns: auto minmax(52px, 72px);
+  gap: 4px;
+}
+
+:is(.craft-assist-material-card-remove, .craft-assist-item-card-remove) {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #f1b5b5;
+  border-radius: 50%;
+  background: #fff5f5;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 12px;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:is(.craft-assist-material-card, .craft-assist-item-card):hover :is(.craft-assist-material-card-remove, .craft-assist-item-card-remove) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (max-width: 1280px) {
+  :is(.craft-assist-material-card-list, .craft-assist-item-cards) {
+    grid-template-columns: repeat(3, minmax(0, max-content));
+  }
+}
+
+@media (max-width: 980px) {
+  :is(.craft-assist-material-card-list, .craft-assist-item-cards) {
+    grid-template-columns: repeat(2, minmax(0, max-content));
+  }
+}
+
+@media (max-width: 700px) {
+  :is(.craft-assist-material-card-list, .craft-assist-item-cards) {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  :is(.craft-assist-material-card, .craft-assist-item-card) {
+    width: 100%;
+  }
 }
 
 .craft-assist-selected-wrap {
@@ -7346,6 +7528,25 @@ body.theme-inkblue #craftPage .craft-assist-item-add {
   border-color: var(--ops-border-strong);
   background: rgba(220, 164, 76, 0.14);
   color: #f3ddab;
+}
+
+body.theme-inkblue #craftPage :is(.craft-assist-material-card, .craft-assist-item-card) {
+  border-color: var(--ops-border-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+
+body.theme-inkblue #craftPage :is(.craft-assist-material-card-title, .craft-assist-item-card-title) {
+  color: var(--ops-text-main);
+}
+
+body.theme-inkblue #craftPage :is(.craft-assist-material-card-meta, .craft-assist-item-card-meta) {
+  color: var(--ops-text-soft);
+}
+
+body.theme-inkblue #craftPage :is(.craft-assist-material-card-remove, .craft-assist-item-card-remove) {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(120, 24, 24, 0.28);
+  color: #ffb4b4;
 }
 
 body.theme-inkblue #craftPage .craft-assist-picker-empty,

@@ -1,6 +1,12 @@
 const {asString} = require("../utils");
 const {compareScoreTuples, searchCraftAssistBestSolution} = require("./craftAssistSearch");
 const {resolvePrefilterOptions, resolveShardCount, runPrefilterPhase} = require("./craftAssistShardPrefilter");
+const {
+  buildCraftAssistCandidateCacheKeyTuple,
+  normalizeCraftAssistMaterialListCanonical,
+  projectCraftAssistTraceMaterial,
+  resolveCraftAssistRequiredCount
+} = require("../../ui/craftAssistItemWearShared");
 
 const WEAR_INPUT_DECIMALS = 6;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
@@ -132,13 +138,6 @@ function normalizeCraftAssistRole(role) {
   return asString(role).trim() === "aux" ? "aux" : "main";
 }
 
-function normalizeCraftAssistDirection(role, direction) {
-  const defaultDirection = normalizeCraftAssistRole(role) === "aux" ? "lt" : "gt";
-  const value = asString(direction).trim();
-  if (value === "lt" || value === "gt") return value;
-  return defaultDirection;
-}
-
 function normalizeCraftAssistFilterMode(mode) {
   return asString(mode).trim() === "absolute" ? "absolute" : "relative";
 }
@@ -175,64 +174,16 @@ function getCraftAssistOffsetSettingHintText(wearOffsetPct = DEFAULT_CRAFT_ASSIS
   return `当前产物偏移阈值 ${pctText}%（可在炼金设置中调整）`;
 }
 
-function normalizeCraftAssistNameList(value) {
-  const source = Array.isArray(value) ? value : (value == null ? [] : [value]);
-  const out = [];
-  const seen = new Set();
-  for (const item of source) {
-    const name = asString(item).trim();
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    out.push(name);
-  }
-  return out;
-}
-
-function craftAssistMaterialNames(material) {
-  const names = normalizeCraftAssistNameList(material && material.names);
-  if (names.length) return names;
-  const fallbackName = asString(material && material.name || "").trim();
-  return fallbackName ? [fallbackName] : [];
-}
-
 function craftAssistMaterialLabel(material) {
-  const names = craftAssistMaterialNames(material);
-  return names.length ? names.join(" / ") : "-";
+  return projectCraftAssistTraceMaterial(material).label || "-";
 }
 
-function normalizeCraftAssistMaterialForRun(entry) {
-  const names = craftAssistMaterialNames(entry);
-  if (!names.length) return null;
-  const role = normalizeCraftAssistRole(entry && entry.role);
-  // 兼容旧格式（count）和新格式（count_limit）
-  const countLimit = normalizeCraftAssistEntryCount(
-    entry && (entry.count_limit != null ? entry.count_limit : entry.count), 1
-  );
-  let wearMin = clampWear01(entry && entry.wear_min, 0);
-  let wearMax = clampWear01(entry && entry.wear_max, 1);
-  if (wearMax < wearMin) {
-    const tmp = wearMin;
-    wearMin = wearMax;
-    wearMax = tmp;
-  }
-  return {
-    id: asString(entry && entry.id || "").trim(),
-    names,
-    name: names[0],
-    label: names.join(" / "),
-    role,
-    count: countLimit,
-    direction: normalizeCraftAssistDirection(role, entry && entry.direction),
-    disable_direction_limit: !!(entry && entry.disable_direction_limit),
-    wear_min: wearMin,
-    wear_max: wearMax
-  };
-}
-
-function normalizeCraftAssistMaterialsForRun(materials) {
-  return (Array.isArray(materials) ? materials : [])
-    .map((entry) => normalizeCraftAssistMaterialForRun(entry))
-    .filter((entry) => entry && entry.names.length > 0 && entry.count > 0);
+function normalizeCraftAssistMaterialsForRun(materials, {rows = null, legacyWearFilterMode = "relative"} = {}) {
+  return normalizeCraftAssistMaterialListCanonical(materials, {
+    rows,
+    source: "renormalize",
+    legacyWearFilterMode
+  });
 }
 
 function nthWeekdayOfMonthUtc(year, month, weekday, nth) {
@@ -347,6 +298,32 @@ function buildRowsByAssetId(rows) {
   return out;
 }
 
+function buildCraftAssistSelectionRowSignatureToken(row) {
+  return [
+    rowAssetId(row),
+    itemDisplayName(row),
+    numberTextTrunc(row && row.float_value),
+    numberTextTrunc(row && row.minfloat),
+    numberTextTrunc(row && row.maxfloat),
+    String(Math.trunc(Number(row && row.rarity) || 0)),
+    String(Math.trunc(Number(row && row.quality) || 0)),
+    asString(row && row.quality_name || "").trim(),
+    asString(row && row.casket_id || "").trim(),
+    asString(row && row.hidden_reason || "").trim(),
+    row && row.is_craftable === true ? "1" : "0",
+    row && row.yellow_shield_blocked === true ? "1" : "0",
+    asString(row && row.trade_lock_kind || "").trim(),
+    asString(row && row.tradable_after || "").trim()
+  ].join("\u001f");
+}
+
+function buildCraftAssistSelectionSourceSignature(candidateRows, {includeCooling = false} = {}) {
+  return [
+    includeCooling ? "1" : "0",
+    ...(Array.isArray(candidateRows) ? candidateRows : []).map((row) => buildCraftAssistSelectionRowSignatureToken(row))
+  ].join("\u001e");
+}
+
 function buildCraftAssistSelectionContextFromCandidateRows(candidateRows, {includeCooling = false} = {}) {
   const normalizedRows = sortCraftAssistCandidateRows(candidateRows);
   return {
@@ -354,7 +331,10 @@ function buildCraftAssistSelectionContextFromCandidateRows(candidateRows, {inclu
     candidateRows: normalizedRows,
     rowsByName: buildCraftAssistRowsByName(normalizedRows),
     rowsById: buildRowsByAssetId(normalizedRows),
-    candidateCache: new Map()
+    candidateCache: new Map(),
+    sourceSignature: buildCraftAssistSelectionSourceSignature(normalizedRows, {
+      includeCooling: !!includeCooling
+    })
   };
 }
 
@@ -365,18 +345,63 @@ function buildCraftAssistSelectionContext({rows, includeCooling = false} = {}) {
   );
 }
 
-function resolveCraftAssistSelectionContext({selectionContext, rows, includeCooling = false} = {}) {
+function isReusableCraftAssistSelectionContext(selectionContext, {includeCooling = false, sourceSignature = ""} = {}) {
   if (
-    selectionContext
-    && typeof selectionContext === "object"
-    && selectionContext.includeCooling === !!includeCooling
-    && Array.isArray(selectionContext.candidateRows)
-    && selectionContext.rowsByName instanceof Map
-    && selectionContext.rowsById instanceof Map
+    !selectionContext
+    || typeof selectionContext !== "object"
+    || selectionContext.includeCooling !== !!includeCooling
+    || !Array.isArray(selectionContext.candidateRows)
+    || !(selectionContext.rowsByName instanceof Map)
+    || !(selectionContext.rowsById instanceof Map)
   ) {
-    if (!(selectionContext.candidateCache instanceof Map)) {
-      selectionContext.candidateCache = new Map();
+    return false;
+  }
+  if (!(selectionContext.candidateCache instanceof Map)) {
+    selectionContext.candidateCache = new Map();
+  }
+  if (!selectionContext.sourceSignature) {
+    selectionContext.sourceSignature = buildCraftAssistSelectionSourceSignature(selectionContext.candidateRows, {
+      includeCooling: !!includeCooling
+    });
+  }
+  if (!sourceSignature) {
+    return true;
+  }
+  return selectionContext.sourceSignature === sourceSignature;
+}
+
+function resolveCraftAssistSelectionContext({
+  selectionContext,
+  rows,
+  candidateRows,
+  includeCooling = false
+} = {}) {
+  if (Array.isArray(candidateRows)) {
+    const expectedSignature = buildCraftAssistSelectionSourceSignature(candidateRows, {
+      includeCooling: !!includeCooling
+    });
+    if (isReusableCraftAssistSelectionContext(selectionContext, {
+      includeCooling,
+      sourceSignature: expectedSignature
+    })) {
+      return selectionContext;
     }
+    return buildCraftAssistSelectionContextFromCandidateRows(candidateRows, {includeCooling});
+  }
+  if (Array.isArray(rows)) {
+    const derivedCandidateRows = getCraftCandidates(rows, {includeCooling: !!includeCooling});
+    const expectedSignature = buildCraftAssistSelectionSourceSignature(derivedCandidateRows, {
+      includeCooling: !!includeCooling
+    });
+    if (isReusableCraftAssistSelectionContext(selectionContext, {
+      includeCooling,
+      sourceSignature: expectedSignature
+    })) {
+      return selectionContext;
+    }
+    return buildCraftAssistSelectionContextFromCandidateRows(derivedCandidateRows, {includeCooling});
+  }
+  if (isReusableCraftAssistSelectionContext(selectionContext, {includeCooling})) {
     return selectionContext;
   }
   return buildCraftAssistSelectionContext({rows, includeCooling});
@@ -393,17 +418,12 @@ function craftAssistCandidateComparator(a, b, target) {
 }
 
 function buildCraftAssistCandidateCacheKey(material, targetValue, useRelativeFilter) {
-  const names = craftAssistMaterialNames(material);
-  return [
-    useRelativeFilter ? "relative" : "absolute",
-    numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS),
-    numberTextTrunc(material && material.wear_min, WEAR_INPUT_DECIMALS),
-    numberTextTrunc(material && material.wear_max, WEAR_INPUT_DECIMALS),
-    names.join("\u001f")
-  ].join("|");
+  void useRelativeFilter;
+  return buildCraftAssistCandidateCacheKeyTuple(material, targetValue).join("\u001f");
 }
 
 function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedIds, targetValue, {useRelativeFilter = true, candidateCache = null} = {}) {
+  void useRelativeFilter;
   const cacheKey = candidateCache instanceof Map
     ? buildCraftAssistCandidateCacheKey(material, targetValue, useRelativeFilter)
     : "";
@@ -412,22 +432,22 @@ function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedId
     if (!(blockedIds instanceof Set) || blockedIds.size <= 0) return cached;
     return cached.filter((item) => !blockedIds.has(item.id));
   }
-  const nameList = craftAssistMaterialNames(material);
-  const rows = [];
-  for (const name of nameList) {
-    rows.push(...(rowsByName.get(name) || []));
-  }
   const unique = new Map();
-  for (const row of rows) {
-    const id = rowAssetId(row);
-    if (!id || blockedIds.has(id)) continue;
-    if (unique.has(id)) continue;
-    const relativeValue = getRelativeWearValue(row);
-    const rangeValue = useRelativeFilter ? relativeValue : getAbsoluteWearValue(row);
-    const value = relativeValue;
-    if (relativeValue == null || rangeValue == null || value == null) continue;
-    if (rangeValue < Number(material.wear_min) - EPSILON || rangeValue > Number(material.wear_max) + EPSILON) continue;
-    unique.set(id, {id, row, value, relative_value: relativeValue});
+  for (const item of Array.isArray(material && material.items) ? material.items : []) {
+    const name = asString(item && item.name || "").trim();
+    if (!name) continue;
+    const useRelativeItemFilter = asString(item && item.wear_filter_mode || "").trim() !== "absolute";
+    for (const row of rowsByName.get(name) || []) {
+      const id = rowAssetId(row);
+      if (!id || blockedIds.has(id) || unique.has(id)) continue;
+      const relativeValue = getRelativeWearValue(row);
+      const absoluteValue = getAbsoluteWearValue(row);
+      const rangeValue = useRelativeItemFilter ? relativeValue : absoluteValue;
+      if (relativeValue == null || rangeValue == null) continue;
+      if (rangeValue < Number(item && item.wear_min) - EPSILON) continue;
+      if (rangeValue > Number(item && item.wear_max) + EPSILON) continue;
+      unique.set(id, {id, row, value: relativeValue, relative_value: relativeValue});
+    }
   }
   const list = [...unique.values()];
   list.sort((a, b) => craftAssistCandidateComparator(a, b, targetValue));
@@ -1221,9 +1241,12 @@ function runCraftAssistContextRefine({
         ? refinedCandidate
         : null;
       const accepted = didCraftAssistSolvedCandidateImprove(beforeSolved, refinedSolved);
+      const traceMaterial = projectCraftAssistTraceMaterial(sourceGroups[groupIndex] && sourceGroups[groupIndex].material);
       attempts.push({
         groupIndex,
-        materialName: craftAssistMaterialLabel(sourceGroups[groupIndex] && sourceGroups[groupIndex].material),
+        materialName: traceMaterial.materialName,
+        item_names: traceMaterial.item_names,
+        label: traceMaterial.label,
         candidateCountOpened: Array.isArray(sourceGroups[groupIndex] && sourceGroups[groupIndex].candidates)
           ? sourceGroups[groupIndex].candidates.length
           : 0,
@@ -1632,7 +1655,9 @@ async function runCraftAssistSelectionForRecipe({
 
   const resultIds = [];
   for (const entry of materialResults) {
-    for (const choice of entry.selected) {
+    const orderedSelected = [...(Array.isArray(entry.selected) ? entry.selected : [])]
+      .sort((a, b) => craftAssistCandidateComparator(a, b, safeTargetValue));
+    for (const choice of orderedSelected) {
       resultIds.push(choice.id);
     }
   }
@@ -1692,6 +1717,7 @@ function buildPickedRowsPayload(rows) {
 async function selectCraftAssistForRecipe({
   rows,
   selectionContext,
+  candidateRows,
   targetWear,
   wearFilterMode,
   wearApproachMode,
@@ -1701,15 +1727,6 @@ async function selectCraftAssistForRecipe({
   wearOffsetPct,
   enableFastCraftAssist
 } = {}) {
-  const normalizedMaterials = normalizeCraftAssistMaterialsForRun(materials);
-  if (!normalizedMaterials.length) {
-    return {ok: false, message: "请先添加父类材料并设置数量"};
-  }
-  const mode = 10;
-  const totalCount = normalizedMaterials.reduce((sum, item) => sum + Number(item.count || 0), 0);
-  if (totalCount > mode) {
-    return {ok: false, message: `材料数量之和不能超过 ${mode}，当前 ${totalCount}`};
-  }
   const targetValue = parseOptionalWear01(targetWear);
   if (targetValue == null) {
     return {ok: false, message: "请先输入目标相对磨损"};
@@ -1717,13 +1734,26 @@ async function selectCraftAssistForRecipe({
   const context = resolveCraftAssistSelectionContext({
     selectionContext,
     rows,
+    candidateRows,
     includeCooling: !!includeCooling
   });
-  const candidateRows = Array.isArray(context.candidateRows) ? context.candidateRows : [];
-  if (!candidateRows.length) {
+  const contextCandidateRows = Array.isArray(context.candidateRows) ? context.candidateRows : [];
+  if (!contextCandidateRows.length) {
     return {ok: false, message: "主库存无可选炼金物品"};
   }
-  const rowsByName = context.rowsByName instanceof Map ? context.rowsByName : buildCraftAssistRowsByName(candidateRows);
+  const normalizedMaterials = normalizeCraftAssistMaterialsForRun(materials, {
+    rows: contextCandidateRows,
+    legacyWearFilterMode: normalizeCraftAssistFilterMode(wearFilterMode)
+  });
+  if (!normalizedMaterials.length) {
+    return {ok: false, message: "请先添加父类材料并设置数量"};
+  }
+  const mode = resolveCraftAssistRequiredCount();
+  const totalCount = normalizedMaterials.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  if (totalCount !== mode) {
+    return {ok: false, message: `材料数量之和必须等于 ${mode}，当前 ${totalCount}`};
+  }
+  const rowsByName = context.rowsByName instanceof Map ? context.rowsByName : buildCraftAssistRowsByName(contextCandidateRows);
   const blocked = new Set(normalizeCraftRecipeItemIds(blockedIds));
   const run = await runCraftAssistSelectionForRecipe({
     materials: normalizedMaterials,
@@ -1740,7 +1770,7 @@ async function selectCraftAssistForRecipe({
   });
   if (!run.ok) return run;
   const itemIds = normalizeCraftRecipeItemIds(run.itemIds);
-  const rowsById = context.rowsById instanceof Map ? context.rowsById : buildRowsByAssetId(candidateRows);
+  const rowsById = context.rowsById instanceof Map ? context.rowsById : buildRowsByAssetId(contextCandidateRows);
   const selectedRows = itemIds.map((id) => rowsById.get(id)).filter(Boolean);
   const recipeInfo = getTradeUpRecipeFromRows(selectedRows);
   return {
@@ -1768,15 +1798,25 @@ function createCraftAssistService({logger} = {}) {
       selectionContextCache.set(rows, variants);
     }
     const key = includeCooling ? "1" : "0";
-    if (variants.has(key)) return variants.get(key);
-    const context = buildCraftAssistSelectionContext({rows, includeCooling});
+    const cached = variants.get(key);
+    const candidateRows = getCraftCandidates(rows, {includeCooling: !!includeCooling});
+    const signature = buildCraftAssistSelectionSourceSignature(candidateRows, {
+      includeCooling: !!includeCooling
+    });
+    if (isReusableCraftAssistSelectionContext(cached, {
+      includeCooling,
+      sourceSignature: signature
+    })) {
+      return cached;
+    }
+    const context = buildCraftAssistSelectionContextFromCandidateRows(candidateRows, {includeCooling});
     variants.set(key, context);
     return context;
   }
 
   async function selectForRecipe(args = {}) {
     const nextArgs = args && typeof args === "object" ? {...args} : {};
-    if (!nextArgs.selectionContext && Array.isArray(nextArgs.rows)) {
+    if (!nextArgs.selectionContext && !Array.isArray(nextArgs.candidateRows) && Array.isArray(nextArgs.rows)) {
       nextArgs.selectionContext = getCachedSelectionContext(nextArgs.rows, {
         includeCooling: !!nextArgs.includeCooling
       });

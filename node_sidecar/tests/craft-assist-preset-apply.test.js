@@ -44,16 +44,14 @@ async function testAutoSelectDoesNotMutateLiveDraftState() {
   const originalDraft = {
     panel_open: true,
     target_wear: 0.2142,
-    wear_filter_mode: "absolute",
-    materials: [{id: "live", name: "LIVE", names: ["LIVE"], role: "main", count: 10}],
+    materials: [{id: "live", role: "main", count: 10, items: [{id: "live__1", name: "LIVE", wear_filter_mode: "absolute", wear_min: 0.01, wear_max: 0.07, custom_range: true}]}],
     pick_role: "main"
   };
   const preset = {
     id: "preset-1",
     name: "Preset One",
     target_wear: 0.123456,
-    wear_filter_mode: "relative",
-    materials: [{id: "preset", name: "PRESET", names: ["PRESET"], role: "aux", count: 10}]
+    materials: [{id: "preset", role: "aux", count: 10, items: [{id: "preset__1", name: "PRESET", wear_filter_mode: "relative", wear_min: 0.2, wear_max: 0.5, custom_range: false}]}]
   };
   const state = {
     craftAssistPresets: [preset],
@@ -74,7 +72,6 @@ async function testAutoSelectDoesNotMutateLiveDraftState() {
     buildCraftAssistDraftSnapshotFromState: () => ({
       panel_open: originalDraft.panel_open,
       target_wear: state.craftAssistTargetWear,
-      wear_filter_mode: state.craftAssistUseAbsoluteWear ? "absolute" : "relative",
       materials: state.craftAssistMaterials,
       pick_role: state.craftAssistPickRole
     }),
@@ -83,7 +80,6 @@ async function testAutoSelectDoesNotMutateLiveDraftState() {
       state.craftAssistTargetWear = snapshot.target_wear;
       state.craftAssistMaterials = snapshot.materials;
       state.craftAssistPickRole = snapshot.pick_role;
-      state.craftAssistUseAbsoluteWear = snapshot.wear_filter_mode === "absolute";
     },
     normalizeCraftAssistApplyCount: (value) => Number(value) || 1,
     applyCraftAssistAutoSelectionBatch: async (args) => {
@@ -112,13 +108,12 @@ async function testAutoSelectDoesNotMutateLiveDraftState() {
   assert.equal(JSON.stringify(receivedBatchArgs), JSON.stringify({
     sourcePresetName: "Preset One",
     repeatCount: 2,
-    draftSnapshot: {
-      panel_open: true,
-      target_wear: 0.123456,
-      wear_filter_mode: "relative",
-      materials: preset.materials,
-      pick_role: "main"
-    },
+      draftSnapshot: {
+        panel_open: true,
+        target_wear: 0.123456,
+        materials: preset.materials,
+        pick_role: "main"
+      },
     pendingUiAction: "preset_apply",
     pendingPresetId: "preset-1"
   }));

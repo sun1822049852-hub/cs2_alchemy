@@ -429,7 +429,13 @@ function guardGuestAction({reason = "", view = "login", run = null} = {}) {
     }
     return true;
   }
-  if (workspaceAccessGuard && typeof workspaceAccessGuard.requireAuth === "function") {
+  if (typeof workspaceAccessGuard === "undefined" && typeof authUiController === "undefined") {
+    if (typeof run === "function") {
+      return run();
+    }
+    return true;
+  }
+  if (typeof workspaceAccessGuard !== "undefined" && workspaceAccessGuard && typeof workspaceAccessGuard.requireAuth === "function") {
     workspaceAccessGuard.requireAuth({reason, view});
   } else {
     openClientAuthModal({
@@ -1001,9 +1007,11 @@ async function handleApiLicenseFailure() {
   }
 }
 
-window.__cs2AlchemyHandleApiLicenseFailure = () => {
-  void handleApiLicenseFailure();
-};
+if (typeof window !== "undefined") {
+  window.__cs2AlchemyHandleApiLicenseFailure = () => {
+    void handleApiLicenseFailure();
+  };
+}
 
 function parseEventData(raw) {
   try {
@@ -1296,6 +1304,58 @@ function normalizeCraftAccountScopedItemIdList(values) {
   ));
 }
 
+function projectCraftAssistAccountScopedMaterials(materials) {
+  const list = Array.isArray(materials) ? materials : [];
+  const clamp01 = (value, fallback = 0) => {
+    const numeric = Number(value);
+    const base = Number.isFinite(numeric) ? numeric : Number(fallback);
+    return Math.max(0, Math.min(1, Number.isFinite(base) ? base : 0));
+  };
+  const filterModeOf = (value) => String(value || "").trim() === "absolute" ? "absolute" : "relative";
+  const normalizeNames = (value) => {
+    const source = Array.isArray(value) ? value : (value == null ? [] : [value]);
+    const out = [];
+    const seen = new Set();
+    for (const entry of source) {
+      const name = String(entry || "").trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      out.push(name);
+    }
+    return out;
+  };
+  return list
+    .map((entry) => {
+      const items = Array.isArray(entry && entry.items) && entry.items.length > 0
+        ? entry.items
+            .map((item, index) => ({
+              id: String(item && item.id || `${String(entry && entry.id || "assist").trim() || "assist"}__${index + 1}`).trim(),
+              name: String(item && item.name || "").trim(),
+              wear_filter_mode: filterModeOf(item && item.wear_filter_mode),
+              wear_min: clamp01(item && item.wear_min, 0),
+              wear_max: clamp01(item && item.wear_max, 1),
+              custom_range: !!(item && item.custom_range)
+            }))
+            .filter((item) => item.name)
+        : normalizeNames(entry && entry.names).map((name, index) => ({
+            id: `${String(entry && entry.id || "assist").trim() || "assist"}__${index + 1}`,
+            name,
+            wear_filter_mode: filterModeOf(entry && entry.wear_filter_mode),
+            wear_min: clamp01(entry && entry.wear_min, 0),
+            wear_max: clamp01(entry && entry.wear_max, 1),
+            custom_range: !!(entry && entry.custom_range)
+          }));
+      if (!items.length) return null;
+      return {
+        id: String(entry && entry.id || "").trim(),
+        role: String(entry && entry.role || "").trim() === "aux" ? "aux" : "main",
+        count: Math.max(1, Math.min(10, Math.trunc(Number(entry && entry.count) || 1))),
+        items
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizeCraftAccountScopedStateSnapshot(snapshot) {
   const base = createDefaultCraftAccountScopedState();
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
@@ -1326,7 +1386,7 @@ function normalizeCraftAccountScopedStateSnapshot(snapshot) {
     craftAssistTargetWear: source.craftAssistTargetWear == null ? null : Number(source.craftAssistTargetWear),
     craftAssistMainCount: Math.max(0, Math.min(10, Math.trunc(Number(source.craftAssistMainCount != null ? source.craftAssistMainCount : base.craftAssistMainCount) || base.craftAssistMainCount))),
     craftAssistAuxCount: Math.max(0, Math.min(10, Math.trunc(Number(source.craftAssistAuxCount != null ? source.craftAssistAuxCount : base.craftAssistAuxCount) || base.craftAssistAuxCount))),
-    craftAssistMaterials: Array.isArray(source.craftAssistMaterials) ? deepCopyPlain(source.craftAssistMaterials) : [],
+    craftAssistMaterials: projectCraftAssistAccountScopedMaterials(source.craftAssistMaterials),
     craftAssistPresetApplyCountMap: source.craftAssistPresetApplyCountMap && typeof source.craftAssistPresetApplyCountMap === "object"
       ? deepCopyPlain(source.craftAssistPresetApplyCountMap)
       : {},
@@ -1347,7 +1407,7 @@ function normalizeCraftAccountScopedStateSnapshot(snapshot) {
 }
 
 function buildCurrentCraftAccountScopedStateSnapshot() {
-  return normalizeCraftAccountScopedStateSnapshot({
+  const snapshot = normalizeCraftAccountScopedStateSnapshot({
     craftSelectedItemIds: [...state.craftSelectedItemIds],
     craftStatusText: state.craftStatusText,
     craftStatusError: state.craftStatusError,
@@ -1358,11 +1418,8 @@ function buildCurrentCraftAccountScopedStateSnapshot() {
     craftAssistPickerTargetMaterialId: state.craftAssistPickerTargetMaterialId,
     craftAssistRoleChooserOpen: state.craftAssistRoleChooserOpen,
     craftAssistPickRole: state.craftAssistPickRole,
-    craftAssistUseAbsoluteWear: state.craftAssistUseAbsoluteWear,
     craftAssistTargetWear: state.craftAssistTargetWear,
-    craftAssistMainCount: state.craftAssistMainCount,
-    craftAssistAuxCount: state.craftAssistAuxCount,
-    craftAssistMaterials: state.craftAssistMaterials,
+    craftAssistMaterials: projectCraftAssistAccountScopedMaterials(state.craftAssistMaterials),
     craftAssistPresetApplyCountMap: state.craftAssistPresetApplyCountMap,
     craftAssistPresetEditingId: state.craftAssistPresetEditingId,
     craftAssistPresetEditingName: state.craftAssistPresetEditingName,
@@ -1374,6 +1431,10 @@ function buildCurrentCraftAccountScopedStateSnapshot() {
     craftPredictorContextLabel: state.craftPredictorContextLabel,
     craftPredictorAutoOpenMuted: state.craftPredictorAutoOpenMuted
   });
+  delete snapshot.craftAssistUseAbsoluteWear;
+  delete snapshot.craftAssistMainCount;
+  delete snapshot.craftAssistAuxCount;
+  return snapshot;
 }
 
 function applyCraftAccountScopedStateSnapshot(snapshot, {runtimeSnapshot = null, username = "", resetPredictorPreview = true} = {}) {
@@ -3493,17 +3554,11 @@ function getCraftComponentSummaryMapForAccount(username) {
 }
 function buildCraftAssistDraftSnapshotFromScopedState(scopedState) {
   const source = scopedState && typeof scopedState === "object" ? scopedState : createDefaultCraftAccountScopedState();
-  const filterMode = !!source.craftAssistUseAbsoluteWear ? "absolute" : "relative";
   const targetWear = parseOptionalWear01(source.craftAssistTargetWear);
   return {
     panel_open: !!source.craftAssistOpen,
     target_wear: targetWear,
-    wear_filter_mode: filterMode,
-    materials: normalizeCraftAssistMaterialList(source.craftAssistMaterials, {
-      targetWear,
-      idPrefix: "assist",
-      useRelative: filterMode !== "absolute"
-    }).map((entry) => ({...entry})),
+    materials: projectCraftAssistPersistedMaterialsFromState(source.craftAssistMaterials),
     pick_role: normalizeCraftAssistRole(source.craftAssistPickRole)
   };
 }
@@ -4848,6 +4903,12 @@ function normalizeCraftAssistNameList(value) {
   return out;
 }
 function craftAssistMaterialNames(material) {
+  const itemNames = Array.isArray(material && material.items)
+    ? material.items.map((item) => String(item && item.name || "").trim()).filter(Boolean)
+    : [];
+  if (itemNames.length) {
+    return normalizeCraftAssistNameList(itemNames);
+  }
   const names = normalizeCraftAssistNameList(material && material.names);
   if (names.length) return names;
   const fallbackName = String(material && material.name || "").trim();
@@ -4877,6 +4938,15 @@ function makeCraftAssistDefaultRange(names, {useRelative = getCraftAssistFilterU
   return {wear_min: min, wear_max: max};
 }
 function normalizeCraftAssistMaterialEntry(entry, {targetWear = state.craftAssistTargetWear, idPrefix = "assist", useRelative = getCraftAssistFilterUseRelative(), rows = null} = {}) {
+  const shared = globalThis && globalThis.craftAssistItemWearShared;
+  if (shared && typeof shared.normalizeCraftAssistMaterialListCanonical === "function") {
+    const canonical = shared.normalizeCraftAssistMaterialListCanonical([entry], {
+      rows,
+      legacyWearFilterMode: useRelative ? "relative" : "absolute",
+      source: "renormalize"
+    });
+    return canonical[0] ? {...canonical[0]} : null;
+  }
   const names = craftAssistMaterialNames(entry);
   if (!names.length) return null;
   const name = names[0];
@@ -4909,6 +4979,14 @@ function normalizeCraftAssistMaterialEntry(entry, {targetWear = state.craftAssis
   };
 }
 function normalizeCraftAssistMaterialList(entries, {targetWear = state.craftAssistTargetWear, idPrefix = "assist", useRelative = getCraftAssistFilterUseRelative(), rows = null} = {}) {
+  const shared = globalThis && globalThis.craftAssistItemWearShared;
+  if (shared && typeof shared.normalizeCraftAssistMaterialListCanonical === "function") {
+    return coalesceCraftAssistMaterialRoleBuckets(shared.normalizeCraftAssistMaterialListCanonical(entries, {
+      rows,
+      legacyWearFilterMode: useRelative ? "relative" : "absolute",
+      source: "renormalize"
+    }).map((entry) => ({...entry})), {source: "renormalize"});
+  }
   const out = [];
   const seenNames = new Set();
   for (const raw of Array.isArray(entries) ? entries : []) {
@@ -4924,13 +5002,45 @@ function normalizeCraftAssistMaterialList(entries, {targetWear = state.craftAssi
     normalized.name = allowedNames[0];
     out.push(normalized);
   }
-  return out;
+  return coalesceCraftAssistMaterialRoleBuckets(out, {source: "renormalize"});
+}
+function projectCraftAssistPersistedMaterialsFromState(materials = state.craftAssistMaterials) {
+  const shared = globalThis && globalThis.craftAssistItemWearShared;
+  if (shared && typeof shared.projectCraftAssistPersistedMaterials === "function") {
+    return shared.projectCraftAssistPersistedMaterials(materials);
+  }
+  return normalizeCraftAssistMaterialList(materials, {
+    targetWear: state.craftAssistTargetWear,
+    idPrefix: "assist",
+    useRelative: getCraftAssistFilterUseRelative()
+  }).map((entry) => ({
+    id: String(entry && entry.id || "").trim(),
+    role: normalizeCraftAssistRole(entry && entry.role),
+    count: normalizeCraftAssistEntryCount(entry && entry.count, 1),
+    direction: normalizeCraftAssistDirection(entry && entry.role, entry && entry.direction),
+    disable_direction_limit: !!(entry && entry.disable_direction_limit),
+    items: craftAssistMaterialNames(entry).map((name, index) => ({
+      id: `${String(entry && entry.id || "assist").trim() || "assist"}__${index + 1}`,
+      name,
+      wear_filter_mode: getCraftAssistFilterMode(),
+      wear_min: clampWear01(entry && entry.wear_min, 0),
+      wear_max: clampWear01(entry && entry.wear_max, 1),
+      custom_range: !!(entry && entry.custom_range)
+    }))
+  }));
+}
+function resolveCraftAssistRequiredCountForApp() {
+  const shared = globalThis && globalThis.craftAssistItemWearShared;
+  if (shared && typeof shared.resolveCraftAssistRequiredCount === "function") {
+    return shared.resolveCraftAssistRequiredCount();
+  }
+  return 10;
 }
 function syncCraftAssistAutoDirectionLimit() {
   // 兼容旧调用：已移除“可大于/可小于相对磨损”机制。
 }
 function refreshCraftAssistMaterialRanges({rows = null, useRelative = getCraftAssistFilterUseRelative()} = {}) {
-  state.craftAssistMaterials = (Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
+  state.craftAssistMaterials = coalesceCraftAssistMaterialRoleBuckets((Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [])
     .map((entry) => {
       const existingId = String(entry && entry.id || "").trim();
       const names = craftAssistMaterialNames(entry);
@@ -4969,7 +5079,7 @@ function refreshCraftAssistMaterialRanges({rows = null, useRelative = getCraftAs
         id: existingId || String(normalized.id || "").trim() || normalized.id
       };
     })
-    .filter(Boolean);
+    .filter(Boolean), {source: "renormalize"});
   syncCraftAssistAutoDirectionLimit();
 }
 function setCraftAssistFilterMode(mode, {refreshRanges = true, renderPanel = true} = {}) {
@@ -4989,27 +5099,13 @@ function sanitizeCraftAssistPresetPayload(payload) {
   const name = String(source.name || "").trim();
   if (!name) return null;
   const filterMode = normalizeCraftAssistFilterMode(source.wear_filter_mode);
-  const useRelativeFilter = filterMode !== "absolute";
   const targetWear = clampWear01(source.target_wear, 0.5);
-  const materials = normalizeCraftAssistMaterialList(source.materials, {
+  const materials = projectCraftAssistPersistedMaterialsFromState(normalizeCraftAssistMaterialList(source.materials, {
     targetWear,
     idPrefix: "preset_material",
-    useRelative: useRelativeFilter
-  })
-    .map((entry) => {
-      const names = craftAssistMaterialNames(entry);
-      return {
-        names,
-        name: names[0] || String(entry && entry.name || "").trim(),
-        role: entry.role,
-        count: entry.count,
-        direction: entry.direction,
-        disable_direction_limit: !!entry.disable_direction_limit,
-        wear_min: entry.wear_min,
-        wear_max: entry.wear_max,
-        custom_range: !!entry.custom_range
-      };
-    })
+    useRelative: filterMode !== "absolute",
+    rows: getAllInventoryCraftableRows()
+  }))
     .filter((entry) => entry.count > 0);
   if (!materials.length) return null;
   const createdAt = Math.max(0, Number(source.created_at || 0) || 0);
@@ -5018,8 +5114,6 @@ function sanitizeCraftAssistPresetPayload(payload) {
     id: String(source.id || makeCraftAssistUid("preset")).trim() || makeCraftAssistUid("preset"),
     name,
     target_wear: targetWear,
-    wear_filter_mode: filterMode,
-    use_absolute_wear: filterMode === "absolute",
     materials,
     created_at: createdAt || Date.now(),
     updated_at: updatedAt || Date.now()
@@ -5108,33 +5202,15 @@ function formatCraftAssistPresetTime(value) {
 function buildCurrentCraftAssistPresetSnapshot(name) {
   const presetName = String(name || "").trim();
   if (!presetName) return null;
-  const filterMode = getCraftAssistFilterMode();
   const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
   if (targetWear == null) return null;
-  const materials = normalizeCraftAssistMaterialList(state.craftAssistMaterials, {
-    targetWear,
-    idPrefix: "preset_material",
-    useRelative: filterMode !== "absolute"
-  })
-    .filter((entry) => entry.count > 0)
-    .map((entry) => ({
-      names: craftAssistMaterialNames(entry),
-      name: entry.name,
-      role: entry.role,
-      count: entry.count,
-      direction: entry.direction,
-      disable_direction_limit: !!entry.disable_direction_limit,
-      wear_min: entry.wear_min,
-      wear_max: entry.wear_max,
-      custom_range: !!entry.custom_range
-    }));
+  const materials = projectCraftAssistPersistedMaterialsFromState(state.craftAssistMaterials)
+    .filter((entry) => entry.count > 0);
   if (!materials.length) return null;
   return sanitizeCraftAssistPresetPayload({
     id: makeCraftAssistUid("preset"),
     name: presetName,
     target_wear: targetWear,
-    wear_filter_mode: filterMode,
-    use_absolute_wear: filterMode === "absolute",
     materials,
     created_at: Date.now(),
     updated_at: Date.now()
@@ -6051,14 +6127,180 @@ function createCraftAssistMaterial(name, role = "main") {
   const key = String(name || "").trim();
   if (!key) return null;
   return normalizeCraftAssistMaterialEntry({
-    names: [key],
-    name: key,
     role: normalizeCraftAssistRole(role),
     count: 1,
     direction: "",
     disable_direction_limit: false,
-    custom_range: false
+    items: [{
+      name: key,
+      wear_filter_mode: getCraftAssistFilterMode(),
+      custom_range: false
+    }]
   }, {targetWear: state.craftAssistTargetWear, idPrefix: "assist", useRelative: getCraftAssistFilterUseRelative()});
+}
+function normalizeCraftAssistMaterialForUi(entry, {source = "renormalize"} = {}) {
+  const material = entry && typeof entry === "object" ? entry : null;
+  if (!material) return null;
+  const rows = typeof getAllInventoryCraftableRows === "function"
+    ? getAllInventoryCraftableRows()
+    : null;
+  const shared = globalThis && globalThis.craftAssistItemWearShared;
+  if (shared && typeof shared.normalizeCraftAssistMaterialListCanonical === "function") {
+    const canonical = shared.normalizeCraftAssistMaterialListCanonical([material], {
+      rows,
+      legacyWearFilterMode: getCraftAssistFilterMode(),
+      source
+    });
+    return canonical[0] ? {...canonical[0]} : null;
+  }
+  return normalizeCraftAssistMaterialEntry(material, {
+    targetWear: state.craftAssistTargetWear,
+    idPrefix: "assist",
+    useRelative: getCraftAssistFilterUseRelative(),
+    rows
+  });
+}
+function craftAssistMaterialItems(material) {
+  const projected = projectCraftAssistPersistedMaterialsFromState([material]);
+  const entry = projected[0] || null;
+  const materialId = String(entry && entry.id || material && material.id || "assist").trim() || "assist";
+  return (Array.isArray(entry && entry.items) ? entry.items : [])
+    .map((item, index) => ({
+      id: String(item && item.id || `${materialId}__${index + 1}`).trim() || `${materialId}__${index + 1}`,
+      name: String(item && item.name || "").trim(),
+      wear_filter_mode: normalizeCraftAssistFilterMode(item && item.wear_filter_mode),
+      wear_min: clampWear01(item && item.wear_min, 0),
+      wear_max: clampWear01(item && item.wear_max, 1),
+      custom_range: !!(item && item.custom_range)
+    }))
+    .filter((item) => item.name);
+}
+function coalesceCraftAssistMaterialRoleBuckets(materials, {source = "renormalize"} = {}) {
+  const list = Array.isArray(materials) ? materials : [];
+  const buckets = new Map();
+  for (const material of list) {
+    const role = normalizeCraftAssistRole(material && material.role);
+    const items = craftAssistMaterialItems(material);
+    if (!items.length) continue;
+    if (!buckets.has(role)) {
+      buckets.set(role, {
+        id: String(material && material.id || "").trim(),
+        role,
+        count: 0,
+        direction: material && material.direction,
+        disable_direction_limit: !!(material && material.disable_direction_limit),
+        items: []
+      });
+    }
+    const bucket = buckets.get(role);
+    bucket.count += normalizeCraftAssistEntryCount(material && material.count, 1);
+    if (!bucket.id) {
+      bucket.id = String(material && material.id || "").trim();
+    }
+    if (!bucket.disable_direction_limit && material && material.disable_direction_limit) {
+      bucket.disable_direction_limit = true;
+    }
+    const seenNames = new Set(bucket.items.map((item) => String(item && item.name || "").trim()));
+    for (const item of items) {
+      const name = String(item && item.name || "").trim();
+      if (!name || seenNames.has(name)) continue;
+      seenNames.add(name);
+      bucket.items.push({
+        ...item,
+        id: String(item && item.id || "").trim()
+      });
+    }
+  }
+  return ["main", "aux"]
+    .filter((role) => buckets.has(role))
+    .map((role) => {
+      const bucket = buckets.get(role);
+      const normalized = normalizeCraftAssistMaterialForUi({
+        id: bucket.id || "",
+        role,
+        count: normalizeCraftAssistEntryCount(bucket.count, 1),
+        direction: bucket.direction,
+        disable_direction_limit: bucket.disable_direction_limit,
+        items: bucket.items
+      }, {source});
+      return normalized ? {
+        ...normalized,
+        id: String(bucket.id || normalized.id || "").trim() || String(normalized.id || "").trim()
+      } : null;
+    })
+    .filter(Boolean);
+}
+function createCraftAssistMaterialItem(name) {
+  const itemName = String(name || "").trim();
+  if (!itemName) return null;
+  return {
+    name: itemName,
+    wear_filter_mode: getCraftAssistFilterMode(),
+    wear_min: 0,
+    wear_max: 1,
+    custom_range: false
+  };
+}
+function updateCraftAssistMaterialItems(materialId, updater, {source = "renormalize"} = {}) {
+  const key = String(materialId || "").trim();
+  if (!key || typeof updater !== "function") return false;
+  const materials = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [];
+  const target = materials.find((entry) => String(entry && entry.id || "").trim() === key);
+  if (!target) return false;
+  const currentItems = craftAssistMaterialItems(target);
+  const nextItems = updater(currentItems.map((item) => ({...item})), target);
+  if (!Array.isArray(nextItems)) return false;
+  if (!nextItems.length) {
+    removeCraftAssistMaterial(key);
+    return true;
+  }
+  updateCraftAssistMaterial(key, (entry) => {
+    const normalized = normalizeCraftAssistMaterialForUi({
+      ...entry,
+      id: key,
+      items: nextItems
+    }, {source});
+    return normalized ? {
+      ...normalized,
+      id: key
+    } : entry;
+  });
+  syncCraftAssistAutoDirectionLimit();
+  renderCraftAssistPanel();
+  return true;
+}
+function removeCraftAssistMaterialItem(materialId, materialItemId) {
+  const key = String(materialId || "").trim();
+  const itemKey = String(materialItemId || "").trim();
+  if (!key || !itemKey) return;
+  updateCraftAssistMaterialItems(key, (items) => items.filter((item) => String(item && item.id || "").trim() !== itemKey));
+}
+function resolveCraftAssistItemEffectiveRange(item, {rows = null} = {}) {
+  const mode = normalizeCraftAssistFilterMode(item && item.wear_filter_mode);
+  const constraint = resolveCraftMaterialWearConstraintByName(String(item && item.name || "").trim(), {
+    useRelative: mode !== "absolute",
+    rows
+  }) || {min: 0, max: 1};
+  let wearMin = Number(constraint.min);
+  let wearMax = Number(constraint.max);
+  const custom = !!(item && item.custom_range);
+  if (custom) {
+    wearMin = clampWearToRange(item && item.wear_min, constraint.min, constraint.max, constraint.min);
+    wearMax = clampWearToRange(item && item.wear_max, constraint.min, constraint.max, constraint.max);
+    if (wearMax < wearMin) {
+      const tmp = wearMin;
+      wearMin = wearMax;
+      wearMax = tmp;
+    }
+  }
+  return {
+    wear_min: wearMin,
+    wear_max: wearMax,
+    constraint_min: Number(constraint.min),
+    constraint_max: Number(constraint.max),
+    custom_range: custom,
+    use_relative: mode !== "absolute"
+  };
 }
 function setCraftAssistPanelOpen(open, {expandOnOpen = true} = {}) {
   const nextOpen = !!open;
@@ -6143,17 +6385,18 @@ function scheduleCloseCraftAssistPicker(delayMs = 140) {
 function updateCraftAssistMaterial(materialId, updater) {
   const key = String(materialId || "").trim();
   if (!key || typeof updater !== "function") return;
-  state.craftAssistMaterials = state.craftAssistMaterials.map((entry) => {
+  state.craftAssistMaterials = coalesceCraftAssistMaterialRoleBuckets(state.craftAssistMaterials.map((entry) => {
     if (String(entry && entry.id || "").trim() !== key) return entry;
     const next = updater(entry);
     return next && typeof next === "object" ? next : entry;
-  });
+  }), {source: "renormalize"});
 }
 function addCraftAssistMaterialByName(name, {targetMaterialId = ""} = {}) {
   const key = String(name || "").trim();
   if (!key) return;
   const targetId = String(targetMaterialId || "").trim();
   const materials = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [];
+  const requestedRole = normalizeCraftAssistRole(state.craftAssistPickRole);
   const existingIndex = materials.findIndex((entry) => craftAssistMaterialNames(entry).includes(key));
   const targetIndex = targetId
     ? materials.findIndex((entry) => String(entry && entry.id || "").trim() === targetId)
@@ -6173,15 +6416,9 @@ function addCraftAssistMaterialByName(name, {targetMaterialId = ""} = {}) {
       renderCraftAssistPanel();
       return;
     }
-    updateCraftAssistMaterial(targetId, (entry) => {
-      const nextNames = [...craftAssistMaterialNames(entry), key];
-      return {
-        ...entry,
-        names: nextNames,
-        name: nextNames[0]
-      };
-    });
-    refreshCraftAssistMaterialRanges();
+    const nextItem = createCraftAssistMaterialItem(key);
+    if (!nextItem) return;
+    updateCraftAssistMaterialItems(targetId, (items) => [...items, nextItem]);
     state.craftAssistPickerOpen = false;
     state.craftAssistRoleChooserOpen = false;
     state.craftAssistPickerTargetMaterialId = "";
@@ -6213,17 +6450,28 @@ function addCraftAssistMaterialByName(name, {targetMaterialId = ""} = {}) {
     renderCraftAssistPanel();
     return;
   }
+  const existingRoleBucket = materials.find((entry) => normalizeCraftAssistRole(entry && entry.role) === requestedRole) || null;
+  if (existingRoleBucket) {
+    const nextItem = createCraftAssistMaterialItem(key);
+    if (!nextItem) return;
+    updateCraftAssistMaterialItems(String(existingRoleBucket && existingRoleBucket.id || "").trim(), (items) => [...items, nextItem]);
+    state.craftAssistPickerOpen = false;
+    state.craftAssistRoleChooserOpen = false;
+    state.craftAssistPickerTargetMaterialId = "";
+    renderCraftAssistPanel();
+    return;
+  }
   const mode = craftAssistMaterialLimitFor(materials);
   const totalCount = calcCraftAssistLiveTotalCount(materials);
   if (totalCount >= mode) {
     setCraftStatus(`材料数量已达 ${mode}，不能继续添加父类材料`, true);
     return;
   }
-  const next = createCraftAssistMaterial(key, state.craftAssistPickRole);
+  const next = createCraftAssistMaterial(key, requestedRole);
   if (!next) return;
   const remain = Math.max(0, mode - totalCount);
   next.count = Math.max(1, Math.min(remain, normalizeCraftAssistEntryCount(next.count, 1)));
-  state.craftAssistMaterials = [...materials, next];
+  state.craftAssistMaterials = coalesceCraftAssistMaterialRoleBuckets([...materials, next], {source: "renormalize"});
   syncCraftAssistAutoDirectionLimit();
   state.craftAssistPickerOpen = false;
   state.craftAssistRoleChooserOpen = false;
@@ -6247,30 +6495,10 @@ function removeCraftAssistMaterialName(materialId, materialName) {
   const materials = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [];
   const target = materials.find((entry) => String(entry && entry.id || "").trim() === itemId);
   if (!target) return;
-  const currentNames = craftAssistMaterialNames(target);
-  if (!currentNames.length) {
-    removeCraftAssistMaterial(itemId);
-    return;
-  }
-  const nextNames = currentNames.filter((entryName) => entryName !== name);
-  if (nextNames.length === currentNames.length) return;
-  if (!nextNames.length) {
-    updateCraftAssistMaterial(itemId, (entry) => ({
-      ...entry,
-      names: [],
-      name: ""
-    }));
-    syncCraftAssistAutoDirectionLimit();
-    renderCraftAssistPanel();
-    return;
-  }
-  updateCraftAssistMaterial(itemId, (entry) => ({
-    ...entry,
-    names: nextNames,
-    name: nextNames[0]
-  }));
-  refreshCraftAssistMaterialRanges();
-  renderCraftAssistPanel();
+  const targetItem = craftAssistMaterialItems(target)
+    .find((entry) => String(entry && entry.name || "").trim() === name);
+  if (!targetItem) return;
+  removeCraftAssistMaterialItem(itemId, targetItem.id);
 }
 function renderCraftAssistPicker() {
   if (!ui.craftAssistPicker) return;
@@ -6322,21 +6550,20 @@ function renderCraftAssistPicker() {
     return;
   }
   for (const group of groups) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "craft-assist-picker-item";
     const used = selected.has(group.name);
     const inTarget = selectedInTarget.has(group.name);
     const usedByOther = used && !inTarget;
     const groupRarity = String(group && group.rarity || "").trim();
     const blockedByRarity = !inTarget && !usedByOther && lockedRarity && groupRarity && groupRarity !== lockedRarity;
+    if (usedByOther || blockedByRarity) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "craft-assist-picker-item";
     const blockedByLimit = !targetMaterial && !used && limitReached;
-    btn.disabled = inTarget || usedByOther || blockedByLimit || blockedByRarity;
+    btn.disabled = inTarget || blockedByLimit;
     let blockedTag = "";
     if (inTarget) blockedTag = " 已在本项";
-    else if (usedByOther) blockedTag = " 已在其他项";
     else if (blockedByLimit) blockedTag = ` 已满${mode}`;
-    else if (blockedByRarity) blockedTag = ` 稀有度需 ${lockedRarity}`;
     btn.textContent = `${group.name}（${group.count}）${blockedTag}`;
     btn.title = group.collection ? `${group.rarity || "-"} | ${group.collection}` : (group.rarity || "-");
     btn.onclick = () => {
@@ -6352,14 +6579,27 @@ function parseCraftAssistRangeInputValue(value) {
   if (!Number.isFinite(n)) return null;
   return n;
 }
-function seedCraftAssistDecimalInput(input) {
+function seedCraftAssistDecimalInput(input, {seedWhenEmpty = false} = {}) {
   if (!input) return;
-  if (String(input.value || "").trim()) return;
-  input.value = "0.";
-  input.dataset.seeded = "1";
+  const value = String(input.value || "").trim();
+  if (!value) {
+    if (!seedWhenEmpty) return;
+    input.value = "0.";
+    input.dataset.seeded = "1";
+    requestAnimationFrame(() => {
+      try {
+        input.setSelectionRange(2, 2);
+      } catch (_) {
+        // ignore
+      }
+    });
+    return;
+  }
   requestAnimationFrame(() => {
     try {
-      input.setSelectionRange(2, 2);
+      const currentValue = String(input.value || "");
+      const prefixLength = /^[01]\./.test(currentValue) ? 2 : 0;
+      input.setSelectionRange(prefixLength, currentValue.length);
     } catch (_) {
       // ignore
     }
@@ -6368,12 +6608,6 @@ function seedCraftAssistDecimalInput(input) {
 function commitCraftAssistTargetWearInput(input) {
   if (!input) return null;
   const raw = String(input.value || "").trim();
-  if (input.dataset.seeded === "1" && raw === "0.") {
-    input.value = "";
-    delete input.dataset.seeded;
-    return null;
-  }
-  delete input.dataset.seeded;
   const parsed = parseOptionalWear01(raw);
   if (parsed == null) {
     if (raw) input.value = "";
@@ -6386,6 +6620,81 @@ function renderCraftAssistList() {
   if (!ui.craftAssistList) return;
   syncCraftAssistAutoDirectionLimit();
   ui.craftAssistList.replaceChildren();
+  if (typeof coalesceCraftAssistMaterialRoleBuckets === "function") {
+    state.craftAssistMaterials = coalesceCraftAssistMaterialRoleBuckets(state.craftAssistMaterials, {source: "renormalize"});
+  }
+  const filterModeOf = typeof normalizeCraftAssistFilterMode === "function"
+    ? normalizeCraftAssistFilterMode
+    : (mode) => String(mode || "").trim() === "absolute" ? "absolute" : "relative";
+  const readMaterialItems = typeof craftAssistMaterialItems === "function"
+    ? craftAssistMaterialItems
+    : (material) => {
+      const materialId = String(material && material.id || "assist").trim() || "assist";
+      const sourceItems = Array.isArray(material && material.items) && material.items.length
+        ? material.items
+        : craftAssistMaterialNames(material).map((name, index) => ({
+          id: `${materialId}__${index + 1}`,
+          name,
+          wear_filter_mode: filterModeOf(typeof getCraftAssistFilterMode === "function" ? getCraftAssistFilterMode() : "relative"),
+          wear_min: 0,
+          wear_max: 1,
+          custom_range: false
+        }));
+      return sourceItems
+        .map((materialItem, index) => ({
+          id: String(materialItem && materialItem.id || `${materialId}__${index + 1}`).trim() || `${materialId}__${index + 1}`,
+          name: String(materialItem && materialItem.name || "").trim(),
+          wear_filter_mode: filterModeOf(materialItem && materialItem.wear_filter_mode),
+          wear_min: clampWearToRange(materialItem && materialItem.wear_min, 0, 1, 0),
+          wear_max: clampWearToRange(materialItem && materialItem.wear_max, 0, 1, 1),
+          custom_range: !!(materialItem && materialItem.custom_range)
+        }))
+        .filter((materialItem) => materialItem.name);
+    };
+  const resolveItemRange = typeof resolveCraftAssistItemEffectiveRange === "function"
+    ? resolveCraftAssistItemEffectiveRange
+    : (materialItem) => {
+      const wearMin = clampWearToRange(materialItem && materialItem.wear_min, 0, 1, 0);
+      const wearMax = clampWearToRange(materialItem && materialItem.wear_max, wearMin, 1, 1);
+      return {
+        wear_min: wearMin,
+        wear_max: wearMax,
+        constraint_min: 0,
+        constraint_max: 1,
+        custom_range: !!(materialItem && materialItem.custom_range),
+        use_relative: filterModeOf(materialItem && materialItem.wear_filter_mode) !== "absolute"
+      };
+    };
+  const applyItemUpdate = typeof updateCraftAssistMaterialItems === "function"
+    ? updateCraftAssistMaterialItems
+    : (materialId, updater) => {
+      if (typeof updater !== "function" || typeof updateCraftAssistMaterial !== "function") return false;
+      let removedWholeGroup = false;
+      updateCraftAssistMaterial(materialId, (entry) => {
+        const nextItems = updater(readMaterialItems(entry).map((item) => ({...item})), entry);
+        if (!Array.isArray(nextItems)) return entry;
+        if (!nextItems.length) {
+          removedWholeGroup = true;
+          return entry;
+        }
+        return {
+          ...entry,
+          items: nextItems
+        };
+      });
+      if (removedWholeGroup && typeof removeCraftAssistMaterial === "function") {
+        removeCraftAssistMaterial(materialId);
+        return true;
+      }
+      if (typeof renderCraftAssistPanel === "function") renderCraftAssistPanel();
+      return true;
+    };
+  const removeItem = typeof removeCraftAssistMaterialItem === "function"
+    ? removeCraftAssistMaterialItem
+    : (materialId, itemId) => applyItemUpdate(
+      materialId,
+      (items) => items.filter((materialItem) => String(materialItem && materialItem.id || "").trim() !== String(itemId || "").trim())
+    );
   const materials = Array.isArray(state.craftAssistMaterials) ? state.craftAssistMaterials : [];
   if (!materials.length) {
     const empty = document.createElement("div");
@@ -6394,20 +6703,15 @@ function renderCraftAssistList() {
     ui.craftAssistList.append(empty);
     return;
   }
-  const filterUseRelative = getCraftAssistFilterUseRelative();
-  const wearLabel = filterUseRelative ? "相对磨损范围" : "绝对磨损范围";
-  const minText = "Minwear";
-  const maxText = "Maxwear";
+  const rows = typeof getAllInventoryCraftableRows === "function"
+    ? getAllInventoryCraftableRows()
+    : null;
+  const minText = "Min";
+  const maxText = "Max";
   const formatRangeWear = wearTextFull;
   for (const material of materials) {
     const materialId = String(material && material.id || "").trim();
-    const selectedNames = craftAssistMaterialNames(material);
-    const resolvedRange = resolveCraftAssistMaterialEffectiveRange(material, {
-      useRelative: filterUseRelative
-    });
-    const constraintMin = Number(resolvedRange.constraint_min);
-    const constraintMax = Number(resolvedRange.constraint_max);
-    const customRange = !!(material && material.custom_range);
+    const selectedItems = readMaterialItems(material);
     const role = normalizeCraftAssistRole(material && material.role);
     const roleText = role === "main" ? "主料" : "辅料";
     const item = document.createElement("div");
@@ -6415,12 +6719,15 @@ function renderCraftAssistList() {
 
     const head = document.createElement("div");
     head.className = "craft-assist-item-head";
+    const headPrimary = document.createElement("div");
+    headPrimary.className = "craft-assist-item-head-primary";
     const title = document.createElement("div");
     title.className = "craft-assist-item-title";
-    title.textContent = `条件设置（已选${selectedNames.length}）`;
     const badge = document.createElement("span");
     badge.className = `craft-assist-role-tag ${role}`;
     badge.textContent = roleText;
+    title.append(badge);
+    headPrimary.append(title);
     const addNameBtn = document.createElement("button");
     addNameBtn.type = "button";
     addNameBtn.className = "craft-assist-item-add";
@@ -6443,13 +6750,8 @@ function renderCraftAssistList() {
     };
     const actions = document.createElement("div");
     actions.className = "craft-assist-item-actions";
-    actions.append(badge, addNameBtn, removeBtn);
-    head.append(title, actions);
-
-    const configRow = document.createElement("div");
-    configRow.className = "craft-assist-item-config";
     const qtyLabel = document.createElement("label");
-    qtyLabel.className = "craft-assist-field qty";
+    qtyLabel.className = "craft-assist-field qty craft-assist-head-qty";
     const qtyText = document.createElement("span");
     qtyText.textContent = "数量";
     const qtyInput = document.createElement("input");
@@ -6482,136 +6784,182 @@ function renderCraftAssistList() {
       renderCraftAssistPanel();
     };
     qtyLabel.append(qtyText, qtyInput);
-    configRow.append(qtyLabel);
+    actions.append(qtyLabel, addNameBtn, removeBtn);
+    head.append(headPrimary, actions);
 
-    const rangeLabel = document.createElement("label");
-    rangeLabel.className = "craft-assist-field range";
-    const rangeText = document.createElement("span");
-    rangeText.textContent = wearLabel;
-    const rangeWrap = document.createElement("div");
-    rangeWrap.className = "craft-assist-range-wrap";
-    const minLabel = document.createElement("span");
-    minLabel.className = "craft-assist-range-label";
-    minLabel.textContent = minText;
-    const minInput = document.createElement("input");
-    minInput.type = "text";
-    minInput.inputMode = "decimal";
-    minInput.placeholder = formatRangeWear(constraintMin);
-    minInput.value = customRange ? formatRangeWear(resolvedRange.wear_min) : "";
-    minInput.setAttribute("aria-label", `${minText} 输入`);
-    const dash = document.createElement("span");
-    dash.textContent = "-";
-    const maxLabel = document.createElement("span");
-    maxLabel.className = "craft-assist-range-label";
-    maxLabel.textContent = maxText;
-    const maxInput = document.createElement("input");
-    maxInput.type = "text";
-    maxInput.inputMode = "decimal";
-    maxInput.placeholder = formatRangeWear(constraintMax);
-    maxInput.value = customRange ? formatRangeWear(resolvedRange.wear_max) : "";
-    maxInput.setAttribute("aria-label", `${maxText} 输入`);
-    const commitRange = () => {
-      if (minInput.dataset.seeded === "1" && String(minInput.value || "").trim() === "0.") {
-        minInput.value = "";
-      }
-      if (maxInput.dataset.seeded === "1" && String(maxInput.value || "").trim() === "0.") {
-        maxInput.value = "";
-      }
-      delete minInput.dataset.seeded;
-      delete maxInput.dataset.seeded;
-
-      const minRaw = parseCraftAssistRangeInputValue(minInput.value);
-      const maxRaw = parseCraftAssistRangeInputValue(maxInput.value);
-      const minBlank = String(minInput.value || "").trim() === "";
-      const maxBlank = String(maxInput.value || "").trim() === "";
-      if (minBlank && maxBlank) {
-        updateCraftAssistMaterial(materialId, (entry) => ({
-          ...entry,
-          wear_min: constraintMin,
-          wear_max: constraintMax,
-          custom_range: false
-        }));
-        renderCraftAssistPanel();
-        return;
-      }
-
-      let nextMin = minBlank
-        ? constraintMin
-        : clampWearToRange(minRaw, constraintMin, constraintMax, constraintMin);
-      let nextMax = maxBlank
-        ? constraintMax
-        : clampWearToRange(maxRaw, constraintMin, constraintMax, constraintMax);
-      if (nextMax < nextMin) {
-        if (!minBlank && maxBlank) nextMax = nextMin;
-        else if (minBlank && !maxBlank) nextMin = nextMax;
-        else nextMax = nextMin;
-      }
-      updateCraftAssistMaterial(materialId, (entry) => ({
-        ...entry,
-        wear_min: nextMin,
-        wear_max: nextMax,
-        custom_range: true
-      }));
-      renderCraftAssistPanel();
-    };
-    minInput.onfocus = () => seedCraftAssistDecimalInput(minInput);
-    maxInput.onfocus = () => seedCraftAssistDecimalInput(maxInput);
-    minInput.oninput = () => { delete minInput.dataset.seeded; };
-    maxInput.oninput = () => { delete maxInput.dataset.seeded; };
-    minInput.onblur = commitRange;
-    maxInput.onblur = commitRange;
-    minInput.onkeydown = (evt) => {
-      if (evt.key !== "Enter") return;
-      evt.preventDefault();
-      commitRange();
-      maxInput.focus();
-    };
-    maxInput.onkeydown = (evt) => {
-      if (evt.key !== "Enter") return;
-      evt.preventDefault();
-      commitRange();
-      maxInput.blur();
-    };
-    rangeWrap.append(minLabel, minInput, dash, maxLabel, maxInput);
-    rangeLabel.append(rangeText, rangeWrap);
-    configRow.append(rangeLabel);
-
-    const selectedWrap = document.createElement("div");
-    selectedWrap.className = "craft-assist-selected-wrap";
-    const selectedLabel = document.createElement("div");
-    selectedLabel.className = "craft-assist-selected-label";
-    selectedLabel.textContent = "已选材料";
-    const selectedTags = document.createElement("div");
-    selectedTags.className = "craft-assist-selected-tags";
-    if (!selectedNames.length) {
+    const cardList = document.createElement("div");
+    cardList.className = "craft-assist-material-card-list";
+    if (!selectedItems.length) {
       const selectedEmpty = document.createElement("div");
       selectedEmpty.className = "craft-assist-selected-empty";
-      selectedEmpty.textContent = "暂无";
-      selectedTags.append(selectedEmpty);
-    } else {
-      for (const name of selectedNames) {
-        const tag = document.createElement("div");
-        tag.className = "craft-assist-selected-tag";
-        const tagText = document.createElement("span");
-        tagText.className = "craft-assist-selected-tag-text";
-        tagText.textContent = name;
-        const tagRemove = document.createElement("button");
-        tagRemove.type = "button";
-        tagRemove.className = "craft-assist-selected-tag-remove";
-        tagRemove.title = `从该项删除：${name}`;
-        tagRemove.setAttribute("aria-label", `从该项删除：${name}`);
-        tagRemove.textContent = "×";
-        tagRemove.onclick = (evt) => {
-          if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
-          removeCraftAssistMaterialName(materialId, name);
-        };
-        tag.append(tagText, tagRemove);
-        selectedTags.append(tag);
-      }
+      selectedEmpty.textContent = "暂无已选物品";
+      cardList.append(selectedEmpty);
     }
-    selectedWrap.append(selectedLabel, selectedTags);
+    for (const materialItem of selectedItems) {
+      const itemRange = resolveItemRange(materialItem, {rows});
+      const constraintMin = Number(itemRange.constraint_min);
+      const constraintMax = Number(itemRange.constraint_max);
+      const wearLabel = itemRange.use_relative ? "相对磨损范围" : "绝对磨损范围";
 
-    item.append(head, configRow, selectedWrap);
+      const card = document.createElement("div");
+      card.className = "craft-assist-material-card";
+      const cardRail = document.createElement("div");
+      cardRail.className = "craft-assist-material-card-rail";
+      const cardHead = document.createElement("div");
+      cardHead.className = "craft-assist-material-card-head";
+      const cardTitle = document.createElement("div");
+      cardTitle.className = "craft-assist-material-card-title";
+      cardTitle.textContent = materialItem.name;
+      const cardRemove = document.createElement("button");
+      cardRemove.type = "button";
+      cardRemove.className = "craft-assist-material-card-remove";
+      cardRemove.title = `删除该物品：${materialItem.name}`;
+      cardRemove.setAttribute("aria-label", `删除该物品：${materialItem.name}`);
+      cardRemove.textContent = "×";
+      cardRemove.onclick = (evt) => {
+        if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
+        removeItem(materialId, materialItem.id);
+      };
+      cardHead.append(cardTitle, cardRemove);
+
+      const modeField = document.createElement("div");
+      modeField.className = "craft-assist-field craft-assist-card-mode";
+      const modeText = document.createElement("span");
+      modeText.textContent = "筛选磨损";
+      const modeWrap = document.createElement("div");
+      modeWrap.className = "craft-assist-mode-toggle";
+      modeWrap.setAttribute("role", "group");
+      modeWrap.setAttribute("aria-label", `${materialItem.name} 磨损模式`);
+      const modeGroupName = `craftAssistCardMode_${materialId}_${materialItem.id}`;
+      const makeModeOption = (value, labelText) => {
+        const option = document.createElement("label");
+        option.className = "craft-assist-mode-option";
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = modeGroupName;
+        input.value = value;
+        input.checked = filterModeOf(materialItem.wear_filter_mode) === value;
+        input.onchange = () => {
+          if (!input.checked) return;
+          applyItemUpdate(materialId, (items) => items.map((entry) => (
+            String(entry && entry.id || "").trim() === String(materialItem.id || "").trim()
+              ? {
+                ...entry,
+                wear_filter_mode: value
+              }
+              : entry
+          )), {source: "mode-switch"});
+        };
+        const text = document.createElement("span");
+        text.textContent = labelText;
+        option.append(input, text);
+        return option;
+      };
+      modeWrap.append(
+        makeModeOption("relative", "相对"),
+        makeModeOption("absolute", "绝对")
+      );
+      modeField.append(modeText, modeWrap);
+
+      const rangeLabel = document.createElement("label");
+      rangeLabel.className = "craft-assist-field range craft-assist-card-range";
+      const rangeText = document.createElement("span");
+      rangeText.textContent = wearLabel;
+      const rangeWrap = document.createElement("div");
+      rangeWrap.className = "craft-assist-range-wrap";
+      const minRow = document.createElement("div");
+      minRow.className = "craft-assist-range-row";
+      const minLabel = document.createElement("span");
+      minLabel.className = "craft-assist-range-label";
+      minLabel.textContent = minText;
+      const minInput = document.createElement("input");
+      minInput.type = "text";
+      minInput.inputMode = "decimal";
+      minInput.placeholder = formatRangeWear(itemRange.custom_range ? itemRange.wear_min : constraintMin);
+      minInput.value = "";
+      minInput.setAttribute("aria-label", `${materialItem.name} ${minText} 输入`);
+      const maxRow = document.createElement("div");
+      maxRow.className = "craft-assist-range-row";
+      const maxLabel = document.createElement("span");
+      maxLabel.className = "craft-assist-range-label";
+      maxLabel.textContent = maxText;
+      const maxInput = document.createElement("input");
+      maxInput.type = "text";
+      maxInput.inputMode = "decimal";
+      maxInput.placeholder = formatRangeWear(itemRange.custom_range ? itemRange.wear_max : constraintMax);
+      maxInput.value = "";
+      maxInput.setAttribute("aria-label", `${materialItem.name} ${maxText} 输入`);
+      const commitRange = () => {
+        const normalizeRangeText = (input) => {
+          const raw = String(input && input.value || "").trim();
+          const seededBlank = input && input.dataset && input.dataset.seeded === "1" && raw === "0.";
+          if (seededBlank) input.value = "";
+          if (input && input.dataset) delete input.dataset.seeded;
+          return seededBlank ? "" : raw;
+        };
+        const minTextRaw = normalizeRangeText(minInput);
+        const maxTextRaw = normalizeRangeText(maxInput);
+        const minRaw = parseCraftAssistRangeInputValue(minTextRaw);
+        const maxRaw = parseCraftAssistRangeInputValue(maxTextRaw);
+        const minBlank = minTextRaw === "";
+        const maxBlank = maxTextRaw === "";
+        if (minBlank && maxBlank) {
+          return;
+        }
+
+        let nextMin = minBlank
+          ? clampWearToRange(itemRange.wear_min, constraintMin, constraintMax, constraintMin)
+          : clampWearToRange(minRaw, constraintMin, constraintMax, constraintMin);
+        let nextMax = maxBlank
+          ? clampWearToRange(itemRange.wear_max, constraintMin, constraintMax, constraintMax)
+          : clampWearToRange(maxRaw, constraintMin, constraintMax, constraintMax);
+        if (nextMax < nextMin) {
+          if (!minBlank && maxBlank) nextMax = nextMin;
+          else if (minBlank && !maxBlank) nextMin = nextMax;
+          else nextMax = nextMin;
+        }
+        applyItemUpdate(materialId, (items) => items.map((entry) => (
+          String(entry && entry.id || "").trim() === String(materialItem.id || "").trim()
+            ? {
+              ...entry,
+              wear_min: nextMin,
+              wear_max: nextMax,
+              custom_range: !(
+                Math.abs(nextMin - constraintMin) <= 1e-9 &&
+                Math.abs(nextMax - constraintMax) <= 1e-9
+              )
+            }
+            : entry
+        )));
+      };
+      minInput.onfocus = () => seedCraftAssistDecimalInput(minInput, {seedWhenEmpty: true});
+      maxInput.onfocus = () => seedCraftAssistDecimalInput(maxInput, {seedWhenEmpty: true});
+      minInput.oninput = () => { delete minInput.dataset.seeded; };
+      maxInput.oninput = () => { delete maxInput.dataset.seeded; };
+      minInput.onblur = commitRange;
+      maxInput.onblur = commitRange;
+      minInput.onkeydown = (evt) => {
+        if (evt.key !== "Enter") return;
+        evt.preventDefault();
+        commitRange();
+        maxInput.focus();
+      };
+      maxInput.onkeydown = (evt) => {
+        if (evt.key !== "Enter") return;
+        evt.preventDefault();
+        commitRange();
+        maxInput.blur();
+      };
+      minRow.append(minLabel, minInput);
+      maxRow.append(maxLabel, maxInput);
+      rangeWrap.append(minRow, maxRow);
+      rangeLabel.append(rangeText, rangeWrap);
+
+      cardRail.append(cardHead, modeField, rangeLabel);
+      card.append(cardRail);
+      cardList.append(card);
+    }
+    item.append(head, cardList);
     ui.craftAssistList.append(item);
   }
 }
@@ -6669,41 +7017,25 @@ function isCraftAssistPresetEditing() {
 }
 
 function buildCraftAssistDraftSnapshotFromState() {
-  const filterMode = getCraftAssistFilterMode();
   const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
   return {
     panel_open: !!state.craftAssistOpen,
     target_wear: targetWear,
-    wear_filter_mode: filterMode,
-    materials: normalizeCraftAssistMaterialList(state.craftAssistMaterials, {
-      targetWear,
-      idPrefix: "assist",
-      useRelative: filterMode !== "absolute"
-    }).map((entry) => ({...entry})),
+    materials: projectCraftAssistPersistedMaterialsFromState(state.craftAssistMaterials),
     pick_role: normalizeCraftAssistRole(state.craftAssistPickRole)
   };
 }
 
 function buildCraftAssistPresetComparableSnapshot({targetWear = null, wearFilterMode = "relative", materials = []} = {}) {
-  const filterMode = normalizeCraftAssistFilterMode(wearFilterMode);
   const parsedTargetWear = parseOptionalWear01(targetWear);
-  const normalizedMaterials = normalizeCraftAssistMaterialList(materials, {
+  const normalizedMaterials = projectCraftAssistPersistedMaterialsFromState(normalizeCraftAssistMaterialList(materials, {
     targetWear: parsedTargetWear,
     idPrefix: "assist",
-    useRelative: filterMode !== "absolute"
-  }).map((entry) => ({
-    names: craftAssistMaterialNames(entry),
-    role: normalizeCraftAssistRole(entry && entry.role),
-    count: normalizeCraftAssistEntryCount(entry && entry.count, 1),
-    direction: normalizeCraftAssistDirection(entry && entry.role, entry && entry.direction),
-    disable_direction_limit: !!(entry && entry.disable_direction_limit),
-    wear_min: clampWear01(entry && entry.wear_min, 0),
-    wear_max: clampWear01(entry && entry.wear_max, 1),
-    custom_range: !!(entry && entry.custom_range)
+    useRelative: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
+    rows: getAllInventoryCraftableRows()
   }));
   return {
     target_wear: parsedTargetWear,
-    wear_filter_mode: filterMode,
     materials: normalizedMaterials
   };
 }
@@ -6727,14 +7059,14 @@ function isCraftAssistPresetEditingDirty() {
 
 function restoreCraftAssistDraftSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return;
-  const filterMode = normalizeCraftAssistFilterMode(snapshot.wear_filter_mode);
   state.craftAssistTargetWear = parseOptionalWear01(snapshot.target_wear);
-  setCraftAssistFilterMode(filterMode, {refreshRanges: false, renderPanel: false});
   state.craftAssistMaterials = normalizeCraftAssistMaterialList(snapshot.materials, {
     targetWear: state.craftAssistTargetWear,
     idPrefix: "assist",
-    useRelative: filterMode !== "absolute"
+    useRelative: normalizeCraftAssistFilterMode(snapshot.wear_filter_mode) !== "absolute",
+    rows: getAllInventoryCraftableRows()
   });
+  state.craftAssistUseAbsoluteWear = false;
   syncCraftAssistAutoDirectionLimit();
   state.craftAssistPickRole = normalizeCraftAssistRole(snapshot.pick_role);
   state.craftAssistPickerOpen = false;
@@ -6755,14 +7087,14 @@ function clearCraftAssistPresetEditingState({restoreDraft = false} = {}) {
 function loadCraftAssistPresetIntoDraft(preset) {
   const normalized = sanitizeCraftAssistPresetPayload(preset);
   if (!normalized) return null;
-  const filterMode = normalizeCraftAssistFilterMode(normalized.wear_filter_mode);
   state.craftAssistTargetWear = parseOptionalWear01(normalized.target_wear);
-  setCraftAssistFilterMode(filterMode, {refreshRanges: false, renderPanel: false});
   state.craftAssistMaterials = normalizeCraftAssistMaterialList(normalized.materials, {
     targetWear: state.craftAssistTargetWear,
     idPrefix: "assist",
-    useRelative: filterMode !== "absolute"
+    useRelative: true,
+    rows: getAllInventoryCraftableRows()
   });
+  state.craftAssistUseAbsoluteWear = false;
   syncCraftAssistAutoDirectionLimit();
   state.craftAssistPickRole = "main";
   state.craftAssistPickerOpen = false;
@@ -7203,42 +7535,14 @@ function renderCraftAssistPresetPanel() {
   }
 }
 function normalizeCraftAssistMaterialsForRun({materials = state.craftAssistMaterials, targetWear = state.craftAssistTargetWear, wearFilterMode = getCraftAssistFilterMode()} = {}) {
-  const filterMode = normalizeCraftAssistFilterMode(wearFilterMode);
-  const useRelativeFilter = filterMode !== "absolute";
   const normalized = normalizeCraftAssistMaterialList(materials, {
     targetWear,
     idPrefix: "assist",
-    useRelative: useRelativeFilter
+    useRelative: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
+    rows: getAllInventoryCraftableRows()
   })
-    .map((entry) => {
-      const names = craftAssistMaterialNames(entry);
-      const name = names[0] || "";
-      const role = normalizeCraftAssistRole(entry && entry.role);
-      const countFallback = 1;
-      const count = normalizeCraftAssistEntryCount(entry && entry.count, countFallback);
-      const resolvedRange = resolveCraftAssistMaterialEffectiveRange(entry, {useRelative: useRelativeFilter});
-      let wearMin = clampWear01(resolvedRange.wear_min, 0);
-      let wearMax = clampWear01(resolvedRange.wear_max, 1);
-      if (wearMax < wearMin) {
-        const tmp = wearMin;
-        wearMin = wearMax;
-        wearMax = tmp;
-      }
-      return {
-        id: String(entry && entry.id || "").trim(),
-        names,
-        name,
-        label: names.join(" / "),
-        role,
-        count,
-        direction: normalizeCraftAssistDirection(role, entry && entry.direction),
-        disable_direction_limit: !!(entry && entry.disable_direction_limit),
-        wear_min: wearMin,
-        wear_max: wearMax
-      };
-    })
-    .filter((entry) => entry.names.length > 0 && entry.count > 0);
-  return normalized;
+    .filter((entry) => craftAssistMaterialNames(entry).length > 0 && normalizeCraftAssistEntryCount(entry && entry.count, 1) > 0);
+  return projectCraftAssistPersistedMaterialsFromState(normalized);
 }
 async function applyCraftAssistAutoSelection({accountUsername = "", sourcePresetName = "", draftSnapshot = null, pendingUiAction = "", pendingPresetId = ""} = {}) {
   if (guardGuestAction({
@@ -7382,7 +7686,6 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
         body: JSON.stringify({
           username: runUsername,
           target_wear: targetValue,
-          wear_filter_mode: wearFilterMode,
           wear_approach_mode: state.craftAssistApproachMode ? "infinite" : "below",
           materials,
           use_component_items: !!state.craftUseComponentItems,
@@ -7547,9 +7850,11 @@ function buildCraftPredictorContextKey(type, id = "") {
   return normalizedId ? `draft:${normalizedId}` : "draft";
 }
 function normalizeCraftPredictorMaterialNames(material) {
-  const source = Array.isArray(material && material.names)
-    ? material.names
-    : (material && material.name != null ? [material.name] : []);
+  const source = Array.isArray(material && material.items)
+    ? material.items.map((item) => item && item.name)
+    : Array.isArray(material && material.names)
+      ? material.names
+      : (material && material.name != null ? [material.name] : []);
   const out = [];
   const seen = new Set();
   for (const entry of source) {
@@ -7568,8 +7873,14 @@ function normalizeCraftPredictorMaterialCount(value, fallback = 1) {
   return numeric;
 }
 function normalizeCraftPredictorRequiredCount(value, fallback = 10) {
+  const shared = globalThis && globalThis.craftAssistItemWearShared;
+  const sharedRequiredCount = shared && typeof shared.resolveCraftAssistRequiredCount === "function"
+    ? shared.resolveCraftAssistRequiredCount()
+    : null;
   const numeric = Math.trunc(Number(value));
   if (numeric === 5 || numeric === 10) return numeric;
+  if (numeric === sharedRequiredCount) return numeric;
+  if (sharedRequiredCount != null) return sharedRequiredCount;
   const fallbackNumeric = Math.trunc(Number(fallback));
   if (fallbackNumeric === 5 || fallbackNumeric === 10) return fallbackNumeric;
   return 0;
@@ -7804,7 +8115,10 @@ function buildCraftPredictorRequestFromDraft({targetWear = null, requiredCount =
   };
 }
 function buildCraftPredictorRequestFromRecipeEntry(entry, rowsById) {
-  const requiredCount = 10;
+  const shared = globalThis && globalThis.craftAssistItemWearShared;
+  const requiredCount = shared && typeof shared.resolveCraftAssistRequiredCount === "function"
+    ? shared.resolveCraftAssistRequiredCount()
+    : 10;
   const ids = normalizeCraftRecipeItemIds(entry && entry.item_ids);
   const rowMap = rowsById instanceof Map ? rowsById : new Map();
   if (!ids.length) {
@@ -8289,6 +8603,9 @@ function renderCraftAssistPanel() {
   if (!ui.craftAssistPanel || !ui.craftAssistOverlay) return;
   const open = !!state.craftAssistOpen;
   const editingPreset = isCraftAssistPresetEditing();
+  if (typeof coalesceCraftAssistMaterialRoleBuckets === "function") {
+    state.craftAssistMaterials = coalesceCraftAssistMaterialRoleBuckets(state.craftAssistMaterials, {source: "renormalize"});
+  }
   ui.craftAssistOverlay.classList.toggle("hidden", !open);
   if (ui.craftAssistToggleBtn) {
     ui.craftAssistToggleBtn.classList.toggle("active", open);
@@ -12731,9 +13048,6 @@ function bindEvents() {
     };
     ui.craftAssistTargetWear.onfocus = () => {
       seedCraftAssistDecimalInput(ui.craftAssistTargetWear);
-    };
-    ui.craftAssistTargetWear.oninput = () => {
-      delete ui.craftAssistTargetWear.dataset.seeded;
     };
     ui.craftAssistTargetWear.onchange = commitTargetWear;
     ui.craftAssistTargetWear.onblur = commitTargetWear;

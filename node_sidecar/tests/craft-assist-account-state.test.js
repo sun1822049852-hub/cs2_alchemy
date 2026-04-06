@@ -85,7 +85,7 @@ function testSaveAndRestoreCraftAccountScopedStateKeepsDraftButClearsRuntimeBusy
     craftAssistOpen: true,
     craftAssistPickRole: "aux",
     craftAssistTargetWear: 0.2142,
-    craftAssistMaterials: [{id: "m1", names: ["AK"], count: 3}],
+    craftAssistMaterials: [{id: "m1", role: "main", count: 3, items: [{id: "m1__1", name: "AK", wear_filter_mode: "relative", wear_min: 0.1, wear_max: 0.2, custom_range: true}]}],
     craftAssistPresetApplyCountMap: {presetA: 2}
   });
 
@@ -140,7 +140,7 @@ function testRestoreCanStillShowLiveRuntimeBusyStateForCurrentAccount() {
   const app = loadCraftAssistAccountStateFns({
     craftAssistOpen: true,
     craftAssistTargetWear: 0.123,
-    craftAssistMaterials: [{id: "m-live"}]
+    craftAssistMaterials: [{id: "m-live", role: "main", count: 1, items: [{id: "m-live__1", name: "AK", wear_filter_mode: "absolute", wear_min: 0.03, wear_max: 0.07, custom_range: true}]}]
   });
 
   assert.equal(typeof app.saveCraftAssistRuntimeState, "function", "expected runtime save helper to exist");
@@ -171,7 +171,7 @@ function testRestoreDropsBusyRuntimeSnapshotWithoutActiveRunToken() {
   const app = loadCraftAssistAccountStateFns({
     craftAssistOpen: true,
     craftAssistTargetWear: 0.456,
-    craftAssistMaterials: [{id: "m-legacy"}]
+    craftAssistMaterials: [{id: "m-legacy", role: "aux", count: 1, items: [{id: "m-legacy__1", name: "USP-S", wear_filter_mode: "relative", wear_min: 0.2, wear_max: 0.4, custom_range: false}]}]
   });
 
   app.saveCraftAccountScopedState("acc-a");
@@ -198,11 +198,43 @@ function testRestoreDropsBusyRuntimeSnapshotWithoutActiveRunToken() {
   assert.equal(app.state.craftAssistRunToken, "");
 }
 
+function testAccountScopedWritebackUsesItemLevelMaterialsAndOmitsLegacyTopLevelFields() {
+  const app = loadCraftAssistAccountStateFns({
+    craftAssistUseAbsoluteWear: true,
+    craftAssistMainCount: 4,
+    craftAssistAuxCount: 6,
+    craftAssistMaterials: [{
+      id: "m-write",
+      role: "main",
+      count: 4,
+      items: [
+        {id: "m-write__1", name: "AK", wear_filter_mode: "absolute", wear_min: 0.01, wear_max: 0.07, custom_range: true}
+      ],
+      label: "AK"
+    }]
+  });
+
+  const snapshot = app.buildCurrentCraftAccountScopedStateSnapshot();
+
+  assert.equal(Object.prototype.hasOwnProperty.call(snapshot, "craftAssistUseAbsoluteWear"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(snapshot, "craftAssistMainCount"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(snapshot, "craftAssistAuxCount"), false);
+  assert.equal(JSON.stringify(snapshot.craftAssistMaterials), JSON.stringify([{
+    id: "m-write",
+    role: "main",
+    count: 4,
+    items: [
+      {id: "m-write__1", name: "AK", wear_filter_mode: "absolute", wear_min: 0.01, wear_max: 0.07, custom_range: true}
+    ]
+  }]));
+}
+
 function main() {
   testSaveAndRestoreCraftAccountScopedStateKeepsDraftButClearsRuntimeBusyFlags();
   testMissingAccountRestoresEmptyDefaults();
   testRestoreCanStillShowLiveRuntimeBusyStateForCurrentAccount();
   testRestoreDropsBusyRuntimeSnapshotWithoutActiveRunToken();
+  testAccountScopedWritebackUsesItemLevelMaterialsAndOmitsLegacyTopLevelFields();
   console.log("craft-assist-account-state tests passed");
 }
 
