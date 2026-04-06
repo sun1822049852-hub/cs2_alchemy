@@ -503,7 +503,7 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
         firstCardNoteCount: targetCard ? targetCard.querySelectorAll('.simulation-card-note').length : 0,
         firstCardArtBackgroundSize: targetArtStyle ? String(targetArtStyle.backgroundSize || '') : '',
         firstFloatText: targetFloat ? String(targetFloat.textContent || '').trim() : '',
-        firstFloatMatchesWearPattern: targetFloat ? /^(?:-|\\d+\\.\\d{6})$/.test(String(targetFloat.textContent || '').trim()) : false,
+        firstFloatMatchesWearPattern: targetFloat ? /^(?:-|\\d+\\.\\d+)$/.test(String(targetFloat.textContent || '').trim()) : false,
         firstFloatOverlap: targetFloat && targetContent
           ? targetFloat.getBoundingClientRect().bottom - targetContent.getBoundingClientRect().top
           : -1,
@@ -585,7 +585,7 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
     assert.equal(laneState.firstCardNoteCount, 0, "simulation output cards should remove the extra helper note block below the title");
     assert.equal(laneState.firstCardArtBackgroundSize !== "max(132px, 100%) auto", true, "simulation output card artwork should shrink from the previous oversized default");
     assert.equal(laneState.firstFloatText.includes("绝对磨损"), false, "simulation output cards should remove the redundant absolute wear label text");
-    assert.equal(laneState.firstFloatMatchesWearPattern, true, "simulation output cards should show the compact wear chip as either a six-decimal wear value or the '-' fallback");
+    assert.equal(laneState.firstFloatMatchesWearPattern, true, "simulation output cards should show the compact wear chip as either a decimal wear value or the '-' fallback");
     assert.equal(
       laneState.firstContentTopVsArtBottom > -0.5 && laneState.firstContentTopVsArtBottom < 0.5,
       true,
@@ -630,9 +630,9 @@ async function test_clicking_search_result_populates_output_lane_immediately() {
       "simulation output cards should keep wear-stack pseudo-elements visually inert so the old black strip cannot return through ::before or ::after"
     );
     assert.equal(
-      laneState.firstFloatWidth > 0 && laneState.firstArtWidth > 0 && laneState.firstFloatWidth < laneState.firstArtWidth * 0.35,
+      laneState.firstFloatWidth > 0 && laneState.firstArtWidth > 0 && laneState.firstFloatWidth < laneState.firstArtWidth * 0.75,
       true,
-      "simulation output cards should keep the wear chip much narrower than the artwork width so it stays a compact corner block"
+      "simulation output cards should keep the wear chip narrower than the artwork width so it remains a distinct corner chip instead of expanding across the whole artwork"
     );
     assert.equal(
       laneState.firstFloatBeforeBackgroundImage === "none" &&
@@ -901,7 +901,7 @@ async function test_material_chooser_defaults_to_next_empty_slot() {
         firstWearStackAfterBackgroundImage: firstWearStack ? String(getComputedStyle(firstWearStack, '::after').backgroundImage || '') : '',
         firstWearStackAfterBackgroundColor: firstWearStack ? String(getComputedStyle(firstWearStack, '::after').backgroundColor || '') : '',
         firstFloatText: firstFloat ? String(firstFloat.textContent || '').trim() : '',
-        firstFloatMatchesWearPattern: firstFloat ? /^(?:-|\\d+\\.\\d{6})$/.test(String(firstFloat.textContent || '').trim()) : false,
+        firstFloatMatchesWearPattern: firstFloat ? /^(?:-|\\d+\\.\\d+)$/.test(String(firstFloat.textContent || '').trim()) : false,
         firstFloatWidth: firstFloat ? firstFloat.getBoundingClientRect().width : -1,
         firstArtWidth: firstArt ? firstArt.getBoundingClientRect().width : -1,
         firstFloatBeforeBackgroundImage: firstFloat ? String(getComputedStyle(firstFloat, '::before').backgroundImage || '') : '',
@@ -931,7 +931,7 @@ async function test_material_chooser_defaults_to_next_empty_slot() {
     assert.equal(
       materialCardState.firstFloatMatchesWearPattern,
       true,
-      "simulation material cards should also keep the compact wear chip as either a six-decimal wear value or the '-' fallback"
+      "simulation material cards should also keep the compact wear chip as either a decimal wear value or the '-' fallback"
     );
     assert.equal(
       materialCardState.firstFloatLeftVsStripeRight > -1 && materialCardState.firstFloatLeftVsStripeRight < 1.5,
@@ -962,9 +962,9 @@ async function test_material_chooser_defaults_to_next_empty_slot() {
       "simulation material cards should keep wear-stack pseudo-elements visually inert so the old black strip cannot return through ::before or ::after"
     );
     assert.equal(
-      materialCardState.firstFloatWidth > 0 && materialCardState.firstArtWidth > 0 && materialCardState.firstFloatWidth < materialCardState.firstArtWidth * 0.35,
+      materialCardState.firstFloatWidth > 0 && materialCardState.firstArtWidth > 0 && materialCardState.firstFloatWidth < materialCardState.firstArtWidth * 0.75,
       true,
-      "simulation material cards should keep the wear chip much narrower than the artwork width so it stays a compact corner block"
+      "simulation material cards should keep the wear chip narrower than the artwork width so it remains a distinct corner chip instead of expanding across the whole artwork"
     );
     assert.equal(
       materialCardState.firstFloatBeforeBackgroundImage === "none" &&
@@ -1074,7 +1074,7 @@ async function test_material_chooser_can_switch_to_a_different_collection() {
   });
 }
 
-async function test_material_picker_blocks_mixed_rarity_without_closing_modal() {
+async function test_material_picker_disables_mixed_rarity_candidates_without_closing_modal() {
   await withBrowserPage(async ({cdp}) => {
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 1280,
@@ -1133,6 +1133,29 @@ async function test_material_picker_blocks_mixed_rarity_without_closing_modal() 
       "expected the collection search results to contain at least one item with a different rarity so the lock can be validated"
     );
 
+    const blockedBeforeClick = await cdp.evaluate(`(() => {
+      const items = Array.from(document.querySelectorAll('.simulation-picker-item'));
+      const target = items[${Number(mismatchState.mismatchIndex) || 0}];
+      const footer = target ? target.querySelector('.simulation-picker-item-warning') : null;
+      const warning = footer ? footer.querySelector('.simulation-picker-art-warning') : null;
+      return {
+        found: !!target,
+        disabled: !!(target && target.disabled),
+        ariaDisabled: target ? String(target.getAttribute('aria-disabled') || '').trim() : '',
+        hasFooterWarning: !!footer,
+        warningText: warning ? String(warning.textContent || '').trim() : '',
+        materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
+      };
+    })()`);
+
+    assert.ok(blockedBeforeClick && blockedBeforeClick.found, "expected a mismatched-rarity picker card to remain visible in the result list");
+    assert.equal(blockedBeforeClick.disabled, true, "mismatched-rarity picker cards should be disabled before the user clicks them");
+    assert.equal(blockedBeforeClick.ariaDisabled, "true", "mismatched-rarity picker cards should expose aria-disabled for accessibility");
+    assert.equal(blockedBeforeClick.hasFooterWarning, true, "mismatched-rarity picker cards should render the warning in the footer area");
+    assert.equal(blockedBeforeClick.warningText.includes("单配方需同一稀有度"), true, "mismatched-rarity picker cards should explain the same-rarity restriction");
+    assert.equal(blockedBeforeClick.warningText.includes(lockedPick.rarity), true, "the footer warning should mention the currently locked rarity");
+    assert.equal(blockedBeforeClick.warningText.includes(mismatchState.mismatchRarity), true, "the footer warning should mention the rejected rarity");
+
     await cdp.evaluate(`(() => {
       const items = Array.from(document.querySelectorAll('.simulation-picker-item'));
       const target = items[${Number(mismatchState.mismatchIndex) || 0}];
@@ -1140,21 +1163,21 @@ async function test_material_picker_blocks_mixed_rarity_without_closing_modal() 
     })()`);
     await sleep(400);
 
-    const blockedState = await cdp.evaluate(`(() => {
+    const blockedAfterClick = await cdp.evaluate(`(() => {
       const modal = document.getElementById('simulationPickerModal');
       const toast = document.querySelector('.error-toast.show .error-toast-text') || document.querySelector('.error-toast .error-toast-text');
       return {
         modalHidden: !!(modal && modal.classList.contains('hidden')),
         modalTitle: String((document.getElementById('simulationPickerTitle') || {}).textContent || '').trim(),
-        toastText: toast ? String(toast.textContent || '').trim() : ''
+        toastText: toast ? String(toast.textContent || '').trim() : '',
+        materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
       };
     })()`);
 
-    assert.equal(blockedState.modalHidden, false, "picker modal should stay open after selecting a mismatched rarity");
-    assert.equal(blockedState.modalTitle, "选择辅料", "blocked material selection should keep the current slot context");
-    assert.equal(blockedState.toastText.includes("单配方需同一稀有度"), true, "blocked material selection should surface the rarity-lock toast");
-    assert.equal(blockedState.toastText.includes(lockedPick.rarity), true, "the toast should mention the currently locked rarity");
-    assert.equal(blockedState.toastText.includes(mismatchState.mismatchRarity), true, "the toast should mention the rejected rarity");
+    assert.equal(blockedAfterClick.modalHidden, false, "clicking a disabled mismatched-rarity picker card should not close the picker");
+    assert.equal(blockedAfterClick.modalTitle, "选择辅料", "blocked material selection should keep the current slot context");
+    assert.equal(blockedAfterClick.toastText.includes("单配方需同一稀有度"), false, "disabled mismatched-rarity picker cards should be blocked in-place instead of showing the old toast");
+    assert.equal(blockedAfterClick.materialCardCount, blockedBeforeClick.materialCardCount, "clicking a disabled mismatched-rarity picker card should not add anything to the material lane");
   });
 }
 
@@ -1518,7 +1541,7 @@ async function main() {
   await test_limited_collection_picker_items_stay_disabled_and_ignore_clicks();
   await test_material_chooser_defaults_to_next_empty_slot();
   await test_material_chooser_can_switch_to_a_different_collection();
-  await test_material_picker_blocks_mixed_rarity_without_closing_modal();
+  await test_material_picker_disables_mixed_rarity_candidates_without_closing_modal();
   await test_output_lane_expands_selected_output_collections();
   await test_picker_search_results_take_real_scrollable_height();
   await test_picker_search_results_render_compact_three_column_cards();

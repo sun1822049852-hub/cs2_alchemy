@@ -9,6 +9,7 @@ const MAIN_INVENTORY_CAPACITY = 1000;
 const STORAGE_UNIT_DEF_INDEX = 1201;
 const WEAR_INPUT_DECIMALS = 6;
 const TRADEUP_SIMULATION_WEAR_DECIMALS = 16;
+const TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS = 4;
 const TRADEUP_SIMULATION_RANGE_DECIMALS = 4;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 1;
 const CRAFT_ASSIST_PRESET_MIN_WIDTH = 186;
@@ -5669,7 +5670,7 @@ async function saveActiveTradeupSimulationPreset() {
     setSummary("请先选择主产物", {isError: true});
     return false;
   }
-  const presetName = await openCraftAssistPresetModal(String(preset && preset.name || "").trim(), {
+  const presetName = await openCraftAssistPresetModal("", {
     title: "保存汰换配置",
     confirmText: "保存配方",
     placeholder: "请输入配置名称",
@@ -6063,22 +6064,40 @@ function adoptTradeupSimulationDerivedPrimaryOutput({presetId, candidates = []} 
   if (!list.length) return false;
   const next = updateTradeupSimulationPresetRecord(presetId, (current) => {
     const currentPrimary = sanitizeTradeupSimulationTargetItem(current && current.primary_output);
+    const currentAux = sanitizeTradeupSimulationTargetItem(current && current.aux_output);
     const currentCover = sanitizeTradeupSimulationTargetItem(current && current.cover_output)
       || currentPrimary;
-    const anchor = getTradeupSimulationActiveAnchorItem(current);
-    const anchorCollection = String(anchor && anchor.collection || "").trim();
+    const mainMaterial = sanitizeTradeupSimulationTargetItem(current && current.main_material);
+    const auxMaterial = sanitizeTradeupSimulationTargetItem(current && current.aux_material);
+    const primaryCollection = String(
+      (mainMaterial && mainMaterial.collection)
+      || (currentPrimary && currentPrimary.collection)
+      || (currentCover && currentCover.collection)
+      || (auxMaterial && auxMaterial.collection)
+      || ""
+    ).trim();
+    const auxCollection = String(auxMaterial && auxMaterial.collection || "").trim();
     const currentPrimaryCandidate = findTradeupSimulationCandidateByKey(list, currentPrimary);
+    const currentAuxCandidate = findTradeupSimulationCandidateByKey(list, currentAux);
     const currentCoverCandidate = findTradeupSimulationCandidateByKey(list, currentCover);
-    const alignedCandidate = pickTradeupSimulationCandidateForCollection(list, anchorCollection);
-    const nextPrimary = currentPrimaryCandidate && (!anchorCollection || String(currentPrimaryCandidate.collection || "").trim() === anchorCollection)
+    const primaryAlignedCandidate = pickTradeupSimulationCandidateForCollection(list, primaryCollection);
+    const nextPrimary = currentPrimaryCandidate && (!primaryCollection || String(currentPrimaryCandidate.collection || "").trim() === primaryCollection)
       ? currentPrimaryCandidate
-      : alignedCandidate || currentPrimaryCandidate || currentPrimary || list[0];
-    const nextCover = currentCoverCandidate && (!anchorCollection || String(currentCoverCandidate.collection || "").trim() === anchorCollection)
-      ? currentCoverCandidate
-      : nextPrimary || alignedCandidate || currentCoverCandidate || currentCover || list[0];
+      : primaryAlignedCandidate || currentPrimaryCandidate || currentPrimary || list[0];
+    let nextAux = null;
+    if (auxCollection && auxCollection !== String(nextPrimary && nextPrimary.collection || "").trim()) {
+      nextAux = currentAuxCandidate && String(currentAuxCandidate.collection || "").trim() === auxCollection
+        ? currentAuxCandidate
+        : pickTradeupSimulationCandidateForCollection(list, auxCollection);
+      if (getTradeupSimulationItemKey(nextAux) === getTradeupSimulationItemKey(nextPrimary)) {
+        nextAux = null;
+      }
+    }
+    const nextCover = currentCoverCandidate || nextPrimary || nextAux || currentCover || list[0];
     return {
       ...current,
       primary_output: nextPrimary,
+      aux_output: nextAux,
       cover_output: nextCover,
       output_rows: [],
       material_rows: [],
@@ -9028,6 +9047,11 @@ function formatTradeupSimulationWear(value) {
   if (!Number.isFinite(numeric)) return "-";
   return numeric.toFixed(TRADEUP_SIMULATION_WEAR_DECIMALS);
 }
+function formatTradeupSimulationModalWear(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "-";
+  return numeric.toFixed(TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS);
+}
 function summarizeTradeupSimulationWearLabel(label) {
   const value = String(label || "").trim();
   if (value === "Factory New") return "崭新出厂";
@@ -9206,6 +9230,8 @@ function mapTradeupSimulationPredictorOutcomeToItem(outcome) {
   });
 }
 function buildTradeupSimulationDerivedOutputPayload(preset) {
+  const primaryOutput = sanitizeTradeupSimulationTargetItem(preset && preset.primary_output)
+    || sanitizeTradeupSimulationTargetItem(preset && preset.cover_output);
   const mainMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.main_material);
   const auxMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.aux_material);
   const materialEntries = [
@@ -9222,13 +9248,26 @@ function buildTradeupSimulationDerivedOutputPayload(preset) {
   if (!Number.isFinite(relativeWear)) return null;
   const groups = [];
   const collectionCountMap = new Map();
-  if (materialEntries.length === 1) {
-    collectionCountMap.set(String(materialEntries[0].item && materialEntries[0].item.collection || "").trim(), 10);
-  } else if (materialEntries.length >= 2) {
-    for (const {item} of materialEntries) {
-      const collection = String(item && item.collection || "").trim();
-      collectionCountMap.set(collection, (collectionCountMap.get(collection) || 0) + 5);
-    }
+  const allowedMaterialBySlot = new Map(materialEntries.map(({slot, item}) => [slot, item]));
+  const allowedMainMaterial = allowedMaterialBySlot.get("main_material") || null;
+  const allowedAuxMaterial = allowedMaterialBySlot.get("aux_material") || null;
+  const allowedRowCollections = (Array.isArray(preset && preset.rows) ? preset.rows : [])
+    .flatMap((row) => Array.isArray(row && row.materials) ? row.materials : [])
+    .filter((item) => !getTradeupSimulationPickerRestrictionMessage(item, "main_material"))
+    .map((item) => String(item && item.collection || "").trim())
+    .filter(Boolean);
+  const pushCollection = (value) => {
+    const collection = String(value || "").trim();
+    if (!collection || collectionCountMap.has(collection) || collectionCountMap.size >= 10) return;
+    collectionCountMap.set(collection, 1);
+  };
+  pushCollection(allowedMainMaterial && allowedMainMaterial.collection);
+  if (!allowedMainMaterial) {
+    pushCollection(primaryOutput && primaryOutput.collection);
+  }
+  pushCollection(allowedAuxMaterial && allowedAuxMaterial.collection);
+  for (const collection of allowedRowCollections) {
+    pushCollection(collection);
   }
   for (const [collection, count] of collectionCountMap.entries()) {
     if (!collection || !count) continue;
@@ -9347,6 +9386,14 @@ function validateTradeupSimulationPickerSelection(preset, slot, item) {
   }
   return {ok: true, item: nextItem};
 }
+function getTradeupSimulationPickerBlockedMessage(preset, slot, item) {
+  const slotName = normalizeTradeupSimulationSlotName(slot);
+  if (!slotName) return "";
+  const validation = validateTradeupSimulationPickerSelection(preset || {}, slotName, item);
+  return validation && validation.ok === false
+    ? String(validation.message || "").trim()
+    : "";
+}
 async function selectTradeupSimulationPickerItem(pickIndex) {
   const results = Array.isArray(state.simulationPickerResults) ? state.simulationPickerResults : [];
   const index = Number(pickIndex);
@@ -9383,6 +9430,8 @@ function renderTradeupSimulationPickerResults() {
   if (!ui.simulationPickerSearchResults) return;
   const results = Array.isArray(state.simulationPickerResults) ? state.simulationPickerResults : [];
   const context = getTradeupSimulationPickerContext();
+  const slot = normalizeTradeupSimulationSlotName(state.simulationPickerMode);
+  const preset = getActiveTradeupSimulationPreset();
   const errorText = String(state.simulationPickerError || "").trim();
   if (state.simulationSearchLoading) {
     ui.simulationPickerSearchResults.innerHTML = `<div class="simulation-row-empty">正在搜索${context.roleText}候选...</div>`;
@@ -9400,7 +9449,7 @@ function renderTradeupSimulationPickerResults() {
   }
   ui.simulationPickerSearchResults.innerHTML = results.map((item, index) => {
     const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
-    const pickerRestrictionMessage = getTradeupSimulationPickerRestrictionMessage(item, state.simulationPickerMode);
+    const pickerRestrictionMessage = getTradeupSimulationPickerBlockedMessage(preset, slot, item);
     const disabled = !!pickerRestrictionMessage;
     const itemLabel = String(item && (item.basename || item.basemarkethashname || item.markethashname) || "").trim();
     const rarityVisual = getTradeupSimulationRarityVisuals(item && item.rarity);
@@ -9418,9 +9467,9 @@ function renderTradeupSimulationPickerResults() {
             <span class="simulation-picker-art-mask">
               <span class="simulation-picker-art-title" title="${escapeHtmlAttribute(itemLabel)}">${escapeHtml(itemLabel)}</span>
               <span class="simulation-picker-art-meta">${escapeHtml(metaText)}</span>
-              ${pickerRestrictionMessage ? `<span class="simulation-picker-art-warning">${escapeHtml(pickerRestrictionMessage)}</span>` : ""}
             </span>
           </span>
+          ${pickerRestrictionMessage ? `<span class="simulation-picker-item-warning"><span class="simulation-picker-art-warning">${escapeHtml(pickerRestrictionMessage)}</span></span>` : ""}
         </span>
       </button>
     `;
@@ -10405,6 +10454,7 @@ function renderTradeupSimulationCardModal() {
     ? Number(preset.active_anchor_abs_wear)
     : Number(item && item.absolute_wear);
   const wearText = Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "-";
+  const wearDetailText = Number.isFinite(wearValue) ? formatTradeupSimulationModalWear(wearValue) : "-";
   const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
   const minWear = Number(item && item.minfloat);
   const maxWear = Number(item && item.maxfloat);
@@ -10432,14 +10482,10 @@ function renderTradeupSimulationCardModal() {
           <div class="simulation-card-bar${wearToneClass}" style="--simulation-card-wear-pos:${formatCraftPredictorWearMarkerPosition(wearValue)}"><span style="width:${Math.max(0, Math.min(100, Number.isFinite(wearValue) ? wearValue * 100 : 0))}%"></span></div>
           <div class="simulation-card-name">${String(item && (item.base_name || item.name) || "").trim()}</div>
           <div class="simulation-card-meta">${String(item && item.collection || "").trim()} · ${String(item && item.rarity || "").trim()}</div>
-          <div class="simulation-card-tag-row">
-            <span class="simulation-card-role">${roleLabel}</span>
-            ${hasBounds ? `<span class="simulation-card-chip">${formatTradeupSimulationWear(minWear)} - ${formatTradeupSimulationWear(maxWear)}</span>` : ""}
-          </div>
         </div>
       </div>
       <div class="simulation-card-modal-lines">
-        <div class="simulation-card-modal-line"><span>当前绝对磨损</span><strong>${wearText}</strong></div>
+        <div class="simulation-card-modal-line"><span>当前绝对磨损</span><strong>${wearDetailText}</strong></div>
         <div class="simulation-card-modal-line"><span>所在收藏品</span><strong>${String(item && item.collection || "未标记").trim()}</strong></div>
       </div>
     `;
@@ -10449,12 +10495,12 @@ function renderTradeupSimulationCardModal() {
   }
   if (ui.simulationCardModalWearInput) {
     ui.simulationCardModalWearInput.disabled = !editable || !!state.simulationLoading;
-    ui.simulationCardModalWearInput.value = editable && Number.isFinite(wearValue) ? formatTradeupSimulationWear(wearValue) : "";
+    ui.simulationCardModalWearInput.value = editable && Number.isFinite(wearValue) ? formatTradeupSimulationModalWear(wearValue) : "";
   }
   if (ui.simulationCardModalWearHint) {
     ui.simulationCardModalWearHint.textContent = editable
       ? (hasBounds
-        ? `允许范围：${formatTradeupSimulationWear(minWear)} - ${formatTradeupSimulationWear(maxWear)}`
+        ? `允许范围：${formatTradeupSimulationModalWear(minWear)} - ${formatTradeupSimulationModalWear(maxWear)}`
         : "请输入新的绝对磨损，保存后会立即重算整组材料。")
       : "";
   }
@@ -12701,12 +12747,12 @@ function bindEvents() {
         return;
       }
       if (Number.isFinite(minWear) && numeric < minWear) {
-        setSummary(`绝对磨损不能低于 ${formatTradeupSimulationWear(minWear)}`);
+        setSummary(`绝对磨损不能低于 ${formatTradeupSimulationModalWear(minWear)}`);
         focusTradeupSimulationWearInput(ui.simulationCardModalWearInput);
         return;
       }
       if (Number.isFinite(maxWear) && numeric > maxWear) {
-        setSummary(`绝对磨损不能高于 ${formatTradeupSimulationWear(maxWear)}`);
+        setSummary(`绝对磨损不能高于 ${formatTradeupSimulationModalWear(maxWear)}`);
         focusTradeupSimulationWearInput(ui.simulationCardModalWearInput);
         return;
       }

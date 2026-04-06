@@ -2299,6 +2299,7 @@ select.small {
   flex-direction: column;
   width: 100%;
   min-width: 0;
+  height: 100%;
   min-height: 236px;
 }
 
@@ -2406,6 +2407,22 @@ select.small {
   line-height: 1.35;
   white-space: normal;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.42);
+}
+
+.simulation-picker-item-warning {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px 12px 16px;
+  border-top: 1px solid rgba(185, 112, 67, 0.28);
+  background: linear-gradient(180deg, rgba(35, 22, 15, 0.92) 0%, rgba(21, 13, 9, 0.96) 100%);
+  text-align: left;
+}
+
+.simulation-picker-item-warning .simulation-picker-art-warning {
+  display: block;
+  color: #ffb56a;
+  text-shadow: none;
 }
 
 .simulation-picker-rarity-badge {

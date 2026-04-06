@@ -553,6 +553,12 @@ assert.match(
 
 assert.match(
   css,
+  /\.simulation-picker-item-warning\s*\{[\s\S]*border-top:[\s\S]*background:[\s\S]*text-align:\s*left;/m,
+  "tradeup simulation picker should render blocked warnings inside a dedicated footer block"
+);
+
+assert.match(
+  css,
   /body\.theme-inkblue #simulationPage :is\(#simulationCancelEditBtn:hover,\s*\.simulation-picker-item:not\(\.is-disabled\):not\(:disabled\):hover\)\s*\{/m,
   "tradeup simulation inkblue hover styling should exclude disabled picker cards so blocked candidates never light up on hover"
 );
@@ -560,7 +566,7 @@ assert.match(
 assert.match(
   css,
   /\.simulation-picker-art-warning\s*\{[\s\S]*color:\s*#ffbf70;[\s\S]*white-space:\s*normal;/m,
-  "tradeup simulation picker should render a wrapped amber warning for blocked output candidates"
+  "tradeup simulation picker should render a wrapped amber warning for blocked candidates"
 );
 
 assert.match(
@@ -607,8 +613,8 @@ assert.match(
 
 assert.match(
   app,
-  /<button class="simulation-picker-item\$\{disabled \? " is-disabled" : ""\}" type="button" data-simulation-pick-index="\$\{index\}"\$\{rarityStyleAttr\}\$\{disabledAttr\}>[\s\S]*simulation-picker-art-warning/m,
-  "tradeup simulation picker results should mark blocked output candidates as disabled and show an inline warning in the search card"
+  /<button class="simulation-picker-item\$\{disabled \? " is-disabled" : ""\}" type="button" data-simulation-pick-index="\$\{index\}"\$\{rarityStyleAttr\}\$\{disabledAttr\}>[\s\S]*simulation-picker-item-warning[\s\S]*simulation-picker-art-warning/m,
+  "tradeup simulation picker results should mark blocked candidates as disabled and render the warning in the card footer"
 );
 
 const requiredCssFragments = [

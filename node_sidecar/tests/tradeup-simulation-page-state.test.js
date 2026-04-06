@@ -38,6 +38,8 @@ function createLocalStorageStub() {
 function loadSimulationFns(initialState = {}) {
   const source = [
     extractConst("TRADEUP_SIMULATION_PRESETS_KEY"),
+    extractConst("TRADEUP_SIMULATION_WEAR_DECIMALS"),
+    extractConst("TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS"),
     extractBlock("function makeTradeupSimulationUid(", "function renderCraftPage(")
   ].join("\n");
   const localStorage = createLocalStorageStub();
@@ -75,6 +77,9 @@ function loadSimulationFns(initialState = {}) {
       simulationPickerSearchResults: null
     },
     renderSimulationPage() {},
+    guardGuestAction() {
+      return true;
+    },
     showErrorToast(message) {
       errorToasts.push(String(message || "").trim());
     },
@@ -828,7 +833,7 @@ function test_build_tradeup_simulation_derived_output_payload_ignores_restricted
 
   assert.deepEqual(
     JSON.parse(JSON.stringify(payload.groups)),
-    [{collection: "狂牙大行动收藏品", count: 10}]
+    [{collection: "狂牙大行动收藏品", count: 1}]
   );
 }
 
@@ -1025,7 +1030,7 @@ function test_build_tradeup_simulation_saved_card_summary_uses_wear_tier_and_rel
   assert.equal(summary.presetName, "我的配方配置");
   assert.equal(summary.wearLabel, "略有磨损");
   assert.equal(summary.wearToneClass, " tone-mw");
-  assert.equal(summary.anchorWear, "0.350000");
+  assert.equal(summary.anchorWear, "0.3500000000000000");
   assert.equal(summary.anchorAbsoluteWearValue, 0.35);
   assert.equal(summary.collectionText, "猎杀号收藏品");
 }
@@ -1058,7 +1063,7 @@ async function test_save_active_tradeup_simulation_preset_uses_prompted_name_bef
   };
 
   app.openCraftAssistPresetModal = async (initialName, options = {}) => {
-    assert.equal(initialName, "旧配置名");
+    assert.equal(initialName, "");
     assert.equal(String(options.title || "").includes("配置"), true);
     return "  新配置名称  ";
   };
@@ -2166,7 +2171,9 @@ function test_render_simulation_card_modal_renders_without_role_label_reference_
 
   assert.doesNotThrow(() => app.renderTradeupSimulationCardModal());
   assert.equal(app.ui.simulationCardModal.classList.contains("hidden"), false);
-  assert.match(app.ui.simulationCardModalBody.innerHTML, /主料|辅料|主产物|辅产物/);
+  assert.match(app.ui.simulationCardModalBody.innerHTML, /当前绝对磨损/);
+  assert.match(app.ui.simulationCardModalBody.innerHTML, /Five-SeveN \| 混沌点阵/);
+  assert.doesNotMatch(app.ui.simulationCardModalBody.innerHTML, /主料|辅料|主产物|辅产物/);
 }
 
 async function main() {
