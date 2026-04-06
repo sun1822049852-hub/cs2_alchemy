@@ -12,10 +12,15 @@ const cssFragments = [
   ".craft-assist-close.craft-assist-close-floating::before,",
   ".craft-assist-close.craft-assist-close-floating::after {",
   "body.theme-inkblue #craftPage .craft-assist-close.craft-assist-close-floating {",
+  ".craft-assist-split-bar::before {",
   ".craft-assist-preset-list {",
   "padding: 0;",
   "background: transparent;",
+  ".craft-assist-preset-footer {",
+  ".craft-assist-preset-action-btn {",
   "body.theme-inkblue #craftPage .craft-assist-preset-list {",
+  "body.theme-inkblue #craftPage .craft-assist-preset-footer {",
+  "body.theme-inkblue #craftPage .craft-assist-preset-action-btn {",
   "box-shadow: none;"
 ];
 
@@ -53,6 +58,54 @@ assert.match(
 
 assert.match(
   css,
+  /\.craft-assist-content\s*\{[\s\S]*gap:\s*0;/m,
+  "craft assist content should remove the visual gutter so the divider no longer reads like a thick empty border"
+);
+
+assert.match(
+  css,
+  /\.craft-assist-split-bar\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*8px;/m,
+  "craft assist split bar should keep a draggable hit area while visually slimming the divider"
+);
+
+assert.match(
+  css,
+  /\.craft-assist-split-bar::before\s*\{[\s\S]*width:\s*1px;[\s\S]*left:\s*50%;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;/m,
+  "craft assist split bar should render a single center divider line instead of a thick block"
+);
+
+assert.match(
+  css,
+  /\.craft-assist-main-col\s*\{[\s\S]*border-right:\s*0;[\s\S]*border-top-right-radius:\s*0;[\s\S]*border-bottom-right-radius:\s*0;/m,
+  "main editor column should drop its right border so the split bar owns the only visible divider line"
+);
+
+assert.match(
+  css,
+  /\.craft-assist-preset-panel\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-bottom-left-radius:\s*0;[\s\S]*padding:\s*4px;/m,
+  "preset panel should drop its left edge chrome so the seam collapses into one line"
+);
+
+assert.match(
+  css,
+  /\.craft-assist-preset-list\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*align-items:\s*center;/m,
+  "preset list should center cards instead of stretching them across the full rail width"
+);
+
+assert.match(
+  css,
+  /\.craft-assist-preset-footer\s*\{[\s\S]*padding:\s*4px;[\s\S]*border-radius:\s*10px;/m,
+  "preset card footer should have its own inset chrome so the action row can stay visually aligned"
+);
+
+assert.match(
+  css,
+  /\.craft-assist-preset-action-btn\s*\{[\s\S]*appearance:\s*none;[\s\S]*width:\s*100%;[\s\S]*height:\s*28px;/m,
+  "preset action buttons should use a dedicated button reset instead of browser-native chrome"
+);
+
+assert.match(
+  css,
   /body\.theme-inkblue #craftPage \.craft-assist-close\.craft-assist-close-floating\s*\{[\s\S]*background:\s*linear-gradient\(/m,
   "floating craft assist close button should use a themed gradient surface instead of a plain text chip"
 );
@@ -61,6 +114,12 @@ assert.match(
   css,
   /body\.theme-inkblue #craftPage \.craft-assist-close\.craft-assist-close-floating\s*\{[\s\S]*box-shadow:\s*inset/m,
   "floating craft assist close button should read as a red sunken control in the ink theme"
+);
+
+assert.match(
+  css,
+  /body\.theme-inkblue #craftPage \.craft-assist-preset-action-btn\s*\{[\s\S]*background:\s*linear-gradient\([\s\S]*box-shadow:\s*inset/m,
+  "preset action buttons should also use the ink theme inset chrome so the rebuilt footer reads as one control cluster"
 );
 
 console.log("craftAssistPresetChrome tests passed");

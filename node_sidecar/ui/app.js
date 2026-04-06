@@ -7111,12 +7111,17 @@ function renderCraftAssistPresetPanel() {
     metaWear.className = "craft-assist-preset-meta-wear";
     metaWear.textContent = `wear: ${wearTextFull(preset && preset.target_wear)}`;
     meta.append(metaTop, metaWear);
+    const body = document.createElement("div");
+    body.className = "craft-assist-preset-body";
+    body.append(name, meta);
 
+    const footer = document.createElement("div");
+    footer.className = "craft-assist-preset-footer";
     const actions = document.createElement("div");
     actions.className = "craft-assist-preset-actions";
     const editBtn = document.createElement("button");
     editBtn.type = "button";
-    editBtn.className = "craft-assist-preset-edit";
+    editBtn.className = "craft-assist-preset-action-btn craft-assist-preset-edit";
     editBtn.textContent = "编辑";
     editBtn.disabled = state.refreshing || state.craftBusy;
     editBtn.onclick = () => {
@@ -7170,6 +7175,7 @@ function renderCraftAssistPresetPanel() {
     applyCountWrap.append(applyCountStepper);
     const applyBtn = document.createElement("button");
     applyBtn.type = "button";
+    applyBtn.className = "craft-assist-preset-action-btn craft-assist-preset-apply";
     applyBtn.textContent = "应用";
     applyBtn.disabled = inEditingMode || state.refreshing || state.craftBusy || isCraftAssistPendingUiAction("preset_apply", {presetId});
     applyBtn.onclick = () => {
@@ -7190,8 +7196,9 @@ function renderCraftAssistPresetPanel() {
       removeCraftAssistPreset(preset.id);
     };
     actions.append(editBtn, applyCountWrap, applyBtn);
+    footer.append(actions);
 
-    item.append(name, meta, actions, removeBtn);
+    item.append(body, footer, removeBtn);
     ui.craftAssistPresetList.append(item);
   }
 }

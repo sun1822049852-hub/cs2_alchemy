@@ -24,8 +24,45 @@ function testPresetCardsDoNotShrinkVertically() {
   );
 }
 
+function testPresetCardsShrinkToContentWidth() {
+  const block = extractCssBlock(".craft-assist-preset-item");
+  assert.equal(
+    /width:\s*100%;/.test(block),
+    true,
+    "preset cards should fill the available card track so the new footer can align its action row consistently"
+  );
+  assert.equal(
+    /max-width:\s*172px;/.test(block),
+    true,
+    "preset cards should still cap themselves to a stable compact width inside the preset rail"
+  );
+  assert.equal(
+    /margin:\s*0 auto;/.test(block),
+    true,
+    "preset cards should stay centered inside the preset rail"
+  );
+}
+
+function testPresetFooterCentersAgainstCardShell() {
+  const itemBlock = extractCssBlock(".craft-assist-preset-item");
+  assert.equal(
+    /padding:\s*10px;/.test(itemBlock),
+    true,
+    "preset card shell should use symmetric horizontal padding so the footer action row can center against the visible card chrome"
+  );
+
+  const bodyBlock = extractCssBlock(".craft-assist-preset-body");
+  assert.equal(
+    /padding-right:\s*18px;/.test(bodyBlock),
+    true,
+    "preset card body should own the extra right inset needed to avoid the remove button without shifting the footer off center"
+  );
+}
+
 function main() {
   testPresetCardsDoNotShrinkVertically();
+  testPresetCardsShrinkToContentWidth();
+  testPresetFooterCentersAgainstCardShell();
   console.log("craft-assist-preset-layout tests passed");
 }
 
