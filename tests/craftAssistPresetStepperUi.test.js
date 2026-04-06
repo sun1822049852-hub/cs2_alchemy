@@ -20,12 +20,15 @@ const appFragments = [
   'const incrementBtn = document.createElement("button");',
   'incrementBtn.className = "craft-assist-preset-apply-step increment";',
   'incrementBtn.setAttribute("aria-label", "增加应用数量");',
+  'const duplicateBtn = document.createElement("button");',
+  'duplicateBtn.className = "craft-assist-preset-duplicate";',
+  'duplicateBtn.textContent = "复制";',
   'editBtn.className = "craft-assist-preset-action-btn craft-assist-preset-edit";',
   'applyBtn.className = "craft-assist-preset-action-btn craft-assist-preset-apply";',
   "applyCountStepper.append(decrementBtn, applyCountInput, incrementBtn);",
   "body.append(name, meta);",
   "footer.append(actions);",
-  "item.append(body, footer, removeBtn);"
+  "item.append(body, footer, duplicateBtn, removeBtn);"
 ];
 
 for (const fragment of appFragments) {
@@ -42,6 +45,8 @@ const cssFragments = [
   ".craft-assist-preset-action-btn {",
   ".craft-assist-preset-apply-stepper {",
   ".craft-assist-preset-apply-step {",
+  ".craft-assist-preset-duplicate {",
+  ".craft-assist-preset-item:hover :is(.craft-assist-preset-duplicate, .craft-assist-preset-remove) {",
   ".craft-assist-preset-apply-step::before {",
   ".craft-assist-preset-apply-step.increment::before {",
   ".craft-assist-preset-apply-step.decrement::before {",

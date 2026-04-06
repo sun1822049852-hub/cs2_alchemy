@@ -53,9 +53,9 @@ function testPresetFooterCentersAgainstCardShell() {
 
   const bodyBlock = extractCssBlock(".craft-assist-preset-body");
   assert.equal(
-    /padding-right:\s*18px;/.test(bodyBlock),
+    /padding-right:\s*54px;/.test(bodyBlock),
     true,
-    "preset card body should own the extra right inset needed to avoid the remove button without shifting the footer off center"
+    "preset card body should own the extra right inset needed to avoid the duplicate and remove buttons without shifting the footer off center"
   );
 }
 

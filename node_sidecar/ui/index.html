@@ -356,7 +356,11 @@
                   <div id="craftAssistContent" class="craft-assist-line craft-assist-content">
                     <div class="craft-assist-main-col">
                       <div class="craft-assist-main-tools">
-                        <label class="craft-assist-field craft-assist-target-field">
+                        <label id="craftAssistPresetNameField" class="craft-assist-field craft-assist-inline-field craft-assist-preset-name-field hidden">
+                          <span>配置名称</span>
+                          <input id="craftAssistPresetNameInput" type="text" maxlength="40" />
+                        </label>
+                        <label class="craft-assist-field craft-assist-inline-field craft-assist-target-field">
                           <span>目标相对磨损</span>
                           <input id="craftAssistTargetWear" type="text" inputmode="decimal" />
                         </label>
