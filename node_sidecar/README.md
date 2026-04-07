@@ -52,6 +52,11 @@ npm run ui
 npm run ui:desktop
 ```
 
+说明：
+
+- 仓库根目录的 `main_ui_node_desktop.js` / `run.bat` 默认按开发入口启动，会自动注入 `dev_auto_bundle`
+- `npm run ui:desktop` 适合直接调 Electron，本地如需走正式登录流可显式设置 `CLIENT_AUTH_MODE=prod_login`
+
 release / 安装包说明：
 
 - packaged 客户端默认走 `prod_login`

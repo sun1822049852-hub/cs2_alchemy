@@ -29,8 +29,9 @@ node main_ui_node_desktop.js
 
 说明：
 
-- release 桌面入口默认走 `prod_login`
-- dev 自动签发授权只保留给显式 dev 启动链
+- 仓库根目录桌面入口默认走 `dev_auto_bundle`，便于开发时直接进入已授权工作台
+- 如需验证正式登录流，可显式设置 `CLIENT_AUTH_MODE=prod_login`
+- packaged 客户端仍固定走 `prod_login`，不会继承本地开发直通态
 - 新注册用户默认开放账号、库存、刷新与汰换模拟
 - 真实炼金执行仍需要控制台单独下发 `craft.use`
 
