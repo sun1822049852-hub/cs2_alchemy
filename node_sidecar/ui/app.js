@@ -80,6 +80,9 @@ const ui = {
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
   loginSaveBtn: document.getElementById("loginSaveBtn"), clearAccountBtn: document.getElementById("clearAccountBtn"), accountStatus: document.getElementById("accountStatus"), savedAccountsWrap: document.getElementById("savedAccountsWrap"),
+  accountPageSummaryText: document.getElementById("accountPageSummaryText"), accountPageFetchTimeText: document.getElementById("accountPageFetchTimeText"), accountPageStatusText: document.getElementById("accountPageStatusText"),
+  accountPageSelect: document.getElementById("accountPageSelect"), accountPageAddBtn: document.getElementById("accountPageAddBtn"), accountPageRefreshBtn: document.getElementById("accountPageRefreshBtn"), accountPageDisconnectBtn: document.getElementById("accountPageDisconnectBtn"),
+  accountLoginModal: document.getElementById("accountLoginModal"), accountLoginModalClose: document.getElementById("accountLoginModalClose"),
   fetchTimeText: document.getElementById("fetchTimeText"), statusText: document.getElementById("statusText"),
   accountSelect: document.getElementById("accountSelect"), refreshBtn: document.getElementById("refreshBtn"), disconnectBtn: document.getElementById("disconnectBtn"), summaryText: document.getElementById("summaryText"),
   craftTopFetchTimeText: document.getElementById("craftTopFetchTimeText"), craftTopStatusText: document.getElementById("craftTopStatusText"),
@@ -2459,9 +2462,26 @@ function setConnectionStatusTone(el, connected) {
   el.classList.toggle("status-disconnected", !isConnected);
 }
 
+function syncAccountPageSummary() {
+  if (!ui.accountPageSummaryText) return;
+  if (isGuestWorkspaceActive()) {
+    ui.accountPageSummaryText.textContent = "访客预览态：登录后可管理真实账号";
+    return;
+  }
+  const count = Array.isArray(state.accounts) ? state.accounts.length : 0;
+  if (!count) {
+    ui.accountPageSummaryText.textContent = "尚未保存账号";
+    return;
+  }
+  const current = accountByUsername(state.accountSelectedUsername || state.currentAccountUsername || state.activeAccount);
+  const currentLabel = current ? (displayAccountName(current) || current.username) : "未选择账号";
+  ui.accountPageSummaryText.textContent = `已保存 ${count} 个账号 · 当前：${currentLabel}`;
+}
+
 function syncInventoryTop() {
-  const applyTop = (fetchEl, statusEl, refreshBtn, disconnectBtn) => {
+  const applyTop = (fetchEl, statusEl, refreshBtn, disconnectBtn, currentUsername = state.currentAccountUsername) => {
     if (!fetchEl || !statusEl || !refreshBtn) return;
+    const current = String(currentUsername || "").trim();
     if (isGuestWorkspaceActive()) {
       fetchEl.textContent = "库存获取时间：-";
       statusEl.textContent = "未登录";
@@ -2472,7 +2492,7 @@ function syncInventoryTop() {
       if (disconnectBtn) disconnectBtn.disabled = false;
       return;
     }
-    if (!state.currentAccountUsername) {
+    if (!current) {
       fetchEl.textContent = "库存获取时间：-";
       statusEl.textContent = "未连接";
       setConnectionStatusTone(statusEl, false);
@@ -2482,26 +2502,32 @@ function syncInventoryTop() {
       if (disconnectBtn) disconnectBtn.disabled = true;
       return;
     }
-    fetchEl.textContent = `库存获取时间：${state.fetchTime || "-"}`;
-    if (state.refreshPhaseText) statusEl.textContent = normalizeTopStatusText(state.refreshPhaseText, false);
-    else if (isCurrentAccountConnected()) statusEl.textContent = "已连接";
+    const isCurrentSnapshot = current === String(state.currentAccountUsername || "").trim();
+    fetchEl.textContent = `库存获取时间：${isCurrentSnapshot ? (state.fetchTime || "-") : "-"}`;
+    if (isCurrentSnapshot && state.refreshPhaseText) statusEl.textContent = normalizeTopStatusText(state.refreshPhaseText, false);
+    else if (String(state.connectedUsername || "").trim() === current) statusEl.textContent = "已连接";
     else statusEl.textContent = "未连接";
-    const connected = isCurrentAccountConnected() || isConnectedPhaseText(state.refreshPhaseText);
+    const connected = String(state.connectedUsername || "").trim() === current || (isCurrentSnapshot && isConnectedPhaseText(state.refreshPhaseText));
     setConnectionStatusTone(statusEl, connected);
     const clickable = !state.refreshing && !connected;
     statusEl.classList.toggle("status-clickable", clickable);
     statusEl.title = clickable ? "点击连接并刷新库存" : "";
-    refreshBtn.textContent = isCurrentAccountConnected() ? "刷新库存信息" : "连接并刷新库存信息";
-    if (disconnectBtn) disconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
+    refreshBtn.textContent = connected ? "刷新库存信息" : "连接并刷新库存信息";
+    if (disconnectBtn) disconnectBtn.disabled = state.refreshing || !connected;
   };
 
+  const accountPageKey = String((ui.accountPageSelect && ui.accountPageSelect.value) || "").trim();
   if (!state.currentAccountUsername) {
+    applyTop(ui.accountPageFetchTimeText, ui.accountPageStatusText, ui.accountPageRefreshBtn, ui.accountPageDisconnectBtn, accountPageKey);
     applyTop(ui.fetchTimeText, ui.statusText, ui.refreshBtn, ui.disconnectBtn);
     applyTop(ui.craftTopFetchTimeText, ui.craftTopStatusText, ui.craftRefreshBtn, ui.craftDisconnectBtn);
+    syncAccountPageSummary();
     return;
   }
+  applyTop(ui.accountPageFetchTimeText, ui.accountPageStatusText, ui.accountPageRefreshBtn, ui.accountPageDisconnectBtn, accountPageKey);
   applyTop(ui.fetchTimeText, ui.statusText, ui.refreshBtn, ui.disconnectBtn);
   applyTop(ui.craftTopFetchTimeText, ui.craftTopStatusText, ui.craftRefreshBtn, ui.craftDisconnectBtn);
+  syncAccountPageSummary();
 }
 
 function setAccountForm({username = "", password = "", totp = "", remark = ""} = {}) {
@@ -2551,9 +2577,21 @@ function ensureAccountFormEditable({focusUsername = false} = {}) {
     field.disabled = false;
     field.readOnly = false;
   }
-  if (focusUsername && ui.accountUsername && typeof ui.accountUsername.focus === "function") {
+  const modalVisible = !ui.accountLoginModal || !ui.accountLoginModal.classList.contains("hidden");
+  if (focusUsername && modalVisible && ui.accountUsername && typeof ui.accountUsername.focus === "function") {
     ui.accountUsername.focus();
   }
+}
+
+function openAccountLoginModal() {
+  if (!ui.accountLoginModal) return;
+  ui.accountLoginModal.classList.remove("hidden");
+  ensureAccountFormEditable({focusUsername: true});
+}
+
+function closeAccountLoginModal() {
+  if (!ui.accountLoginModal) return;
+  ui.accountLoginModal.classList.add("hidden");
 }
 
 function syncAccountFormBySelection() {
@@ -2597,7 +2635,7 @@ function setNavDrawerOpen(open) {
 }
 
 function syncInventoryAccountSelect() {
-  const selects = [ui.accountSelect, ui.craftAccountSelect].filter(Boolean);
+  const selects = [ui.accountPageSelect, ui.accountSelect, ui.craftAccountSelect].filter(Boolean);
   if (isGuestWorkspaceActive()) {
     for (const selectEl of selects) {
       selectEl.replaceChildren();
@@ -2612,10 +2650,20 @@ function syncInventoryAccountSelect() {
     if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = false;
     if (ui.disconnectBtn) ui.disconnectBtn.disabled = false;
     if (ui.craftDisconnectBtn) ui.craftDisconnectBtn.disabled = false;
+    if (ui.accountPageRefreshBtn) ui.accountPageRefreshBtn.disabled = false;
+    if (ui.accountPageDisconnectBtn) ui.accountPageDisconnectBtn.disabled = false;
+    syncAccountPageSummary();
+    syncInventoryTop();
     return;
   }
   for (const selectEl of selects) {
     selectEl.replaceChildren();
+    if (selectEl === ui.accountPageSelect) {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "选择账号";
+      selectEl.append(placeholder);
+    }
     for (const row of state.accounts) {
       const o = document.createElement("option");
       o.value = row.username;
@@ -2623,14 +2671,20 @@ function syncInventoryAccountSelect() {
       selectEl.append(o);
     }
     if (state.accountSelectedUsername) selectEl.value = state.accountSelectedUsername;
-    else if (state.activeAccount) selectEl.value = state.activeAccount;
+    else if (selectEl !== ui.accountPageSelect && state.activeAccount) selectEl.value = state.activeAccount;
+    else selectEl.value = "";
   }
   const hasAccount = state.accounts.length > 0;
   ui.refreshBtn.disabled = !hasAccount || state.refreshing;
   if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = !hasAccount || state.refreshing;
+  if (ui.accountPageRefreshBtn) ui.accountPageRefreshBtn.disabled = !hasAccount || state.refreshing;
+  if (ui.accountPageDisconnectBtn) ui.accountPageDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
+  syncAccountPageSummary();
+  syncInventoryTop();
 }
 function renderSavedAccounts() {
   ui.savedAccountsWrap.replaceChildren();
+  syncAccountPageSummary();
   if (isGuestWorkspaceActive()) {
     const cards = guestPreviewProvider && typeof guestPreviewProvider.getGuestAccountCards === "function"
       ? guestPreviewProvider.getGuestAccountCards()
@@ -2655,20 +2709,20 @@ function renderSavedAccounts() {
       avatar.append(fallback);
       const info = document.createElement("div");
       info.className = "account-card-info";
-      const titleRow = document.createElement("div");
-      titleRow.className = "account-card-title-row";
       const title = document.createElement("div");
       title.className = "account-card-title";
       title.textContent = String(row && (row.remark || row.username) || "示例账号").trim();
-      const badge = document.createElement("span");
-      badge.className = "account-card-state status status-disconnected";
-      badge.textContent = String(row && row.status || "示例").trim() || "示例";
       const sub = document.createElement("div");
       sub.className = "account-card-sub";
       sub.textContent = `账号：${String(row && row.username || "").trim() || "-"}`;
       const note = document.createElement("div");
       note.className = "account-card-sub";
       note.textContent = String(row && row.note || "").trim() || "登录后可保存真实 Steam 账号。";
+      const side = document.createElement("div");
+      side.className = "account-card-side";
+      const badge = document.createElement("span");
+      badge.className = "account-card-state status status-disconnected";
+      badge.textContent = String(row && row.status || "示例").trim() || "示例";
       const actions = document.createElement("div");
       actions.className = "account-card-actions";
       const loginBtn = document.createElement("button");
@@ -2682,9 +2736,9 @@ function renderSavedAccounts() {
         });
       };
       actions.append(loginBtn);
-      titleRow.append(title, badge);
-      info.append(titleRow, sub, note, actions);
-      main.append(avatar, info);
+      info.append(title, sub, note, actions);
+      side.append(badge);
+      main.append(avatar, info, side);
       card.append(main);
       card.onclick = () => {
         openClientAuthModal({
@@ -2740,11 +2794,11 @@ function renderSavedAccounts() {
     }
     const info = document.createElement("div");
     info.className = "account-card-info";
-    const titleRow = document.createElement("div");
-    titleRow.className = "account-card-title-row";
     const title = document.createElement("div");
     title.className = "account-card-title";
     title.textContent = displayName;
+    const side = document.createElement("div");
+    side.className = "account-card-side";
     const stateBadge = document.createElement("span");
     stateBadge.className = `account-card-state status ${connected ? "status-connected" : "status-disconnected"}`;
     stateBadge.textContent = connected ? "已连接" : "未连接";
@@ -2761,6 +2815,7 @@ function renderSavedAccounts() {
         }
       };
     }
+    side.append(stateBadge);
     const actions = document.createElement("div");
     actions.className = "account-card-actions";
 
@@ -2791,7 +2846,6 @@ function renderSavedAccounts() {
     delBtn.onclick = async (e) => { e.stopPropagation(); await deleteAccount(row); };
 
     actions.append(remarkBtn, delBtn);
-    titleRow.append(title, stateBadge);
     const sub = document.createElement("div");
     sub.className = "account-card-sub";
     sub.textContent = `账号：${accountName || "-"}`;
@@ -2800,10 +2854,11 @@ function renderSavedAccounts() {
       syncInventoryAccountSelect();
       syncAccountFormBySelection();
       setAccountStatus(`已选中账号：${displayAccountName(row) || row.username}`);
+      syncAccountPageSummary();
       renderSavedAccounts();
     };
-    info.append(titleRow, sub, actions);
-    main.append(avatar, info);
+    info.append(title, sub, actions);
+    main.append(avatar, info, side);
     card.append(main);
     ui.savedAccountsWrap.append(card);
   }
@@ -3052,7 +3107,7 @@ async function loginAndSave() {
   const username = String(ui.accountUsername.value || "").trim();
   const password = String(ui.accountPassword.value || "").trim();
   const totp = normalizeAccountTotpInput();
-  const remark = String(ui.accountRemark.value || "").trim();
+  const remark = "";
   if (!username) { setAccountStatus("请输入 Steam 账号", true); return; }
   if (!password) { setAccountStatus("请输入密码", true); return; }
   if (!totp) { setAccountStatus("请输入令牌码", true); return; }
@@ -3064,7 +3119,8 @@ async function loginAndSave() {
     await loadAccounts({preferUsername: username});
     await switchAccountView(username, {silentSnapshotSummary: true});
     await doRefresh({usernameOverride: username, force: true, silentRateLimit: true, silentInfo: true});
-    clearAccountInputs({focusUsername: state.currentPage === "accountPage"});
+    clearAccountInputs();
+    closeAccountLoginModal();
     setAccountStatus("准备就绪");
   } catch (err) {
     setAccountStatus(formatLoginSaveError(err), true);
@@ -3074,16 +3130,29 @@ async function loginAndSave() {
 }
 
 function clearAccountForm() {
-  state.accountSelectedUsername = "";
   clearAccountInputs();
-  setAccountStatus("输入已清空");
-  renderSavedAccounts();
+  closeAccountLoginModal();
+  setAccountStatus("");
 }
 
-async function connectByStatusBadge({preferCraft = false} = {}) {
+function openAddAccountForm() {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可保存 Steam 账号并管理账号列表。",
+    view: "login"
+  }) === false) {
+    return;
+  }
+  clearAccountInputs({focusUsername: true});
+  setAccountStatus("");
+  openAccountLoginModal();
+}
+
+async function connectByStatusBadge({preferCraft = false, usernameOverride = ""} = {}) {
   if (state.refreshing) return;
   const username = String(
+    usernameOverride ||
     (preferCraft && ui.craftAccountSelect ? ui.craftAccountSelect.value : "") ||
+    (ui.accountPageSelect ? ui.accountPageSelect.value : "") ||
     (ui.accountSelect ? ui.accountSelect.value : "") ||
     (ui.craftAccountSelect ? ui.craftAccountSelect.value : "") ||
     state.currentAccountUsername
@@ -4744,7 +4813,7 @@ async function refreshWithConnectionOverlay({
     usernameOverride ||
     (preferCraft
       ? ((ui.craftAccountSelect && ui.craftAccountSelect.value) || (ui.accountSelect && ui.accountSelect.value))
-      : ((ui.accountSelect && ui.accountSelect.value) || (ui.craftAccountSelect && ui.craftAccountSelect.value))) ||
+      : ((ui.accountPageSelect && ui.accountPageSelect.value) || (ui.accountSelect && ui.accountSelect.value) || (ui.craftAccountSelect && ui.craftAccountSelect.value))) ||
     state.currentAccountUsername ||
     ""
   ).trim();
@@ -12118,6 +12187,7 @@ async function disconnectCurrentSession({usernameOverride = ""} = {}) {
   const username = String(
     usernameOverride ||
     state.currentAccountUsername ||
+    (ui.accountPageSelect && ui.accountPageSelect.value) ||
     (ui.accountSelect && ui.accountSelect.value) ||
     (ui.craftAccountSelect && ui.craftAccountSelect.value) ||
     state.connectedUsername
@@ -12179,8 +12249,11 @@ function setRefreshBusy(busy) {
   const disabled = state.refreshing || state.accounts.length <= 0;
   ui.refreshBtn.disabled = disabled;
   if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = disabled;
+  if (ui.accountPageRefreshBtn) ui.accountPageRefreshBtn.disabled = disabled;
   if (ui.disconnectBtn) ui.disconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   if (ui.craftDisconnectBtn) ui.craftDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
+  if (ui.accountPageDisconnectBtn) ui.accountPageDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
+  if (ui.accountPageAddBtn) ui.accountPageAddBtn.disabled = state.refreshing;
   ui.loginSaveBtn.disabled = state.refreshing;
   syncComponentActionState();
   renderSavedAccounts();
@@ -12197,7 +12270,14 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
       // ignore progress callback errors
     }
   };
-  const username = String(usernameOverride || ui.accountSelect.value || (ui.craftAccountSelect && ui.craftAccountSelect.value) || state.currentAccountUsername || "").trim();
+  const username = String(
+    usernameOverride ||
+    (ui.accountPageSelect && ui.accountPageSelect.value) ||
+    ui.accountSelect.value ||
+    (ui.craftAccountSelect && ui.craftAccountSelect.value) ||
+    state.currentAccountUsername ||
+    ""
+  ).trim();
   if (!username) {
     const message = "请选用一个账号";
     setSummary(message);
@@ -12824,7 +12904,52 @@ function bindEvents() {
   ui.loginSaveBtn.onclick = loginAndSave;
   ui.clearAccountBtn.onclick = clearAccountForm;
   bindAccountTotpNormalization();
+  if (ui.accountLoginModalClose) {
+    ui.accountLoginModalClose.onclick = () => {
+      clearAccountForm();
+    };
+  }
+  if (ui.accountPassword) {
+    ui.accountPassword.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      void loginAndSave();
+    };
+  }
+  if (ui.accountTotp) {
+    ui.accountTotp.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter") {
+        evt.preventDefault();
+        void loginAndSave();
+        return;
+      }
+      if (evt.key === "Escape") {
+        evt.preventDefault();
+        clearAccountForm();
+      }
+    });
+  }
+  if (ui.accountLoginModal) {
+    ui.accountLoginModal.addEventListener("click", (evt) => {
+      if (evt.target === ui.accountLoginModal) {
+        clearAccountForm();
+      }
+    });
+    ui.accountLoginModal.addEventListener("keydown", (evt) => {
+      if (evt.key !== "Escape") return;
+      evt.preventDefault();
+      clearAccountForm();
+    });
+  }
 
+  if (ui.accountPageSelect) {
+    ui.accountPageSelect.onchange = async () => {
+      const username = String(ui.accountPageSelect.value || "").trim();
+      if (!username) return;
+      try { await switchAccountView(username); }
+      catch (err) { setAccountStatus(`切换账号视图失败：${err.message}`, true); }
+    };
+  }
   ui.accountSelect.onchange = async () => {
     const username = String(ui.accountSelect.value || "").trim();
     if (!username) return;
@@ -12840,6 +12965,32 @@ function bindEvents() {
     };
   }
 
+  if (ui.accountPageAddBtn) {
+    ui.accountPageAddBtn.onclick = () => {
+      openAddAccountForm();
+    };
+  }
+  if (ui.accountPageRefreshBtn) {
+    ui.accountPageRefreshBtn.onclick = () => void refreshWithConnectionOverlay({
+      preferCraft: false,
+      usernameOverride: String((ui.accountPageSelect && ui.accountPageSelect.value) || "").trim(),
+      force: false
+    });
+  }
+  if (ui.accountPageStatusText) {
+    ui.accountPageStatusText.onclick = () => {
+      if (!ui.accountPageStatusText.classList.contains("status-clickable")) return;
+      void connectByStatusBadge({
+        preferCraft: false,
+        usernameOverride: String((ui.accountPageSelect && ui.accountPageSelect.value) || "").trim()
+      });
+    };
+  }
+  if (ui.accountPageDisconnectBtn) {
+    ui.accountPageDisconnectBtn.onclick = () => disconnectCurrentSession({
+      usernameOverride: String((ui.accountPageSelect && ui.accountPageSelect.value) || "").trim()
+    });
+  }
   ui.refreshBtn.onclick = () => void refreshWithConnectionOverlay({preferCraft: false, force: false});
   if (ui.statusText) {
     ui.statusText.onclick = () => {

@@ -129,32 +129,33 @@
           </div>
         </section>
         <section class="page" id="accountPage">
+          <header class="topbar account-page-topbar">
+            <div class="account-page-topbar-copy">
+              <h1>账号管理</h1>
+              <div class="account-page-topbar-meta">
+                <span id="accountPageSummaryText">尚未保存账号</span>
+                <span id="accountPageFetchTimeText">库存获取时间：-</span>
+              </div>
+            </div>
+            <div class="account-tools account-page-tools">
+              <label for="accountPageSelect">账号</label>
+              <select id="accountPageSelect"></select>
+              <span class="status status-disconnected" id="accountPageStatusText">未连接</span>
+              <button id="accountPageRefreshBtn" type="button">连接并刷新库存信息</button>
+              <button id="accountPageDisconnectBtn" type="button">断开连接</button>
+            </div>
+          </header>
           <div class="account-grid">
-            <section class="panel account-form-panel">
-              <div class="form-row">
-                <label for="accountUsername">Steam 账号</label>
-                <input id="accountUsername" type="text" autocomplete="off" autocorrect="off" spellcheck="false" />
-              </div>
-              <div class="form-row">
-                <label for="accountPassword">密码</label>
-                <input id="accountPassword" type="password" autocomplete="new-password" />
-              </div>
-              <div class="form-row">
-                <label for="accountTotp">令牌码</label>
-                <input id="accountTotp" type="text" maxlength="6" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" />
-              </div>
-              <div class="form-row">
-                <label for="accountRemark">备注名</label>
-                <input id="accountRemark" type="text" autocomplete="off" autocorrect="off" spellcheck="false" />
-              </div>
-              <div class="account-actions">
-                <button id="loginSaveBtn">登录并保存</button>
-                <button id="clearAccountBtn">清空输入</button>
-              </div>
-              <div id="accountStatus" class="status-text"></div>
-            </section>
-
             <section class="panel account-list-panel">
+              <div class="account-panel-head">
+                <div>
+                  <h2>账号列表</h2>
+                  <p>点击卡片即可切换当前工作账号，右侧状态区可直接触发连接。</p>
+                </div>
+                <div class="account-list-head-actions">
+                  <button id="accountPageAddBtn" type="button">添加账号</button>
+                </div>
+              </div>
               <div id="savedAccountsWrap" class="saved-accounts"></div>
             </section>
           </div>
@@ -304,6 +305,40 @@
             <div class="row modal-actions">
               <button id="confirmModalCancelBtn" type="button">取消</button>
               <button id="confirmModalConfirmBtn" class="confirm-modal-confirm-btn" type="button">确认</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="accountLoginModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="accountLoginModalTitle">
+          <div class="modal-card account-login-modal-card">
+            <div class="modal-header account-login-brand">
+              <div class="account-login-brand-copy">
+                <div class="account-login-wordmark">STEAM</div>
+                <h3 id="accountLoginModalTitle">添加账号</h3>
+              </div>
+            </div>
+            <div class="account-login-body">
+              <div class="account-login-linkhint">使用 Steam 账号登录并保存到当前客户端</div>
+              <div class="account-login-fields">
+                <label class="account-login-field">
+                  <span>Steam 账号</span>
+                  <input id="accountUsername" type="text" autocomplete="off" autocorrect="off" spellcheck="false" />
+                </label>
+                <label class="account-login-field">
+                  <span>密码</span>
+                  <input id="accountPassword" type="password" autocomplete="new-password" />
+                </label>
+                <label class="account-login-field">
+                  <span>令牌码</span>
+                  <input id="accountTotp" type="text" maxlength="6" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" />
+                </label>
+              </div>
+              <input id="accountRemark" type="hidden" value="" />
+              <div class="account-login-actions">
+                <button id="loginSaveBtn" type="button">登录并保存</button>
+                <button id="clearAccountBtn" type="button">取消</button>
+              </div>
+              <div id="accountStatus" class="account-login-status status-text" aria-live="polite"></div>
             </div>
           </div>
         </div>

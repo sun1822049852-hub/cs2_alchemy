@@ -1354,17 +1354,62 @@ select.small {
   color: var(--muted);
 }
 
-.account-grid {
-  display: grid;
-  grid-template-columns: minmax(460px, 2fr) minmax(360px, 1fr);
-  gap: 10px;
+.account-page-topbar {
+  margin-bottom: 12px;
 }
 
-.account-form-panel h2,
-.account-list-panel h2 {
-  margin: 0 0 12px;
-  font-size: 20px;
+.account-page-topbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.account-page-topbar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.account-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.account-panel-head h2 {
+  margin: 0;
+  font-size: 21px;
   color: #1d3557;
+}
+
+.account-panel-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #57606a;
+}
+
+.account-list-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.account-form-shell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .form-row {
@@ -1378,6 +1423,30 @@ select.small {
 .form-row input {
   width: 100%;
   min-width: 0;
+}
+
+.account-input-card {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.account-input-card label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-form-footer {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 14px;
 }
 
 #accountTotp {
@@ -1418,16 +1487,20 @@ select.small {
 }
 
 .saved-accounts {
-  max-height: calc(100vh - 170px);
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  align-content: start;
+  max-height: calc(100vh - 230px);
   overflow: auto;
-  padding-right: 4px;
+  padding: 2px 4px 6px 2px;
 }
 
 .account-card {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
-  margin-bottom: 8px;
+  min-height: 156px;
   background: #fff;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
@@ -1439,9 +1512,11 @@ select.small {
 }
 
 .account-card-main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 100%;
 }
 
 .account-card-avatar {
@@ -1475,7 +1550,8 @@ select.small {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  align-self: stretch;
 }
 
 .account-card.connected {
@@ -1488,11 +1564,11 @@ select.small {
   box-shadow: 0 0 0 2px rgba(119, 163, 216, 0.18);
 }
 
-.account-card-title-row {
+.account-card-side {
+  min-width: 0;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
+  justify-content: flex-end;
+  align-items: flex-start;
 }
 
 .account-card-state {
@@ -1522,13 +1598,121 @@ select.small {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .account-card-actions button {
   height: 28px;
   padding: 0 8px;
   font-size: 12px;
+}
+
+.account-login-modal-card {
+  width: min(100%, 360px);
+  display: grid;
+  grid-template-rows: auto;
+  gap: 18px;
+  padding: 18px 18px 16px;
+  border: 0;
+  border-radius: 12px;
+}
+
+.account-login-brand {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 0;
+  padding: 0;
+}
+
+.account-login-brand-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-login-wordmark {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.account-login-modal-card .modal-header h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-login-body {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.account-login-linkhint {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.account-login-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.account-login-field {
+  display: grid;
+  gap: 8px;
+}
+
+.account-login-field > span {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-login-field input {
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 3px;
+}
+
+.account-login-modal-card input {
+  min-width: 0;
+}
+
+.account-login-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.account-login-actions #loginSaveBtn {
+  width: 100%;
+  height: 46px;
+}
+
+.account-login-actions #clearAccountBtn {
+  width: 100%;
+  height: 34px;
+}
+
+.account-login-status {
+  min-height: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.account-login-status:empty {
+  display: none;
 }
 
 .btn-danger {
@@ -5647,6 +5831,15 @@ select.small {
   padding: 12px;
 }
 
+.modal-card.account-login-modal-card {
+  width: min(360px, calc(100vw - 40px));
+  max-height: none;
+  grid-template-rows: auto auto;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+}
+
 .remark-modal-card {
   width: min(520px, calc(100vw - 40px));
   max-height: none;
@@ -6060,6 +6253,8 @@ body {
   background:
     radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.84) 0%, rgba(255, 255, 255, 0) 52%),
     linear-gradient(180deg, #f8fbff 0%, #eef3fa 100%);
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .layout {
@@ -6159,6 +6354,13 @@ input,
 select,
 textarea {
   background: #fdfeff;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 input:focus,
@@ -6339,6 +6541,11 @@ button:active {
   grid-template-columns: 100px 1fr;
 }
 
+.form-row.account-login-row {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
 .account-actions button {
   height: 32px;
   font-weight: 600;
@@ -6464,6 +6671,15 @@ button:active {
     gap: 6px;
   }
 
+  .account-form-shell,
+  .account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-form-footer {
+    grid-template-columns: 1fr;
+  }
+
   .account-actions {
     flex-wrap: wrap;
   }
@@ -6472,8 +6688,49 @@ button:active {
     flex: 1 1 calc(50% - 6px);
   }
 
+  .account-card-main {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .account-card-side {
+    grid-column: 2;
+    justify-content: flex-start;
+    padding-left: 0;
+    border-left: 0;
+  }
+
   .saved-accounts {
     max-height: none;
+  }
+}
+
+@media (max-width: 1680px) {
+  .saved-accounts {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1460px) {
+  .saved-accounts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1220px) {
+  .saved-accounts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .saved-accounts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .saved-accounts {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -6728,6 +6985,10 @@ body.theme-inkblue .account-tools select:focus {
 }
 
 body.theme-inkblue .account-tools .status.status-connected,
+body.theme-inkblue .account-card-state.status.status-connected {
+  color: #c8ffe3;
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(22, 163, 74, 0.16);
 }
 
 body.theme-inkblue .account-tools .status.status-disconnected,
@@ -6827,6 +7088,27 @@ body.theme-inkblue #accountPage {
   border-radius: 20px;
 }
 
+body.theme-inkblue #accountPage .account-page-topbar {
+  border-color: var(--account-border-soft);
+  background:
+    radial-gradient(circle at top right, rgba(243, 199, 121, 0.14), transparent 28%),
+    var(--account-surface-main);
+  box-shadow: var(--account-shadow-panel);
+}
+
+body.theme-inkblue #accountPage .account-page-topbar-meta,
+body.theme-inkblue #accountPage .account-panel-head p {
+  color: var(--account-text-dim);
+}
+
+body.theme-inkblue #accountPage .account-page-tools {
+  margin-left: auto;
+}
+
+body.theme-inkblue #accountPage .account-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 body.theme-inkblue #accountPage .account-form-panel,
 body.theme-inkblue #accountPage .account-list-panel {
   background: var(--account-surface-main);
@@ -6834,6 +7116,10 @@ body.theme-inkblue #accountPage .account-list-panel {
   border-radius: 18px;
   color: var(--account-text-main);
   box-shadow: var(--account-shadow-panel);
+}
+
+body.theme-inkblue #accountPage .account-list-head-actions {
+  margin-left: auto;
 }
 
 body.theme-inkblue #accountPage .tips,
@@ -6909,6 +7195,19 @@ body.theme-inkblue #accountPage #loginSaveBtn {
   color: var(--account-accent-foreground);
 }
 
+body.theme-inkblue #accountPage #accountPageRefreshBtn {
+  background: linear-gradient(135deg, #f3c779, #dca44c);
+  border-color: rgba(220, 164, 76, 0.45);
+  color: var(--account-accent-foreground);
+}
+
+body.theme-inkblue #accountPage #accountPageAddBtn,
+body.theme-inkblue #accountPage #accountPageDisconnectBtn {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--account-border-soft);
+  color: var(--account-text-main);
+}
+
 body.theme-inkblue #accountPage #clearAccountBtn,
 body.theme-inkblue #accountPage .account-card-actions button {
   background: rgba(255, 255, 255, 0.03);
@@ -6927,7 +7226,14 @@ body.theme-inkblue #accountPage #loginSaveBtn:hover:not(:disabled) {
   background: linear-gradient(135deg, #efc56f, #dc9c3f);
 }
 
+body.theme-inkblue #accountPage #accountPageRefreshBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f6cd83, #dfaa54);
+}
+
 body.theme-inkblue #accountPage #loginSaveBtn:active,
+body.theme-inkblue #accountPage #accountPageAddBtn:active,
+body.theme-inkblue #accountPage #accountPageRefreshBtn:active,
+body.theme-inkblue #accountPage #accountPageDisconnectBtn:active,
 body.theme-inkblue #accountPage #clearAccountBtn:active,
 body.theme-inkblue #accountPage .account-card-actions button:active {
   transform: translateY(1px);
@@ -6944,8 +7250,13 @@ body.theme-inkblue #accountPage .account-card {
   background: var(--account-surface-main);
   border-color: var(--account-border-soft);
   border-radius: 16px;
-  box-shadow: none;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
   color: var(--account-text-main);
+}
+
+body.theme-inkblue #accountPage .account-card-main {
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 14px;
 }
 
 body.theme-inkblue #accountPage .account-card:hover {
@@ -6982,6 +7293,91 @@ body.theme-inkblue #accountPage .account-card-state.status {
   border-color: var(--account-border-soft);
   background: rgba(255, 255, 255, 0.04);
   color: var(--account-text-soft);
+}
+
+body.theme-inkblue #accountPage .account-card-side {
+  min-width: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+body.theme-inkblue .account-login-modal-card {
+  background:
+    radial-gradient(circle at top left, rgba(243, 199, 121, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(31, 33, 39, 0.98), rgba(25, 27, 33, 0.98));
+  color: var(--account-text-main);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
+}
+
+body.theme-inkblue .account-login-wordmark {
+  color: #f7f1e2;
+}
+
+body.theme-inkblue .account-login-modal-card .modal-header h3 {
+  color: #b69052;
+}
+
+body.theme-inkblue .account-login-linkhint {
+  color: #d4a24b;
+}
+
+body.theme-inkblue .account-login-body {
+  background: transparent;
+}
+
+body.theme-inkblue .account-login-field {
+  gap: 8px;
+}
+
+body.theme-inkblue .account-login-field > span,
+body.theme-inkblue .account-login-modal-card .status-text {
+  color: #efe0c2;
+}
+
+body.theme-inkblue .account-login-field input {
+  background: linear-gradient(180deg, rgba(68, 71, 82, 0.92), rgba(58, 60, 70, 0.96));
+  border-color: rgba(208, 162, 84, 0.16);
+  color: #fff7ea;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+body.theme-inkblue .account-login-modal-card input {
+  color: var(--account-text-main);
+}
+
+body.theme-inkblue .account-login-status {
+  padding-top: 2px;
+  border-top: 0;
+  color: var(--account-text-dim);
+}
+
+body.theme-inkblue .account-login-status.error {
+  color: var(--account-danger-text);
+}
+
+body.theme-inkblue .account-login-modal-card :is(input, button):focus-visible {
+  outline: var(--account-focus-outline);
+  outline-offset: var(--account-focus-outline-offset);
+  box-shadow: var(--account-focus-halo);
+}
+
+body.theme-inkblue .account-login-modal-card .modal-close {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(208, 162, 84, 0.12);
+  color: var(--account-text-main);
+}
+
+body.theme-inkblue .account-login-modal-card #loginSaveBtn {
+  background: linear-gradient(135deg, #d09a3c, #f0c97a);
+  border-color: rgba(220, 164, 76, 0.5);
+  color: #24180a;
+  font-weight: 700;
+}
+
+body.theme-inkblue .account-login-modal-card #clearAccountBtn {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(208, 162, 84, 0.14);
+  color: #c7b089;
 }
 
 body.theme-inkblue #accountPage .account-card-state.status.status-connected {
