@@ -5,8 +5,8 @@
       "fetch_time": "2026-04-06 20:00:57"
     },
     "1822049852": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260407_122845.json",
-      "fetch_time": "2026-04-07 12:28:45"
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260407_183944.json",
+      "fetch_time": "2026-04-07 18:39:44"
     },
     "countsteam01": {
       "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260405_181754.json",
@@ -17,8 +17,8 @@
       "fetch_time": "2026-04-05 18:12:38"
     },
     "19174601720": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260406_205758.json",
-      "fetch_time": "2026-04-06 20:57:58"
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260407_163425.json",
+      "fetch_time": "2026-04-07 16:34:25"
     },
     "countsteam002": {
       "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260405_181457.json",
@@ -2163,7 +2163,7 @@
           "updated_at": 1775487891648
         }
       ],
-      "last_selected_username": "1822049852"
+      "last_selected_username": "wy19174601720"
     },
     "__global__": {
       "craft_assist_presets": [],

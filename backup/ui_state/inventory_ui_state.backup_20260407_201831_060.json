@@ -5,8 +5,8 @@
       "fetch_time": "2026-04-06 20:00:57"
     },
     "1822049852": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260407_161659.json",
-      "fetch_time": "2026-04-07 16:16:59"
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260407_183944.json",
+      "fetch_time": "2026-04-07 18:39:44"
     },
     "countsteam01": {
       "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260405_181754.json",
@@ -2163,12 +2163,12 @@
           "updated_at": 1775487891648
         }
       ],
-      "last_selected_username": "19174601720"
+      "last_selected_username": "countsteam04"
     },
     "__global__": {
       "craft_assist_presets": [],
       "tradeup_simulation_presets": [],
-      "last_selected_username": "19174601720"
+      "last_selected_username": "1822049852"
     }
   }
 }
