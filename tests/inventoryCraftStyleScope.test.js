@@ -39,6 +39,8 @@ const cssFragments = [
   "body.theme-inkblue :is(#inventoryPage, #craftPage) :is(.group-table th, .group-table td, .craft-selection-table th, .craft-selection-table td, .deposit-table th, .deposit-table td, .deposit-excluded-table th, .deposit-excluded-table td) {",
   "body.theme-inkblue #inventoryPage .component-available-badge,",
   "body.theme-inkblue #inventoryPage .card.selected,",
+  "body.theme-inkblue #inventoryPage .group-parent.selected,",
+  "body.theme-inkblue #inventoryPage .group-child.selected {",
   "body.theme-inkblue #craftPage #craftLayout > .panel,",
   "body.theme-inkblue #craftPage .craft-selection-list,",
   "body.theme-inkblue :is(#inventoryPage, #craftPage) .row-check {",

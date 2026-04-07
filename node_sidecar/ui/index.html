@@ -326,7 +326,12 @@
                 </label>
                 <label class="account-login-field">
                   <span>密码</span>
-                  <input id="accountPassword" type="password" autocomplete="new-password" />
+                  <div class="account-password-field-wrap">
+                    <input id="accountPassword" type="password" autocomplete="new-password" />
+                    <button id="accountPasswordToggle" class="account-password-toggle" type="button" aria-label="显示密码" aria-pressed="false">
+                      <span class="account-password-toggle-icon" aria-hidden="true"></span>
+                    </button>
+                  </div>
                 </label>
                 <label class="account-login-field">
                   <span>令牌码</span>

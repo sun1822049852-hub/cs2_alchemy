@@ -24,6 +24,7 @@ const WEAR_SUFFIX_RANGES = [
 
 const state = {
   currentPage: "accountPage", navDrawerOpen: false, accounts: [], activeAccount: "", accountSelectedUsername: "",
+  accountPasswordVisible: false,
   currentAccountUsername: "", connectedUsername: "", rows: [], mode: "grouped", searchText: "",
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
@@ -79,6 +80,7 @@ const ui = {
   guestWorkspaceNotice: document.getElementById("guestWorkspaceNotice"), guestWorkspaceNoticeText: document.getElementById("guestWorkspaceNoticeText"), guestWorkspaceLoginBtn: document.getElementById("guestWorkspaceLoginBtn"),
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
+  accountPasswordToggle: document.getElementById("accountPasswordToggle"),
   loginSaveBtn: document.getElementById("loginSaveBtn"), clearAccountBtn: document.getElementById("clearAccountBtn"), accountStatus: document.getElementById("accountStatus"), savedAccountsWrap: document.getElementById("savedAccountsWrap"),
   accountPageSummaryText: document.getElementById("accountPageSummaryText"), accountPageFetchTimeText: document.getElementById("accountPageFetchTimeText"), accountPageStatusText: document.getElementById("accountPageStatusText"),
   accountPageSelect: document.getElementById("accountPageSelect"), accountPageAddBtn: document.getElementById("accountPageAddBtn"), accountPageRefreshBtn: document.getElementById("accountPageRefreshBtn"), accountPageDisconnectBtn: document.getElementById("accountPageDisconnectBtn"),
@@ -2535,6 +2537,21 @@ function setAccountForm({username = "", password = "", totp = "", remark = ""} =
   ui.accountPassword.value = password;
   ui.accountTotp.value = normalizeTotpCode(totp);
   ui.accountRemark.value = remark;
+  state.accountPasswordVisible = false;
+  syncAccountPasswordVisibility();
+}
+
+function syncAccountPasswordVisibility() {
+  if (ui.accountPassword) {
+    ui.accountPassword.type = state.accountPasswordVisible ? "text" : "password";
+  }
+  if (ui.accountPasswordToggle) {
+    const visible = !!state.accountPasswordVisible;
+    ui.accountPasswordToggle.classList.toggle("is-visible", visible);
+    ui.accountPasswordToggle.setAttribute("aria-pressed", visible ? "true" : "false");
+    ui.accountPasswordToggle.setAttribute("aria-label", visible ? "隐藏密码" : "显示密码");
+    ui.accountPasswordToggle.title = visible ? "隐藏密码" : "显示密码";
+  }
 }
 
 function normalizeTotpCode(value) {
@@ -3067,7 +3084,12 @@ async function useAccount(username) {
 
 async function deleteAccount(row) {
   if (state.refreshing) { setAccountStatus("库存刷新中，暂时无法删除账号", true); return; }
-  const ok = window.confirm(`确认删除账号“${row.remark || row.username}（${row.username}）”？\n该操作会移除本地保存的密码与账号记录。`);
+  const ok = await openConfirmModal({
+    title: "确认删除账号",
+    message: `确认删除账号“${row.remark || row.username}（${row.username}）”？\n该操作会移除本地保存的密码与账号记录。`,
+    confirmText: "确认删除",
+    cancelText: "取消"
+  });
   if (!ok) return;
   try {
     await api("/api/accounts/delete", {method: "POST", body: JSON.stringify({username: row.username})});
@@ -3114,7 +3136,7 @@ async function loginAndSave() {
 
   try {
     ui.loginSaveBtn.disabled = true;
-    setAccountStatus("正在登录并获取 token，请稍候...");
+    setAccountStatus("正在登录，请稍候...");
     await api("/api/accounts/login-save", {method: "POST", body: JSON.stringify({username, password, totp, remark})});
     await loadAccounts({preferUsername: username});
     await switchAccountView(username, {silentSnapshotSummary: true});
@@ -4801,7 +4823,8 @@ async function refreshWithConnectionOverlay({
   force = false,
   silentRateLimit = false,
   silentInfo = false,
-  forceOverlay = false
+  forceOverlay = false,
+  keepSelectedIds = null
 } = {}) {
   if (guardGuestAction({
     reason: "当前为访客预览态，登录后可连接账号并刷新真实库存。",
@@ -4825,7 +4848,8 @@ async function refreshWithConnectionOverlay({
       force,
       silentRateLimit,
       silentInfo,
-      onProgress
+      onProgress,
+      keepSelectedIds
     });
   } finally {
     if (onProgress) clearCraftExecutionOverlayState();
@@ -10899,6 +10923,72 @@ async function ensureCraftConnectedForExecution() {
   }
   return false;
 }
+async function ensureConnectedForComponentDeposit() {
+  const username = String(
+    state.currentAccountUsername ||
+    (ui.accountPageSelect && ui.accountPageSelect.value) ||
+    (ui.accountSelect && ui.accountSelect.value) ||
+    (ui.craftAccountSelect && ui.craftAccountSelect.value) ||
+    ""
+  ).trim();
+  if (!username) {
+    setSummary("请先选用一个账号");
+    return false;
+  }
+  if (isCurrentAccountConnected()) return true;
+  const keepSelectedIds = new Set(state.selectedComponentItemIds);
+  const result = await refreshWithConnectionOverlay({
+    preferCraft: false,
+    usernameOverride: username,
+    force: true,
+    silentRateLimit: true,
+    silentInfo: true,
+    keepSelectedIds,
+    forceOverlay: true
+  });
+  if (result && result.ok && isCurrentAccountConnected()) {
+    return true;
+  }
+  if (result && result.message) {
+    setSummary(result.message);
+  } else {
+    setSummary("自动连接失败，请先连接并刷新库存");
+  }
+  return false;
+}
+async function ensureConnectedForComponentWithdraw() {
+  const username = String(
+    state.currentAccountUsername ||
+    (ui.accountPageSelect && ui.accountPageSelect.value) ||
+    (ui.accountSelect && ui.accountSelect.value) ||
+    (ui.craftAccountSelect && ui.craftAccountSelect.value) ||
+    ""
+  ).trim();
+  if (!username) {
+    setSummary("请先选用一个账号");
+    return false;
+  }
+  if (isCurrentAccountConnected()) return true;
+  const keepSelectedIds = new Set(state.selectedComponentItemIds);
+  const result = await refreshWithConnectionOverlay({
+    preferCraft: false,
+    usernameOverride: username,
+    force: true,
+    silentRateLimit: true,
+    silentInfo: true,
+    keepSelectedIds,
+    forceOverlay: true
+  });
+  if (result && result.ok && isCurrentAccountConnected()) {
+    return true;
+  }
+  if (result && result.message) {
+    setSummary(result.message);
+  } else {
+    setSummary("自动连接失败，请先连接并刷新库存");
+  }
+  return false;
+}
 async function runCraftTradeUpQueue() {
   if (guardGuestAction({
     reason: "当前为访客预览态，登录后可执行真实炼金配方。",
@@ -11620,20 +11710,31 @@ function syncComponentActionState() {
   const connected = isCurrentAccountConnected();
   const selectedRows = getSelectedRows();
   const hasTargetComponent = listComponentChoices().length > 0;
-  const blocked = !connected || state.componentOpBusy || state.refreshing;
+  const busy = state.componentOpBusy || state.refreshing;
+  const depositBlocked = busy;
+  const withdrawBlocked = busy;
   if (ui.componentWithdrawBtn) {
     ui.componentWithdrawBtn.classList.toggle("hidden", !currentComponent);
   }
-  ui.componentDepositBtn.disabled = blocked;
-  ui.componentWithdrawBtn.disabled = blocked;
-  if (blocked) {
-    ui.componentDepositBtn.title = connected ? "处理中，请稍候" : "请先连接并刷新库存";
-    ui.componentWithdrawBtn.title = connected ? "处理中，请稍候" : "请先连接并刷新库存";
+  ui.componentDepositBtn.disabled = depositBlocked;
+  ui.componentWithdrawBtn.disabled = withdrawBlocked;
+  if (depositBlocked) {
+    ui.componentDepositBtn.title = "处理中，请稍候";
+  } else if (!connected) {
+    ui.componentDepositBtn.title = "未连接时将在存入前自动连接并刷新库存";
+  } else {
+    ui.componentDepositBtn.title = !selectedRows.length
+      ? "请先在列表选择要存入的物品"
+      : (!hasTargetComponent ? "暂无可用目标组件" : "存入组件");
+  }
+  if (withdrawBlocked) {
+    ui.componentWithdrawBtn.title = "处理中，请稍候";
     return;
   }
-  ui.componentDepositBtn.title = !selectedRows.length
-    ? "请先在列表选择要存入的物品"
-    : (!hasTargetComponent ? "暂无可用目标组件" : "存入组件");
+  if (!connected) {
+    ui.componentWithdrawBtn.title = "未连接时将在取出前自动连接并刷新库存";
+    return;
+  }
   ui.componentWithdrawBtn.title = !currentComponent
     ? "请先选择组件"
     : "取出选中（优先低磨损）";
@@ -11813,14 +11914,21 @@ async function submitDepositToTarget(targetComponentId) {
   }) === false) {
     return false;
   }
-  const selectedRows = getSelectedRows();
-  if (!selectedRows.length) {
-    setSummary("请先在库存列表中选择要存入的物品");
-    return false;
-  }
   const targetId = String(targetComponentId || "").trim();
   if (!targetId) {
     setSummary("请先选择目标组件");
+    return false;
+  }
+  const connected = await ensureConnectedForComponentDeposit();
+  if (!connected) return false;
+  const targetExists = listComponentChoices({excludeId: selectedComponentId()}).some((choice) => String(choice && choice.id || "").trim() === targetId);
+  if (!targetExists) {
+    setSummary("自动校对后目标组件已变化，请重新选择目标组件");
+    return false;
+  }
+  const selectedRows = getSelectedRows();
+  if (!selectedRows.length) {
+    setSummary("请先在库存列表中选择要存入的物品");
     return false;
   }
   const storableRows = selectedRows
@@ -12109,10 +12217,13 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
       const selectable = isInventoryRowSelectable(item);
       const componentRow = isComponentRow(item);
       const selected = selectable && state.selectedComponentItemIds.has(itemId);
+      const childSelectCell = selectable
+        ? `<input type="checkbox" class="row-check item-check" ${selected ? "checked" : ""} title="选中该物品" aria-label="选中该物品" />`
+        : "";
       const child = document.createElement("tr");
       child.className = `group-child${selectable ? " selectable" : ""}${selected ? " selected" : ""}${showCoolingTime && !componentRow && coolingUnlockTs(item) > 0 ? " cooling" : ""}`;
       const childCells = [
-        "<td class=\"select-col\"></td>",
+        `<td class="select-col">${childSelectCell}</td>`,
         "<td></td>",
         "<td></td>",
         "<td></td>",
@@ -12122,8 +12233,16 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
       childCells.push(`<td>${itemHasWear(item) ? formatVisibleWearText(item.float_value, 8) : ""}</td>`);
       if (showCoolingTime) childCells.push(`<td>${componentRow ? "" : cooldownText(item)}</td>`);
       child.innerHTML = childCells.join("");
+      const itemCheck = child.querySelector(".item-check");
+      if (itemCheck) {
+        itemCheck.onclick = (evt) => {
+          evt.stopPropagation();
+          toggleComponentItemSelection(itemId);
+        };
+      }
       if (selectable) {
         child.onclick = (evt) => {
+          if (evt.target && typeof evt.target.closest === "function" && evt.target.closest(".item-check")) return;
           evt.stopPropagation();
           toggleComponentItemSelection(itemId);
         };
@@ -12260,7 +12379,7 @@ function setRefreshBusy(busy) {
   renderCraftPage();
 }
 
-async function doRefresh({usernameOverride = "", force = false, silentRateLimit = false, silentInfo = false, onProgress = null} = {}) {
+async function doRefresh({usernameOverride = "", force = false, silentRateLimit = false, silentInfo = false, onProgress = null, keepSelectedIds = null} = {}) {
   if (state.refreshing) return {ok: false, message: "当前正在刷新库存"};
   const reportProgress = ({percent = 0, title = "正在连接账号", detail = ""} = {}) => {
     if (typeof onProgress !== "function") return;
@@ -12332,7 +12451,12 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
     state.fetchTime = String(data.fetch_time || "").trim();
     const component = data.component || {summary_map: {}, item_map: {}};
     const snapshotPath = result.snapshot_path || "";
-    setRows(rows, component, snapshotPath);
+    const nextKeepSelectedIds = keepSelectedIds instanceof Set
+      ? new Set(Array.from(keepSelectedIds).map((id) => String(id || "").trim()).filter(Boolean))
+      : (Array.isArray(keepSelectedIds)
+        ? new Set(keepSelectedIds.map((id) => String(id || "").trim()).filter(Boolean))
+        : null);
+    setRows(rows, component, snapshotPath, nextKeepSelectedIds ? {keepSelectedIds: nextKeepSelectedIds} : {});
     cacheSnapshotForAccount(username, {
       rows,
       component,
@@ -12909,6 +13033,15 @@ function bindEvents() {
       clearAccountForm();
     };
   }
+  if (ui.accountPasswordToggle) {
+    ui.accountPasswordToggle.onclick = () => {
+      state.accountPasswordVisible = !state.accountPasswordVisible;
+      syncAccountPasswordVisibility();
+      if (ui.accountPassword && typeof ui.accountPassword.focus === "function") {
+        ui.accountPassword.focus({preventScroll: true});
+      }
+    };
+  }
   if (ui.accountPassword) {
     ui.accountPassword.onkeydown = (evt) => {
       if (evt.key !== "Enter") return;
@@ -12923,22 +13056,6 @@ function bindEvents() {
         void loginAndSave();
         return;
       }
-      if (evt.key === "Escape") {
-        evt.preventDefault();
-        clearAccountForm();
-      }
-    });
-  }
-  if (ui.accountLoginModal) {
-    ui.accountLoginModal.addEventListener("click", (evt) => {
-      if (evt.target === ui.accountLoginModal) {
-        clearAccountForm();
-      }
-    });
-    ui.accountLoginModal.addEventListener("keydown", (evt) => {
-      if (evt.key !== "Escape") return;
-      evt.preventDefault();
-      clearAccountForm();
     });
   }
 
@@ -13124,20 +13241,25 @@ function bindEvents() {
     };
   }
   ui.componentDepositBtn.onclick = async () => {
-    if (!isCurrentAccountConnected()) {
-      setSummary("请先连接并刷新库存");
+    if (!getSelectedRows().length) {
+      setSummary("请先在库存列表中选择要存入的物品");
       return;
     }
+    const connected = await ensureConnectedForComponentDeposit();
+    if (!connected) return;
     openTargetComponentDrawer({excludeId: selectedComponentId()});
   };
   ui.componentWithdrawBtn.onclick = async () => {
-    if (!isCurrentAccountConnected()) {
-      setSummary("请先连接并刷新库存");
-      return;
-    }
     const currentComponentId = selectedComponentId();
     if (!currentComponentId) {
       setSummary("请先选择组件");
+      return;
+    }
+    const connected = await ensureConnectedForComponentWithdraw();
+    if (!connected) return;
+    const componentStillExists = listComponentChoices().some((choice) => String(choice && choice.id || "").trim() === currentComponentId);
+    if (!componentStillExists) {
+      setSummary("自动校对后当前组件已变化，请重新选择组件");
       return;
     }
     const selectedRows = getSelectedRows()
