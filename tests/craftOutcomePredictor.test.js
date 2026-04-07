@@ -37,6 +37,7 @@ function createTempPredictorDb() {
       maxfloat REAL,
       isstattrak INTEGER DEFAULT 0,
       wear_range REAL,
+      inventory_display_only INTEGER DEFAULT 0,
       goods_icon_url TEXT DEFAULT '',
       goods_original_icon_url TEXT DEFAULT '',
       goods_share_thumbnail_url TEXT DEFAULT ''
@@ -49,9 +50,9 @@ function insertSkinRow(db, row) {
   db.prepare(`
     INSERT INTO skin (
       markethashname, name, basemarkethashname, basename, collection, rarity,
-      wearlevel, minfloat, maxfloat, isstattrak, wear_range,
+      wearlevel, minfloat, maxfloat, isstattrak, wear_range, inventory_display_only,
       goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.markethashname,
     row.name || row.markethashname,
@@ -64,6 +65,7 @@ function insertSkinRow(db, row) {
     row.maxfloat == null ? null : row.maxfloat,
     row.isstattrak ? 1 : 0,
     row.wear_range == null ? null : row.wear_range,
+    row.inventory_display_only ? 1 : 0,
     row.goods_icon_url || "",
     row.goods_original_icon_url || "",
     row.goods_share_thumbnail_url || ""
@@ -292,9 +294,44 @@ function test_predictor_keeps_missing_wear_bounds_and_missing_concrete_rows() {
   assert.equal(missingMapped.outcomes[0].predicted_wearlevel, "Battle-Scarred");
 }
 
+function test_outcome_catalog_excludes_inventory_display_only_rows() {
+  const {dbPath, db} = createTempPredictorDb();
+  insertSkinRow(db, {
+    markethashname: "AK-47 | Ice Coaled (Factory New)",
+    basemarkethashname: "AK-47 | Ice Coaled",
+    collection: "Fracture Case",
+    rarity: "受限",
+    wearlevel: "Factory New",
+    minfloat: 0,
+    maxfloat: 1,
+    wear_range: 1
+  });
+  insertSkinRow(db, {
+    markethashname: "Souvenir AK-47 | Ice Coaled (Factory New)",
+    basemarkethashname: "Souvenir AK-47 | Ice Coaled",
+    basename: "Souvenir AK-47 | Ice Coaled",
+    collection: "Fracture Case",
+    rarity: "受限",
+    wearlevel: "Factory New",
+    minfloat: 0,
+    maxfloat: 1,
+    wear_range: 1,
+    inventory_display_only: 1
+  });
+  db.close();
+
+  const catalog = createCraftOutcomeCatalog({dbPath});
+  const snapshot = catalog.getSnapshot();
+  const bucket = snapshot.baseBuckets.get("Fracture Case|4|0") || [];
+
+  assert.equal(bucket.length, 1);
+  assert.equal(bucket[0].base_name, "AK-47 | Ice Coaled");
+}
+
 function runTests() {
   test_shared_collection_and_rarity_helpers();
   test_outcome_catalog_scaffold_reads_base_buckets_and_wear_map();
+  test_outcome_catalog_excludes_inventory_display_only_rows();
   test_predictor_invalidates_top_rarity_and_missing_collections();
   test_predictor_returns_realtime_probabilities_for_partial_recipe();
   test_predictor_isolates_stattrak_pools_and_maps_wear();

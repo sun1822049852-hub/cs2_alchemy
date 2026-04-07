@@ -162,6 +162,75 @@ async function test_syncSkinDb_enriches_missing_wear_range_after_base_commit() {
   assert.equal(row.wear_range, 0.6);
 }
 
+async function test_syncSkinDb_enriches_images_for_inventory_display_only_rows() {
+  const {dbPath, db} = createTempSkinDb();
+  db.close();
+
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "印花 | 斯塔比鱼（迈阿密）",
+        marketHashName: "Sticker | Miami Stabbyfish",
+        platformList: [{name: "BUFF", itemId: "1201"}]
+      }
+    ],
+    detailProvider: {
+      async fetchByGoodsId() {
+        throw new Error("display_only_rows_should_not_fetch_detail");
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        assert.equal(String(goodsId), "1201");
+        return {
+          goods_icon_url: "https://img.example/miami/icon.webp",
+          goods_original_icon_url: "https://img.example/miami/original.webp",
+          goods_share_thumbnail_url: "https://img.example/miami/share.webp"
+        };
+      }
+    }
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT name, inventory_display_only, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
+    FROM skin
+    WHERE markethashname = ?
+  `).get("Sticker | Miami Stabbyfish");
+  verify.close();
+
+  assert.equal(result.importedItems, 1);
+  assert.equal(result.detailStats.families_pending, 0);
+  assert.equal(result.detailStats.image_rows_ok, 1);
+  assert.equal(row.name, "印花 | 斯塔比鱼（迈阿密）");
+  assert.equal(Number(row.inventory_display_only || 0), 1);
+  assert.equal(row.goods_icon_url, "https://img.example/miami/icon.webp");
+  assert.equal(row.goods_original_icon_url, "https://img.example/miami/original.webp");
+  assert.equal(row.goods_share_thumbnail_url, "https://img.example/miami/share.webp");
+}
+
+async function test_syncSkinDb_handles_large_import_without_sql_variable_overflow() {
+  const {dbPath, db} = createTempSkinDb();
+  db.close();
+
+  const items = Array.from({length: 34000}, (_, index) => ({
+    name: `AK-47 | 批量物品 ${index} (久经沙场)`,
+    marketHashName: `AK-47 | Bulk Item ${index} (Field-Tested)`,
+    platformList: [{name: "BUFF", itemId: String(3000 + index)}]
+  }));
+
+  const result = await syncSkinDb({
+    dbPath,
+    items
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const countRow = verify.prepare("SELECT COUNT(*) AS count FROM skin").get();
+  verify.close();
+
+  assert.equal(result.importedItems, 34000);
+  assert.equal(Number(countRow.count || 0), 34000);
+}
+
 async function test_syncSkinDb_creates_skin_table_for_empty_db_path() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cs2-alchemy-skin-db-empty-"));
   const dbPath = path.join(tempDir, "skins.db");
@@ -307,15 +376,32 @@ async function runTests() {
   });
 
   const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
-  const rows = verify.prepare("SELECT markethashname FROM skin ORDER BY markethashname").all();
+  const rows = verify.prepare("SELECT markethashname, inventory_display_only FROM skin ORDER BY markethashname").all();
   const columns = verify.prepare("PRAGMA table_info(skin)").all().map((row) => row.name);
   verify.close();
 
   assert.deepEqual(
-    rows.map((row) => row.markethashname),
+    rows.map((row) => ({
+      markethashname: row.markethashname,
+      inventory_display_only: Number(row.inventory_display_only || 0)
+    })),
     [
-      "AK-47 | Redline (Field-Tested)",
-      "★ Bayonet | Autotronic (Factory New)"
+      {
+        markethashname: "AK-47 | Redline (Field-Tested)",
+        inventory_display_only: 0
+      },
+      {
+        markethashname: "Autograph Capsule | Virtus.Pro | Cologne 2015",
+        inventory_display_only: 1
+      },
+      {
+        markethashname: "Special Agent Ava | FBI",
+        inventory_display_only: 1
+      },
+      {
+        markethashname: "★ Bayonet | Autotronic (Factory New)",
+        inventory_display_only: 0
+      }
     ]
   );
   assert(columns.includes("detail_status"));
@@ -326,6 +412,7 @@ async function runTests() {
   assert(columns.includes("goods_icon_url"));
   assert(columns.includes("goods_original_icon_url"));
   assert(columns.includes("goods_share_thumbnail_url"));
+  assert(columns.includes("inventory_display_only"));
 
   const {dbPath: familyDbPath, db: familyDb} = createTempSkinDb();
   familyDb.exec(`
@@ -454,6 +541,8 @@ async function runTests() {
   await test_syncSkinDb_enriches_pending_rows_after_base_commit();
   await test_syncSkinDb_keeps_base_rows_when_enrichment_fails();
   await test_syncSkinDb_enriches_missing_wear_range_after_base_commit();
+  await test_syncSkinDb_enriches_images_for_inventory_display_only_rows();
+  await test_syncSkinDb_handles_large_import_without_sql_variable_overflow();
   await test_syncSkinDb_creates_skin_table_for_empty_db_path();
   await test_syncSkinDb_creates_price_columns_for_empty_db_path();
 }

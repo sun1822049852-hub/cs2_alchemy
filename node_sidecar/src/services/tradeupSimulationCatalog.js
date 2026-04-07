@@ -12,6 +12,21 @@ function normalizeFloat(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function skinHasColumn(db, columnName) {
+  if (!db) {
+    return false;
+  }
+  return db.prepare("PRAGMA table_info(skin)").all().some(
+    (row) => asString(row && row.name).trim() === asString(columnName).trim()
+  );
+}
+
+function buildInventoryDisplayOnlyFilterClause(db) {
+  return skinHasColumn(db, "inventory_display_only")
+    ? " AND COALESCE(inventory_display_only, 0) = 0"
+    : "";
+}
+
 function normalizeSimulationSearchText(value) {
   return asString(value)
     .replace(/™/g, "")
@@ -113,11 +128,13 @@ function appendSimulationSearchItems(uniqueItems, rows) {
 function buildCollectionLowestRarityMap(db) {
   const map = new Map();
   if (!db) return map;
+  const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
   const rows = db.prepare(`
     SELECT DISTINCT collection, rarity
     FROM skin
     WHERE TRIM(COALESCE(collection, '')) <> ''
       AND TRIM(COALESCE(rarity, '')) <> ''
+      ${inventoryFilter}
   `).all();
   for (const row of rows) {
     const collection = normalizeCollectionKey(row && row.collection);
@@ -185,19 +202,24 @@ function createTradeupSimulationCatalog({dbPath = PATHS.SKIN_DB_FILE} = {}) {
       const rawLimit = Math.max(normalizedLimit * 8, 80);
       return withDb(dbPath, (db) => {
         if (!db) return [];
+        const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
         const stmt = db.prepare(`
           SELECT markethashname, name, basemarkethashname, basename, collection, rarity, wearlevel,
                  minfloat, maxfloat, wear_range, isstattrak,
                    goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
           FROM skin
-          WHERE LOWER(REPLACE(COALESCE(markethashname, ''), '™', '')) LIKE ?
-             OR LOWER(REPLACE(COALESCE(name, ''), '™', '')) LIKE ?
-             OR LOWER(REPLACE(COALESCE(basemarkethashname, ''), '™', '')) LIKE ?
-             OR LOWER(COALESCE(collection, '')) LIKE ?
-             OR LOWER(REPLACE(COALESCE(markethashname, ''), '™', '')) LIKE ?
-             OR LOWER(REPLACE(COALESCE(name, ''), '™', '')) LIKE ?
-             OR LOWER(REPLACE(COALESCE(basemarkethashname, ''), '™', '')) LIKE ?
-             OR LOWER(COALESCE(collection, '')) LIKE ?
+          WHERE 1 = 1
+            ${inventoryFilter}
+            AND (
+              LOWER(REPLACE(COALESCE(markethashname, ''), '™', '')) LIKE ?
+              OR LOWER(REPLACE(COALESCE(name, ''), '™', '')) LIKE ?
+              OR LOWER(REPLACE(COALESCE(basemarkethashname, ''), '™', '')) LIKE ?
+              OR LOWER(COALESCE(collection, '')) LIKE ?
+              OR LOWER(REPLACE(COALESCE(markethashname, ''), '™', '')) LIKE ?
+              OR LOWER(REPLACE(COALESCE(name, ''), '™', '')) LIKE ?
+              OR LOWER(REPLACE(COALESCE(basemarkethashname, ''), '™', '')) LIKE ?
+              OR LOWER(COALESCE(collection, '')) LIKE ?
+            )
             ORDER BY markethashname ASC
             LIMIT ? OFFSET ?
           `);
@@ -226,12 +248,14 @@ function createTradeupSimulationCatalog({dbPath = PATHS.SKIN_DB_FILE} = {}) {
       if (!key) return null;
       return withDb(dbPath, (db) => {
         if (!db) return null;
+        const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
         const row = db.prepare(`
           SELECT markethashname, name, basemarkethashname, basename, collection, rarity, wearlevel,
                  minfloat, maxfloat, wear_range, isstattrak,
                  goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
           FROM skin
           WHERE markethashname = ?
+            ${inventoryFilter}
           LIMIT 1
         `).get(key);
         return row

@@ -27,6 +27,9 @@ const {createCraftOutcomePredictor} = require("./services/craftOutcomePredictor"
 const {createTradeupSimulationCatalog} = require("./services/tradeupSimulationCatalog");
 const {createTradeupSimulationService} = require("./services/tradeupSimulationService");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
+const {
+  enrichInventoryDisplayOnlyImages
+} = require("../../tools/enrichInventoryDisplayOnlyImages");
 const {DedupLogger} = require("./logger");
 const {hashCraftPermitPayload} = require("../../shared/craftPermitPolicy");
 const {getLicenseConfig} = require("./licenseConfig");
@@ -1091,6 +1094,53 @@ function buildRefreshPayload(result) {
   };
 }
 
+async function runInventoryDisplayImageAutoEnrichment({
+  username,
+  source,
+  result,
+  emitSse
+}) {
+  const account = asString(username).trim();
+  const snapshotPath = asString(result && result.snapshot_path).trim();
+  if (!account || !snapshotPath) {
+    return;
+  }
+  const outcome = await enrichInventoryDisplayOnlyImages({
+    dbPath: PATHS.SKIN_DB_FILE,
+    snapshotPath,
+    concurrency: 6,
+    imageQps: 20,
+    imageRequestMaxInFlight: 6
+  });
+  const summary = outcome && outcome.result ? outcome.result : {};
+  const targetCount = Array.isArray(outcome && outcome.targetMarketHashNames)
+    ? outcome.targetMarketHashNames.length
+    : 0;
+  if (logger) {
+    logger.info(
+      "ui_server",
+      `display image enrichment: account=${account} source=${asString(source).trim() || "-"} targets=${targetCount} ok=${Number(summary.image_rows_ok || 0) || 0} failed=${Number(summary.image_rows_failed || 0) || 0}`
+    );
+  }
+  if (
+    targetCount <= 0 &&
+    (Number(summary.image_rows_ok || 0) || 0) <= 0 &&
+    (Number(summary.image_rows_failed || 0) || 0) <= 0
+  ) {
+    return;
+  }
+  emitSse("inventory_display_images_enriched", {
+    username: account,
+    source: asString(source).trim(),
+    snapshot_path: outcome.snapshotPath,
+    target_market_hash_names_count: targetCount,
+    image_rows_pending: Number(summary.image_rows_pending || 0) || 0,
+    image_rows_ok: Number(summary.image_rows_ok || 0) || 0,
+    image_rows_failed: Number(summary.image_rows_failed || 0) || 0,
+    image_rows_still_missing: Number(summary.image_rows_still_missing || 0) || 0
+  });
+}
+
 const refreshRuntime = createRefreshRuntime({
   logger,
   refreshInventoryFn: (args) => refreshInventory({...args, sessionPool}),
@@ -1098,6 +1148,7 @@ const refreshRuntime = createRefreshRuntime({
   uiStateStoreFactory: () => new UiStateStore(),
   resolveRefreshTarget,
   buildRefreshPayload,
+  runPostRefreshTask: runInventoryDisplayImageAutoEnrichment,
   heartbeatStaleMs: 30 * 60 * 1000,
   heartbeatCheckMs: 60 * 1000,
   sseKeepaliveMs: 25 * 1000

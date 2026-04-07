@@ -161,6 +161,12 @@ function isImportableSkin(item) {
   return true;
 }
 
+function isImportableInventoryItem(item) {
+  const marketHashName = asString(item && item.marketHashName).trim();
+  const displayName = asString(item && item.name).trim();
+  return Boolean(marketHashName || displayName);
+}
+
 function parseSkinRecord(item) {
   const name = asString(item && item.name).trim();
   const markethashname = asString(item && item.marketHashName).trim() || name;
@@ -243,6 +249,7 @@ function ensureSkinTable(db) {
       createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
       wear_range REAL,
       alchemy_type TEXT DEFAULT '不能炼金',
+      inventory_display_only INTEGER DEFAULT 0,
       detail_status TEXT DEFAULT 'pending',
       detail_source TEXT DEFAULT '',
       detail_checked_at DATETIME,
@@ -261,6 +268,14 @@ function ensureAlchemyTypeColumn(db) {
     return;
   }
   db.exec("ALTER TABLE skin ADD COLUMN alchemy_type TEXT DEFAULT '不能炼金'");
+}
+
+function ensureInventoryDisplayOnlyColumn(db) {
+  const columns = db.prepare("PRAGMA table_info(skin)").all();
+  if (columns.some((row) => asString(row.name).trim() === "inventory_display_only")) {
+    return;
+  }
+  db.exec("ALTER TABLE skin ADD COLUMN inventory_display_only INTEGER DEFAULT 0");
 }
 
 function ensureSkinDetailColumns(db) {
@@ -326,12 +341,18 @@ function createDetailStatsSnapshot(db, extra = {}) {
   const missingRow = db.prepare(`
     SELECT COUNT(*) AS count
     FROM skin
-    WHERE TRIM(COALESCE(collection, '')) = '' OR TRIM(COALESCE(rarity, '')) = ''
+    WHERE COALESCE(inventory_display_only, 0) = 0
+      AND (
+        TRIM(COALESCE(collection, '')) = ''
+        OR TRIM(COALESCE(rarity, '')) = ''
+      )
   `).get();
   const noSupportedPlatformRow = db.prepare(`
     SELECT COUNT(*) AS count
     FROM skin
-    WHERE detail_status = 'failed' AND detail_error = 'no_supported_platform_id'
+    WHERE COALESCE(inventory_display_only, 0) = 0
+      AND detail_status = 'failed'
+      AND detail_error = 'no_supported_platform_id'
   `).get();
   return {
     families_pending: 0,
@@ -346,7 +367,8 @@ function createDetailStatsSnapshot(db, extra = {}) {
     wear_rows_still_missing: Number(db.prepare(`
       SELECT COUNT(*) AS count
       FROM skin
-      WHERE TRIM(COALESCE(markethashname, '')) <> ''
+      WHERE COALESCE(inventory_display_only, 0) = 0
+        AND TRIM(COALESCE(markethashname, '')) <> ''
         AND (
           minfloat IS NULL
           OR maxfloat IS NULL
@@ -382,6 +404,7 @@ function readCurrentSkinStats(db) {
   const rows = db.prepare(`
     SELECT collection, rarity, alchemy_type
     FROM skin
+    WHERE COALESCE(inventory_display_only, 0) = 0
   `).all();
   return {
     missingCollectionOrRarity: rows.filter(
@@ -447,7 +470,7 @@ function pickFirstNonEmpty(values) {
 
 function loadExistingMetadataMaps(db) {
   const rows = db.prepare(
-    "SELECT id, markethashname, basemarkethashname, collection, rarity, minfloat, maxfloat, wear_range, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url, buffprice, c5price, youpinprice, buffprice_updated_at, c5price_updated_at, youpinprice_updated_at FROM skin ORDER BY id"
+    "SELECT id, markethashname, basemarkethashname, collection, rarity, minfloat, maxfloat, wear_range, goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url, buffprice, c5price, youpinprice, buffprice_updated_at, c5price_updated_at, youpinprice_updated_at, inventory_display_only FROM skin ORDER BY id"
   ).all();
   const exact = new Map();
   const familyBuckets = new Map();
@@ -472,7 +495,7 @@ function loadExistingMetadataMaps(db) {
     exact.set(marketHashName, metadata);
 
     const familyKey = buildSkinFamilyKey(asString(row.basemarkethashname).trim() || marketHashName);
-    if (!familyKey) {
+    if (!familyKey || Number(row.inventory_display_only) === 1) {
       continue;
     }
     if (!familyBuckets.has(familyKey)) {
@@ -589,17 +612,24 @@ function buildTargetRecords(items, options = {}) {
   const existingMetadata = options.existingMetadata || {exact: new Map(), family: new Map()};
   const parsed = [];
   for (const item of Array.isArray(items) ? items : []) {
-    if (!isImportableSkin(item)) {
+    if (!isImportableInventoryItem(item)) {
       continue;
     }
+    const inventoryDisplayOnly = isImportableSkin(item) ? 0 : 1;
     const row = reuseExistingMetadata(parseSkinRecord(item), existingMetadata);
+    row.inventory_display_only = inventoryDisplayOnly;
     row.wear_range = normalizeFloat(row.wear_range);
     if (row.wear_range === null) {
       row.wear_range = deriveWearRange(row);
     }
     parsed.push(applyInitialDetailState(row));
   }
-  return assignAlchemyTypesShared(parsed, options);
+  return assignAlchemyTypesShared(parsed, options).map((row) => ({
+    ...row,
+    alchemy_type: Number(row.inventory_display_only) === 1
+      ? "不能炼金"
+      : asString(row.alchemy_type).trim() || "不能炼金"
+  }));
 }
 
 async function syncSkinDb({
@@ -615,6 +645,7 @@ async function syncSkinDb({
   try {
     ensureSkinTable(db);
     ensureAlchemyTypeColumn(db);
+    ensureInventoryDisplayOnlyColumn(db);
     ensureSkinDetailColumns(db);
     ensureSkinPriceColumns(db);
     const existingMetadata = loadExistingMetadataMaps(db);
@@ -628,10 +659,10 @@ async function syncSkinDb({
         markethashname, name, basemarkethashname, basename, collection, rarity,
         wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, youpinid,
         buffprice, c5price, youpinprice, buffprice_updated_at, c5price_updated_at, youpinprice_updated_at,
-        wear_range, alchemy_type,
+        wear_range, alchemy_type, inventory_display_only,
         detail_status, detail_source, detail_checked_at, detail_error, detail_attempts,
         goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(markethashname) DO UPDATE SET
         name = excluded.name,
         basemarkethashname = excluded.basemarkethashname,
@@ -653,6 +684,7 @@ async function syncSkinDb({
         youpinprice_updated_at = excluded.youpinprice_updated_at,
         wear_range = excluded.wear_range,
         alchemy_type = excluded.alchemy_type,
+        inventory_display_only = excluded.inventory_display_only,
         detail_status = excluded.detail_status,
         detail_source = excluded.detail_source,
         detail_checked_at = excluded.detail_checked_at,
@@ -688,6 +720,7 @@ async function syncSkinDb({
           normalizeDateTimeText(row.youpinprice_updated_at),
           normalizeFloat(row.wear_range),
           asString(row.alchemy_type).trim() || "不能炼金",
+          Number(row.inventory_display_only) === 1 ? 1 : 0,
           asString(row.detail_status).trim() || "pending",
           asString(row.detail_source).trim(),
           row.detail_checked_at,
@@ -699,11 +732,19 @@ async function syncSkinDb({
         );
       }
 
-      if (targetKeys.length) {
-        const placeholders = targetKeys.map(() => "?").join(",");
-        db.prepare(`DELETE FROM skin WHERE markethashname NOT IN (${placeholders})`).run(...targetKeys);
-      } else {
+      if (!targetKeys.length) {
         db.exec("DELETE FROM skin");
+      } else {
+        const deleteKeys = existingKeys.filter((key) => !targetKeySet.has(key));
+        const deleteChunkSize = 500;
+        for (let i = 0; i < deleteKeys.length; i += deleteChunkSize) {
+          const chunk = deleteKeys.slice(i, i + deleteChunkSize);
+          if (!chunk.length) {
+            continue;
+          }
+          const placeholders = chunk.map(() => "?").join(",");
+          db.prepare(`DELETE FROM skin WHERE markethashname IN (${placeholders})`).run(...chunk);
+        }
       }
 
       db.exec("COMMIT");

@@ -307,6 +307,9 @@ function isCraftableBySkinMeta(meta) {
   if (!meta) {
     return {isCraftable: false, reason: "meta_not_found"};
   }
+  if (toInt(meta.inventory_display_only, 0) === 1) {
+    return {isCraftable: false, reason: "inventory_display_only"};
+  }
   if (!asString(meta.collection).trim()) {
     return {isCraftable: false, reason: "missing_collection"};
   }
@@ -342,6 +345,7 @@ function enrichAlchemyMetadata(rows, hiddenRows, dbPath) {
       row.maxfloat = meta.maxfloat;
       row.isstattrak = toInt(meta.isstattrak, 0);
       row.wear_range = meta.wear_range;
+      row.inventory_display_only = toInt(meta.inventory_display_only, 0);
       row.goods_icon_url = asString(meta.goods_icon_url).trim();
       row.goods_original_icon_url = asString(meta.goods_original_icon_url).trim();
       row.goods_share_thumbnail_url = asString(meta.goods_share_thumbnail_url).trim();
@@ -353,6 +357,7 @@ function enrichAlchemyMetadata(rows, hiddenRows, dbPath) {
       row.maxfloat = null;
       row.isstattrak = 0;
       row.wear_range = null;
+      row.inventory_display_only = 0;
       row.goods_icon_url = "";
       row.goods_original_icon_url = "";
       row.goods_share_thumbnail_url = "";
@@ -418,6 +423,7 @@ function parseOne(item, schema) {
     maxfloat: null,
     isstattrak: 0,
     wear_range: null,
+    inventory_display_only: 0,
     goods_icon_url: "",
     goods_original_icon_url: "",
     goods_share_thumbnail_url: "",

@@ -88,6 +88,18 @@ function buildFamilyKeyFromRow(row) {
   );
 }
 
+function skinHasColumn(db, columnName) {
+  return db.prepare("PRAGMA table_info(skin)").all().some(
+    (row) => asString(row && row.name).trim() === asString(columnName).trim()
+  );
+}
+
+function buildInventoryDisplayOnlyFilterClause(db) {
+  return skinHasColumn(db, "inventory_display_only")
+    ? " AND COALESCE(inventory_display_only, 0) = 0"
+    : "";
+}
+
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, Math.max(0, Math.trunc(Number(ms) || 0)));
@@ -100,6 +112,23 @@ function normalizeDelayMs(value, fallback = 0) {
     return parsed;
   }
   return Math.max(0, Math.trunc(Number(fallback) || 0));
+}
+
+function normalizeTargetMarketHashNameSet(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const list = Array.isArray(value) || value instanceof Set
+    ? Array.from(value)
+    : [value];
+  const targetSet = new Set();
+  for (const item of list) {
+    const normalized = asString(item).trim();
+    if (normalized) {
+      targetSet.add(normalized);
+    }
+  }
+  return targetSet;
 }
 
 function mapWithConcurrency(items, concurrency, iteratee) {
@@ -168,6 +197,7 @@ function createRequestController({
   rateLimitMaxDelayMs = 0,
   delayRelaxStepMs = 0,
   delayRelaxAfterSuccesses = 1,
+  maxInFlight = 1,
   logger = null,
   logLabel = "request_throttle"
 } = {}) {
@@ -180,10 +210,29 @@ function createRequestController({
   const relaxStepMs = normalizeDelayMs(delayRelaxStepMs);
   const relaxAfter = Math.max(1, Math.trunc(Number(delayRelaxAfterSuccesses) || 0) || 1);
   const sleepFn = typeof sleepImpl === "function" ? sleepImpl : sleep;
+  const maxParallel = Math.max(1, Math.trunc(Number(maxInFlight) || 0) || 1);
   let currentDelayMs = minDelayMs;
   let successStreak = 0;
   let hasStarted = false;
-  let queue = Promise.resolve();
+  let dispatchQueue = Promise.resolve();
+  let inFlight = 0;
+  const slotWaiters = [];
+
+  function releaseSlot() {
+    inFlight = Math.max(0, inFlight - 1);
+    const next = slotWaiters.shift();
+    if (typeof next === "function") {
+      next();
+    }
+  }
+
+  async function waitForSlot() {
+    while (inFlight >= maxParallel) {
+      await new Promise((resolve) => {
+        slotWaiters.push(resolve);
+      });
+    }
+  }
 
   function updateDelay(nextDelayMs, reason) {
     const normalized = Math.max(minDelayMs, normalizeDelayMs(nextDelayMs, currentDelayMs));
@@ -195,34 +244,38 @@ function createRequestController({
   }
 
   async function run(task) {
-    const scheduled = queue.then(async () => {
+    const scheduled = dispatchQueue.then(async () => {
+      await waitForSlot();
       if (hasStarted && currentDelayMs > 0) {
         await sleepFn(currentDelayMs);
       }
       hasStarted = true;
-      try {
-        const result = await task();
-        if (relaxStepMs > 0 && currentDelayMs > minDelayMs) {
-          successStreak += 1;
-          if (successStreak >= relaxAfter) {
-            successStreak = 0;
-            updateDelay(Math.max(minDelayMs, currentDelayMs - relaxStepMs), "relax");
-          }
-        }
-        return result;
-      } catch (error) {
-        successStreak = 0;
-        if (backoffMs > 0 && isRateLimitLikeError(error)) {
-          const nextDelayMs = currentDelayMs > 0
-            ? Math.min(maxDelayMs, currentDelayMs + backoffMs)
-            : Math.min(maxDelayMs, backoffMs);
-          updateDelay(nextDelayMs, "rate_limit");
-        }
-        throw error;
-      }
+      inFlight += 1;
     });
-    queue = scheduled.catch(() => {});
-    return scheduled;
+    dispatchQueue = scheduled.catch(() => {});
+    await scheduled;
+    try {
+      const result = await task();
+      if (relaxStepMs > 0 && currentDelayMs > minDelayMs) {
+        successStreak += 1;
+        if (successStreak >= relaxAfter) {
+          successStreak = 0;
+          updateDelay(Math.max(minDelayMs, currentDelayMs - relaxStepMs), "relax");
+        }
+      }
+      return result;
+    } catch (error) {
+      successStreak = 0;
+      if (backoffMs > 0 && isRateLimitLikeError(error)) {
+        const nextDelayMs = currentDelayMs > 0
+          ? Math.min(maxDelayMs, currentDelayMs + backoffMs)
+          : Math.min(maxDelayMs, backoffMs);
+        updateDelay(nextDelayMs, "rate_limit");
+      }
+      throw error;
+    } finally {
+      releaseSlot();
+    }
   }
 
   return {
@@ -235,10 +288,12 @@ function recalculateAlchemyTypesForCollections(db, affectedCollections, options 
   if (!targets.size) {
     return 0;
   }
+  const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
   const rows = db.prepare(`
     SELECT id, collection, rarity, alchemy_type
     FROM skin
     WHERE TRIM(COALESCE(collection, '')) <> ''
+      ${inventoryFilter}
   `).all().filter((row) => {
     const collections = splitCollectionNames(row.collection);
     return collections.some((collection) => targets.has(collection));
@@ -282,7 +337,8 @@ function createSkinDetailEnrichmentService({
   imageRateLimitBackoffMs = 1500,
   imageRateLimitMaxDelayMs = 15000,
   imageDelayRelaxStepMs = 250,
-  imageDelayRelaxAfterSuccesses = 3
+  imageDelayRelaxAfterSuccesses = 3,
+  imageRequestMaxInFlight = 1
 } = {}) {
   if (!asString(dbPath).trim()) {
     throw new Error("dbPath is required");
@@ -292,10 +348,12 @@ function createSkinDetailEnrichmentService({
   }
 
   function loadPendingFamilies(db) {
+    const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
     const rows = db.prepare(`
       SELECT id, markethashname, basemarkethashname, buffid, collection, rarity, detail_status, detail_source
       FROM skin
       WHERE TRIM(COALESCE(markethashname, '')) <> ''
+        ${inventoryFilter}
       ORDER BY id
     `).all();
     const families = new Map();
@@ -403,18 +461,26 @@ function createSkinDetailEnrichmentService({
         imageInfo: hasAnyImageInfo(mergedImageInfo) ? mergedImageInfo : null
       };
     }).filter((family) => family.pendingRows.length > 0);
+    const targetMarketHashNameSet = normalizeTargetMarketHashNameSet(options.targetMarketHashNames);
+    const filteredList = targetMarketHashNameSet === null
+      ? list
+      : list.filter((family) => family.rows.some(
+        (row) => targetMarketHashNameSet.has(asString(row && row.markethashname).trim())
+      ));
     const limitFamilies = Math.max(0, Math.trunc(Number(options.limitFamilies) || 0));
     if (limitFamilies > 0) {
-      return list.slice(0, limitFamilies);
+      return filteredList.slice(0, limitFamilies);
     }
-    return list;
+    return filteredList;
   }
 
   function loadPendingWearFamilies(db, options = {}) {
+    const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
     const rows = db.prepare(`
       SELECT id, markethashname, basemarkethashname, buffid, minfloat, maxfloat, wear_range
       FROM skin
       WHERE TRIM(COALESCE(markethashname, '')) <> ''
+        ${inventoryFilter}
       ORDER BY id
     `).all();
     const families = new Map();
@@ -547,10 +613,12 @@ function createSkinDetailEnrichmentService({
 
     db = new DatabaseSync(dbPath);
     try {
+      const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
       const wearRow = db.prepare(`
         SELECT COUNT(*) AS count
         FROM skin
         WHERE TRIM(COALESCE(markethashname, '')) <> ''
+          ${inventoryFilter}
           AND (
             minfloat IS NULL
             OR maxfloat IS NULL
@@ -578,6 +646,7 @@ function createSkinDetailEnrichmentService({
       rateLimitMaxDelayMs: imageRateLimitMaxDelayMs,
       delayRelaxStepMs: imageDelayRelaxStepMs,
       delayRelaxAfterSuccesses: imageDelayRelaxAfterSuccesses,
+      maxInFlight: imageRequestMaxInFlight,
       logger,
       logLabel: "image_throttle"
     });
@@ -624,17 +693,24 @@ function createSkinDetailEnrichmentService({
 
     db = new DatabaseSync(dbPath);
     try {
-      const imageRow = db.prepare(`
-        SELECT COUNT(*) AS count
-        FROM skin
-        WHERE TRIM(COALESCE(markethashname, '')) <> ''
-          AND (
-            TRIM(COALESCE(goods_icon_url, '')) = ''
-            OR TRIM(COALESCE(goods_original_icon_url, '')) = ''
-            OR TRIM(COALESCE(goods_share_thumbnail_url, '')) = ''
-          )
-      `).get();
-      summary.image_rows_still_missing = Number(imageRow && imageRow.count || 0) || 0;
+      if (normalizeTargetMarketHashNameSet(options.targetMarketHashNames) !== null) {
+        summary.image_rows_still_missing = loadPendingImageFamilies(db, options).reduce(
+          (total, family) => total + family.pendingRows.length,
+          0
+        );
+      } else {
+        const imageRow = db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM skin
+          WHERE TRIM(COALESCE(markethashname, '')) <> ''
+            AND (
+              TRIM(COALESCE(goods_icon_url, '')) = ''
+              OR TRIM(COALESCE(goods_original_icon_url, '')) = ''
+              OR TRIM(COALESCE(goods_share_thumbnail_url, '')) = ''
+            )
+        `).get();
+        summary.image_rows_still_missing = Number(imageRow && imageRow.count || 0) || 0;
+      }
     } finally {
       db.close();
     }
@@ -699,10 +775,16 @@ function createSkinDetailEnrichmentService({
     db = new DatabaseSync(dbPath);
     try {
       recalculateAlchemyTypesForCollections(db, affectedCollections, {rarityOrder});
+      const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
       const row = db.prepare(`
         SELECT COUNT(*) AS count
         FROM skin
-        WHERE TRIM(COALESCE(collection, '')) = '' OR TRIM(COALESCE(rarity, '')) = ''
+        WHERE 1 = 1
+          ${inventoryFilter}
+          AND (
+            TRIM(COALESCE(collection, '')) = ''
+            OR TRIM(COALESCE(rarity, '')) = ''
+          )
       `).get();
       summary.rows_still_missing = Number(row && row.count || 0) || 0;
     } finally {

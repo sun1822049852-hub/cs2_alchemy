@@ -17,12 +17,14 @@ function createRefreshRuntime({
   uiStateStoreFactory,
   resolveRefreshTarget,
   buildRefreshPayload,
+  runPostRefreshTask = null,
   heartbeatStaleMs = 30 * 60 * 1000,
   heartbeatCheckMs = 60 * 1000,
   sseKeepaliveMs = 25 * 1000
 }) {
   const connectedAccounts = new Set();
   const refreshLocks = new Map();
+  const postRefreshStates = new Map();
   const eventBus = new EventEmitter();
   const sseClients = new Map();
 
@@ -104,6 +106,77 @@ function createRefreshRuntime({
     return active ? asString(active.username).trim() : "";
   }
 
+  function emitCustomSse(event, payload) {
+    broadcastSse(asString(event).trim() || "message", payload || {});
+  }
+
+  async function drainPostRefreshQueue(account, state) {
+    if (!state || state.running || typeof runPostRefreshTask !== "function") {
+      return;
+    }
+    state.running = true;
+    try {
+      while (state.pending) {
+        const current = state.pending;
+        state.pending = null;
+        try {
+          await runPostRefreshTask({
+            username: account,
+            source: asString(current && current.source).trim(),
+            result: current && current.result ? current.result : null,
+            payload: current && current.payload ? current.payload : null,
+            emitSse: emitCustomSse
+          });
+        } catch (err) {
+          const message = asString(err && err.message ? err.message : err).trim() || "post_refresh_failed";
+          if (logger) {
+            logger.warn(
+              "ui_server",
+              `post-refresh failed: account=${account} source=${asString(current && current.source).trim() || "-"} err=${message}`
+            );
+          }
+          eventBus.emit("inventory_post_refresh_failed", {
+            username: account,
+            source: asString(current && current.source).trim(),
+            message
+          });
+        }
+      }
+    } finally {
+      state.running = false;
+      if (!state.pending) {
+        postRefreshStates.delete(account);
+      }
+    }
+  }
+
+  function queuePostRefreshTask(task) {
+    if (typeof runPostRefreshTask !== "function") {
+      return;
+    }
+    const account = asString(task && task.username).trim();
+    if (!account) {
+      return;
+    }
+    let state = postRefreshStates.get(account);
+    if (!state) {
+      state = {running: false, pending: null};
+      postRefreshStates.set(account, state);
+    }
+    state.pending = task;
+    drainPostRefreshQueue(account, state).catch((err) => {
+      const message = asString(err && err.message ? err.message : err).trim() || "post_refresh_queue_failed";
+      if (logger) {
+        logger.warn("ui_server", `post-refresh queue failed: account=${account} err=${message}`);
+      }
+      eventBus.emit("inventory_post_refresh_failed", {
+        username: account,
+        source: asString(task && task.source).trim(),
+        message
+      });
+    });
+  }
+
   async function runRefreshJob({
     username,
     password,
@@ -141,6 +214,12 @@ function createRefreshRuntime({
           rows: payload.rows.length,
           source,
           connected: true
+        });
+        queuePostRefreshTask({
+          username: account,
+          source,
+          result,
+          payload
         });
         if (logger) {
           logger.info("ui_server", `refresh success: source=${source} account=${account} rows=${payload.rows.length}`);
@@ -273,6 +352,7 @@ function createRefreshRuntime({
     startSseKeepaliveLoop();
     eventBus.on("inventory_refreshed", (payload) => broadcastSse("inventory_refreshed", payload));
     eventBus.on("inventory_refresh_failed", (payload) => broadcastSse("inventory_refresh_failed", payload));
+    eventBus.on("inventory_post_refresh_failed", (payload) => broadcastSse("inventory_post_refresh_failed", payload));
   }
 
   function emitSse(event, payload) {

@@ -2101,6 +2101,26 @@ function startInventoryEventStream(username) {
     setSummary(`自动刷新失败：${msg}`);
   });
 
+  stream.addEventListener("inventory_display_images_enriched", async (evt) => {
+    const data = parseEventData(evt.data);
+    const eventUsername = String(data.username || "").trim();
+    if (!eventUsername || eventUsername !== state.currentAccountUsername) return;
+    await loadSnapshotForAccount(eventUsername);
+    syncInventoryTop();
+    const ok = Math.max(0, Number(data.image_rows_ok || 0) || 0);
+    const failed = Math.max(0, Number(data.image_rows_failed || 0) || 0);
+    const targets = Math.max(0, Number(data.target_market_hash_names_count || 0) || 0);
+    setSummary(`库存补图已更新：目标${targets}，成功${ok}，失败${failed}`);
+  });
+
+  stream.addEventListener("inventory_post_refresh_failed", (evt) => {
+    const data = parseEventData(evt.data);
+    const eventUsername = String(data.username || "").trim();
+    if (!eventUsername || eventUsername !== state.currentAccountUsername) return;
+    const msg = String(data.message || "未知错误");
+    setSummary(`库存补图失败：${msg}`);
+  });
+
   stream.addEventListener("component_task_queue", (evt) => {
     const data = parseEventData(evt.data);
     applyTaskQueueSnapshot(data);

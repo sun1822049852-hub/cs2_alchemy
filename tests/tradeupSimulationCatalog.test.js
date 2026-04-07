@@ -24,6 +24,7 @@ function createTempSkinDb() {
       maxfloat REAL,
       isstattrak INTEGER DEFAULT 0,
       wear_range REAL,
+      inventory_display_only INTEGER DEFAULT 0,
       goods_icon_url TEXT DEFAULT '',
       goods_original_icon_url TEXT DEFAULT '',
       goods_share_thumbnail_url TEXT DEFAULT ''
@@ -36,9 +37,9 @@ function insertSkinRow(db, row) {
   db.prepare(`
     INSERT INTO skin (
       markethashname, name, basemarkethashname, basename, collection, rarity,
-      wearlevel, minfloat, maxfloat, isstattrak, wear_range,
+      wearlevel, minfloat, maxfloat, isstattrak, wear_range, inventory_display_only,
       goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.markethashname,
     row.name || row.markethashname,
@@ -51,6 +52,7 @@ function insertSkinRow(db, row) {
     row.maxfloat == null ? null : row.maxfloat,
     row.isstattrak ? 1 : 0,
     row.wear_range == null ? null : row.wear_range,
+    row.inventory_display_only ? 1 : 0,
     row.goods_icon_url || "",
     row.goods_original_icon_url || "",
     row.goods_share_thumbnail_url || ""
@@ -273,6 +275,27 @@ function test_search_items_returns_empty_when_query_normalizes_to_empty_text() {
   assert.equal(results.length, 0);
 }
 
+function test_search_items_excludes_inventory_display_only_rows() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRow(db, {
+    markethashname: "Special Agent Ava | FBI",
+    name: "Special Agent Ava | FBI",
+    basemarkethashname: "Special Agent Ava | FBI",
+    basename: "Special Agent Ava | FBI",
+    collection: "",
+    rarity: "",
+    wearlevel: "Unknown",
+    inventory_display_only: 1
+  });
+  db.close();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+
+  const results = catalog.searchItems("Agent");
+
+  assert.deepEqual(results, []);
+  assert.equal(catalog.getItemByMarketHashName("Special Agent Ava | FBI"), null);
+}
+
 function main() {
   test_search_items_returns_normalized_picker_rows();
   test_search_items_matches_collection_alias_queries();
@@ -282,6 +305,7 @@ function main() {
   test_search_items_keeps_fetching_until_limit_unique_items_are_collected();
   test_search_items_matches_stattrak_queries_without_tm_symbol();
   test_search_items_returns_empty_when_query_normalizes_to_empty_text();
+  test_search_items_excludes_inventory_display_only_rows();
   console.log("tradeupSimulationCatalog tests passed");
 }
 

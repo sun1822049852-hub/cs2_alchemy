@@ -15,6 +15,12 @@ function normalizeText(value) {
   return asString(value).trim();
 }
 
+function hasSkinColumn(db, columnName) {
+  return db.prepare("PRAGMA table_info(skin)").all().some(
+    (row) => normalizeText(row && row.name) === normalizeText(columnName)
+  );
+}
+
 function fetchSkinMetadataMap(names, dbPath = PATHS.SKIN_DB_FILE) {
   const clean = Array.from(
     new Set(
@@ -31,13 +37,15 @@ function fetchSkinMetadataMap(names, dbPath = PATHS.SKIN_DB_FILE) {
   let db = null;
   try {
     db = new DatabaseSync(dbPath, {open: true, readOnly: true});
+    const hasInventoryDisplayOnly = hasSkinColumn(db, "inventory_display_only");
     const chunkSize = 500;
     for (let i = 0; i < clean.length; i += chunkSize) {
       const chunk = clean.slice(i, i + chunkSize);
       const placeholders = chunk.map(() => "?").join(",");
       const sql =
         "SELECT markethashname, name, collection, rarity, minfloat, maxfloat, isstattrak, wear_range, " +
-        "goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url " +
+        "goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url" +
+        (hasInventoryDisplayOnly ? ", inventory_display_only " : " ") +
         `FROM skin WHERE markethashname IN (${placeholders})`;
       const stmt = db.prepare(sql);
       const rows = stmt.all(...chunk);
@@ -54,6 +62,7 @@ function fetchSkinMetadataMap(names, dbPath = PATHS.SKIN_DB_FILE) {
           maxfloat: normalizeFloat(row.maxfloat),
           isstattrak: toInt(row.isstattrak, 0),
           wear_range: normalizeFloat(row.wear_range),
+          inventory_display_only: hasInventoryDisplayOnly ? toInt(row.inventory_display_only, 0) : 0,
           goods_icon_url: normalizeText(row.goods_icon_url),
           goods_original_icon_url: normalizeText(row.goods_original_icon_url),
           goods_share_thumbnail_url: normalizeText(row.goods_share_thumbnail_url)
@@ -93,6 +102,7 @@ function fillMissingWearBounds(rows, {dbPath = PATHS.SKIN_DB_FILE} = {}) {
     row.goods_icon_url = normalizeText(row.goods_icon_url);
     row.goods_original_icon_url = normalizeText(row.goods_original_icon_url);
     row.goods_share_thumbnail_url = normalizeText(row.goods_share_thumbnail_url);
+    row.inventory_display_only = toInt(row.inventory_display_only, 0);
 
     const key = asString(row.market_hash_name || row.name || "").trim();
     if (!key) {
@@ -157,6 +167,7 @@ function fillMissingWearBounds(rows, {dbPath = PATHS.SKIN_DB_FILE} = {}) {
     if (!row.goods_share_thumbnail_url) {
       row.goods_share_thumbnail_url = meta.goods_share_thumbnail_url;
     }
+    row.inventory_display_only = toInt(meta.inventory_display_only, row.inventory_display_only);
   }
   return rows;
 }

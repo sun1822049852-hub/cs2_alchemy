@@ -21,6 +21,12 @@ function choosePreferredText(values) {
   return "";
 }
 
+function skinHasColumn(db, columnName) {
+  return db.prepare("PRAGMA table_info(skin)").all().some(
+    (row) => asString(row && row.name).trim() === asString(columnName).trim()
+  );
+}
+
 function mergeBaseOutcome(existing, row, collectionKey, rarityRank, stattrak) {
   const minfloat = row.minfloat == null ? existing && existing.minfloat : row.minfloat;
   const maxfloat = row.maxfloat == null ? existing && existing.maxfloat : row.maxfloat;
@@ -45,11 +51,15 @@ function mergeBaseOutcome(existing, row, collectionKey, rarityRank, stattrak) {
 function buildSnapshot(dbPath) {
   const db = new DatabaseSync(dbPath, {open: true, readOnly: true});
   try {
+    const inventoryFilter = skinHasColumn(db, "inventory_display_only")
+      ? "WHERE COALESCE(inventory_display_only, 0) = 0"
+      : "";
     const rows = db.prepare(`
       SELECT markethashname, name, basemarkethashname, basename, collection, rarity, wearlevel,
              minfloat, maxfloat, isstattrak, wear_range,
              goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
       FROM skin
+      ${inventoryFilter}
       ORDER BY id
     `).all();
     const baseBucketMaps = new Map();
