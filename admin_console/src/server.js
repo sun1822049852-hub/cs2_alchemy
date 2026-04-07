@@ -6,6 +6,7 @@ const {getMailConfig} = require("./mailConfig");
 const {createMailService} = require("./mailService");
 const {createEntitlementSigner} = require("./entitlementSigner");
 const {DEFAULTS, PATHS} = require("./constants");
+const {FEATURE_CODES} = require("../../shared/featureCodes");
 const {asString} = require("../../node_sidecar/src/utils");
 
 const MIME_TYPES = {
@@ -129,6 +130,18 @@ function createServer({
       featureFlags: entitlements ? entitlements.feature_flags : undefined,
       refreshCredential,
       source
+    });
+  }
+
+  function issueCraftPermit({user, deviceId, action, accountUsername, payloadHash}) {
+    return signer.issueCraftPermit({
+      user,
+      deviceId,
+      action,
+      accountUsername,
+      payloadHash,
+      ttlSeconds: Math.max(1, Number(config.craftPermitTtlSeconds) || DEFAULTS.CRAFT_PERMIT_TTL_SECONDS),
+      source: "remote_craft_permit"
     });
   }
 
@@ -548,6 +561,47 @@ function createServer({
             source: "remote_refresh"
           }),
           refresh_token: rotated.refresh_token
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/craft-permit") {
+        const body = await readJsonBody(req);
+        const refreshToken = asString(body && body.refresh_token).trim();
+        const deviceId = asString(body && body.device_id).trim();
+        const action = asString(body && body.action).trim();
+        const accountUsername = asString(body && body.account_username).trim();
+        const payloadHash = asString(body && body.payload_hash).trim();
+        if (!refreshToken || !deviceId || !action || !accountUsername || !payloadHash) {
+          writeError(res, 400, "craft_permit_payload_invalid", "refresh_token、device_id、action、account_username、payload_hash 不能为空");
+          return;
+        }
+        const access = store.resolveClientAccess({
+          refreshToken,
+          deviceId,
+          now: now()
+        });
+        if (!access.ok) {
+          const status = access.reason === "device_mismatch" ? 409 : 401;
+          writeError(res, status, access.reason, access.reason === "device_mismatch" ? "设备绑定不匹配" : "refresh_token 无效");
+          return;
+        }
+        const permissions = Array.isArray(access.entitlements && access.entitlements.permissions)
+          ? access.entitlements.permissions
+          : [];
+        if (!permissions.includes(FEATURE_CODES.CRAFT_USE)) {
+          writeError(res, 403, "craft_permission_denied", "当前账号未获得炼金执行授权");
+          return;
+        }
+        writeJson(res, 200, {
+          ok: true,
+          permit: issueCraftPermit({
+            user: access.user,
+            deviceId,
+            action,
+            accountUsername,
+            payloadHash
+          })
         });
         return;
       }

@@ -28,8 +28,10 @@ const {createTradeupSimulationCatalog} = require("./services/tradeupSimulationCa
 const {createTradeupSimulationService} = require("./services/tradeupSimulationService");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {DedupLogger} = require("./logger");
+const {hashCraftPermitPayload} = require("../../shared/craftPermitPolicy");
 const {getLicenseConfig} = require("./licenseConfig");
 const {createControlPlaneAuthClient} = require("./controlPlaneAuthClient");
+const {createCraftPermitEnforcer} = require("./craftPermitEnforcer");
 const {resolveDeviceId} = require("./deviceIdentity");
 const {LicenseStore} = require("./licenseStore");
 const {createLicenseEnforcer} = require("./licenseEnforcer");
@@ -148,7 +150,35 @@ function getLicenseRuntime(deps = {}) {
     store,
     enforcer,
     refreshIntervalMs: config.refreshIntervalMs,
-    refreshThresholdMs: config.refreshIntervalMs
+    refreshThresholdMs: config.refreshIntervalMs,
+    refreshFn: async () => {
+      const authClient = getControlPlaneAuthClient(deps);
+      if (!authClient || typeof authClient.refresh !== "function") {
+        return null;
+      }
+      const currentBundle = store.read();
+      const refreshCredential = asString(currentBundle && currentBundle.refresh_credential).trim();
+      if (!refreshCredential) {
+        return null;
+      }
+      try {
+        const result = await authClient.refresh({
+          refreshCredential,
+          deviceId
+        });
+        if (!result || !result.bundle || typeof result.bundle !== "object") {
+          return null;
+        }
+        return {
+          ...result.bundle,
+          refresh_credential: asString(result.refreshCredential || refreshCredential).trim() || refreshCredential,
+          source: "remote_refresh"
+        };
+      } catch (err) {
+        logger.warn("ui_server", `license refresh failed: ${asString(err && err.message ? err.message : err)}`);
+        return null;
+      }
+    }
   });
   bootstrapDevLicense({
     config,
@@ -168,6 +198,14 @@ function getClientLicenseConfig(deps = {}) {
   return deps.__licenseConfig;
 }
 
+function getClientDeviceId(deps = {}) {
+  if (deps.__clientDeviceId) {
+    return deps.__clientDeviceId;
+  }
+  deps.__clientDeviceId = resolveDeviceId(getClientLicenseConfig(deps).machineIdFile);
+  return deps.__clientDeviceId;
+}
+
 function getControlPlaneAuthClient(deps = {}) {
   if (deps.__controlPlaneAuthClient) {
     return deps.__controlPlaneAuthClient;
@@ -183,6 +221,18 @@ function getControlPlaneAuthClient(deps = {}) {
     baseUrl: config.controlPlaneBaseUrl
   });
   return deps.__controlPlaneAuthClient;
+}
+
+function getCraftPermitEnforcer(deps = {}) {
+  if (deps.__craftPermitEnforcer) {
+    return deps.__craftPermitEnforcer;
+  }
+  const config = getClientLicenseConfig(deps);
+  deps.__craftPermitEnforcer = createCraftPermitEnforcer({
+    publicKeyFile: config.publicKeyFile,
+    deviceId: getClientDeviceId(deps)
+  });
+  return deps.__craftPermitEnforcer;
 }
 
 function getCraftAssistWorkerPool() {
@@ -446,6 +496,89 @@ function writeClientAuthError(res, err, fallbackMessage = "认证请求失败") 
     reason: asString(err && err.code || "auth_request_failed").trim() || "auth_request_failed",
     message: asString(err && err.message || fallbackMessage).trim() || fallbackMessage
   });
+}
+
+function normalizeCraftPermitFailure(result) {
+  const code = asString(result && result.code).trim() || "craft_permission_denied";
+  const message = asString(result && result.message).trim() || "当前账号未获得炼金执行授权";
+  if (code === "permit_expired") {
+    return {status: 410, reason: code, message};
+  }
+  if ([
+    "device_mismatch",
+    "action_mismatch",
+    "account_username_mismatch",
+    "payload_hash_mismatch"
+  ].includes(code)) {
+    return {status: 409, reason: code, message};
+  }
+  if (["public_key_missing", "invalid_signature", "permit_invalid"].includes(code)) {
+    return {status: 502, reason: code, message};
+  }
+  return {status: 403, reason: code, message};
+}
+
+async function requireCraftExecutionPermit(res, auth, deps, action, body = {}) {
+  const config = getClientLicenseConfig(deps);
+  if (!config.requireRemoteCraftPermit) {
+    return true;
+  }
+  const runtime = auth && auth.licenseRuntime;
+  const currentBundle = runtime && typeof runtime.readBundle === "function" ? runtime.readBundle() : null;
+  const refreshCredential = asString(currentBundle && currentBundle.refresh_credential).trim();
+  if (!refreshCredential) {
+    writeJson(res, 503, {
+      ok: false,
+      reason: "craft_permit_unavailable",
+      message: "当前客户端缺少执行授权凭证，请重新登录"
+    });
+    return false;
+  }
+  const authClient = getControlPlaneAuthClient(deps);
+  if (!authClient || typeof authClient.issueCraftPermit !== "function") {
+    writeJson(res, 503, {
+      ok: false,
+      reason: "craft_auth_unavailable",
+      message: "认证服务暂时不可用，暂无法执行炼金"
+    });
+    return false;
+  }
+  const accountUsername = asString(body && body.username).trim();
+  const deviceId = getClientDeviceId(deps);
+  const payloadHash = hashCraftPermitPayload(action, body);
+  let permit = null;
+  try {
+    const response = await authClient.issueCraftPermit({
+      refreshCredential,
+      deviceId,
+      action,
+      accountUsername,
+      payloadHash
+    });
+    permit = response && response.permit && typeof response.permit === "object" ? response.permit : null;
+  } catch (err) {
+    writeJson(res, Math.max(400, Number(err && err.status) || 503), {
+      ok: false,
+      reason: asString(err && err.code || "craft_auth_unavailable").trim() || "craft_auth_unavailable",
+      message: asString(err && err.message || "认证服务暂时不可用，暂无法执行炼金").trim() || "认证服务暂时不可用，暂无法执行炼金"
+    });
+    return false;
+  }
+  const evaluation = getCraftPermitEnforcer(deps).evaluatePermit(permit, {
+    action,
+    accountUsername,
+    payloadHash
+  });
+  if (evaluation.ok) {
+    return true;
+  }
+  const failure = normalizeCraftPermitFailure(evaluation);
+  writeJson(res, failure.status, {
+    ok: false,
+    reason: failure.reason,
+    message: failure.message
+  });
+  return false;
 }
 
 function requireSteamAccountAccess(res, auth, username) {
@@ -1158,7 +1291,12 @@ async function handleApi(req, res, urlObj, deps = {}) {
         const authClient = getControlPlaneAuthClient(deps);
         if (authClient && typeof authClient.logout === "function") {
           try {
-            await authClient.logout({});
+            const bundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function"
+              ? auth.licenseRuntime.readBundle()
+              : null;
+            await authClient.logout({
+              refreshCredential: asString(bundle && bundle.refresh_credential).trim()
+            });
           } catch (_) {
             // local logout still succeeds even if remote revoke fails
           }
@@ -1878,7 +2016,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/assist-select" && req.method === "POST") {
-    if (!requirePermission(res, auth, "craft.use")) {
+    if (!requirePermission(res, auth, "simulation.use")) {
       return true;
     }
     const body = await readJsonBody(req);
@@ -1928,7 +2066,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/predict-outcomes" && req.method === "POST") {
-    if (!requirePermission(res, auth, "craft.use")) {
+    if (!requirePermission(res, auth, "simulation.use")) {
       return true;
     }
     const body = await readJsonBody(req);
@@ -2005,7 +2143,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/craft/candidates" && req.method === "POST") {
-    if (!requirePermission(res, auth, "craft.use")) {
+    if (!requirePermission(res, auth, "simulation.use")) {
       return true;
     }
     const body = await readJsonBody(req);
@@ -2057,6 +2195,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
     if (!username || !refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    if (!await requireCraftExecutionPermit(res, auth, deps, "craft.tradeup.with_components.execute", body)) {
       return true;
     }
     try {
@@ -2179,6 +2320,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
     if (!username || !refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    if (!requestUsesComponentSourceRecipes(body) && !await requireCraftExecutionPermit(res, auth, deps, "craft.tradeup.execute", body)) {
       return true;
     }
     try {

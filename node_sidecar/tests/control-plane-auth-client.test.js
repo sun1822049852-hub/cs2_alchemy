@@ -125,10 +125,68 @@ async function test_refresh_normalizes_rotated_refresh_token() {
   });
 }
 
+async function test_issue_craft_permit_normalizes_request_and_response() {
+  const calls = [];
+  const client = createControlPlaneAuthClient({
+    baseUrl: "https://auth.example.com",
+    fetchFn: async (url, options = {}) => {
+      calls.push({
+        url,
+        method: options.method,
+        body: JSON.parse(String(options.body || "{}"))
+      });
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            ok: true,
+            permit: {
+              snapshot: {
+                sub: "user_1",
+                action: "craft.tradeup.execute"
+              },
+              signature: "permit_signed"
+            }
+          };
+        }
+      };
+    }
+  });
+
+  const result = await client.issueCraftPermit({
+    refreshCredential: "refresh_token_1",
+    deviceId: "device_1",
+    action: "craft.tradeup.execute",
+    accountUsername: "steam_account_a",
+    payloadHash: "sha256:abc123"
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://auth.example.com/api/auth/craft-permit");
+  assert.deepEqual(calls[0].body, {
+    refresh_token: "refresh_token_1",
+    device_id: "device_1",
+    action: "craft.tradeup.execute",
+    account_username: "steam_account_a",
+    payload_hash: "sha256:abc123"
+  });
+  assert.deepEqual(result, {
+    permit: {
+      snapshot: {
+        sub: "user_1",
+        action: "craft.tradeup.execute"
+      },
+      signature: "permit_signed"
+    }
+  });
+}
+
 async function main() {
   await test_login_fails_when_service_is_not_configured();
   await test_login_normalizes_remote_auth_payload();
   await test_refresh_normalizes_rotated_refresh_token();
+  await test_issue_craft_permit_normalizes_request_and_response();
   console.log("control-plane-auth-client tests passed");
 }
 

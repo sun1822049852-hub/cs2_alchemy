@@ -14,19 +14,23 @@ const DEFAULT_MEMBERSHIP_PLANS = [
   {
     code: "free",
     name: "Free",
-    description: "Basic read-only features",
+    description: "Default registered access without craft execution",
     permissions: [
       FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.INVENTORY_READ
+      FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.INVENTORY_READ,
+      FEATURE_CODES.INVENTORY_REFRESH,
+      FEATURE_CODES.SIMULATION_USE
     ]
   },
   {
     code: "pro",
     name: "Pro",
-    description: "Core working set for paid users",
+    description: "Includes real craft execution",
     permissions: [
       FEATURE_CODES.ACCOUNTS_READ,
       FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.CRAFT_USE,
       FEATURE_CODES.INVENTORY_READ,
       FEATURE_CODES.INVENTORY_REFRESH,
       FEATURE_CODES.SIMULATION_USE
@@ -707,6 +711,19 @@ class ControlPlaneStore {
         username: asString(row.username).trim(),
         membership_plan: asString(row.membership_plan).trim() || "pro"
       }
+    };
+  }
+
+  resolveClientAccess({refreshToken = "", deviceId = "", now = new Date()} = {}) {
+    const resolved = this.resolveRefreshSession({refreshToken, deviceId, now});
+    if (!resolved.ok) {
+      return resolved;
+    }
+    return {
+      ok: true,
+      session: resolved.session,
+      user: this.getClientUserById(resolved.user.id, {now}),
+      entitlements: this.resolveUserEntitlements({userId: resolved.user.id, now})
     };
   }
 

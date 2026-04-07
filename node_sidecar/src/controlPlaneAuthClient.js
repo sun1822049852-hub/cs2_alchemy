@@ -132,6 +132,24 @@ function createControlPlaneAuthClient({
         refreshCredential: normalized.refreshCredential
       };
     },
+    async issueCraftPermit({
+      refreshCredential = "",
+      deviceId = "",
+      action = "",
+      accountUsername = "",
+      payloadHash = ""
+    } = {}) {
+      const data = await postJson("/api/auth/craft-permit", {
+        refresh_token: asString(refreshCredential).trim(),
+        device_id: asString(deviceId).trim(),
+        action: asString(action).trim(),
+        account_username: asString(accountUsername).trim(),
+        payload_hash: asString(payloadHash).trim()
+      });
+      return {
+        permit: data.permit && typeof data.permit === "object" ? {...data.permit} : null
+      };
+    },
     async logout({refreshCredential = ""} = {}) {
       return postJson("/api/auth/logout", {
         refresh_token: asString(refreshCredential).trim()

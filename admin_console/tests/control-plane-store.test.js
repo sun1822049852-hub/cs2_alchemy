@@ -59,13 +59,17 @@ function main() {
     const freePlan = plans.find((item) => item.code === "free");
     assert.deepEqual(sortText(freePlan.permissions), sortText([
       FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.INVENTORY_READ
+      FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.INVENTORY_READ,
+      FEATURE_CODES.INVENTORY_REFRESH,
+      FEATURE_CODES.SIMULATION_USE
     ]));
 
     const proPlan = plans.find((item) => item.code === "pro");
     assert.deepEqual(sortText(proPlan.permissions), sortText([
       FEATURE_CODES.ACCOUNTS_READ,
       FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.CRAFT_USE,
       FEATURE_CODES.INVENTORY_READ,
       FEATURE_CODES.INVENTORY_REFRESH,
       FEATURE_CODES.SIMULATION_USE
@@ -160,9 +164,12 @@ function main() {
     assert.equal(defaultEntitlements.assigned_membership_plan, "free");
     assert.deepEqual(sortText(defaultEntitlements.permissions), sortText([
       FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.INVENTORY_READ
+      FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.INVENTORY_READ,
+      FEATURE_CODES.INVENTORY_REFRESH,
+      FEATURE_CODES.SIMULATION_USE
     ]));
-    assert.equal(defaultEntitlements.feature_flags.simulation_enabled, false);
+    assert.equal(defaultEntitlements.feature_flags.simulation_enabled, true);
     assert.equal(defaultEntitlements.remaining_membership_days, 0);
     assert.equal(defaultEntitlements.membership_active, false);
 
@@ -201,8 +208,10 @@ function main() {
     assert.equal(expiredEntitlements.remaining_membership_days, 0);
     assert.deepEqual(sortText(expiredEntitlements.permissions), sortText([
       FEATURE_CODES.ACCOUNTS_READ,
+      FEATURE_CODES.ACCOUNTS_WRITE,
       FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.CRAFT_USE
+      FEATURE_CODES.INVENTORY_REFRESH,
+      FEATURE_CODES.SIMULATION_USE
     ]));
 
     const login = store.authenticateClientUser({
@@ -228,6 +237,25 @@ function main() {
     assert.equal(resolved.ok, true);
     assert.equal(resolved.user.username, "alice");
     assert.equal(resolved.user.membership_plan, "pro");
+
+    const access = store.resolveClientAccess({
+      refreshToken: session.refresh_token,
+      deviceId: "device_alpha",
+      now: "2026-04-05T05:03:10.000Z"
+    });
+    assert.equal(access.ok, true);
+    assert.equal(access.user.username, "alice");
+    assert.equal(access.entitlements.membership_plan, "pro");
+    assert.equal(access.entitlements.permissions.includes(FEATURE_CODES.CRAFT_USE), true);
+
+    const accessWithoutCraft = store.resolveClientAccess({
+      refreshToken: session.refresh_token,
+      deviceId: "device_alpha",
+      now: "2026-04-25T00:00:00.000Z"
+    });
+    assert.equal(accessWithoutCraft.ok, true);
+    assert.equal(accessWithoutCraft.entitlements.membership_plan, "free");
+    assert.equal(accessWithoutCraft.entitlements.permissions.includes(FEATURE_CODES.CRAFT_USE), false);
 
     const rotated = store.rotateRefreshSession({
       refreshToken: session.refresh_token,

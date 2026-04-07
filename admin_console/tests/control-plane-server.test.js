@@ -3,13 +3,18 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const {createServer} = require("../src/server");
 const {FEATURE_CODES} = require("../../shared/featureCodes");
+const {stableJsonStringify} = require("../../shared/licensePolicy");
+const {validateCraftPermitSnapshot} = require("../../shared/craftPermitPolicy");
 
 function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "cs2-alchemy-control-plane-server-"));
 }
+
+const FIXED_NOW = "2026-04-05T00:00:00.000Z";
 
 async function startServer() {
   const tempDir = makeTempDir();
@@ -33,6 +38,9 @@ async function startServer() {
         refreshSessionDays: 30,
         adminSessionHours: 12
       };
+    },
+    now() {
+      return new Date(FIXED_NOW);
     },
     mailServiceFactory() {
       return {
@@ -176,6 +184,13 @@ async function main() {
     assert.equal(userList.body.items[0].membership_plan, "free");
     assert.equal(userList.body.items[0].membership_expires_at, "");
     assert.equal(userList.body.items[0].remaining_membership_days, 0);
+    assert.deepEqual(userList.body.items[0].entitlements.permissions, [
+      FEATURE_CODES.ACCOUNTS_READ,
+      FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.INVENTORY_READ,
+      FEATURE_CODES.INVENTORY_REFRESH,
+      FEATURE_CODES.SIMULATION_USE
+    ]);
 
     const updatedUser = await requestJson(ctx, "PATCH", `/api/admin/users/${userList.body.items[0].id}`, {
       membership_plan: "pro",
@@ -223,6 +238,70 @@ async function main() {
       FEATURE_CODES.SIMULATION_USE
     ]);
     assert.equal(login.body.access_bundle.snapshot.feature_flags.simulation_enabled, true);
+
+    const craftPermit = await requestJson(ctx, "POST", "/api/auth/craft-permit", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      action: "craft.tradeup.execute",
+      account_username: "steam_account_a",
+      payload_hash: "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    });
+    assert.equal(craftPermit.status, 200);
+    assert.equal(craftPermit.body.ok, true);
+    assert.equal(craftPermit.body.permit.snapshot.username, "alice");
+    assert.equal(craftPermit.body.permit.snapshot.device_id, "device_alpha");
+    assert.equal(craftPermit.body.permit.snapshot.action, "craft.tradeup.execute");
+    assert.equal(craftPermit.body.permit.snapshot.account_username, "steam_account_a");
+    assert.equal(
+      validateCraftPermitSnapshot(craftPermit.body.permit.snapshot).ok,
+      true
+    );
+    const publicKey = fs.readFileSync(path.join(__dirname, "..", "..", "keys", "client_license_public.pem"), "utf8");
+    const permitVerified = crypto.verify(
+      null,
+      Buffer.from(stableJsonStringify(craftPermit.body.permit.snapshot)),
+      publicKey,
+      Buffer.from(craftPermit.body.permit.signature, "base64")
+    );
+    assert.equal(permitVerified, true);
+
+    const craftPermitDeviceMismatch = await requestJson(ctx, "POST", "/api/auth/craft-permit", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_beta",
+      action: "craft.tradeup.execute",
+      account_username: "steam_account_a",
+      payload_hash: "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    });
+    assert.equal(craftPermitDeviceMismatch.status, 409);
+    assert.equal(craftPermitDeviceMismatch.body.reason, "device_mismatch");
+
+    const craftPermitMissingToken = await requestJson(ctx, "POST", "/api/auth/craft-permit", {
+      refresh_token: "",
+      device_id: "device_alpha",
+      action: "craft.tradeup.execute",
+      account_username: "steam_account_a",
+      payload_hash: "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    });
+    assert.equal(craftPermitMissingToken.status, 400);
+    assert.equal(craftPermitMissingToken.body.reason, "craft_permit_payload_invalid");
+
+    const downgradedUser = await requestJson(ctx, "PATCH", `/api/admin/users/${userList.body.items[0].id}`, {
+      membership_plan: "free",
+      membership_expires_at: "",
+      permission_overrides: []
+    }, adminHeaders);
+    assert.equal(downgradedUser.status, 200);
+    assert.equal(downgradedUser.body.ok, true);
+
+    const craftPermitDenied = await requestJson(ctx, "POST", "/api/auth/craft-permit", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      action: "craft.tradeup.execute",
+      account_username: "steam_account_a",
+      payload_hash: "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    });
+    assert.equal(craftPermitDenied.status, 403);
+    assert.equal(craftPermitDenied.body.reason, "craft_permission_denied");
 
     const refreshed = await requestJson(ctx, "POST", "/api/auth/refresh", {
       refresh_token: login.body.refresh_token,

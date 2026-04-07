@@ -1,5 +1,6 @@
 const path = require("path");
 const {PATHS} = require("./constants");
+const {readJson} = require("./jsonStore");
 
 function resolveNumber(value, fallback) {
   const number = Number(value);
@@ -17,13 +18,63 @@ function resolveAuthMode(value) {
   if (mode === "dev_auto_bundle") {
     return "dev_auto_bundle";
   }
-  return "debug_bundle";
+  if (mode === "debug_bundle") {
+    return "debug_bundle";
+  }
+  return "";
+}
+
+function resolveBoolean(value, fallback = false) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(text)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(text)) {
+    return false;
+  }
+  return fallback;
+}
+
+function readClientConfig(filePath) {
+  const target = String(filePath || "").trim();
+  if (!target) {
+    return {};
+  }
+  const data = readJson(target, {});
+  return data && typeof data === "object" && !Array.isArray(data) ? data : {};
 }
 
 function getLicenseConfig(overrides = {}) {
   const value = overrides && typeof overrides === "object" ? overrides : {};
-  const controlPlaneBaseUrl = value.controlPlaneBaseUrl || process.env.CONTROL_PLANE_BASE_URL || "";
-  const authMode = resolveAuthMode(value.authMode || process.env.CLIENT_AUTH_MODE || "");
+  const configFile = value.configFile || process.env.CLIENT_CONFIG_FILE || PATHS.CLIENT_CONFIG_FILE;
+  const fileConfig = readClientConfig(configFile);
+  const controlPlaneBaseUrl = value.controlPlaneBaseUrl
+    || process.env.CONTROL_PLANE_BASE_URL
+    || fileConfig.controlPlaneBaseUrl
+    || fileConfig.control_plane_base_url
+    || value.defaultControlPlaneBaseUrl
+    || process.env.CLIENT_DEFAULT_AUTH_BASE_URL
+    || "";
+  const defaultAuthMode = resolveAuthMode(value.defaultAuthMode || process.env.CLIENT_DEFAULT_AUTH_MODE || "") || "debug_bundle";
+  const requestedAuthMode = resolveAuthMode(value.authMode || process.env.CLIENT_AUTH_MODE || "");
+  const authMode = requestedAuthMode || defaultAuthMode;
+  const explicitRequireRemoteCraftPermit = Object.prototype.hasOwnProperty.call(value, "requireRemoteCraftPermit")
+    ? value.requireRemoteCraftPermit
+    : undefined;
+  const configuredRequireRemoteCraftPermit = explicitRequireRemoteCraftPermit !== undefined
+    ? explicitRequireRemoteCraftPermit
+    : (
+      process.env.CLIENT_REQUIRE_REMOTE_CRAFT_PERMIT
+      || fileConfig.requireRemoteCraftPermit
+      || fileConfig.require_remote_craft_permit
+    );
+  const requireRemoteCraftPermit = resolveBoolean(
+    configuredRequireRemoteCraftPermit,
+    authMode === "prod_login"
+  );
   const publicKeyFile = value.publicKeyFile
     || process.env.CONTROL_PLANE_PUBLIC_KEY_FILE
     || path.join(PATHS.ROOT_DIR, "keys", "client_license_public.pem");
@@ -35,6 +86,7 @@ function getLicenseConfig(overrides = {}) {
   return {
     authMode,
     allowManualImport: authMode === "debug_bundle",
+    requireRemoteCraftPermit,
     controlPlaneBaseUrl: String(controlPlaneBaseUrl || "").trim(),
     publicKeyFile: path.resolve(publicKeyFile),
     devLicensePrivateKeyFile: path.resolve(devLicensePrivateKeyFile),
