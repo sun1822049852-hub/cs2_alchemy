@@ -52,6 +52,20 @@ npm run ui
 npm run ui:desktop
 ```
 
+release / 安装包说明：
+
+- packaged 客户端默认走 `prod_login`
+- 如本机运行控制台认证服务，客户端会默认连接 `http://127.0.0.1:8787`
+- 如需改成远端认证服务，可在用户目录下创建或修改 `client_config.json`
+
+示例：
+
+```json
+{
+  "control_plane_base_url": "https://auth.example.com"
+}
+```
+
 从仓库根目录一键启动开发直通模式：
 
 ```powershell

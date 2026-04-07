@@ -4,13 +4,18 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
-function buildDesktopLauncherEnv(baseEnv = process.env, {projectRoot = path.resolve(__dirname, "..", "..")} = {}) {
+function buildDesktopLauncherEnv(baseEnv = process.env, {
+  projectRoot = path.resolve(__dirname, "..", ".."),
+  mode = "release"
+} = {}) {
   const env = {
     ...baseEnv
   };
   const authMode = normalizeText(env.CLIENT_AUTH_MODE);
   if (!authMode) {
-    env.CLIENT_AUTH_MODE = "dev_auto_bundle";
+    env.CLIENT_AUTH_MODE = normalizeText(mode).toLowerCase() === "dev"
+      ? "dev_auto_bundle"
+      : "prod_login";
   }
   if (normalizeText(env.CLIENT_AUTH_MODE) !== "dev_auto_bundle") {
     return env;

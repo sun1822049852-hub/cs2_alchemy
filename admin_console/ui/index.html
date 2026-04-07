@@ -134,8 +134,16 @@
                             </select>
                           </div>
                           <div class="col-12">
-                            <label class="form-label" for="userExpiry">会员到期时间</label>
-                            <input id="userExpiry" class="form-control" type="datetime-local">
+                            <label class="form-label" for="userExpiryDate">会员到期时间</label>
+                            <div class="row g-2">
+                              <div class="col-sm-7">
+                                <input id="userExpiryDate" class="form-control" type="date">
+                              </div>
+                              <div class="col-sm-5">
+                                <input id="userExpiryTime" class="form-control" type="time" step="60" value="23:59">
+                              </div>
+                            </div>
+                            <div class="form-hint">先选日期；若不调整时间，默认按 23:59 到期。</div>
                           </div>
                           <div class="col-12">
                             <div id="membershipMeta" class="alert alert-secondary py-2 px-3 mb-0"></div>

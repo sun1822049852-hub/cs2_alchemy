@@ -3,9 +3,19 @@ const path = require("node:path");
 
 const {buildDesktopLauncherEnv} = require("../node_sidecar/src/devDesktopLaunchEnv");
 
-function test_defaults_to_dev_auto_bundle_when_auth_mode_missing() {
+function test_release_launcher_defaults_to_prod_login() {
   const projectRoot = path.resolve(__dirname, "..");
-  const env = buildDesktopLauncherEnv({}, {projectRoot});
+  const env = buildDesktopLauncherEnv({}, {projectRoot, mode: "release"});
+  assert.equal(env.CLIENT_AUTH_MODE, "prod_login");
+  assert.equal("CLIENT_DEV_LICENSE_PRIVATE_KEY_FILE" in env, false);
+  assert.equal("CONTROL_PLANE_PUBLIC_KEY_FILE" in env, false);
+  assert.equal("CLIENT_DEV_LICENSE_USERNAME" in env, false);
+  assert.equal("CLIENT_DEV_LICENSE_PLAN" in env, false);
+}
+
+function test_dev_launcher_defaults_to_dev_auto_bundle() {
+  const projectRoot = path.resolve(__dirname, "..");
+  const env = buildDesktopLauncherEnv({}, {projectRoot, mode: "dev"});
   assert.equal(env.CLIENT_AUTH_MODE, "dev_auto_bundle");
   assert.equal(env.CLIENT_DEV_LICENSE_PRIVATE_KEY_FILE, path.join(projectRoot, "tmp", "client_license_private.pem"));
   assert.equal(env.CONTROL_PLANE_PUBLIC_KEY_FILE, path.join(projectRoot, "keys", "client_license_public.pem"));
@@ -23,7 +33,8 @@ function test_preserves_explicit_auth_mode_from_environment() {
 }
 
 function main() {
-  test_defaults_to_dev_auto_bundle_when_auth_mode_missing();
+  test_release_launcher_defaults_to_prod_login();
+  test_dev_launcher_defaults_to_dev_auto_bundle();
   test_preserves_explicit_auth_mode_from_environment();
   console.log("main-ui-node-desktop-launcher tests passed");
 }

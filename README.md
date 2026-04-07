@@ -27,6 +27,13 @@ node main_ui_node_desktop.js
 
 或双击 `run.bat`。
 
+说明：
+
+- release 桌面入口默认走 `prod_login`
+- dev 自动签发授权只保留给显式 dev 启动链
+- 新注册用户默认开放账号、库存、刷新与汰换模拟
+- 真实炼金执行仍需要控制台单独下发 `craft.use`
+
 ## 浏览器模式
 
 ```powershell
@@ -57,6 +64,26 @@ cd node_sidecar
 npm run refresh -- --account <username>
 npm run ui:cli
 ```
+
+## Windows 打包
+
+在 Windows 上生成桌面安装包：
+
+```powershell
+cd node_sidecar
+npm install
+npm run pack:win
+npm run build:win
+```
+
+说明：
+
+- `pack:win` 生成 unpacked 目录，便于先做本地烟测
+- `build:win` 生成 NSIS 安装包
+- packaged 客户端默认使用 `prod_login`
+- packaged 客户端默认连接本机 `http://127.0.0.1:8787`
+- 如需改成远端认证服务，可编辑用户目录下的 `client_config.json`，写入 `control_plane_base_url`
+- packaged 可写状态会落到 Electron `userData` 目录，不再写安装目录
 
 ## 皮肤库更新
 

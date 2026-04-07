@@ -1,0 +1,33 @@
+appId: com.cs2alchemy.client
+productName: CS Tools
+executableName: CS Tools
+directories:
+  output: dist
+  buildResources: build
+icon: build/icon.ico
+files:
+  - electron-main.js
+  - electron-preload.js
+  - fetch_component_contents.js
+  - package.json
+  - src/**
+  - ui/**
+extraResources:
+  - from: ../shared
+    to: shared
+  - from: ../keys
+    to: keys
+win:
+  signAndEditExecutable: false
+  target:
+    - nsis
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: CS Tools
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  runAfterFinish: true

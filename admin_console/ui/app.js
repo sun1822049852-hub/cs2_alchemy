@@ -29,11 +29,14 @@ const refs = {
   userForm: document.querySelector("#userForm"),
   userPlan: document.querySelector("#userPlan"),
   userStatus: document.querySelector("#userStatus"),
-  userExpiry: document.querySelector("#userExpiry"),
+  userExpiryDate: document.querySelector("#userExpiryDate"),
+  userExpiryTime: document.querySelector("#userExpiryTime"),
   membershipMeta: document.querySelector("#membershipMeta"),
   permissionList: document.querySelector("#permissionList"),
   deviceList: document.querySelector("#deviceList")
 };
+
+const DEFAULT_EXPIRY_TIME = "23:59";
 
 const FEATURE_CODES = [
   "accounts.read",
@@ -113,6 +116,73 @@ function toIsoDateTime(value = "") {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
+function formatLocalDateTimeText(value = "") {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "未设置";
+  }
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return text;
+  }
+  const pad = (number) => String(number).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join("-") + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function normalizeTimeValue(value = "") {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return "";
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return "";
+  }
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function splitLocalDateTimeParts(value = "") {
+  const text = toLocalDateTimeInput(value);
+  if (!text) {
+    return {
+      dateValue: "",
+      timeValue: DEFAULT_EXPIRY_TIME
+    };
+  }
+  const [dateValue, rawTimeValue = DEFAULT_EXPIRY_TIME] = text.split("T");
+  return {
+    dateValue,
+    timeValue: normalizeTimeValue(rawTimeValue) || DEFAULT_EXPIRY_TIME
+  };
+}
+
+function toIsoDateTimeFromParts(dateValue = "", timeValue = "") {
+  const dateText = String(dateValue || "").trim();
+  if (!dateText) {
+    return "";
+  }
+  const normalizedTime = normalizeTimeValue(timeValue) || DEFAULT_EXPIRY_TIME;
+  return toIsoDateTime(`${dateText}T${normalizedTime}`);
+}
+
+function updateMembershipMetaPreview() {
+  if (refs.userPlan.value === "free") {
+    refs.membershipMeta.textContent = "默认开放账号、库存、刷新与汰换模拟；真实炼金执行需单独授权。";
+    return;
+  }
+  const expiryDateValue = String(refs.userExpiryDate.value || "").trim();
+  const expiryIso = toIsoDateTimeFromParts(expiryDateValue, refs.userExpiryTime.value);
+  refs.membershipMeta.textContent = expiryIso
+    ? `当前计划：${refs.userPlan.value}，可按需覆盖单项权限。预计到期时间：${formatLocalDateTimeText(expiryIso)}。保存后控制台会自动重算剩余天数。`
+    : `当前计划：${refs.userPlan.value}，可按需覆盖单项权限。请选择到期日期；若不调整时间，默认按 ${DEFAULT_EXPIRY_TIME} 处理。`;
+}
+
 function syncPermissionsFromPlan() {
   const plan = selectedPlan();
   const permissions = new Set((plan && plan.permissions) || []);
@@ -186,7 +256,7 @@ function renderUsers() {
             </td>
             <td>
               <span class="badge bg-blue-lt">${user.membership_plan}</span>
-              <div class="text-secondary mt-1">${user.membership_expires_at || "未设置"}</div>
+              <div class="text-secondary mt-1">${formatLocalDateTimeText(user.membership_expires_at)}</div>
             </td>
             <td>${user.remaining_membership_days}</td>
             <td><span class="badge ${user.status === "active" ? "bg-green-lt" : "bg-red-lt"}">${user.status}</span></td>
@@ -211,7 +281,7 @@ function renderUserDetail() {
   const user = selectedUser();
   if (!user) {
     refs.userForm.hidden = true;
-    refs.detailHint.textContent = "选择左侧用户后即可调整会员与权限。";
+    refs.detailHint.textContent = "选择左侧用户后即可调整会员、单项权限与设备授权。";
     refs.deviceList.innerHTML = '<div class="empty-block">尚未选择用户。</div>';
     return;
   }
@@ -223,11 +293,17 @@ function renderUserDetail() {
     </option>
   `).join("");
   refs.userStatus.value = user.status;
-  refs.userExpiry.value = toLocalDateTimeInput(user.membership_expires_at);
-  refs.userExpiry.disabled = user.membership_plan === "free";
+  const expiryParts = splitLocalDateTimeParts(user.membership_expires_at);
+  refs.userExpiryDate.value = expiryParts.dateValue;
+  refs.userExpiryTime.value = expiryParts.timeValue;
+  refs.userExpiryDate.disabled = user.membership_plan === "free";
+  refs.userExpiryTime.disabled = user.membership_plan === "free";
+  refs.userExpiryDate.required = user.membership_plan !== "free";
   refs.membershipMeta.textContent = user.membership_plan === "free"
-    ? "当前为 free 档，无会员天数。"
-    : `剩余 ${user.remaining_membership_days} 天，到期时间：${user.membership_expires_at || "未设置"}`;
+    ? "默认开放账号、库存、刷新与汰换模拟；真实炼金执行需单独授权。"
+    : user.membership_expires_at
+      ? `当前计划：${user.membership_plan}，可按需覆盖单项权限。剩余 ${user.remaining_membership_days} 天，到期时间：${formatLocalDateTimeText(user.membership_expires_at)}`
+      : `当前计划：${user.membership_plan}，可按需覆盖单项权限。请选择到期日期；若不调整时间，默认按 ${DEFAULT_EXPIRY_TIME} 处理。`;
   const permissions = new Set((user.entitlements && user.entitlements.permissions) || []);
   refs.permissionList.innerHTML = FEATURE_CODES.map((code) => `
     <div class="permission-row">
@@ -235,7 +311,7 @@ function renderUserDetail() {
         <span class="form-check-label">${code}</span>
         <input class="form-check-input" type="checkbox" data-feature-code="${code}" ${permissions.has(code) ? "checked" : ""}>
       </label>
-      <div class="permission-hint">控制签名快照里是否下发此功能。</div>
+      <div class="permission-hint">计划模板 + 用户覆盖共同决定控制签名快照是否下发此功能。</div>
     </div>
   `).join("");
   renderDevices();
@@ -257,7 +333,7 @@ function renderDevices() {
         <article class="device-item">
           <h4>${item.device_id}</h4>
           <div class="device-meta">最后使用：${item.last_used_at || item.created_at}</div>
-          <div class="device-meta">过期时间：${item.expires_at}</div>
+          <div class="device-meta">过期时间：${formatLocalDateTimeText(item.expires_at)}</div>
           <button class="btn btn-sm btn-outline-danger" type="button" data-session-id="${item.id}">吊销设备</button>
         </article>
       `).join("")}
@@ -384,7 +460,9 @@ async function handleUserSubmit(event) {
       body: JSON.stringify({
         membership_plan: refs.userPlan.value,
         status: refs.userStatus.value,
-        membership_expires_at: refs.userPlan.value === "free" ? "" : toIsoDateTime(refs.userExpiry.value),
+        membership_expires_at: refs.userPlan.value === "free"
+          ? ""
+          : toIsoDateTimeFromParts(refs.userExpiryDate.value, refs.userExpiryTime.value),
         permission_overrides: permissionOverrides
       })
     });
@@ -423,14 +501,22 @@ async function init() {
   refs.logoutButton.addEventListener("click", handleLogout);
   refs.userForm.addEventListener("submit", handleUserSubmit);
   refs.userPlan.addEventListener("change", () => {
-    refs.userExpiry.disabled = refs.userPlan.value === "free";
+    refs.userExpiryDate.disabled = refs.userPlan.value === "free";
+    refs.userExpiryTime.disabled = refs.userPlan.value === "free";
+    refs.userExpiryDate.required = refs.userPlan.value !== "free";
     if (refs.userPlan.value === "free") {
-      refs.userExpiry.value = "";
-      refs.membershipMeta.textContent = "当前为 free 档，无会员天数。";
+      refs.userExpiryDate.value = "";
+      refs.userExpiryTime.value = DEFAULT_EXPIRY_TIME;
     } else {
-      refs.membershipMeta.textContent = "请设置会员到期时间，控制台会自动计算剩余天数。";
+      refs.userExpiryTime.value = normalizeTimeValue(refs.userExpiryTime.value) || DEFAULT_EXPIRY_TIME;
     }
+    updateMembershipMetaPreview();
     syncPermissionsFromPlan();
+  });
+  refs.userExpiryDate.addEventListener("input", updateMembershipMetaPreview);
+  refs.userExpiryTime.addEventListener("change", () => {
+    refs.userExpiryTime.value = normalizeTimeValue(refs.userExpiryTime.value) || DEFAULT_EXPIRY_TIME;
+    updateMembershipMetaPreview();
   });
   refs.usersList.addEventListener("click", handleWorkspaceClick);
   refs.deviceList.addEventListener("click", handleWorkspaceClick);

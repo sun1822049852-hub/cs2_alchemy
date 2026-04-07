@@ -27,7 +27,7 @@ function startDesktopLauncher({baseEnv = process.env, spawnImpl = spawn} = {}) {
     cwd: sidecarDir,
     stdio: "inherit",
     shell: isWin,
-    env: buildDesktopLauncherEnv(baseEnv, {projectRoot: __dirname})
+    env: buildDesktopLauncherEnv(baseEnv, {projectRoot: __dirname, mode: "release"})
   });
 }
 

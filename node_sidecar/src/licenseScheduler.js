@@ -55,6 +55,9 @@ function createLicenseScheduler({
     getState() {
       return currentState;
     },
+    readBundle() {
+      return store.read();
+    },
     async tick() {
       const state = evaluateCurrent();
       return maybeRefresh(state);

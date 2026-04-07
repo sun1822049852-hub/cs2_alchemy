@@ -52,3 +52,14 @@ node tools/initControlPlaneAdmin.js --username admin --password "你的控制台
 cd admin_console
 npm test
 ```
+
+## 首版权限发放规则
+
+当前首版不接支付接口，控制台就是唯一授权源。
+
+默认策略：
+
+- 新注册用户默认获得账号、库存、刷新与汰换模拟权限
+- 真实炼金执行默认不开放
+- 如需开放真实炼金，请在控制台给目标用户下发 `craft.use`
+- 如需紧急回收能力，可关闭 `craft.use` 或直接吊销设备会话

@@ -1,6 +1,6 @@
 const {app, BrowserWindow, shell} = require("electron");
 const path = require("path");
-const {createServer} = require("./src/uiServer");
+const {configureRuntimePaths} = require("./src/constants");
 
 let mainWindow = null;
 let uiServer = null;
@@ -9,7 +9,18 @@ async function startUiServer() {
   if (uiServer) {
     return uiServer;
   }
-  uiServer = createServer();
+  configureRuntimePaths({
+    isPackaged: app.isPackaged,
+    projectRoot: path.resolve(__dirname, ".."),
+    userDataDir: app.getPath("userData")
+  });
+  const {createServer} = require("./src/uiServer");
+  uiServer = createServer({
+    licenseConfigFactory: () => ({
+      defaultAuthMode: app.isPackaged ? "prod_login" : "debug_bundle",
+      defaultControlPlaneBaseUrl: app.isPackaged ? "http://127.0.0.1:8787" : ""
+    })
+  });
   await new Promise((resolve, reject) => {
     uiServer.once("error", reject);
     uiServer.listen(0, "127.0.0.1", resolve);

@@ -462,9 +462,6 @@ function applyGuestWorkspacePreview({reason = ""} = {}) {
     : null;
   if (!inventoryPreview || !craftPreview || !simulationPreview) return false;
 
-  state.clientAuthModalOpen = false;
-  state.clientAuthPromptTitle = "";
-  state.clientAuthPromptHint = "";
   state.workspaceHydratedFor = "";
   state.accounts = [];
   state.activeAccount = "";
@@ -8462,6 +8459,13 @@ async function refreshCraftPredictorPreview({force = false, preferredRowsById = 
   const context = getCraftPredictorResolvedContext();
   if (!context) {
     if (typeof clearCraftPredictorPreviewState === "function") clearCraftPredictorPreviewState();
+    if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
+    return;
+  }
+  if (isGuestWorkspaceActive()) {
+    state.craftPredictorLoading = false;
+    state.craftPredictorRequestKey = "";
+    state.craftPredictorLoadedKey = "";
     if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
     return;
   }

@@ -68,6 +68,9 @@ function loadPredictorPanelFns(initialState = {}) {
       context.refreshCalls += 1;
     },
     refreshCalls: 0,
+    isGuestWorkspaceActive() {
+      return false;
+    },
     isCraftAssistPresetEditing() {
       return false;
     },
