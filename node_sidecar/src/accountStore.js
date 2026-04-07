@@ -23,10 +23,12 @@ class AccountStore {
     this.options = normalizeOptions(options);
   }
 
-  _withStore(fn) {
+  _withStore(fn, {readOnly = false} = {}) {
     const store = new AppAuthStore({
       dbPath: this.options.dbPath,
-      accountsFilePath: this.options.accountsFilePath
+      accountsFilePath: this.options.accountsFilePath,
+      readOnly,
+      initialize: !readOnly
     });
     try {
       return fn(store);
@@ -36,17 +38,26 @@ class AccountStore {
   }
 
   list() {
-    return this._withStore((store) => store.listSteamAccountsForUser(this.options.viewerUsername));
+    return this._withStore(
+      (store) => store.listSteamAccountsForUser(this.options.viewerUsername),
+      {readOnly: true}
+    );
   }
 
   get(username) {
-    return this._withStore((store) => store.getSteamAccountForUser(this.options.viewerUsername, username, {
-      includeAll: !this.options.viewerUsername
-    }));
+    return this._withStore(
+      (store) => store.getSteamAccountForUser(this.options.viewerUsername, username, {
+        includeAll: !this.options.viewerUsername
+      }),
+      {readOnly: true}
+    );
   }
 
   getActive() {
-    return this._withStore((store) => store.getActiveSteamAccount(this.options.viewerUsername));
+    return this._withStore(
+      (store) => store.getActiveSteamAccount(this.options.viewerUsername),
+      {readOnly: true}
+    );
   }
 
   setActive(username) {

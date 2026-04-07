@@ -2,6 +2,31 @@ const {QUALITY_MAP, RARITY_MAP, STORAGE_UNIT_DEF_INDEX, PATHS} = require("./cons
 const {fetchSkinMetadataMap} = require("./skinMetaStore");
 const {asString, toFloat, toInt} = require("./utils");
 
+const ITEM_DEF_DIRECT_PRIORITY_ORDER = [
+  "crates",
+  "keys",
+  "tools",
+  "keychains",
+  "collectibles",
+  "agents",
+  "graffiti",
+  "stickers",
+  "patches",
+  "music_kits"
+];
+const ITEM_DEF_STYLE_PRIORITY_ORDER = [
+  "patches",
+  "agents",
+  "keychains",
+  "collectibles",
+  "graffiti",
+  "stickers",
+  "tools",
+  "keys",
+  "crates",
+  "music_kits"
+];
+
 function wearNameFromFloat(floatValue) {
   const v = toFloat(floatValue, 0);
   if (v <= 0.07) return "Factory New";
@@ -251,10 +276,39 @@ function getCasketContainedItemCount(item) {
   return getAttrUint32(item, 270, {decodeFloatEncoded: false});
 }
 
-function resolveSpecialItemName(item, itemDefs) {
+function resolveItemDefsByCategory(schema) {
+  const itemDefsByCategory = schema && schema.item_defs_by_category;
+  return itemDefsByCategory && typeof itemDefsByCategory === "object" ? itemDefsByCategory : {};
+}
+
+function resolveItemDefNameByPriority(defIndex, itemDefsByCategory, priorityOrder, fallbackItemDefs = {}) {
+  const key = asString(defIndex).trim();
+  if (!key) {
+    return "";
+  }
+  const categoryMaps = itemDefsByCategory && typeof itemDefsByCategory === "object" ? itemDefsByCategory : {};
+  const orderedCategories = [
+    ...(Array.isArray(priorityOrder) ? priorityOrder : []),
+    ...Object.keys(categoryMaps).filter((category) => !priorityOrder.includes(category))
+  ];
+  for (const category of orderedCategories) {
+    const name = asString(categoryMaps[category] && categoryMaps[category][key] || "").trim();
+    if (name) {
+      return name;
+    }
+  }
+  return asString(fallbackItemDefs[key] || "").trim();
+}
+
+function resolveSpecialItemName(item, itemDefsByCategory, itemDefs) {
   const styleId = getAttrUint32(item, 113);
   if (styleId > 0) {
-    const name = asString(itemDefs[String(styleId)] || "").trim();
+    const name = resolveItemDefNameByPriority(
+      styleId,
+      itemDefsByCategory,
+      ITEM_DEF_STYLE_PRIORITY_ORDER,
+      itemDefs
+    );
     if (name) {
       return name;
     }
@@ -262,7 +316,10 @@ function resolveSpecialItemName(item, itemDefs) {
 
   const musicId = getAttrUint32(item, 166);
   if (musicId > 0) {
-    const musicName = asString(itemDefs[String(musicId)] || "").trim();
+    const musicName = asString(
+      itemDefsByCategory.music_kits && itemDefsByCategory.music_kits[String(musicId)] ||
+      resolveItemDefNameByPriority(musicId, itemDefsByCategory, ITEM_DEF_DIRECT_PRIORITY_ORDER, itemDefs)
+    ).trim();
     if (musicName) {
       if (musicName.toLowerCase().startsWith("music kit")) {
         return musicName;
@@ -277,10 +334,16 @@ function resolveDisplayParts(item, schema) {
   const weapons = schema.weapons || {};
   const paints = schema.paints || {};
   const itemDefs = schema.item_defs || {};
+  const itemDefsByCategory = resolveItemDefsByCategory(schema);
   const defIndex = toInt(item.def_index, 0);
   const paintIndex = getAttrUint32(item, 6);
   const resolvedWeapon = asString(weapons[String(defIndex)] || "").trim();
-  const resolvedItem = asString(itemDefs[String(defIndex)] || "").trim();
+  const resolvedItem = resolveItemDefNameByPriority(
+    defIndex,
+    itemDefsByCategory,
+    ITEM_DEF_DIRECT_PRIORITY_ORDER,
+    itemDefs
+  );
   const hasWear = Boolean(resolvedWeapon);
 
   if (resolvedWeapon) {
@@ -293,7 +356,7 @@ function resolveDisplayParts(item, schema) {
     };
   }
 
-  const specialName = resolveSpecialItemName(item, itemDefs);
+  const specialName = resolveSpecialItemName(item, itemDefsByCategory, itemDefs);
   return {
     weapon_name: "",
     skin_name: asString(paints[String(paintIndex)] || "").trim(),

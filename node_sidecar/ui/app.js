@@ -1528,7 +1528,7 @@ function buildComponentSummaryFromRows(rows) {
     const loaded = Math.max(Array.isArray(itemMap[id]) ? itemMap[id].length : 0, expected);
     summaryMap[id] = {
       component_id: id,
-      name: String(row && (row.alchemy_name || row.name) || `Component ${id}`),
+      name: String(row && (row.name || row.alchemy_name) || `Component ${id}`),
       expected_count: Math.max(STORAGE_UNIT_CAPACITY, expected),
       loaded_count: loaded
     };
@@ -3161,7 +3161,9 @@ function rarityName(row) {
 }
 const collectionName = (row) => String(row.collection || "").trim();
 const itemDisplayName = (row) => {
-  const raw = String(row.alchemy_name || "").trim() || String(row.name || "").trim();
+  const raw = isComponentRow(row)
+    ? String(row.name || row.alchemy_name || "").trim()
+    : String(row.alchemy_name || "").trim() || String(row.name || "").trim();
   if (raw.toLowerCase().startsWith("storage unit")) {
     const suffix = raw.slice("storage unit".length).replace(/^\s*\|\s*/, "").trim();
     return suffix ? `库存组件（${suffix}）` : "库存组件";

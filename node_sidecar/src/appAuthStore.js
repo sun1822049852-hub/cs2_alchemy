@@ -84,15 +84,26 @@ function sanitizeSteamAccount(row, activeUsername = "") {
 class AppAuthStore {
   constructor({
     dbPath = PATHS.SKIN_DB_FILE,
-    accountsFilePath = PATHS.ACCOUNTS_FILE
+    accountsFilePath = PATHS.ACCOUNTS_FILE,
+    readOnly = false,
+    initialize = !readOnly
   } = {}) {
     this.dbPath = dbPath;
     this.accountsFilePath = accountsFilePath;
-    this.db = new DatabaseSync(this.dbPath);
+    this.readOnly = Boolean(readOnly);
+    this.initialize = Boolean(initialize);
+    if (this.readOnly && this.initialize) {
+      throw new Error("readOnly auth store cannot run initialization");
+    }
+    this.db = this.readOnly
+      ? new DatabaseSync(this.dbPath, {readOnly: true})
+      : new DatabaseSync(this.dbPath);
     this.db.exec("PRAGMA foreign_keys = ON");
-    this.ensureSchema();
-    this.seedSystemData();
-    this.importLegacyAccountsIfNeeded();
+    if (this.initialize) {
+      this.ensureSchema();
+      this.seedSystemData();
+      this.importLegacyAccountsIfNeeded();
+    }
   }
 
   close() {

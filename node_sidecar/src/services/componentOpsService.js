@@ -8,6 +8,7 @@ const {parseInventory, decodeCasketId} = require("../inventoryParser");
 const {saveProcessedSnapshot} = require("../snapshotStore");
 const {fillMissingWearBounds} = require("../skinMetaStore");
 const {preloadComponentContents} = require("../componentLoader");
+const {buildComponentSummary: buildSharedComponentSummary} = require("./componentSummary");
 const {STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("../constants");
 const {asString, nowString, toInt, sleep, withTimeout} = require("../utils");
 
@@ -191,26 +192,7 @@ async function ensureComponentItemsLoaded(csgo, componentId) {
 }
 
 function buildComponentSummary(rows) {
-  const summaryMap = {};
-  const itemMap = {};
-  for (const row of rows) {
-    const cid = asString(row.casket_id || "").trim();
-    if (!cid) continue;
-    if (!itemMap[cid]) itemMap[cid] = [];
-    itemMap[cid].push(row);
-  }
-  for (const row of rows) {
-    if (toInt(row.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) continue;
-    const id = asString(row.asset_id || "").trim();
-    if (!id) continue;
-    summaryMap[id] = {
-      component_id: id,
-      name: asString(row.alchemy_name || row.name || `Component ${id}`),
-      expected_count: STORAGE_UNIT_CAPACITY,
-      loaded_count: Math.max((itemMap[id] || []).length, toInt(row.casket_contained_item_count, 0))
-    };
-  }
-  return {summary_map: summaryMap, item_map: itemMap};
+  return buildSharedComponentSummary(rows);
 }
 
 function makeParsedRows(csgo, schemaStore) {

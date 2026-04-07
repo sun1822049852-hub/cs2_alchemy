@@ -162,3 +162,42 @@ Windows 一键 JSON 重建：
 - `tools/rebuildSkinDb.js` / `update_skin_db.bat` 只负责“后两步”，适合已经有 JSON 快照时直接重建
 - `tools/fetchAndRebuildSkinDb.js` / `fetch_and_update_skin_db.bat` 负责完整“三部曲”
 - 价格更新链当前没有合并进这个流程
+
+## Schema Cache 重建
+
+如果要从开源映射重新生成炼金用的 `schema_cache.json`，可以使用：
+
+```powershell
+node tools/rebuildSchemaCacheFromCsgoApi.js
+```
+
+默认读取：
+
+- 如果存在已锁定的精确快照，优先使用：
+  - `.tmp_upstream/3c2eb_categories`
+  - `.tmp_upstream/base_weapons.3c2eb515004ba400677d898e1ef028d8a50d26d1.json`
+  - `.tmp_upstream/skins.3c2eb515004ba400677d898e1ef028d8a50d26d1.json`
+- 否则回退到当前 checkout：
+  - `.tmp_upstream/CSGO-API/public/api/en`
+
+默认输出到：
+
+- `tmp/schema_cache.from_csgo_api.json`
+
+如果要和当前仓库里的缓存做精确对账：
+
+```powershell
+node tools/rebuildSchemaCacheFromCsgoApi.js --verify .\schema_cache.json
+```
+
+如果要指定开源 API 目录或输出路径：
+
+```powershell
+node tools/rebuildSchemaCacheFromCsgoApi.js --source-dir "C:\path\to\CSGO-API\public\api\en" --out "C:\path\to\schema_cache.generated.json"
+```
+
+如果要显式指定 `base_weapons.json` 或 `skins.json` 快照：
+
+```powershell
+node tools/rebuildSchemaCacheFromCsgoApi.js --source-dir "C:\path\to\categories" --base-weapons-file "C:\path\to\base_weapons.snapshot.json" --skins-file "C:\path\to\skins.snapshot.json"
+```

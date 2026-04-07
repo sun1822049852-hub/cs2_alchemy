@@ -2,7 +2,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-
 const {AppAuthStore} = require("../src/appAuthStore");
 const {AccountStore} = require("../src/accountStore");
 
@@ -76,8 +75,48 @@ function test_account_store_lists_sqlite_accounts_for_viewer_scope() {
   }
 }
 
+function test_account_store_reads_do_not_run_write_side_effects() {
+  const ctx = createFixture();
+  const originalEnsure = AppAuthStore.prototype.ensureSchema;
+  const originalSeed = AppAuthStore.prototype.seedSystemData;
+  const originalImport = AppAuthStore.prototype.importLegacyAccountsIfNeeded;
+  let ensureCalls = 0;
+  let seedCalls = 0;
+  let importCalls = 0;
+  try {
+    AppAuthStore.prototype.ensureSchema = function trackedEnsure() {
+      ensureCalls += 1;
+    };
+    AppAuthStore.prototype.seedSystemData = function trackedSeed() {
+      seedCalls += 1;
+    };
+    AppAuthStore.prototype.importLegacyAccountsIfNeeded = function trackedImport() {
+      importCalls += 1;
+    };
+
+    const store = new AccountStore({
+      dbPath: ctx.dbPath,
+      accountsFilePath: ctx.accountsFilePath,
+      viewerUsername: ""
+    });
+
+    assert.equal(store.list().length, 2);
+    assert.equal(store.get("countsteam01").username, "countsteam01");
+    assert.equal(store.getActive().username, "countsteam01");
+    assert.equal(ensureCalls, 0);
+    assert.equal(seedCalls, 0);
+    assert.equal(importCalls, 0);
+  } finally {
+    AppAuthStore.prototype.ensureSchema = originalEnsure;
+    AppAuthStore.prototype.seedSystemData = originalSeed;
+    AppAuthStore.prototype.importLegacyAccountsIfNeeded = originalImport;
+    cleanup(ctx);
+  }
+}
+
 function main() {
   test_account_store_lists_sqlite_accounts_for_viewer_scope();
+  test_account_store_reads_do_not_run_write_side_effects();
   console.log("account-store-sqlite tests passed");
 }
 

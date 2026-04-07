@@ -18,7 +18,8 @@ class SchemaStore {
     this.schema = {
       weapons: data.weapons || {},
       paints: data.paints || {},
-      item_defs: data.item_defs || {}
+      item_defs: data.item_defs || {},
+      item_defs_by_category: data.item_defs_by_category || {}
     };
     return this.schema;
   }

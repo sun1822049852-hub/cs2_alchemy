@@ -27,6 +27,7 @@ const {createCraftOutcomePredictor} = require("./services/craftOutcomePredictor"
 const {createTradeupSimulationCatalog} = require("./services/tradeupSimulationCatalog");
 const {createTradeupSimulationService} = require("./services/tradeupSimulationService");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
+const {buildComponentSummary: buildSharedComponentSummary} = require("./services/componentSummary");
 const {
   enrichInventoryDisplayOnlyImages
 } = require("../../tools/enrichInventoryDisplayOnlyImages");
@@ -1241,35 +1242,7 @@ async function enqueueComponentMoveJob({
 }
 
 function buildComponentSummary(rows) {
-  const summaryMap = {};
-  const itemMap = {};
-  for (const row of rows) {
-    const cid = asString(row.casket_id || "").trim();
-    if (cid) {
-      if (!itemMap[cid]) {
-        itemMap[cid] = [];
-      }
-      itemMap[cid].push(row);
-    }
-  }
-  for (const row of rows) {
-    if (toInt(row.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) {
-      continue;
-    }
-    const id = asString(row.asset_id || "").trim();
-    if (!id) {
-      continue;
-    }
-    const expected = toInt(row.casket_contained_item_count, 0);
-    const loaded = Math.max((itemMap[id] || []).length, expected);
-    summaryMap[id] = {
-      component_id: id,
-      name: asString(row.alchemy_name || row.name || `Component ${id}`),
-      expected_count: Math.max(STORAGE_UNIT_CAPACITY, expected),
-      loaded_count: loaded
-    };
-  }
-  return {summary_map: summaryMap, item_map: itemMap};
+  return buildSharedComponentSummary(rows);
 }
 
 async function handleApi(req, res, urlObj, deps = {}) {
