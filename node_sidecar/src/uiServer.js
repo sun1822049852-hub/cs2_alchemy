@@ -1666,8 +1666,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const existed = accountStore.get(username);
       const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
       const authClient = getControlPlaneAuthClient(deps);
-      const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login"
-        || (authClient && typeof authClient.checkOrBindSteamAccount === "function");
+      const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
 
       let profile = null;
       try {

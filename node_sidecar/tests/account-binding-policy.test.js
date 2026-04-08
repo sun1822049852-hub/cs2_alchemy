@@ -286,6 +286,7 @@ async function startServer({
   authClient,
   membershipPlan = "trial",
   refreshCredential = "remote_refresh_token",
+  authMode = "prod_login",
   loginResponse,
   profile
 } = {}) {
@@ -301,7 +302,7 @@ async function startServer({
     licenseRuntimeFactory: () => runtime,
     controlPlaneAuthClientFactory: () => authClient,
     licenseConfigFactory: () => ({
-      authMode: "prod_login",
+      authMode,
       controlPlaneBaseUrl: "https://auth.example.com",
       machineIdFile
     })
@@ -444,9 +445,49 @@ async function test_login_save_reuses_license_refresh_credential_for_binding_che
   }
 }
 
+async function test_login_save_skips_binding_check_for_dev_auto_bundle() {
+  const checkCalls = [];
+  const ctx = await startServer({
+    authMode: "dev_auto_bundle",
+    refreshCredential: "",
+    authClient: {
+      getCapabilities() {
+        return {configured: true, baseUrl: "https://auth.example.com"};
+      },
+      async checkOrBindSteamAccount(args = {}) {
+        checkCalls.push({...args});
+        return {
+          ok: true,
+          bindingMode: "single_locked",
+          bindingLimit: 1,
+          boundCount: 1,
+          matchedExisting: false,
+          message: "Steam 绑定资格已确认"
+        };
+      }
+    }
+  });
+
+  try {
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-save", {
+      body: {
+        username: "steam_account_a",
+        password: "pw",
+        totp: "123456"
+      }
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(checkCalls.length, 0);
+    assert.equal(ctx.state.accounts.has("steam_account_a"), true);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
 async function main() {
   await test_login_save_rejects_second_trial_binding_without_writing_local_account();
   await test_login_save_reuses_license_refresh_credential_for_binding_check();
+  await test_login_save_skips_binding_check_for_dev_auto_bundle();
   console.log("account-binding-policy tests passed");
 }
 
