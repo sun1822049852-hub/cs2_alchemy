@@ -1130,7 +1130,7 @@ function applyCachedSnapshotForAccount(username, {silentSummary = false} = {}) {
     if (!silentSummary) setSummary(`已显示该账号快照（10分钟内复用），共 ${rows.length} 条`);
   } else {
     state.emptyHint = "当前账号未连接";
-    if (!silentSummary) setSummary("当前账号未连接（暂无上次库存信息）");
+    if (!silentSummary) setSummary("当前账号未连接（暂无上次库存信息）", {isError: false});
   }
   return true;
 }
@@ -3052,7 +3052,7 @@ async function loadSnapshotForAccount(username, {silentSummary = false} = {}) {
     if (!silentSummary) setSummary(`已显示该账号上次库存，共 ${rows.length} 条`);
   } else {
     state.emptyHint = "当前账号未连接";
-    if (!silentSummary) setSummary("当前账号未连接（暂无上次库存信息）");
+    if (!silentSummary) setSummary("当前账号未连接（暂无上次库存信息）", {isError: false});
   }
   return true;
 }
