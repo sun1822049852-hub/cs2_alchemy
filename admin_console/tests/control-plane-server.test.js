@@ -152,7 +152,7 @@ async function main() {
     const plans = await requestJson(ctx, "GET", "/api/admin/plans", null, adminHeaders);
     assert.equal(plans.status, 200);
     assert.equal(plans.body.ok, true);
-    assert.deepEqual(plans.body.items.map((item) => item.code), ["elite", "free", "pro"]);
+    assert.deepEqual(plans.body.items.map((item) => item.code), ["inactive", "member", "standard", "trial"]);
 
     const register = await requestJson(ctx, "POST", "/api/auth/email/send-code", {
       email: "alice@example.com"
@@ -175,25 +175,33 @@ async function main() {
     assert.equal(registered.status, 200);
     assert.equal(registered.body.ok, true);
     assert.equal(registered.body.user.username, "alice");
+    assert.equal(registered.body.user.membership_plan, "trial");
+    assert.equal(registered.body.user.membership_expires_at, "2026-04-12T00:00:00.000Z");
+    assert.equal(registered.body.user.remaining_membership_days, 7);
 
     const userList = await requestJson(ctx, "GET", "/api/admin/users", null, adminHeaders);
     assert.equal(userList.status, 200);
     assert.equal(userList.body.ok, true);
     assert.equal(userList.body.items.length, 1);
     assert.equal(userList.body.items[0].username, "alice");
-    assert.equal(userList.body.items[0].membership_plan, "free");
-    assert.equal(userList.body.items[0].membership_expires_at, "");
-    assert.equal(userList.body.items[0].remaining_membership_days, 0);
+    assert.equal(userList.body.items[0].membership_plan, "trial");
+    assert.equal(userList.body.items[0].membership_expires_at, "2026-04-12T00:00:00.000Z");
+    assert.equal(userList.body.items[0].remaining_membership_days, 7);
     assert.deepEqual(userList.body.items[0].entitlements.permissions, [
       FEATURE_CODES.ACCOUNTS_READ,
       FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.CRAFT_USE,
       FEATURE_CODES.INVENTORY_READ,
       FEATURE_CODES.INVENTORY_REFRESH,
       FEATURE_CODES.SIMULATION_USE
     ]);
+    assert.equal(userList.body.items[0].entitlements.feature_flags.craft_enabled, true);
+    assert.equal(userList.body.items[0].entitlements.feature_flags.steam_binding_limit, 1);
+    assert.equal(userList.body.items[0].entitlements.feature_flags.trial_active, true);
+    assert.equal(userList.body.items[0].entitlements.feature_flags.trial_expires_at, "2026-04-12T00:00:00.000Z");
 
     const updatedUser = await requestJson(ctx, "PATCH", `/api/admin/users/${userList.body.items[0].id}`, {
-      membership_plan: "pro",
+      membership_plan: "standard",
       membership_expires_at: "2026-04-20T00:00:00.000Z",
       permission_overrides: [
         {feature_code: FEATURE_CODES.CRAFT_USE, enabled: true}
@@ -201,7 +209,7 @@ async function main() {
     }, adminHeaders);
     assert.equal(updatedUser.status, 200);
     assert.equal(updatedUser.body.ok, true);
-    assert.equal(updatedUser.body.user.membership_plan, "pro");
+    assert.equal(updatedUser.body.user.membership_plan, "standard");
     assert.equal(updatedUser.body.user.membership_expires_at, "2026-04-20T00:00:00.000Z");
     assert.equal(updatedUser.body.user.remaining_membership_days, 15);
     assert.deepEqual(updatedUser.body.entitlements.permissions, [
@@ -213,6 +221,11 @@ async function main() {
       FEATURE_CODES.SIMULATION_USE
     ]);
     assert.equal(updatedUser.body.entitlements.feature_flags.simulation_enabled, true);
+    assert.equal(updatedUser.body.entitlements.feature_flags.craft_enabled, true);
+    assert.equal(updatedUser.body.entitlements.feature_flags.steam_binding_mode, "single_locked");
+    assert.equal(updatedUser.body.entitlements.feature_flags.steam_binding_limit, 1);
+    assert.equal(updatedUser.body.entitlements.feature_flags.trial_active, false);
+    assert.equal(updatedUser.body.entitlements.feature_flags.trial_expires_at, "");
     assert.equal(updatedUser.body.entitlements.membership_active, true);
     assert.equal(updatedUser.body.entitlements.remaining_membership_days, 15);
 
@@ -238,6 +251,93 @@ async function main() {
       FEATURE_CODES.SIMULATION_USE
     ]);
     assert.equal(login.body.access_bundle.snapshot.feature_flags.simulation_enabled, true);
+    assert.equal(login.body.access_bundle.snapshot.feature_flags.craft_enabled, true);
+    assert.equal(login.body.access_bundle.snapshot.feature_flags.steam_binding_limit, 1);
+    assert.equal(login.body.access_bundle.snapshot.feature_flags.trial_active, false);
+
+    const firstBinding = await requestJson(ctx, "POST", "/api/auth/steam-binding/check-or-bind", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      steam_id: "76561198000000001",
+      steam_account_name: "steam_account_a"
+    });
+    assert.equal(firstBinding.status, 200);
+    assert.equal(firstBinding.body.ok, true);
+    assert.equal(firstBinding.body.binding_limit, 1);
+    assert.equal(firstBinding.body.bound_count, 1);
+    assert.equal(firstBinding.body.matched_existing, false);
+
+    const sameBinding = await requestJson(ctx, "POST", "/api/auth/steam-binding/check-or-bind", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      steam_id: "76561198000000001",
+      steam_account_name: "steam_account_a"
+    });
+    assert.equal(sameBinding.status, 200);
+    assert.equal(sameBinding.body.ok, true);
+    assert.equal(sameBinding.body.matched_existing, true);
+    assert.equal(sameBinding.body.bound_count, 1);
+
+    const rejectedSecondBinding = await requestJson(ctx, "POST", "/api/auth/steam-binding/check-or-bind", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      steam_id: "76561198000000002",
+      steam_account_name: "steam_account_b"
+    });
+    assert.equal(rejectedSecondBinding.status, 409);
+    assert.equal(rejectedSecondBinding.body.reason, "steam_binding_limit_reached");
+
+    const adminBindings = await requestJson(
+      ctx,
+      "GET",
+      `/api/admin/users/${userList.body.items[0].id}/steam-bindings`,
+      null,
+      adminHeaders
+    );
+    assert.equal(adminBindings.status, 200);
+    assert.equal(adminBindings.body.ok, true);
+    assert.equal(adminBindings.body.items.length, 1);
+    assert.equal(adminBindings.body.items[0].steam_id, "76561198000000001");
+
+    const revokeBinding = await requestJson(
+      ctx,
+      "POST",
+      `/api/admin/users/${userList.body.items[0].id}/steam-bindings/${adminBindings.body.items[0].id}/revoke`,
+      {note: "manual_reset"},
+      adminHeaders
+    );
+    assert.equal(revokeBinding.status, 200);
+    assert.equal(revokeBinding.body.ok, true);
+
+    const reboundAfterAdminReset = await requestJson(ctx, "POST", "/api/auth/steam-binding/check-or-bind", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      steam_id: "76561198000000002",
+      steam_account_name: "steam_account_b"
+    });
+    assert.equal(reboundAfterAdminReset.status, 200);
+    assert.equal(reboundAfterAdminReset.body.ok, true);
+    assert.equal(reboundAfterAdminReset.body.bound_count, 1);
+
+    const memberUser = await requestJson(ctx, "PATCH", `/api/admin/users/${userList.body.items[0].id}`, {
+      membership_plan: "member",
+      membership_expires_at: "",
+      permission_overrides: []
+    }, adminHeaders);
+    assert.equal(memberUser.status, 200);
+    assert.equal(memberUser.body.ok, true);
+
+    const memberSecondBinding = await requestJson(ctx, "POST", "/api/auth/steam-binding/check-or-bind", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      steam_id: "76561198000000003",
+      steam_account_name: "steam_account_c"
+    });
+    assert.equal(memberSecondBinding.status, 200);
+    assert.equal(memberSecondBinding.body.ok, true);
+    assert.equal(memberSecondBinding.body.binding_limit, -1);
+    assert.equal(memberSecondBinding.body.bound_count, 2);
+    assert.equal(memberSecondBinding.body.matched_existing, false);
 
     const craftPermit = await requestJson(ctx, "POST", "/api/auth/craft-permit", {
       refresh_token: login.body.refresh_token,
@@ -286,12 +386,21 @@ async function main() {
     assert.equal(craftPermitMissingToken.body.reason, "craft_permit_payload_invalid");
 
     const downgradedUser = await requestJson(ctx, "PATCH", `/api/admin/users/${userList.body.items[0].id}`, {
-      membership_plan: "free",
+      membership_plan: "inactive",
       membership_expires_at: "",
       permission_overrides: []
     }, adminHeaders);
     assert.equal(downgradedUser.status, 200);
     assert.equal(downgradedUser.body.ok, true);
+
+    const inactiveBinding = await requestJson(ctx, "POST", "/api/auth/steam-binding/check-or-bind", {
+      refresh_token: login.body.refresh_token,
+      device_id: "device_alpha",
+      steam_id: "76561198000000001",
+      steam_account_name: "steam_account_a"
+    });
+    assert.equal(inactiveBinding.status, 409);
+    assert.equal(inactiveBinding.body.reason, "membership_inactive");
 
     const craftPermitDenied = await requestJson(ctx, "POST", "/api/auth/craft-permit", {
       refresh_token: login.body.refresh_token,

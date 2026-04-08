@@ -182,11 +182,64 @@ async function test_issue_craft_permit_normalizes_request_and_response() {
   });
 }
 
+async function test_check_or_bind_steam_account_normalizes_request_and_response() {
+  const calls = [];
+  const client = createControlPlaneAuthClient({
+    baseUrl: "https://auth.example.com",
+    fetchFn: async (url, options = {}) => {
+      calls.push({
+        url,
+        method: options.method,
+        body: JSON.parse(String(options.body || "{}"))
+      });
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            ok: true,
+            binding_mode: "single_locked",
+            binding_limit: 1,
+            bound_count: 1,
+            matched_existing: false,
+            message: "Steam 绑定资格已确认"
+          };
+        }
+      };
+    }
+  });
+
+  const result = await client.checkOrBindSteamAccount({
+    refreshCredential: "refresh_token_1",
+    deviceId: "device_1",
+    steamId: "76561198000000001",
+    steamAccountName: "steam_account_a"
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://auth.example.com/api/auth/steam-binding/check-or-bind");
+  assert.deepEqual(calls[0].body, {
+    refresh_token: "refresh_token_1",
+    device_id: "device_1",
+    steam_id: "76561198000000001",
+    steam_account_name: "steam_account_a"
+  });
+  assert.deepEqual(result, {
+    ok: true,
+    bindingMode: "single_locked",
+    bindingLimit: 1,
+    boundCount: 1,
+    matchedExisting: false,
+    message: "Steam 绑定资格已确认"
+  });
+}
+
 async function main() {
   await test_login_fails_when_service_is_not_configured();
   await test_login_normalizes_remote_auth_payload();
   await test_refresh_normalizes_rotated_refresh_token();
   await test_issue_craft_permit_normalizes_request_and_response();
+  await test_check_or_bind_steam_account_normalizes_request_and_response();
   console.log("control-plane-auth-client tests passed");
 }
 

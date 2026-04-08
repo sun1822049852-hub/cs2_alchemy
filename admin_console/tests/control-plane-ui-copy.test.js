@@ -5,25 +5,21 @@ const path = require("node:path");
 const APP_PATH = path.resolve(__dirname, "../ui/app.js");
 const APP_SOURCE = fs.readFileSync(APP_PATH, "utf8");
 
-function test_free_plan_copy_explains_baseline_access_without_real_craft() {
+function test_trial_and_inactive_copy_explain_membership_lifecycle() {
   assert.equal(
-    APP_SOURCE.includes("默认开放账号、库存、刷新与汰换模拟；真实炼金执行需单独授权。"),
+    APP_SOURCE.includes("Trial：新注册用户默认获得 7 天普通版权限，期间允许炼金。"),
     true,
-    "free/default 文案应明确说明非 craft 功能默认开放，真实炼金需单独授权"
+    "trial 文案应明确说明新注册用户默认获得 7 天体验期且体验期内允许炼金"
   );
-}
-
-function test_paid_plan_copy_explains_permissions_can_be_overridden() {
   assert.equal(
-    APP_SOURCE.includes("当前计划：${user.membership_plan}，可按需覆盖单项权限。"),
+    APP_SOURCE.includes("Inactive：体验到期或未开通，不能炼金，但保留既有 Steam 绑定资格。"),
     true,
-    "非 free 计划文案应明确说明仍可按用户覆盖权限"
+    "inactive 文案应明确说明到期后不能炼金且不会释放已占用的 Steam 绑定资格"
   );
 }
 
 function main() {
-  test_free_plan_copy_explains_baseline_access_without_real_craft();
-  test_paid_plan_copy_explains_permissions_can_be_overridden();
+  test_trial_and_inactive_copy_explain_membership_lifecycle();
   console.log("control-plane-ui-copy tests passed");
 }
 

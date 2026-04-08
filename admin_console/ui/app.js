@@ -6,7 +6,8 @@ const state = {
   plans: [],
   users: [],
   selectedUserId: 0,
-  devices: []
+  devices: [],
+  bindings: []
 };
 
 const refs = {
@@ -33,7 +34,8 @@ const refs = {
   userExpiryTime: document.querySelector("#userExpiryTime"),
   membershipMeta: document.querySelector("#membershipMeta"),
   permissionList: document.querySelector("#permissionList"),
-  deviceList: document.querySelector("#deviceList")
+  deviceList: document.querySelector("#deviceList"),
+  bindingList: document.querySelector("#bindingList")
 };
 
 const DEFAULT_EXPIRY_TIME = "23:59";
@@ -172,8 +174,12 @@ function toIsoDateTimeFromParts(dateValue = "", timeValue = "") {
 }
 
 function updateMembershipMetaPreview() {
-  if (refs.userPlan.value === "free") {
-    refs.membershipMeta.textContent = "默认开放账号、库存、刷新与汰换模拟；真实炼金执行需单独授权。";
+  if (refs.userPlan.value === "trial") {
+    refs.membershipMeta.textContent = "Trial：新注册用户默认获得 7 天普通版权限，期间允许炼金。";
+    return;
+  }
+  if (refs.userPlan.value === "inactive") {
+    refs.membershipMeta.textContent = "Inactive：体验到期或未开通，不能炼金，但保留既有 Steam 绑定资格。";
     return;
   }
   const expiryDateValue = String(refs.userExpiryDate.value || "").trim();
@@ -296,14 +302,16 @@ function renderUserDetail() {
   const expiryParts = splitLocalDateTimeParts(user.membership_expires_at);
   refs.userExpiryDate.value = expiryParts.dateValue;
   refs.userExpiryTime.value = expiryParts.timeValue;
-  refs.userExpiryDate.disabled = user.membership_plan === "free";
-  refs.userExpiryTime.disabled = user.membership_plan === "free";
-  refs.userExpiryDate.required = user.membership_plan !== "free";
-  refs.membershipMeta.textContent = user.membership_plan === "free"
-    ? "默认开放账号、库存、刷新与汰换模拟；真实炼金执行需单独授权。"
-    : user.membership_expires_at
-      ? `当前计划：${user.membership_plan}，可按需覆盖单项权限。剩余 ${user.remaining_membership_days} 天，到期时间：${formatLocalDateTimeText(user.membership_expires_at)}`
-      : `当前计划：${user.membership_plan}，可按需覆盖单项权限。请选择到期日期；若不调整时间，默认按 ${DEFAULT_EXPIRY_TIME} 处理。`;
+  refs.userExpiryDate.disabled = user.membership_plan === "inactive";
+  refs.userExpiryTime.disabled = user.membership_plan === "inactive";
+  refs.userExpiryDate.required = user.membership_plan !== "inactive";
+  refs.membershipMeta.textContent = user.membership_plan === "trial"
+    ? "Trial：新注册用户默认获得 7 天普通版权限，期间允许炼金。"
+    : user.membership_plan === "inactive"
+      ? "Inactive：体验到期或未开通，不能炼金，但保留既有 Steam 绑定资格。"
+      : user.membership_expires_at
+        ? `当前计划：${user.membership_plan}，可按需覆盖单项权限。剩余 ${user.remaining_membership_days} 天，到期时间：${formatLocalDateTimeText(user.membership_expires_at)}`
+        : `当前计划：${user.membership_plan}，可按需覆盖单项权限。请选择到期日期；若不调整时间，默认按 ${DEFAULT_EXPIRY_TIME} 处理。`;
   const permissions = new Set((user.entitlements && user.entitlements.permissions) || []);
   refs.permissionList.innerHTML = FEATURE_CODES.map((code) => `
     <div class="permission-row">
@@ -315,6 +323,7 @@ function renderUserDetail() {
     </div>
   `).join("");
   renderDevices();
+  renderBindings();
 }
 
 function renderDevices() {
@@ -335,6 +344,31 @@ function renderDevices() {
           <div class="device-meta">最后使用：${item.last_used_at || item.created_at}</div>
           <div class="device-meta">过期时间：${formatLocalDateTimeText(item.expires_at)}</div>
           <button class="btn btn-sm btn-outline-danger" type="button" data-session-id="${item.id}">吊销设备</button>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderBindings() {
+  const user = selectedUser();
+  if (!user) {
+    refs.bindingList.innerHTML = '<div class="empty-block">尚未选择用户。</div>';
+    return;
+  }
+  if (!state.bindings.length) {
+    refs.bindingList.innerHTML = '<div class="empty-block">当前没有占用中的 Steam 绑定资格。</div>';
+    return;
+  }
+  refs.bindingList.innerHTML = `
+    <div class="device-stack">
+      ${state.bindings.map((item) => `
+        <article class="device-item">
+          <h4>${item.steam_account_name || item.steam_id}</h4>
+          <div class="device-meta">SteamID：${item.steam_id}</div>
+          <div class="device-meta">首次绑定：${formatLocalDateTimeText(item.first_bound_at)}</div>
+          <div class="device-meta">最近使用：${formatLocalDateTimeText(item.last_seen_at)}</div>
+          <button class="btn btn-sm btn-outline-danger" type="button" data-binding-id="${item.id}">解除绑定资格</button>
         </article>
       `).join("")}
     </div>
@@ -376,18 +410,23 @@ async function loadDashboard() {
   }
   renderStats();
   renderUsers();
-  await loadDevices();
+  await loadSelectedUserRuntimeDetails();
 }
 
-async function loadDevices() {
+async function loadSelectedUserRuntimeDetails() {
   const user = selectedUser();
   if (!user || !state.session) {
     state.devices = [];
+    state.bindings = [];
     renderUserDetail();
     return;
   }
-  const response = await api(`/api/admin/users/${user.id}/devices`, {method: "GET"});
-  state.devices = response.items || [];
+  const [devicesResponse, bindingsResponse] = await Promise.all([
+    api(`/api/admin/users/${user.id}/devices`, {method: "GET"}),
+    api(`/api/admin/users/${user.id}/steam-bindings`, {method: "GET"})
+  ]);
+  state.devices = devicesResponse.items || [];
+  state.bindings = bindingsResponse.items || [];
   renderUserDetail();
 }
 
@@ -441,6 +480,7 @@ async function handleLogout() {
   state.users = [];
   state.selectedUserId = 0;
   state.devices = [];
+  state.bindings = [];
   await loadSession();
 }
 
@@ -460,7 +500,7 @@ async function handleUserSubmit(event) {
       body: JSON.stringify({
         membership_plan: refs.userPlan.value,
         status: refs.userStatus.value,
-        membership_expires_at: refs.userPlan.value === "free"
+        membership_expires_at: refs.userPlan.value === "inactive"
           ? ""
           : toIsoDateTimeFromParts(refs.userExpiryDate.value, refs.userExpiryTime.value),
         permission_overrides: permissionOverrides
@@ -476,7 +516,7 @@ async function handleWorkspaceClick(event) {
   const userButton = event.target.closest("[data-user-id]");
   if (userButton) {
     state.selectedUserId = Number(userButton.getAttribute("data-user-id")) || 0;
-    await loadDevices();
+    await loadSelectedUserRuntimeDetails();
     renderUsers();
     return;
   }
@@ -490,7 +530,25 @@ async function handleWorkspaceClick(event) {
       method: "POST",
       body: JSON.stringify({})
     });
-    await loadDevices();
+    await loadSelectedUserRuntimeDetails();
+    await loadDashboard();
+    return;
+  }
+  const bindingButton = event.target.closest("[data-binding-id]");
+  if (bindingButton) {
+    const user = selectedUser();
+    if (!user) {
+      return;
+    }
+    const bindingId = bindingButton.getAttribute("data-binding-id");
+    if (!window.confirm("确认解除该 Steam 绑定资格？该操作会允许用户重新绑定新的 Steam 账号。")) {
+      return;
+    }
+    await api(`/api/admin/users/${user.id}/steam-bindings/${bindingId}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({note: "manual_reset"})
+    });
+    await loadSelectedUserRuntimeDetails();
     await loadDashboard();
   }
 }
@@ -501,10 +559,10 @@ async function init() {
   refs.logoutButton.addEventListener("click", handleLogout);
   refs.userForm.addEventListener("submit", handleUserSubmit);
   refs.userPlan.addEventListener("change", () => {
-    refs.userExpiryDate.disabled = refs.userPlan.value === "free";
-    refs.userExpiryTime.disabled = refs.userPlan.value === "free";
-    refs.userExpiryDate.required = refs.userPlan.value !== "free";
-    if (refs.userPlan.value === "free") {
+    refs.userExpiryDate.disabled = refs.userPlan.value === "inactive";
+    refs.userExpiryTime.disabled = refs.userPlan.value === "inactive";
+    refs.userExpiryDate.required = refs.userPlan.value !== "inactive";
+    if (refs.userPlan.value === "inactive") {
       refs.userExpiryDate.value = "";
       refs.userExpiryTime.value = DEFAULT_EXPIRY_TIME;
     } else {
@@ -520,6 +578,7 @@ async function init() {
   });
   refs.usersList.addEventListener("click", handleWorkspaceClick);
   refs.deviceList.addEventListener("click", handleWorkspaceClick);
+  refs.bindingList.addEventListener("click", handleWorkspaceClick);
   await loadSession();
   if (state.session) {
     await loadDashboard();

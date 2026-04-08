@@ -56,7 +56,7 @@ function createEntitlementSigner({
           sub: asString(account.id).trim(),
           username: asString(account.username).trim(),
           device_id: device,
-          membership_plan: asString(account.membership_plan).trim() || "pro",
+          membership_plan: asString(account.membership_plan).trim() || "inactive",
           permissions: resolvedPermissions,
           feature_flags: featureFlags && typeof featureFlags === "object"
             ? {...featureFlags}

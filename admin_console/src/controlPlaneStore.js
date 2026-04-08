@@ -4,37 +4,53 @@ const {ALL_FEATURE_CODES, FEATURE_CODES} = require("../../shared/featureCodes");
 const {PATHS} = require("./constants");
 const {asString} = require("../../node_sidecar/src/utils");
 
+const LEGACY_MEMBERSHIP_PLAN_CODE_MAP = Object.freeze({
+  free: "inactive",
+  pro: "standard",
+  elite: "member"
+});
+
+const DEFAULT_INACTIVE_PERMISSIONS = [
+  FEATURE_CODES.ACCOUNTS_READ,
+  FEATURE_CODES.ACCOUNTS_WRITE,
+  FEATURE_CODES.INVENTORY_READ,
+  FEATURE_CODES.INVENTORY_REFRESH,
+  FEATURE_CODES.SIMULATION_USE
+];
+
+const DEFAULT_ACTIVE_PERMISSIONS = [
+  FEATURE_CODES.ACCOUNTS_READ,
+  FEATURE_CODES.ACCOUNTS_WRITE,
+  FEATURE_CODES.CRAFT_USE,
+  FEATURE_CODES.INVENTORY_READ,
+  FEATURE_CODES.INVENTORY_REFRESH,
+  FEATURE_CODES.SIMULATION_USE
+];
+
 const DEFAULT_MEMBERSHIP_PLANS = [
   {
-    code: "elite",
-    name: "Elite",
-    description: "Full toolkit access",
-    permissions: [...ALL_FEATURE_CODES]
+    code: "inactive",
+    name: "Inactive",
+    description: "Expired or unopened membership without craft execution",
+    permissions: [...DEFAULT_INACTIVE_PERMISSIONS]
   },
   {
-    code: "free",
-    name: "Free",
-    description: "Default registered access without craft execution",
-    permissions: [
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]
+    code: "member",
+    name: "Member",
+    description: "Unlimited Steam bindings with craft execution",
+    permissions: [...DEFAULT_ACTIVE_PERMISSIONS]
   },
   {
-    code: "pro",
-    name: "Pro",
-    description: "Includes real craft execution",
-    permissions: [
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.CRAFT_USE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]
+    code: "standard",
+    name: "Standard",
+    description: "Single Steam binding with craft execution",
+    permissions: [...DEFAULT_ACTIVE_PERMISSIONS]
+  },
+  {
+    code: "trial",
+    name: "Trial",
+    description: "Seven-day single-binding trial with craft execution",
+    permissions: [...DEFAULT_ACTIVE_PERMISSIONS]
   }
 ];
 
@@ -53,6 +69,14 @@ function parseTimeMs(value) {
   }
   const ms = Date.parse(text);
   return Number.isFinite(ms) ? ms : 0;
+}
+
+function normalizeMembershipPlanCode(value = "", fallback = "inactive") {
+  const raw = asString(value).trim().toLowerCase();
+  if (!raw) {
+    return fallback;
+  }
+  return LEGACY_MEMBERSHIP_PLAN_CODE_MAP[raw] || raw;
 }
 
 function hashCode(code) {
@@ -110,11 +134,14 @@ function calculateRemainingMembershipDays(expiresAt = "", now = new Date()) {
 }
 
 function isMembershipActive(planCode = "", expiresAt = "", now = new Date()) {
-  const code = asString(planCode).trim() || "free";
-  if (code === "free") {
+  const code = normalizeMembershipPlanCode(planCode);
+  if (code === "inactive") {
     return false;
   }
   const expiresAtMs = parseTimeMs(expiresAt);
+  if (code === "trial" && !expiresAtMs) {
+    return false;
+  }
   if (!expiresAtMs) {
     return true;
   }
@@ -140,7 +167,7 @@ function sanitizeClientUser(row, {now = new Date()} = {}) {
   if (!row) {
     return null;
   }
-  const membershipPlan = asString(row.membership_plan).trim() || "free";
+  const membershipPlan = normalizeMembershipPlanCode(row.membership_plan);
   const membershipExpiresAt = asString(row.membership_expires_at).trim();
   return {
     id: Number(row.id) || 0,
@@ -251,7 +278,7 @@ class ControlPlaneStore {
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'active',
-        membership_plan TEXT NOT NULL DEFAULT 'free',
+        membership_plan TEXT NOT NULL DEFAULT 'inactive',
         membership_expires_at TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -316,6 +343,22 @@ class ControlPlaneStore {
       CREATE INDEX IF NOT EXISTS idx_refresh_session_user_device
       ON refresh_session(user_id, device_id, status);
 
+      CREATE TABLE IF NOT EXISTS client_user_steam_binding (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        steam_id TEXT NOT NULL,
+        steam_account_name TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'active',
+        first_bound_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'client_login_save',
+        note TEXT NOT NULL DEFAULT '',
+        UNIQUE(user_id, steam_id),
+        FOREIGN KEY (user_id) REFERENCES client_user(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_client_user_steam_binding_user_status
+      ON client_user_steam_binding(user_id, status, first_bound_at DESC);
+
       CREATE TABLE IF NOT EXISTS admin_session (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         token_hash TEXT NOT NULL UNIQUE,
@@ -367,6 +410,9 @@ class ControlPlaneStore {
             VALUES(?, ?, 1, ?, ?)
           `).run(planId, featureCode, now, now);
         }
+      }
+      for (const legacyCode of Object.keys(LEGACY_MEMBERSHIP_PLAN_CODE_MAP)) {
+        this.db.prepare("DELETE FROM membership_plan WHERE code = ?").run(legacyCode);
       }
     });
   }
@@ -455,7 +501,8 @@ class ControlPlaneStore {
   }
 
   getMembershipPlanByCode(code = "") {
-    const row = this.db.prepare("SELECT * FROM membership_plan WHERE code = ?").get(asString(code).trim());
+    const normalizedCode = normalizeMembershipPlanCode(code, "");
+    const row = this.db.prepare("SELECT * FROM membership_plan WHERE code = ?").get(normalizedCode);
     if (!row) {
       return null;
     }
@@ -483,15 +530,15 @@ class ControlPlaneStore {
     return this.db.prepare("SELECT * FROM client_user ORDER BY created_at ASC").all().map((row) => sanitizeClientUser(row, {now}));
   }
 
-  createClientUser({email = "", username = "", password = "", membershipPlan = "free", membershipExpiresAt = "", now = new Date()} = {}) {
+  createClientUser({email = "", username = "", password = "", membershipPlan = "inactive", membershipExpiresAt = "", now = new Date()} = {}) {
     const emailText = asString(email).trim().toLowerCase();
     const usernameText = asString(username).trim();
-    const plan = this.getMembershipPlanByCode(membershipPlan) || this.getMembershipPlanByCode("free");
+    const plan = this.getMembershipPlanByCode(membershipPlan) || this.getMembershipPlanByCode("inactive");
     if (!emailText || !usernameText) {
       throw new Error("email and username are required");
     }
     const stamp = toIsoString(now);
-    const expiresAt = plan.code === "free" ? "" : asString(membershipExpiresAt).trim();
+    const expiresAt = plan.code === "inactive" ? "" : asString(membershipExpiresAt).trim();
     const result = this.db.prepare(`
       INSERT INTO client_user(email, username, password_hash, status, membership_plan, membership_expires_at, created_at, updated_at)
       VALUES(?, ?, ?, 'active', ?, ?, ?, ?)
@@ -544,12 +591,12 @@ class ControlPlaneStore {
     if (!user) {
       return null;
     }
-    const assignedPlan = this.getMembershipPlanByCode(user.membership_plan) || this.getMembershipPlanByCode("free");
+    const assignedPlan = this.getMembershipPlanByCode(user.membership_plan) || this.getMembershipPlanByCode("inactive");
     const membershipActive = user.membership_active;
     const effectivePlan = membershipActive
       ? assignedPlan
-      : (this.getMembershipPlanByCode("free") || assignedPlan);
-    const effectivePlanCode = effectivePlan ? effectivePlan.code : "free";
+      : (this.getMembershipPlanByCode("inactive") || assignedPlan);
+    const effectivePlanCode = effectivePlan ? effectivePlan.code : "inactive";
     const permissions = new Set(effectivePlan ? effectivePlan.permissions : []);
     const overrides = this.db.prepare(`
       SELECT feature_code, enabled
@@ -574,7 +621,12 @@ class ControlPlaneStore {
       membership_active: membershipActive,
       permissions: resolvedPermissions,
       feature_flags: {
-        simulation_enabled: resolvedPermissions.includes(FEATURE_CODES.SIMULATION_USE)
+        simulation_enabled: resolvedPermissions.includes(FEATURE_CODES.SIMULATION_USE),
+        craft_enabled: resolvedPermissions.includes(FEATURE_CODES.CRAFT_USE),
+        steam_binding_mode: effectivePlanCode === "member" ? "unlimited" : "single_locked",
+        steam_binding_limit: effectivePlanCode === "member" ? -1 : (effectivePlanCode === "inactive" ? 0 : 1),
+        trial_active: effectivePlanCode === "trial",
+        trial_expires_at: effectivePlanCode === "trial" ? user.membership_expires_at : ""
       }
     };
   }
@@ -589,7 +641,7 @@ class ControlPlaneStore {
       return {ok: false, reason: "membership_plan_invalid"};
     }
     const stamp = toIsoString(now);
-    const expiresAt = plan.code === "free" ? "" : asString(membershipExpiresAt).trim();
+    const expiresAt = plan.code === "inactive" ? "" : asString(membershipExpiresAt).trim();
     this.runInTransaction(() => {
       this.db.prepare(`
         UPDATE client_user
@@ -633,7 +685,7 @@ class ControlPlaneStore {
       return {ok: false, reason: "membership_plan_invalid"};
     }
     const stamp = toIsoString(now);
-    const expiresAt = plan.code === "free" ? "" : asString(membershipExpiresAt || user.membership_expires_at).trim();
+    const expiresAt = plan.code === "inactive" ? "" : asString(membershipExpiresAt || user.membership_expires_at).trim();
     this.runInTransaction(() => {
       this.db.prepare(`
         UPDATE client_user
@@ -653,6 +705,123 @@ class ControlPlaneStore {
       ok: true,
       user: this.getClientUserById(user.id, {now}),
       entitlements: this.resolveUserEntitlements({userId: user.id, now})
+    };
+  }
+
+  listUserSteamBindings({userId = 0, activeOnly = true} = {}) {
+    const normalizedUserId = Number(userId) || 0;
+    const rows = activeOnly
+      ? this.db.prepare(`
+        SELECT * FROM client_user_steam_binding
+        WHERE user_id = ? AND status = 'active'
+        ORDER BY first_bound_at ASC, id ASC
+      `).all(normalizedUserId)
+      : this.db.prepare(`
+        SELECT * FROM client_user_steam_binding
+        WHERE user_id = ?
+        ORDER BY first_bound_at ASC, id ASC
+      `).all(normalizedUserId);
+    return rows.map((row) => ({
+      id: Number(row.id) || 0,
+      user_id: Number(row.user_id) || 0,
+      steam_id: asString(row.steam_id).trim(),
+      steam_account_name: asString(row.steam_account_name).trim(),
+      status: asString(row.status).trim() || "active",
+      first_bound_at: asString(row.first_bound_at).trim(),
+      last_seen_at: asString(row.last_seen_at).trim(),
+      source: asString(row.source).trim() || "client_login_save",
+      note: asString(row.note).trim()
+    }));
+  }
+
+  revokeUserSteamBindingById({userId = 0, bindingId = 0, note = "", now = new Date()} = {}) {
+    const targetUserId = Number(userId) || 0;
+    const targetBindingId = Number(bindingId) || 0;
+    const binding = this.db.prepare(`
+      SELECT * FROM client_user_steam_binding
+      WHERE id = ? AND user_id = ? AND status = 'active'
+      LIMIT 1
+    `).get(targetBindingId, targetUserId);
+    if (!binding) {
+      return {ok: false, reason: "steam_binding_not_found"};
+    }
+    const stamp = toIsoString(now);
+    const result = this.db.prepare(`
+      UPDATE client_user_steam_binding
+      SET status = 'revoked', last_seen_at = ?, note = ?
+      WHERE id = ? AND user_id = ? AND status = 'active'
+    `).run(stamp, asString(note).trim(), targetBindingId, targetUserId);
+    if (Number(result.changes) <= 0) {
+      return {ok: false, reason: "steam_binding_not_found"};
+    }
+    return {ok: true};
+  }
+
+  checkOrBindSteamAccount({userId = 0, steamId = "", steamAccountName = "", now = new Date()} = {}) {
+    const user = this.getClientUserById(userId, {now});
+    if (!user) {
+      return {ok: false, reason: "user_not_found"};
+    }
+    const normalizedSteamId = asString(steamId).trim();
+    if (!normalizedSteamId) {
+      return {ok: false, reason: "steam_id_required"};
+    }
+    const entitlements = this.resolveUserEntitlements({userId: user.id, now});
+    const bindingMode = asString(entitlements && entitlements.feature_flags && entitlements.feature_flags.steam_binding_mode).trim()
+      || "single_locked";
+    const bindingLimit = Number(entitlements && entitlements.feature_flags && entitlements.feature_flags.steam_binding_limit);
+    const activeBindings = this.listUserSteamBindings({userId: user.id, activeOnly: true});
+    const matchedExisting = activeBindings.find((item) => item.steam_id === normalizedSteamId) || null;
+    const baseResult = {
+      binding_mode: bindingMode,
+      binding_limit: Number.isFinite(bindingLimit) ? bindingLimit : 0,
+      bound_count: activeBindings.length,
+      matched_existing: !!matchedExisting
+    };
+    if (!entitlements || entitlements.membership_plan === "inactive" || baseResult.binding_limit === 0) {
+      return {
+        ok: false,
+        reason: "membership_inactive",
+        message: "当前账号未开通会员权限，无法绑定新的 Steam 账号",
+        ...baseResult
+      };
+    }
+    if (matchedExisting) {
+      const stamp = toIsoString(now);
+      const nextSteamAccountName = asString(steamAccountName).trim() || matchedExisting.steam_account_name;
+      this.db.prepare(`
+        UPDATE client_user_steam_binding
+        SET steam_account_name = ?, last_seen_at = ?
+        WHERE id = ?
+      `).run(nextSteamAccountName, stamp, matchedExisting.id);
+      return {
+        ok: true,
+        ...baseResult,
+        message: "已匹配既有 Steam 绑定"
+      };
+    }
+    if (baseResult.binding_limit > 0 && activeBindings.length >= baseResult.binding_limit) {
+      return {
+        ok: false,
+        reason: "steam_binding_limit_reached",
+        message: "当前账号允许绑定的 Steam 数量已达上限",
+        ...baseResult
+      };
+    }
+    const stamp = toIsoString(now);
+    this.db.prepare(`
+      INSERT INTO client_user_steam_binding(
+        user_id, steam_id, steam_account_name, status, first_bound_at, last_seen_at, source, note
+      )
+      VALUES(?, ?, ?, 'active', ?, ?, 'client_login_save', '')
+    `).run(user.id, normalizedSteamId, asString(steamAccountName).trim(), stamp, stamp);
+    return {
+      ok: true,
+      binding_mode: bindingMode,
+      binding_limit: baseResult.binding_limit,
+      bound_count: activeBindings.length + 1,
+      matched_existing: false,
+      message: "Steam 绑定资格已确认"
     };
   }
 
@@ -709,7 +878,7 @@ class ControlPlaneStore {
         id: Number(row.user_id) || 0,
         email: asString(row.email).trim(),
         username: asString(row.username).trim(),
-        membership_plan: asString(row.membership_plan).trim() || "pro"
+        membership_plan: normalizeMembershipPlanCode(row.membership_plan)
       }
     };
   }

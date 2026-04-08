@@ -573,6 +573,34 @@ function applyClientLicenseState(data) {
   syncAuthSessionStoreFromLicense();
 }
 
+function buildClientMembershipHintText(license = state.clientLicense) {
+  const user = license && license.user && typeof license.user === "object" ? license.user : null;
+  const featureFlags = license && license.featureFlags && typeof license.featureFlags === "object" ? license.featureFlags : {};
+  const membershipPlan = String(user && user.membership_plan || "").trim();
+  const trialActive = !!featureFlags.trial_active;
+  const trialExpiresAt = String(featureFlags.trial_expires_at || "").trim();
+  const remainingDays = (() => {
+    const expiresAtMs = Date.parse(trialExpiresAt);
+    if (!trialActive || !Number.isFinite(expiresAtMs)) {
+      return 0;
+    }
+    return Math.max(0, Math.ceil((expiresAtMs - Date.now()) / (24 * 60 * 60 * 1000)));
+  })();
+  if (membershipPlan === "trial" && trialActive) {
+    return `新用户体验中，还可使用 ${remainingDays} 天普通版权限；当前最多绑定 1 个 Steam 账号；体验期内可使用炼金，到期后将失效。`;
+  }
+  if (membershipPlan === "inactive" || featureFlags.craft_enabled === false) {
+    return "体验已到期，请开通会员后继续使用炼金功能；删除本地账号不等于换绑，既有 Steam 绑定资格仍会保留。";
+  }
+  if (membershipPlan === "member") {
+    return "当前版本支持绑定无限个 Steam 账号，已开通后可持续使用炼金功能。";
+  }
+  if (membershipPlan === "standard") {
+    return "当前版本仅支持绑定 1 个 Steam 账号，已开通后可使用炼金功能。";
+  }
+  return "";
+}
+
 function renderLicenseGate() {
   const license = state.clientLicense || {};
   const authenticated = !!license.authenticated;
@@ -623,10 +651,13 @@ function renderLicenseGate() {
     ui.licenseTitle.textContent = licenseTitleText;
   }
   let licenseHintText = "";
+  const membershipHintText = buildClientMembershipHintText(license);
   if (readyForWorkspace) {
-    licenseHintText = `当前授权已生效${license.expiresAt ? `，到期时间：${license.expiresAt}` : ""}。`;
+    licenseHintText = `当前授权已生效${license.expiresAt ? `，到期时间：${license.expiresAt}` : ""}。${membershipHintText ? ` ${membershipHintText}` : ""}`;
   } else if (authenticated) {
-    licenseHintText = "授权已验证，正在初始化本地工作台，请稍候。";
+    licenseHintText = membershipHintText
+      ? `${membershipHintText} 正在初始化本地工作台，请稍候。`
+      : "授权已验证，正在初始化本地工作台，请稍候。";
   } else if (authMode === "prod_login") {
     licenseHintText = remoteAuthDisabled
       ? "正式登录模式已启用，但远程认证服务尚未配置。"
@@ -3086,7 +3117,7 @@ async function deleteAccount(row) {
   if (state.refreshing) { setAccountStatus("库存刷新中，暂时无法删除账号", true); return; }
   const ok = await openConfirmModal({
     title: "确认删除账号",
-    message: `确认删除账号“${row.remark || row.username}（${row.username}）”？\n该操作会移除本地保存的密码与账号记录。`,
+    message: `确认删除账号“${row.remark || row.username}（${row.username}）”？\n该操作只会移除本地保存的密码与账号记录，不会释放会员绑定资格。`,
     confirmText: "确认删除",
     cancelText: "取消"
   });

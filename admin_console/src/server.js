@@ -420,6 +420,46 @@ function createServer({
           return;
         }
 
+        const steamBindingRevokeMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/steam-bindings\/(\d+)\/revoke$/);
+        if (req.method === "POST" && steamBindingRevokeMatch) {
+          const userId = Number(steamBindingRevokeMatch[1]) || 0;
+          const bindingId = Number(steamBindingRevokeMatch[2]) || 0;
+          const user = store.getClientUserById(userId, {now: now()});
+          if (!user) {
+            writeError(res, 404, "user_not_found", "用户不存在");
+            return;
+          }
+          const body = await readJsonBody(req);
+          const revoked = store.revokeUserSteamBindingById({
+            userId,
+            bindingId,
+            note: asString(body && body.note).trim(),
+            now: now()
+          });
+          if (!revoked.ok) {
+            writeError(res, 404, revoked.reason, "Steam 绑定资格不存在");
+            return;
+          }
+          writeJson(res, 200, {ok: true, message: "Steam 绑定资格已解除"});
+          return;
+        }
+
+        const steamBindingsMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/steam-bindings$/);
+        if (req.method === "GET" && steamBindingsMatch) {
+          const userId = Number(steamBindingsMatch[1]) || 0;
+          const user = store.getClientUserById(userId, {now: now()});
+          if (!user) {
+            writeError(res, 404, "user_not_found", "用户不存在");
+            return;
+          }
+          writeJson(res, 200, {
+            ok: true,
+            user,
+            items: store.listUserSteamBindings({userId})
+          });
+          return;
+        }
+
         const userMatch = pathname.match(/^\/api\/admin\/users\/(\d+)$/);
         if (req.method === "PATCH" && userMatch) {
           const userId = Number(userMatch[1]) || 0;
@@ -482,11 +522,15 @@ function createServer({
           writeError(res, 409, "username_already_exists", "用户名已存在");
           return;
         }
+        const registerNow = now();
+        const trialExpiresAt = new Date(registerNow.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const user = store.createClientUser({
           email,
           username,
           password,
-          now: now()
+          membershipPlan: "trial",
+          membershipExpiresAt: trialExpiresAt,
+          now: registerNow
         });
         writeJson(res, 200, {
           ok: true,
@@ -603,6 +647,37 @@ function createServer({
             payloadHash
           })
         });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/steam-binding/check-or-bind") {
+        const body = await readJsonBody(req);
+        const refreshToken = asString(body && body.refresh_token).trim();
+        const deviceId = asString(body && body.device_id).trim();
+        const steamId = asString(body && body.steam_id).trim();
+        const steamAccountName = asString(body && body.steam_account_name).trim();
+        if (!refreshToken || !deviceId || !steamId) {
+          writeError(res, 400, "steam_binding_payload_invalid", "refresh_token、device_id、steam_id 不能为空");
+          return;
+        }
+        const requestNow = now();
+        const access = store.resolveClientAccess({
+          refreshToken,
+          deviceId,
+          now: requestNow
+        });
+        if (!access.ok) {
+          const status = access.reason === "device_mismatch" ? 409 : 401;
+          writeError(res, status, access.reason, access.reason === "device_mismatch" ? "设备绑定不匹配" : "refresh_token 无效");
+          return;
+        }
+        const result = store.checkOrBindSteamAccount({
+          userId: access.user.id,
+          steamId,
+          steamAccountName,
+          now: requestNow
+        });
+        writeJson(res, result && result.ok ? 200 : 409, result);
         return;
       }
 

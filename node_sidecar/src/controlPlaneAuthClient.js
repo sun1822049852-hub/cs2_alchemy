@@ -150,6 +150,27 @@ function createControlPlaneAuthClient({
         permit: data.permit && typeof data.permit === "object" ? {...data.permit} : null
       };
     },
+    async checkOrBindSteamAccount({
+      refreshCredential = "",
+      deviceId = "",
+      steamId = "",
+      steamAccountName = ""
+    } = {}) {
+      const data = await postJson("/api/auth/steam-binding/check-or-bind", {
+        refresh_token: asString(refreshCredential).trim(),
+        device_id: asString(deviceId).trim(),
+        steam_id: asString(steamId).trim(),
+        steam_account_name: asString(steamAccountName).trim()
+      });
+      return {
+        ok: data.ok !== false,
+        bindingMode: asString(data.binding_mode).trim(),
+        bindingLimit: Number(data.binding_limit),
+        boundCount: Number(data.bound_count) || 0,
+        matchedExisting: !!data.matched_existing,
+        message: asString(data.message).trim()
+      };
+    },
     async logout({refreshCredential = ""} = {}) {
       return postJson("/api/auth/logout", {
         refresh_token: asString(refreshCredential).trim()

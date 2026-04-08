@@ -930,13 +930,16 @@ async function resolveAccountProfile({username, password = "", viewerUsername = 
     viewerUsername
   });
   const account = username ? accountStore.get(username) : accountStore.getActive();
-  if (!account) {
+  const accountName = asString((account && account.username) || username).trim();
+  if (!accountName) {
     throw new Error(`account not found: ${username || "(active)"}`);
   }
-  const accountName = asString(account.username).trim();
   const tokenStore = new TokenStore();
   const refreshToken = tokenStore.get(accountName);
-  const accountPassword = asString(password || account.password || "").trim();
+  const accountPassword = asString(password || (account && account.password) || "").trim();
+  if (!account && !accountPassword && !refreshToken) {
+    throw new Error(`account not found: ${username || "(active)"}`);
+  }
   logger.info("ui_server", `profile resolve start: account=${accountName}`);
 
   const acquired = await sessionPool.acquire({
@@ -1662,15 +1665,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const accountStore = getViewerAccountStore(auth, deps);
       const existed = accountStore.get(username);
       const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
-
-      accountStore.upsert({
-        username,
-        password,
-        remark: finalRemark,
-        steamName: existed ? existed.steam_name : "",
-        steamId: existed ? existed.steam_id : "",
-        avatarUrl: existed ? existed.avatar_url : ""
-      });
+      const authClient = getControlPlaneAuthClient(deps);
+      const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login"
+        || (authClient && typeof authClient.checkOrBindSteamAccount === "function");
 
       let profile = null;
       try {
@@ -1689,19 +1686,76 @@ async function handleApi(req, res, urlObj, deps = {}) {
           `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`
         );
       }
-      if (profile) {
-        const nextSteamName = asString(profile.persona_name || "").trim();
-        const nextSteamId = asString(profile.steam_id64 || "").trim();
-        const nextAvatarUrl = pickProfileAvatarUrl(profile);
-        accountStore.upsert({
-          username,
-          password,
-          remark: finalRemark,
-          steamName: nextSteamName || (existed ? existed.steam_name : ""),
-          steamId: nextSteamId || (existed ? existed.steam_id : ""),
-          avatarUrl: nextAvatarUrl || (existed ? existed.avatar_url : "")
-        });
+      const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
+      if (requiresBindingCheck) {
+        if (!nextSteamId) {
+          writeJson(res, 502, {
+            ok: false,
+            reason: "steam_id_missing",
+            message: "登录成功但未获取到 SteamID，无法校验绑定资格"
+          });
+          return true;
+        }
+        const runtimeBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function"
+          ? auth.licenseRuntime.readBundle()
+          : null;
+        const refreshCredential = asString(runtimeBundle && runtimeBundle.refresh_credential).trim();
+        if (!refreshCredential) {
+          writeJson(res, 503, {
+            ok: false,
+            reason: "steam_binding_auth_unavailable",
+            message: "当前客户端缺少绑定校验凭证，请重新登录后重试"
+          });
+          return true;
+        }
+        if (!authClient || typeof authClient.checkOrBindSteamAccount !== "function") {
+          writeJson(res, 503, {
+            ok: false,
+            reason: "steam_binding_auth_unavailable",
+            message: "认证服务暂时不可用，暂无法校验 Steam 绑定资格"
+          });
+          return true;
+        }
+        let binding = null;
+        try {
+          binding = await authClient.checkOrBindSteamAccount({
+            refreshCredential,
+            deviceId: getClientDeviceId(deps),
+            steamId: nextSteamId,
+            steamAccountName: username
+          });
+        } catch (bindingErr) {
+          writeJson(res, Math.max(400, Number(bindingErr && bindingErr.status) || 409), {
+            ok: false,
+            reason: asString(bindingErr && (bindingErr.code || (bindingErr.data && bindingErr.data.reason)) || "steam_binding_denied").trim()
+              || "steam_binding_denied",
+            message: asString(bindingErr && bindingErr.message || "当前账号不允许绑定新的 Steam 账号").trim()
+              || "当前账号不允许绑定新的 Steam 账号"
+          });
+          return true;
+        }
+        if (!binding || binding.ok === false) {
+          writeJson(res, 409, {
+            ok: false,
+            reason: asString(binding && (binding.reason || binding.code) || "steam_binding_denied").trim()
+              || "steam_binding_denied",
+            message: asString(binding && binding.message || "当前账号不允许绑定新的 Steam 账号").trim()
+              || "当前账号不允许绑定新的 Steam 账号"
+          });
+          return true;
+        }
       }
+
+      const nextSteamName = asString(profile && profile.persona_name || "").trim();
+      const nextAvatarUrl = pickProfileAvatarUrl(profile);
+      accountStore.upsert({
+        username,
+        password,
+        remark: finalRemark,
+        steamName: nextSteamName || (existed ? existed.steam_name : ""),
+        steamId: nextSteamId || (existed ? existed.steam_id : ""),
+        avatarUrl: nextAvatarUrl || (existed ? existed.avatar_url : "")
+      });
 
       const uiState = getUiStateStore(deps, viewerUsername);
       uiState.setLastSelected(username);
