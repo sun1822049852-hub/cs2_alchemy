@@ -118,10 +118,15 @@ function getUiStateStore(deps = {}, viewerUsername = "") {
   return new UiStateStore(undefined, {viewerUsername});
 }
 
+function resolveAccountViewerUsername(auth) {
+  if (auth && Object.prototype.hasOwnProperty.call(auth, "accountViewerUsername")) {
+    return asString(auth.accountViewerUsername).trim();
+  }
+  return asString(auth && auth.user && auth.user.username ? auth.user.username : "").trim();
+}
+
 function getViewerAccountStore(auth, deps = {}) {
-  const viewerUsername = auth && Object.prototype.hasOwnProperty.call(auth, "accountViewerUsername")
-    ? asString(auth.accountViewerUsername).trim()
-    : asString(auth && auth.user && auth.user.username ? auth.user.username : "").trim();
+  const viewerUsername = resolveAccountViewerUsername(auth);
   if (typeof deps.accountStoreFactory === "function") {
     const custom = deps.accountStoreFactory({viewerUsername});
     if (custom) {
@@ -1250,6 +1255,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
   const auth = resolveRequestAuth(req, deps);
   const config = getClientLicenseConfig(deps);
   const viewerUsername = asString(auth && auth.user && auth.user.username ? auth.user.username : "").trim();
+  const accountViewerUsername = resolveAccountViewerUsername(auth);
   try {
     if (pathname === "/api/health" && req.method === "GET") {
       writeJson(res, 200, {ok: true});
@@ -1481,7 +1487,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     try {
       const profile = await resolveAccountProfile({
         username,
-        viewerUsername,
+        viewerUsername: accountViewerUsername,
         accountStoreOptions: {
           dbPath: auth.store.dbPath,
           accountsFilePath: auth.store.accountsFilePath
@@ -1671,7 +1677,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         profile = await resolveAccountProfile({
           username,
           password,
-          viewerUsername,
+          viewerUsername: accountViewerUsername,
           accountStoreOptions: {
             dbPath: auth.store.dbPath,
             accountsFilePath: auth.store.accountsFilePath
