@@ -1,8 +1,8 @@
 const path = require("node:path");
 
 const {asString} = require("../node_sidecar/src/utils");
-const {createBuffSkinDetailProvider} = require("../node_sidecar/src/services/buffSkinDetailProvider");
 const {createSkinDetailEnrichmentService} = require("../node_sidecar/src/services/skinDetailEnrichmentService");
+const {createSteamFirstSkinDetailProvider} = require("../node_sidecar/src/services/steamFirstSkinDetailProvider");
 
 function toPositiveInt(value, fallback) {
   const parsed = Math.trunc(Number(value));
@@ -122,7 +122,10 @@ function resolveImageThrottleOptions(options = {}) {
 }
 
 async function enrichMissingImages(options = {}) {
-  const provider = createBuffSkinDetailProvider();
+  const provider = options.provider || createSteamFirstSkinDetailProvider({
+    logger: options.logger || null,
+    steamImageOptions: options.steamImageOptions || {}
+  });
   const throttleOptions = resolveImageThrottleOptions(options);
   const service = createSkinDetailEnrichmentService({
     dbPath: options.dbPath,

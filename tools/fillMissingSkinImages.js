@@ -1,7 +1,7 @@
 const path = require("node:path");
 
-const {createBuffSkinDetailProvider} = require("../node_sidecar/src/services/buffSkinDetailProvider");
 const {createSkinDetailEnrichmentService} = require("../node_sidecar/src/services/skinDetailEnrichmentService");
+const {createSteamFirstSkinDetailProvider} = require("../node_sidecar/src/services/steamFirstSkinDetailProvider");
 const {asString} = require("../node_sidecar/src/utils");
 const {backupDbFile} = require("./rebuildSkinDb");
 
@@ -74,7 +74,7 @@ async function fillMissingSkinImages({
   provider = null,
   logger = null
 } = {}) {
-  const imageProvider = provider || createBuffSkinDetailProvider({
+  const imageProvider = provider || createSteamFirstSkinDetailProvider({
     logger,
     retryLimit,
     retryDelayMs,

@@ -99,6 +99,8 @@ async function test_tool_only_targets_latest_snapshot_display_only_rows_missing_
     {market_hash_name: "AK-47 | Redline (Field-Tested)"},
     {market_hash_name: "Global Offensive Badge"}
   ]);
+  fs.utimesSync(olderSnapshotPath, new Date("2026-04-07T14:00:00.000Z"), new Date("2026-04-07T14:00:00.000Z"));
+  fs.utimesSync(latestSnapshotPath, new Date("2026-04-07T14:20:00.000Z"), new Date("2026-04-07T14:20:00.000Z"));
 
   const captured = [];
   const result = await enrichInventoryDisplayOnlyImages({
@@ -129,9 +131,15 @@ async function test_tool_only_targets_latest_snapshot_display_only_rows_missing_
 
   assert.equal(captured.length, 1);
   assert.equal(result.snapshotPath, latestSnapshotPath);
-  assert.deepEqual(result.targetMarketHashNames, ["Sticker | Miami Stabbyfish"]);
-  assert.deepEqual(captured[0].serviceOptions.targetMarketHashNames, ["Sticker | Miami Stabbyfish"]);
-  assert.equal(result.result.image_rows_ok, 1);
+  assert.deepEqual(result.targetMarketHashNames, [
+    "Sticker | Miami Stabbyfish",
+    "Music Kit | Valve, CS:GO"
+  ]);
+  assert.deepEqual(captured[0].serviceOptions.targetMarketHashNames, [
+    "Sticker | Miami Stabbyfish",
+    "Music Kit | Valve, CS:GO"
+  ]);
+  assert.equal(result.result.image_rows_ok, 2);
 }
 
 (async () => {

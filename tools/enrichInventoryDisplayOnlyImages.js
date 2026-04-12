@@ -3,8 +3,8 @@ const path = require("node:path");
 const {DatabaseSync} = require("node:sqlite");
 
 const {asString} = require("../node_sidecar/src/utils");
-const {createBuffSkinDetailProvider} = require("../node_sidecar/src/services/buffSkinDetailProvider");
 const {createSkinDetailEnrichmentService} = require("../node_sidecar/src/services/skinDetailEnrichmentService");
+const {createSteamFirstSkinDetailProvider} = require("../node_sidecar/src/services/steamFirstSkinDetailProvider");
 const {
   buildCliOptions: buildBaseCliOptions,
   resolveImageThrottleOptions
@@ -137,7 +137,6 @@ function selectTargetMarketHashNames({dbPath, marketHashNames}) {
       FROM skin
       WHERE COALESCE(inventory_display_only, 0) = 1
         AND TRIM(COALESCE(markethashname, '')) <> ''
-        AND TRIM(COALESCE(buffid, '')) <> ''
         AND (
           TRIM(COALESCE(goods_icon_url, '')) = ''
           OR TRIM(COALESCE(goods_original_icon_url, '')) = ''
@@ -163,7 +162,7 @@ function selectTargetMarketHashNames({dbPath, marketHashNames}) {
 }
 
 function createService(options = {}) {
-  const provider = createBuffSkinDetailProvider();
+  const provider = createSteamFirstSkinDetailProvider();
   const throttleOptions = resolveImageThrottleOptions(options);
   return createSkinDetailEnrichmentService({
     dbPath: options.dbPath,

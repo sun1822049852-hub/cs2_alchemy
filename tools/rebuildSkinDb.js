@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const {createBuffSkinDetailProvider} = require("../node_sidecar/src/services/buffSkinDetailProvider");
+const {createSteamFirstSkinDetailProvider} = require("../node_sidecar/src/services/steamFirstSkinDetailProvider");
 const {
   buildCliOptions,
   loadItemsFromJson,
@@ -66,7 +66,7 @@ async function runRebuildSkinDb(options = {}) {
   const stats = await syncSkinDb({
     dbPath: options.dbPath,
     items,
-    detailProvider: createBuffSkinDetailProvider(),
+    detailProvider: createSteamFirstSkinDetailProvider(),
     detailConcurrency: 1
   });
   return {

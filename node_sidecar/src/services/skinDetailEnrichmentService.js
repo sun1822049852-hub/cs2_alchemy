@@ -63,6 +63,21 @@ function normalizeImageInfo(value) {
   };
 }
 
+function normalizeProviderImageInfo(value) {
+  const imageInfo = normalizeImageInfo(value);
+  const fallbackUrl = imageInfo.goods_original_icon_url
+    || imageInfo.goods_icon_url
+    || imageInfo.goods_share_thumbnail_url;
+  if (!fallbackUrl) {
+    return imageInfo;
+  }
+  return {
+    goods_icon_url: imageInfo.goods_icon_url || fallbackUrl,
+    goods_original_icon_url: imageInfo.goods_original_icon_url || fallbackUrl,
+    goods_share_thumbnail_url: imageInfo.goods_share_thumbnail_url || fallbackUrl
+  };
+}
+
 function hasAnyImageInfo(value) {
   const imageInfo = normalizeImageInfo(value);
   return Boolean(
@@ -82,6 +97,9 @@ function hasCompleteImageInfo(value) {
 }
 
 function buildFamilyKeyFromRow(row) {
+  if (Number(row && row.inventory_display_only) === 1) {
+    return asString(row && row.markethashname).trim();
+  }
   return buildSkinFamilyKey(
     asString(row && row.basemarkethashname).trim() ||
     asString(row && row.markethashname).trim()
@@ -148,6 +166,16 @@ function mapWithConcurrency(items, concurrency, iteratee) {
 function summarizeError(err) {
   const text = asString(err && err.message ? err.message : err).trim();
   return text || "detail_enrichment_failed";
+}
+
+function buildFamilyImageContext(family) {
+  const representativeRow = Array.isArray(family && family.rows) ? (family.rows[0] || {}) : {};
+  return {
+    familyKey: asString(family && family.familyKey).trim(),
+    marketHashName: asString(representativeRow.markethashname).trim(),
+    baseMarketHashName: asString(representativeRow.basemarkethashname).trim() || asString(family && family.familyKey).trim(),
+    representativeGoodsId: asString(family && family.representativeGoodsId).trim()
+  };
 }
 
 function containsCjkCharacters(value) {
@@ -426,8 +454,11 @@ function createSkinDetailEnrichmentService({
   }
 
   function loadPendingImageFamilies(db, options = {}) {
+    const inventoryDisplayOnlySelect = skinHasColumn(db, "inventory_display_only")
+      ? "COALESCE(inventory_display_only, 0) AS inventory_display_only,"
+      : "0 AS inventory_display_only,";
     const rows = db.prepare(`
-      SELECT id, markethashname, basemarkethashname, buffid,
+      SELECT id, markethashname, basemarkethashname, buffid, ${inventoryDisplayOnlySelect}
              goods_icon_url, goods_original_icon_url, goods_share_thumbnail_url
       FROM skin
       WHERE TRIM(COALESCE(markethashname, '')) <> ''
@@ -633,7 +664,7 @@ function createSkinDetailEnrichmentService({
   }
 
   async function enrichPendingImages(summary, options = {}) {
-    if (typeof provider.fetchGoodsImageByGoodsId !== "function") {
+    if (typeof provider.fetchGoodsImage !== "function" && typeof provider.fetchGoodsImageByGoodsId !== "function") {
       return summary;
     }
 
@@ -665,7 +696,36 @@ function createSkinDetailEnrichmentService({
       try {
         let imageInfo = hasCompleteImageInfo(family.imageInfo) ? family.imageInfo : null;
         if (!imageInfo) {
-          if (!family.representativeGoodsId) {
+          const errors = [];
+          if (typeof provider.fetchGoodsImage === "function") {
+            try {
+              const familyImageInfo = await imageRequestController.run(
+                () => provider.fetchGoodsImage(buildFamilyImageContext(family))
+              );
+              const normalizedFamilyImageInfo = normalizeProviderImageInfo(familyImageInfo);
+              if (hasCompleteImageInfo(normalizedFamilyImageInfo)) {
+                imageInfo = normalizedFamilyImageInfo;
+              }
+            } catch (error) {
+              errors.push(error);
+            }
+          }
+          if (!imageInfo && typeof provider.fetchGoodsImageByGoodsId === "function") {
+            if (!family.representativeGoodsId) {
+              if (errors.length > 0) {
+                throw errors[errors.length - 1];
+              }
+            } else {
+              try {
+                imageInfo = normalizeProviderImageInfo(await imageRequestController.run(
+                  () => provider.fetchGoodsImageByGoodsId(family.representativeGoodsId)
+                ));
+              } catch (error) {
+                errors.push(error);
+              }
+            }
+          }
+          if (!imageInfo && !family.representativeGoodsId) {
             summary.image_rows_failed += family.pendingRows.length;
             log(
               logger,
@@ -674,9 +734,9 @@ function createSkinDetailEnrichmentService({
             );
             return;
           }
-          imageInfo = await imageRequestController.run(
-            () => provider.fetchGoodsImageByGoodsId(family.representativeGoodsId)
-          );
+          if (!imageInfo) {
+            throw errors[errors.length - 1] || new Error("image unavailable");
+          }
         }
         summary.image_rows_ok += markFamilyImagesOk(workerDb, family, imageInfo);
       } catch (err) {

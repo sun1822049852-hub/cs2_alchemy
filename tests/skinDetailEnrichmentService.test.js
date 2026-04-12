@@ -6,6 +6,7 @@ const {DatabaseSync} = require("node:sqlite");
 
 const {buildSkinFamilyKey} = require("../node_sidecar/src/services/skinFamilyKey");
 const {createSkinDetailEnrichmentService} = require("../node_sidecar/src/services/skinDetailEnrichmentService");
+const {createSteamFirstSkinDetailProvider} = require("../node_sidecar/src/services/steamFirstSkinDetailProvider");
 
 function createTempSkinDb() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cs2-alchemy-skin-detail-"));
@@ -925,6 +926,303 @@ async function test_enrichment_images_only_can_target_specific_market_hash_names
   assert.equal(rows[1].goods_original_icon_url, "");
 }
 
+async function test_enrichment_prefers_family_image_provider_before_goods_id_fallback() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AK-47 | Blue Laminate (Factory New)",
+      basemarkethashname: "AK-47 | Blue Laminate",
+      collection: "The eSports 2013 Collection",
+      rarity: "受限",
+      wearlevel: "Factory New",
+      buffid: "5101",
+      detail_status: "ok",
+      detail_source: "buff"
+    },
+    {
+      markethashname: "AK-47 | Blue Laminate (Minimal Wear)",
+      basemarkethashname: "AK-47 | Blue Laminate",
+      collection: "The eSports 2013 Collection",
+      rarity: "受限",
+      wearlevel: "Minimal Wear",
+      buffid: "5102",
+      detail_status: "ok",
+      detail_source: "buff"
+    }
+  ]);
+  db.close();
+
+  const familyImageCalls = [];
+  const goodsIdCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchGoodsImage(context = {}) {
+        familyImageCalls.push({
+          familyKey: String(context.familyKey || ""),
+          marketHashName: String(context.marketHashName || ""),
+          baseMarketHashName: String(context.baseMarketHashName || "")
+        });
+        return {
+          goods_icon_url: "https://steam.example/ak-blue-laminate.webp",
+          goods_original_icon_url: "https://steam.example/ak-blue-laminate.webp",
+          goods_share_thumbnail_url: "https://steam.example/ak-blue-laminate.webp"
+        };
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        goodsIdCalls.push(String(goodsId));
+        throw new Error("should not fall back to goods id image provider");
+      }
+    }
+  });
+
+  const result = await service.enrichMissingImages({delayMs: 0});
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const rows = verify.prepare(`
+    SELECT markethashname, goods_original_icon_url
+    FROM skin
+    ORDER BY markethashname
+  `).all();
+  verify.close();
+
+  assert.deepEqual(goodsIdCalls, []);
+  assert.deepEqual(familyImageCalls, [{
+    familyKey: buildSkinFamilyKey("AK-47 | Blue Laminate"),
+    marketHashName: "AK-47 | Blue Laminate (Factory New)",
+    baseMarketHashName: "AK-47 | Blue Laminate"
+  }]);
+  assert.equal(result.image_rows_ok, 2);
+  assert.equal(rows[0].goods_original_icon_url, "https://steam.example/ak-blue-laminate.webp");
+  assert.equal(rows[1].goods_original_icon_url, "https://steam.example/ak-blue-laminate.webp");
+}
+
+async function test_enrichment_falls_back_to_goods_id_when_family_image_provider_cannot_resolve() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AWP | Pit Viper (Minimal Wear)",
+      basemarkethashname: "AWP | Pit Viper",
+      collection: "The Italy Collection",
+      rarity: "工业级",
+      wearlevel: "Minimal Wear",
+      buffid: "5201",
+      detail_status: "ok",
+      detail_source: "buff"
+    }
+  ]);
+  db.close();
+
+  const familyImageCalls = [];
+  const goodsIdCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchGoodsImage(context = {}) {
+        familyImageCalls.push({
+          familyKey: String(context.familyKey || ""),
+          marketHashName: String(context.marketHashName || "")
+        });
+        throw new Error("steam icon path unavailable");
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        goodsIdCalls.push(String(goodsId));
+        return {
+          goods_icon_url: `https://img.example/${goodsId}/icon.webp`,
+          goods_original_icon_url: `https://img.example/${goodsId}/original.webp`,
+          goods_share_thumbnail_url: `https://img.example/${goodsId}/share.webp`
+        };
+      }
+    }
+  });
+
+  const result = await service.enrichMissingImages({delayMs: 0});
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT goods_original_icon_url
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AWP | Pit Viper (Minimal Wear)");
+  verify.close();
+
+  assert.deepEqual(familyImageCalls, [{
+    familyKey: buildSkinFamilyKey("AWP | Pit Viper"),
+    marketHashName: "AWP | Pit Viper (Minimal Wear)"
+  }]);
+  assert.deepEqual(goodsIdCalls, ["5201"]);
+  assert.equal(result.image_rows_ok, 1);
+  assert.equal(row.goods_original_icon_url, "https://img.example/5201/original.webp");
+}
+
+async function test_enrichment_with_steam_first_provider_falls_back_to_buff_after_static_and_steam_miss() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "AWP | Pit Viper (Minimal Wear)",
+      basemarkethashname: "AWP | Pit Viper",
+      collection: "The Italy Collection",
+      rarity: "工业级",
+      wearlevel: "Minimal Wear",
+      buffid: "5301",
+      detail_status: "ok",
+      detail_source: "buff"
+    }
+  ]);
+  db.close();
+
+  const callOrder = [];
+  const provider = createSteamFirstSkinDetailProvider({
+    staticImageProvider: {
+      async fetchGoodsImage(context = {}) {
+        callOrder.push(`static:${String(context.marketHashName || "")}`);
+        throw new Error("local static image unavailable");
+      }
+    },
+    steamImageProvider: {
+      async fetchGoodsImage(context = {}) {
+        callOrder.push(`steam:${String(context.marketHashName || "")}`);
+        throw new Error("steam icon path unavailable");
+      }
+    },
+    buffProvider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call detail provider");
+      },
+      async fetchWearRangeByGoodsId() {
+        throw new Error("should not call wear provider");
+      },
+      async fetchGoodsImageByGoodsId(goodsId) {
+        callOrder.push(`buff:${String(goodsId)}`);
+        return {
+          goods_icon_url: `https://img.example/${goodsId}/icon.webp`,
+          goods_original_icon_url: `https://img.example/${goodsId}/original.webp`,
+          goods_share_thumbnail_url: `https://img.example/${goodsId}/share.webp`
+        };
+      }
+    }
+  });
+
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider
+  });
+
+  const result = await service.enrichMissingImages({delayMs: 0});
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT goods_original_icon_url
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AWP | Pit Viper (Minimal Wear)");
+  verify.close();
+
+  assert.deepEqual(callOrder, [
+    "static:AWP | Pit Viper (Minimal Wear)",
+    "steam:AWP | Pit Viper (Minimal Wear)",
+    "buff:5301"
+  ]);
+  assert.equal(result.image_rows_ok, 1);
+  assert.equal(row.goods_original_icon_url, "https://img.example/5301/original.webp");
+}
+
+async function test_enrichment_treats_inventory_display_only_items_as_exact_image_units() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "Masterminds Music Kit Box",
+      basemarkethashname: "Masterminds Music Kit Box",
+      inventory_display_only: 1,
+      detail_status: "ok"
+    },
+    {
+      markethashname: "StatTrak™ Masterminds Music Kit Box",
+      basemarkethashname: "Masterminds Music Kit Box",
+      inventory_display_only: 1,
+      detail_status: "ok"
+    }
+  ]);
+  db.close();
+
+  const callOrder = [];
+  const provider = createSteamFirstSkinDetailProvider({
+    staticImageProvider: {
+      async fetchGoodsImage(context = {}) {
+        const marketHashName = String(context.marketHashName || "");
+        callOrder.push(`static:${marketHashName}`);
+        if (marketHashName === "Masterminds Music Kit Box") {
+          return {
+            goods_icon_url: "https://static.example/masterminds.png",
+            goods_original_icon_url: "https://static.example/masterminds.png",
+            goods_share_thumbnail_url: "https://static.example/masterminds.png"
+          };
+        }
+        if (marketHashName === "StatTrak™ Masterminds Music Kit Box") {
+          return {
+            goods_icon_url: "https://static.example/masterminds-stattrak.png",
+            goods_original_icon_url: "https://static.example/masterminds-stattrak.png",
+            goods_share_thumbnail_url: "https://static.example/masterminds-stattrak.png"
+          };
+        }
+        throw new Error(`unexpected marketHashName: ${marketHashName}`);
+      }
+    },
+    steamImageProvider: {
+      async fetchGoodsImage() {
+        throw new Error("steam should not be used when static exact names resolve");
+      }
+    },
+    buffProvider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call detail provider");
+      },
+      async fetchWearRangeByGoodsId() {
+        throw new Error("should not call wear provider");
+      },
+      async fetchGoodsImageByGoodsId() {
+        throw new Error("should not fall back to buff goods id");
+      }
+    }
+  });
+
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider
+  });
+
+  const result = await service.enrichMissingImages({delayMs: 0});
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const rows = verify.prepare(`
+    SELECT markethashname, goods_original_icon_url
+    FROM skin
+    ORDER BY id
+  `).all().map((row) => ({
+    markethashname: row.markethashname,
+    goods_original_icon_url: row.goods_original_icon_url
+  }));
+  verify.close();
+
+  assert.deepEqual(callOrder, [
+    "static:Masterminds Music Kit Box",
+    "static:StatTrak™ Masterminds Music Kit Box"
+  ]);
+  assert.equal(result.image_rows_ok, 2);
+  assert.deepEqual(rows, [
+    {
+      markethashname: "Masterminds Music Kit Box",
+      goods_original_icon_url: "https://static.example/masterminds.png"
+    },
+    {
+      markethashname: "StatTrak™ Masterminds Music Kit Box",
+      goods_original_icon_url: "https://static.example/masterminds-stattrak.png"
+    }
+  ]);
+}
+
 async function runTests() {
   assert.equal(
     buildSkinFamilyKey("★ Butterfly Knife | Blue Steel"),
@@ -949,6 +1247,10 @@ async function runTests() {
   await test_enrichment_increases_delay_after_rate_limit_and_relaxes_after_success();
   await test_enrichment_images_can_run_multiple_requests_in_flight_when_configured();
   await test_enrichment_images_only_can_target_specific_market_hash_names();
+  await test_enrichment_prefers_family_image_provider_before_goods_id_fallback();
+  await test_enrichment_falls_back_to_goods_id_when_family_image_provider_cannot_resolve();
+  await test_enrichment_with_steam_first_provider_falls_back_to_buff_after_static_and_steam_miss();
+  await test_enrichment_treats_inventory_display_only_items_as_exact_image_units();
 }
 
 (async () => {
