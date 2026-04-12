@@ -1682,6 +1682,11 @@ select.small {
   border-radius: 3px;
 }
 
+.account-login-field input.is-locked {
+  cursor: not-allowed;
+  opacity: 0.82;
+}
+
 .account-password-field-wrap {
   position: relative;
   display: flex;
@@ -7420,6 +7425,12 @@ body.theme-inkblue .account-login-field input {
   border-color: rgba(208, 162, 84, 0.16);
   color: #fff7ea;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+body.theme-inkblue .account-login-field input.is-locked {
+  border-color: rgba(184, 83, 83, 0.36);
+  background: linear-gradient(180deg, rgba(73, 43, 43, 0.9), rgba(58, 35, 35, 0.96));
+  color: #f7d7d7;
 }
 
 body.theme-inkblue .account-password-toggle {

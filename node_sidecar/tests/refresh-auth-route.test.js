@@ -53,6 +53,16 @@ function createSignedBundle(privateKey, snapshotOverrides = {}) {
   };
 }
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return {promise, resolve, reject};
+}
+
 function createLicenseRuntime(filePath) {
   const {publicKey, privateKey} = crypto.generateKeyPairSync("ed25519");
   const store = new LicenseStore(filePath);
@@ -373,6 +383,83 @@ async function test_refresh_inventory_classifies_invalid_saved_login_key() {
   assert.equal(connectCalls[0].refreshTokenOnly, true);
 }
 
+async function test_refresh_inventory_reports_connection_ready_before_component_preload_finishes() {
+  const componentDeferred = createDeferred();
+  const events = [];
+  class FakeSession {
+    async connect(args = {}) {
+      events.push(`connect:${String(args.username || "").trim()}`);
+      return {
+        csgo: {
+          inventory: [{id: "item_1"}]
+        }
+      };
+    }
+    disconnect() {
+      events.push("disconnect");
+    }
+  }
+
+  const refreshTask = refreshInventory({
+    username: "countsteam01",
+    accountStore: {
+      get() {
+        return {
+          username: "countsteam01",
+          password: "SecretA"
+        };
+      }
+    },
+    tokenStore: {
+      get() {
+        return "saved_login_key";
+      }
+    },
+    schemaStore: {
+      load() {
+        return {};
+      }
+    },
+    SessionClass: FakeSession,
+    onConnectionReady() {
+      events.push("connection_ready");
+    },
+    preloadComponentContentsFn: async () => {
+      events.push("component_preload:start");
+      await componentDeferred.promise;
+      events.push("component_preload:done");
+      return {
+        waiting: 0,
+        loaded_items: [],
+        expected_total: 0,
+        notified: 0
+      };
+    },
+    parseInventoryFn() {
+      return {
+        rows: [],
+        hiddenRows: []
+      };
+    },
+    saveProcessedSnapshotFn() {
+      return path.join(os.tmpdir(), "inventory_processed_test.json");
+    }
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(
+    events,
+    ["connect:countsteam01", "connection_ready", "component_preload:start"],
+    "refreshInventory should surface connection ready before component preload finishes"
+  );
+
+  componentDeferred.resolve();
+  const result = await refreshTask;
+  assert.equal(result.account, "countsteam01");
+  assert.equal(events.includes("component_preload:done"), true);
+  assert.equal(events[events.length - 1], "disconnect");
+}
+
 async function test_refresh_route_returns_login_key_invalid_and_persists_auth_state() {
   let refreshCalls = 0;
   const ctx = await startServer({
@@ -511,6 +598,7 @@ async function main() {
   await test_refresh_route_uses_injected_refresh_inventory_fn();
   await test_refresh_inventory_requires_saved_login_key_before_connecting();
   await test_refresh_inventory_classifies_invalid_saved_login_key();
+  await test_refresh_inventory_reports_connection_ready_before_component_preload_finishes();
   await test_refresh_route_returns_login_key_invalid_and_persists_auth_state();
   await test_refresh_route_skips_retry_for_persisted_auth_invalid_state();
   await test_login_save_clears_persisted_auth_invalid_state();

@@ -66,6 +66,11 @@ function loadBusyMaskRender(overrides = {}) {
       currentAccountUsername: "acc-a",
       componentOpBusy: false,
       componentOpBusyAction: "",
+      craftProgressEnabled: false,
+      craftProgressVisible: false,
+      craftProgressMode: "",
+      craftProgressTitle: "",
+      craftProgressDetail: "",
       ...overrides.state
     },
     ui: {
@@ -157,11 +162,32 @@ function testMaskShowsForComponentWithdrawBusyState() {
   assert.match(app.ui.craftAssistBusyMaskDetail.textContent, /取出物品/);
 }
 
+function testMaskShowsForCraftComponentPrepareStage() {
+  const app = loadBusyMaskRender({
+    state: {
+      craftAssistOpen: false,
+      craftProgressEnabled: true,
+      craftProgressVisible: true,
+      craftProgressMode: "component_prepare",
+      craftProgressTitle: "正在从组件中取出物品 3/5",
+      craftProgressDetail: "成功 3，失败 0"
+    }
+  });
+
+  app.renderCraftAssistBusyMask();
+
+  assert.equal(app.ui.craftAssistBusyMask.classList.contains("hidden"), false);
+  assert.equal(app.ui.craftAssistBusyMask.attrs["aria-hidden"], "false");
+  assert.equal(app.ui.craftAssistBusyMaskTitle.textContent, "正在从组件中取出物品 3/5");
+  assert.equal(app.ui.craftAssistBusyMaskDetail.textContent, "成功 3，失败 0");
+}
+
 function main() {
   testMaskStaysHiddenWithoutRecognizedPendingAction();
   testMaskShowsForActivePanelApplyRun();
   testMaskClearsStalePanelApplyStateWithoutActiveToken();
   testMaskShowsForComponentWithdrawBusyState();
+  testMaskShowsForCraftComponentPrepareStage();
   console.log("craft-assist-busy-mask-render tests passed");
 }
 

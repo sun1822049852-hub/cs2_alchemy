@@ -232,7 +232,15 @@ function createRefreshRuntime({
           password,
           includeHidden,
           dumpRaw: false,
-          logger
+          logger,
+          onConnectionReady: async (payload = {}) => {
+            eventBus.emit("inventory_connection_ready", {
+              username: account,
+              source,
+              connected: true,
+              ...payload
+            });
+          }
         });
         try {
           const uiState = uiStateStoreFactory();
@@ -391,6 +399,7 @@ function createRefreshRuntime({
     started = true;
     startHeartbeatLoop();
     startSseKeepaliveLoop();
+    eventBus.on("inventory_connection_ready", (payload) => broadcastSse("inventory_connection_ready", payload));
     eventBus.on("inventory_refreshed", (payload) => broadcastSse("inventory_refreshed", payload));
     eventBus.on("inventory_refresh_failed", (payload) => broadcastSse("inventory_refresh_failed", payload));
     eventBus.on("inventory_post_refresh_failed", (payload) => broadcastSse("inventory_post_refresh_failed", payload));

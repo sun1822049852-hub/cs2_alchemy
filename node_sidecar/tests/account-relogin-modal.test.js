@@ -129,6 +129,152 @@ function loadAccountModalFns() {
   return context;
 }
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return {promise, resolve, reject};
+}
+
+function loadLoginHarness({
+  apiImpl = async () => ({ok: true}),
+  doRefreshImpl = async () => ({ok: true}),
+  switchAccountViewImpl = async () => ({ok: true}),
+  initialOverlayOwner = ""
+} = {}) {
+  const modalSource = extractBlock("function setAccountForm(", "function showPage(");
+  const loginSource = [
+    extractFunctionSource("loginAndSave"),
+    extractFunctionSource("clearAccountForm"),
+    extractFunctionSource("openAddAccountForm")
+  ].join("\n\n");
+  const source = `${modalSource}\n${loginSource}`;
+  const document = {activeElement: null};
+  const ui = {
+    accountUsername: createElement(document),
+    accountPassword: createElement(document),
+    accountTotp: createElement(document),
+    accountRemark: createElement(document),
+    accountPasswordToggle: createElement(document),
+    accountLoginModal: createElement(document, {classes: ["hidden"]}),
+    accountLoginModalTitle: createElement(document),
+    accountLoginHint: createElement(document),
+    loginSaveBtn: createElement(document),
+    clearAccountBtn: createElement(document),
+    accountLoginModalClose: createElement(document),
+    accountStatus: createElement(document)
+  };
+  const calls = {
+    events: [],
+    api: [],
+    refresh: [],
+    overlay: [],
+    summary: [],
+    auth: [],
+    reloginModal: []
+  };
+  const state = {
+    accountPasswordVisible: false,
+    accountLoginMode: "add",
+    pendingRelogin: null,
+    craftProgressOwner: String(initialOverlayOwner || "").trim()
+  };
+  const context = {
+    Promise,
+    Math,
+    Number,
+    String,
+    Array,
+    Object,
+    JSON,
+    document,
+    ui,
+    state,
+    guardGuestAction() {
+      return true;
+    },
+    normalizeAccountTotpInput() {
+      const normalized = String(ui.accountTotp.value || "").replace(/\s+/g, "").toUpperCase();
+      ui.accountTotp.value = normalized;
+      return normalized;
+    },
+    setAccountStatus(text, isError = false) {
+      ui.accountStatus.textContent = String(text || "");
+      ui.accountStatus.classList.toggle("error", !!isError);
+      calls.events.push(`status:${ui.accountStatus.textContent}`);
+    },
+    formatLoginSaveError(err) {
+      return String(err && err.message ? err.message : err);
+    },
+    async api(pathName, options) {
+      calls.api.push({pathName, options});
+      calls.events.push(`api:${String(pathName || "")}`);
+      return apiImpl(pathName, options);
+    },
+    async loadAccounts() {
+      calls.events.push("loadAccounts");
+    },
+    async switchAccountView(...args) {
+      calls.events.push("switchAccountView");
+      return switchAccountViewImpl(...args);
+    },
+    async doRefresh(options) {
+      calls.refresh.push(options);
+      calls.events.push("doRefresh:start");
+      return doRefreshImpl(options);
+    },
+    setCraftExecutionOverlayState(payload = {}) {
+      calls.overlay.push({type: "set", payload});
+      calls.events.push("overlay:set");
+      const owner = String(payload.owner || "").trim();
+      if (state.craftProgressOwner && owner && state.craftProgressOwner !== owner) {
+        return false;
+      }
+      if (owner) {
+        state.craftProgressOwner = owner;
+      }
+      return true;
+    },
+    clearCraftExecutionOverlayState(payload = {}) {
+      calls.overlay.push({type: "clear", payload});
+      calls.events.push("overlay:clear");
+      const owner = String(payload.owner || "").trim();
+      if (!owner || owner === String(state.craftProgressOwner || "").trim()) {
+        state.craftProgressOwner = "";
+      }
+    },
+    setSummary(message) {
+      calls.summary.push(String(message || ""));
+    },
+    setAccountAuthState(username, payload = {}) {
+      calls.auth.push({
+        username: String(username || ""),
+        authState: String(payload.authState || ""),
+        authReason: String(payload.authReason || "")
+      });
+    }
+  };
+
+  vm.runInNewContext(source, context, {filename: APP_PATH});
+  const originalOpenRelogin = context.openAccountReloginModal;
+  context.openAccountReloginModal = (payload = {}) => {
+    calls.reloginModal.push(payload);
+    return originalOpenRelogin(payload);
+  };
+
+  ui.loginSaveBtn.onclick = context.loginAndSave;
+  ui.clearAccountBtn.onclick = context.clearAccountForm;
+  ui.accountLoginModalClose.onclick = () => {
+    context.clearAccountForm();
+  };
+
+  context.calls = calls;
+  return context;
+}
+
 function test_relogin_modal_locks_username_prefills_password_and_focuses_guard() {
   const app = loadAccountModalFns();
   assert.equal(typeof app.openAccountReloginModal, "function");
@@ -249,7 +395,370 @@ async function test_do_refresh_opens_relogin_modal_for_invalid_login_key() {
   assert.equal(summaryCalls.some((text) => text.includes("登录失效")), true);
 }
 
+async function test_login_overlay_becomes_visible_before_login_request_and_uses_title_stage() {
+  const apiDeferred = createDeferred();
+  const app = loadLoginHarness({
+    apiImpl: async (pathName) => {
+      if (pathName === "/api/accounts/login-save") {
+        return apiDeferred.promise;
+      }
+      return {ok: true};
+    }
+  });
+
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "ab cd12";
+
+  const pending = app.loginAndSave();
+  await Promise.resolve();
+
+  assert.equal(
+    app.calls.overlay.length > 0,
+    true,
+    "login should surface the shared connecting overlay before awaiting /api/accounts/login-save"
+  );
+  const firstOverlaySet = app.calls.overlay.find((entry) => entry.type === "set");
+  assert.ok(firstOverlaySet, "expected a shared overlay set call during login");
+  assert.equal(firstOverlaySet.payload.visible, true, "shared login overlay payload should explicitly set visible=true before awaiting login api");
+  assert.equal(firstOverlaySet.payload.mode, "connecting");
+  const firstOverlayTitle = String(firstOverlaySet.payload.title || "");
+  assert.match(firstOverlayTitle, /登录/, "shared login overlay should surface login-stage wording in overlay title");
+  assert.doesNotMatch(firstOverlayTitle, /连接/, "shared login overlay title should not fall back to the generic connect wording");
+
+  const overlayIndex = app.calls.events.indexOf("overlay:set");
+  const apiIndex = app.calls.events.indexOf("api:/api/accounts/login-save");
+  assert.equal(overlayIndex >= 0 && apiIndex >= 0 && overlayIndex < apiIndex, true);
+
+  apiDeferred.resolve({ok: true});
+  await pending;
+}
+
+async function test_validation_failure_missing_totp_keeps_modal_and_skips_overlay() {
+  const app = loadLoginHarness();
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "";
+
+  await app.loginAndSave();
+
+  assert.equal(app.calls.api.length, 0);
+  assert.equal(app.calls.overlay.length, 0);
+  assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), false);
+  assert.equal(app.ui.accountStatus.textContent, "请输入令牌码");
+}
+
+async function test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_while_login_pending() {
+  const apiDeferred = createDeferred();
+  const app = loadLoginHarness({
+    apiImpl: async (pathName) => {
+      if (pathName === "/api/accounts/login-save") return apiDeferred.promise;
+      return {ok: true};
+    }
+  });
+
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "ABC123";
+  const pending = app.ui.loginSaveBtn.onclick();
+  await Promise.resolve();
+
+  assert.equal(app.calls.api.length, 1);
+  assert.equal(app.ui.loginSaveBtn.disabled, true, "loginSaveBtn should be visibly disabled while login is pending");
+  assert.equal(app.ui.clearAccountBtn.disabled, true, "clearAccountBtn should be visibly disabled while login is pending");
+  assert.equal(app.ui.accountLoginModalClose.disabled, true, "modal close control should be visibly disabled while login is pending");
+  app.ui.loginSaveBtn.onclick();
+  app.ui.clearAccountBtn.onclick();
+  app.ui.accountLoginModalClose.onclick();
+  assert.equal(app.calls.api.length, 1, "loginSaveBtn should remain inert while login is pending");
+  assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), false, "pending login should keep modal visible");
+  assert.equal(app.ui.accountUsername.value, "countsteam01", "pending login should keep current form state intact");
+
+  apiDeferred.resolve({ok: true});
+  await pending;
+
+  const apiDeferredRelogin = createDeferred();
+  app.api = async (pathName, options) => {
+    app.calls.api.push({pathName, options});
+    if (pathName === "/api/accounts/login-save") return apiDeferredRelogin.promise;
+    return {ok: true};
+  };
+  app.openAccountReloginModal({
+    username: "countsteam01",
+    password: "SecretA",
+    reason: "login_key_invalid"
+  });
+  app.ui.accountTotp.value = "ZXCV12";
+  const reloginApiCountBeforePending = app.calls.api.length;
+  const reloginUsernameBeforePending = app.ui.accountUsername.value;
+  const reloginPending = app.ui.loginSaveBtn.onclick();
+  await Promise.resolve();
+  assert.equal(
+    app.calls.api.length,
+    reloginApiCountBeforePending + 1,
+    "relogin entry should still use loginAndSave flow"
+  );
+  assert.equal(app.ui.loginSaveBtn.disabled, true, "relogin pending should keep loginSaveBtn visibly disabled");
+  assert.equal(app.ui.clearAccountBtn.disabled, true, "relogin pending should keep clearAccountBtn visibly disabled");
+  assert.equal(app.ui.accountLoginModalClose.disabled, true, "relogin pending should keep modal close control visibly disabled");
+  app.ui.loginSaveBtn.onclick();
+  app.ui.clearAccountBtn.onclick();
+  app.ui.accountLoginModalClose.onclick();
+  assert.equal(
+    app.calls.api.length,
+    reloginApiCountBeforePending + 1,
+    "relogin pending should avoid duplicate login requests"
+  );
+  assert.equal(
+    app.ui.accountLoginModal.classList.contains("hidden"),
+    false,
+    "relogin pending should keep modal visible"
+  );
+  assert.equal(
+    app.ui.accountUsername.value,
+    reloginUsernameBeforePending,
+    "relogin pending should preserve modal form state"
+  );
+  apiDeferredRelogin.resolve({ok: true});
+  await reloginPending;
+}
+
+async function test_active_overlay_owner_blocks_login_request_and_reports_busy_status() {
+  const app = loadLoginHarness({initialOverlayOwner: "craft_flow"});
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "QWER12";
+
+  await app.loginAndSave();
+
+  assert.equal(app.calls.api.length, 0, "active non-login overlay owner should block /api/accounts/login-save");
+  assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), false, "blocked login should keep modal open");
+  assert.match(app.ui.accountStatus.textContent, /当前有任务进行中，请稍后再试/);
+}
+
+async function test_login_success_closes_overlay_and_modal_before_post_login_refresh() {
+  const refreshStateSnapshots = [];
+  const app = loadLoginHarness({
+    doRefreshImpl: async () => {
+      const lastOverlayEvent = app.calls.overlay[app.calls.overlay.length - 1] || null;
+      refreshStateSnapshots.push({
+        modalHidden: app.ui.accountLoginModal.classList.contains("hidden"),
+        overlayOwnerAtRefreshStart: String(app.state.craftProgressOwner || ""),
+        lastOverlayEventType: String(lastOverlayEvent && lastOverlayEvent.type || "")
+      });
+      return {ok: true};
+    }
+  });
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "LOGIN1";
+
+  await app.loginAndSave();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(refreshStateSnapshots.length, 1);
+  assert.equal(
+    refreshStateSnapshots[0].overlayOwnerAtRefreshStart,
+    "",
+    "refresh should start with overlay already closed (no active owner)"
+  );
+  assert.equal(
+    refreshStateSnapshots[0].lastOverlayEventType,
+    "clear",
+    "refresh should start only after the login overlay has already been cleared"
+  );
+  assert.equal(refreshStateSnapshots[0].modalHidden, true, "modal should close before post-login refresh starts");
+}
+
+async function test_login_resolves_without_waiting_for_background_refresh() {
+  const refreshDeferred = createDeferred();
+  const app = loadLoginHarness({
+    doRefreshImpl: async () => refreshDeferred.promise
+  });
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "READY01";
+
+  const loginPromise = app.loginAndSave();
+  const settledBeforeRefresh = await Promise.race([
+    loginPromise.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 0))
+  ]);
+
+  assert.equal(settledBeforeRefresh, true, "loginAndSave should settle without waiting for post-login background refresh");
+  assert.equal(app.calls.refresh.length, 1, "login should still trigger one background refresh");
+  assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), true, "modal should already be closed when login promise settles");
+  assert.equal(
+    app.calls.overlay[app.calls.overlay.length - 1] && app.calls.overlay[app.calls.overlay.length - 1].type,
+    "clear",
+    "login overlay should already be cleared when login promise settles"
+  );
+
+  refreshDeferred.resolve({ok: true});
+  await Promise.resolve();
+}
+
+async function test_login_failure_closes_overlay_and_keeps_modal_state() {
+  const app = loadLoginHarness({
+    apiImpl: async () => {
+      throw new Error("boom");
+    }
+  });
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "ERR123";
+
+  await app.loginAndSave();
+
+  assert.equal(
+    app.calls.overlay.some((entry) => entry.type === "clear"),
+    true,
+    "login failure should close the shared overlay"
+  );
+  assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), false, "login failure should keep modal open");
+  assert.equal(app.ui.accountUsername.value, "countsteam01");
+  assert.equal(app.ui.loginSaveBtn.disabled, false, "login failure should re-enable loginSaveBtn");
+  assert.equal(app.ui.clearAccountBtn.disabled, false, "login failure should keep clearAccountBtn operable");
+  assert.equal(app.ui.accountLoginModalClose.disabled, false, "login failure should keep close control operable");
+
+  app.ui.accountTotp.value = "ERR124";
+  await app.ui.loginSaveBtn.onclick();
+  assert.equal(app.calls.api.length, 2, "login failure should still allow retry submit in the same modal");
+  assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), false, "retry failure should keep modal open");
+
+  app.ui.accountLoginModalClose.onclick();
+  assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), true, "after failure the modal should remain user-closable");
+}
+
+async function test_post_login_refresh_relogin_required_updates_summary_and_auth_without_reopening_modal() {
+  const app = loadLoginHarness({
+    doRefreshImpl: async () => ({
+      ok: false,
+      reason: "login_key_invalid",
+      reloginRequired: true,
+      message: "当前账号登录已失效，请重新登录后再刷新",
+      authState: "auth_invalid"
+    })
+  });
+  app.openAddAccountForm();
+  app.ui.accountUsername.value = "countsteam01";
+  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountTotp.value = "RELG01";
+
+  await app.loginAndSave();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(app.calls.reloginModal.length, 0, "post-login reloginRequired should not auto-open a second relogin modal");
+  assert.equal(app.calls.summary.some((text) => text.includes("登录失效")), true, "post-login reloginRequired should update summary");
+  assert.equal(
+    app.calls.auth.some((entry) => (
+      entry.username === "countsteam01" &&
+      entry.authState === "auth_invalid" &&
+      entry.authReason === "login_key_invalid"
+    )),
+    true,
+    "post-login reloginRequired should update auth state metadata"
+  );
+}
+
+function loadSwitchAccountViewHarness({
+  loadComponentTaskQueueImpl = async () => ({ok: true})
+} = {}) {
+  const source = extractFunctionSource("switchAccountView");
+  const calls = {
+    loadComponentTaskQueue: 0
+  };
+  const context = {
+    String,
+    Promise,
+    clearTimeout,
+    craftAssistPickerCloseTimer: null,
+    state: {
+      currentAccountUsername: "",
+      lastDirtyFallbackTs: 0,
+      craftSettingsOpen: false
+    },
+    calls,
+    saveCraftAccountScopedState() {},
+    saveCraftAssistRuntimeState() {},
+    buildCurrentCraftAccountScopedStateSnapshot() {
+      return {};
+    },
+    getCraftAccountScopedStateSnapshot() {
+      return {};
+    },
+    buildCurrentCraftAssistRuntimeStateSnapshot() {
+      return {};
+    },
+    getCraftAssistRuntimeStateSnapshot() {
+      return {};
+    },
+    clearSnapshotDirty() {},
+    applyCraftAccountScopedStateSnapshot() {},
+    syncInventoryAccountSelect() {},
+    renderSavedAccounts() {},
+    async persistLastSelected() {},
+    applyCachedSnapshotForAccount() {
+      return true;
+    },
+    async loadSnapshotForAccount() {},
+    restoreCraftAccountScopedState() {},
+    renderCraftPage() {},
+    startInventoryEventStream() {},
+    ensureAccountProfile() {},
+    async loadComponentTaskQueue() {
+      calls.loadComponentTaskQueue += 1;
+      return loadComponentTaskQueueImpl();
+    }
+  };
+  vm.runInNewContext(source, context, {filename: APP_PATH});
+  return context;
+}
+
+async function test_switch_account_view_can_defer_component_queue_loading() {
+  const deferred = createDeferred();
+  const app = loadSwitchAccountViewHarness({
+    loadComponentTaskQueueImpl: async () => deferred.promise
+  });
+
+  const switchPromise = app.switchAccountView("countsteam01", {
+    silentSnapshotSummary: true,
+    deferComponentTaskQueue: true
+  });
+
+  const settledBeforeQueueLoad = await Promise.race([
+    switchPromise.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 0))
+  ]);
+
+  assert.equal(
+    settledBeforeQueueLoad,
+    true,
+    "switchAccountView should not await component task queue when deferComponentTaskQueue=true"
+  );
+  assert.equal(app.calls.loadComponentTaskQueue, 1, "switchAccountView should still trigger one component task queue refresh");
+
+  deferred.resolve({ok: true});
+  await Promise.resolve();
+}
+
 async function main() {
+  await test_login_overlay_becomes_visible_before_login_request_and_uses_title_stage();
+  await test_validation_failure_missing_totp_keeps_modal_and_skips_overlay();
+  await test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_while_login_pending();
+  await test_active_overlay_owner_blocks_login_request_and_reports_busy_status();
+  await test_login_success_closes_overlay_and_modal_before_post_login_refresh();
+  await test_login_resolves_without_waiting_for_background_refresh();
+  await test_login_failure_closes_overlay_and_keeps_modal_state();
+  await test_post_login_refresh_relogin_required_updates_summary_and_auth_without_reopening_modal();
+  await test_switch_account_view_can_defer_component_queue_loading();
   test_relogin_modal_locks_username_prefills_password_and_focuses_guard();
   test_source_mentions_login_invalid_badge_and_relogin_helper();
   await test_do_refresh_opens_relogin_modal_for_invalid_login_key();

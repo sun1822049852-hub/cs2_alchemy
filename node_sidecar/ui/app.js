@@ -27,6 +27,7 @@ const state = {
   accountPasswordVisible: false,
   accountLoginMode: "add",
   pendingRelogin: null,
+  accountLoginBusy: false,
   currentAccountUsername: "", connectedUsername: "", rows: [], mode: "grouped", searchText: "",
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
@@ -39,6 +40,7 @@ const state = {
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
   targetDrawerOpen: false, targetComponentChoices: [], targetComponentSelectedId: "", targetComponentExcludeId: "",
   component: {summary_map: {}, item_map: {}}, snapshotPath: "", fetchTime: "", refreshing: false,
+  refreshSilentInfo: false,
   snapshotDirty: false, snapshotDirtyReason: "", lastDirtyFallbackTs: 0, dirtyFallbackCooldownMs: 60 * 1000,
   refreshPhaseText: "", lastRefreshClickTs: 0, emptyHint: "请选用一个账号", filterPanel: "wear",
   rowsVersion: 0, filterCacheKey: "", filterCacheAllRows: [], filterCacheFilteredRows: [],
@@ -101,14 +103,12 @@ const ui = {
   collectionSummary: document.getElementById("collectionSummary"), collectionMenu: document.getElementById("collectionMenu"), collectionSelectAll: document.getElementById("collectionSelectAll"), collectionClear: document.getElementById("collectionClear"),
   wearSortUp: document.getElementById("wearSortUp"), wearSortDown: document.getElementById("wearSortDown"), raritySortUp: document.getElementById("raritySortUp"), raritySortDown: document.getElementById("raritySortDown"),
   componentPanel: document.getElementById("componentPanel"), componentSelect: document.getElementById("componentSelect"), componentHint: document.getElementById("componentHint"),
-  inventoryWorkspace: document.getElementById("inventoryWorkspace"),
   componentAvailableHint: document.getElementById("componentAvailableHint"),
   showComponentItemsWrap: document.getElementById("showComponentItemsWrap"), showComponentItems: document.getElementById("showComponentItems"),
   componentDepositBtn: document.getElementById("componentDepositBtn"), componentWithdrawBtn: document.getElementById("componentWithdrawBtn"),
   componentCraftSettingsBtn: document.getElementById("componentCraftSettingsBtn"), componentCraftSettingsPanel: document.getElementById("componentCraftSettingsPanel"), componentCraftUseComponentItems: document.getElementById("componentCraftUseComponentItems"),
   componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowFullWear: document.getElementById("componentCraftShowFullWear"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistFastMode: document.getElementById("componentCraftAssistFastMode"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
   componentCraftCoolingHint: document.getElementById("componentCraftCoolingHint"),
-  inventoryBusyMask: document.getElementById("inventoryBusyMask"), inventoryBusyMaskTitle: document.getElementById("inventoryBusyMaskTitle"), inventoryBusyMaskDetail: document.getElementById("inventoryBusyMaskDetail"),
   componentTaskFloat: document.getElementById("componentTaskFloat"), componentTaskQueueList: document.getElementById("componentTaskQueueList"),
   componentTaskCancelBtn: document.getElementById("componentTaskCancelBtn"), componentTaskInfo: document.getElementById("componentTaskInfo"),
   targetComponentDrawer: document.getElementById("targetComponentDrawer"), targetComponentDrawerClose: document.getElementById("targetComponentDrawerClose"),
@@ -2141,6 +2141,23 @@ function startInventoryEventStream(username) {
     setSummary(`库存已自动更新：${remoteFetchTime}`);
   });
 
+  stream.addEventListener("inventory_connection_ready", (evt) => {
+    const data = parseEventData(evt.data);
+    const eventUsername = String(data.username || "").trim();
+    if (!eventUsername || eventUsername !== state.currentAccountUsername) return;
+    state.connectedUsername = eventUsername;
+    clearCraftExecutionOverlayState({owner: "connect_flow"});
+    renderSavedAccounts();
+    if (state.refreshing) {
+      setRefreshPhase("连接状态：已连接（同步中）");
+      if (!state.refreshSilentInfo) {
+        setSummary("已连接，正在同步库存与组件...");
+      }
+      return;
+    }
+    syncInventoryTop();
+  });
+
   stream.addEventListener("inventory_refresh_failed", (evt) => {
     const data = parseEventData(evt.data);
     const eventUsername = String(data.username || "").trim();
@@ -2704,6 +2721,23 @@ function clearAccountInputs({focusUsername = false} = {}) {
   ensureAccountFormEditable({focusUsername});
 }
 
+function syncAccountLoginActionState() {
+  const busy = !!state.accountLoginBusy;
+  const refreshing = !!state.refreshing;
+  if (ui.loginSaveBtn) ui.loginSaveBtn.disabled = busy || refreshing;
+  if (ui.clearAccountBtn) ui.clearAccountBtn.disabled = busy;
+  if (ui.accountLoginModalClose) ui.accountLoginModalClose.disabled = busy;
+  if (ui.accountPasswordToggle) ui.accountPasswordToggle.disabled = busy;
+  if (ui.accountLoginModal && typeof ui.accountLoginModal.setAttribute === "function") {
+    ui.accountLoginModal.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+}
+
+function setAccountLoginBusy(busy) {
+  state.accountLoginBusy = !!busy;
+  syncAccountLoginActionState();
+}
+
 function ensureAccountFormEditable({focusUsername = false, focusGuard = false} = {}) {
   const reloginMode = String(state.accountLoginMode || "").trim() === "relogin";
   const fields = [ui.accountUsername, ui.accountPassword, ui.accountTotp, ui.accountRemark];
@@ -2739,6 +2773,7 @@ function ensureAccountFormEditable({focusUsername = false, focusGuard = false} =
   if (ui.loginSaveBtn) {
     ui.loginSaveBtn.textContent = reloginMode ? "重新登录" : "登录并保存";
   }
+  syncAccountLoginActionState();
   const modalVisible = !ui.accountLoginModal || !ui.accountLoginModal.classList.contains("hidden");
   if (focusGuard && modalVisible && ui.accountTotp && typeof ui.accountTotp.focus === "function") {
     ui.accountTotp.focus();
@@ -2768,6 +2803,46 @@ function openAccountReloginModal({username = "", password = "", reason = ""} = {
 function closeAccountLoginModal() {
   if (!ui.accountLoginModal) return;
   ui.accountLoginModal.classList.add("hidden");
+  syncAccountLoginActionState();
+}
+
+function setAccountLoginOverlayStage({percent = 0, title = "正在登录账号", detail = ""} = {}) {
+  if (typeof setCraftExecutionOverlayState !== "function") return true;
+  return setCraftExecutionOverlayState({
+    owner: "login_flow",
+    enabled: true,
+    visible: true,
+    mode: "connecting",
+    percent,
+    title,
+    detail
+  });
+}
+
+function clearAccountLoginOverlay() {
+  if (typeof clearCraftExecutionOverlayState !== "function") return true;
+  return clearCraftExecutionOverlayState({owner: "login_flow"});
+}
+
+function handlePostLoginRefreshResult(username, result = null) {
+  if (!result || !result.reloginRequired) return result;
+  const reason = String(result.reason || "").trim();
+  const authState = String(result.authState || "").trim() || (reason === "login_key_invalid" ? "auth_invalid" : "login_required");
+  const message = reason === "login_key_invalid"
+    ? "登录失效，请重新登录后再刷新"
+    : (reason === "login_key_missing"
+      ? "当前账号缺少 loginKey，请重新登录后再刷新"
+      : String(result.message || "").trim());
+  if (typeof setAccountAuthState === "function") {
+    setAccountAuthState(username, {
+      authState,
+      authReason: reason
+    });
+  }
+  if (message && typeof setSummary === "function") {
+    setSummary(message);
+  }
+  return result;
 }
 
 function syncAccountFormBySelection() {
@@ -2985,8 +3060,10 @@ function renderSavedAccounts() {
       stateBadge.onclick = async (e) => {
         e.stopPropagation();
         try {
-          await switchAccountView(row.username);
-          await doRefresh({usernameOverride: row.username, force: true, silentRateLimit: true, silentInfo: true});
+          await connectByStatusBadge({
+            preferCraft: false,
+            usernameOverride: row.username
+          });
         } catch (err) {
           setAccountStatus(`连接失败：${err.message}`, true);
         }
@@ -3192,7 +3269,7 @@ async function loadSnapshotForAccount(username, {silentSummary = false} = {}) {
   return true;
 }
 
-async function switchAccountView(username, {silentSnapshotSummary = false} = {}) {
+async function switchAccountView(username, {silentSnapshotSummary = false, deferComponentTaskQueue = false} = {}) {
   const key = String(username || "").trim();
   if (!key) return;
   const previousUsername = String(state.currentAccountUsername || "").trim();
@@ -3229,7 +3306,11 @@ async function switchAccountView(username, {silentSnapshotSummary = false} = {})
   renderCraftPage();
   startInventoryEventStream(key);
   void ensureAccountProfile(key);
-  await loadComponentTaskQueue();
+  if (deferComponentTaskQueue) {
+    void loadComponentTaskQueue();
+  } else {
+    await loadComponentTaskQueue();
+  }
 }
 async function useAccount(username) {
   const key = String(username || "").trim();
@@ -3240,7 +3321,12 @@ async function useAccount(username) {
     state.activeAccount = key;
     await loadAccounts({preferUsername: key});
     await switchAccountView(key);
-    await doRefresh({usernameOverride: key, force: true, silentRateLimit: true});
+    await refreshWithConnectionOverlay({
+      preferCraft: false,
+      usernameOverride: key,
+      force: true,
+      silentRateLimit: true
+    });
     const info = accountByUsername(key);
     setAccountStatus(`已设为当前账号：${info ? displayAccountName(info) : key}`);
   } catch (err) {
@@ -3292,6 +3378,7 @@ async function loginAndSave() {
   }) === false) {
     return false;
   }
+  if (state.accountLoginBusy) return false;
   const username = String(ui.accountUsername.value || "").trim();
   const password = String(ui.accountPassword.value || "").trim();
   const totp = normalizeAccountTotpInput();
@@ -3299,25 +3386,72 @@ async function loginAndSave() {
   if (!username) { setAccountStatus("请输入 Steam 账号", true); return; }
   if (!password) { setAccountStatus("请输入密码", true); return; }
   if (!totp) { setAccountStatus("请输入令牌码", true); return; }
+  if (setAccountLoginOverlayStage({
+    percent: 25,
+    title: "正在登录账号",
+    detail: "正在校验账号、密码与令牌码..."
+  }) === false) {
+    setAccountStatus("当前有任务进行中，请稍后再试", true);
+    return false;
+  }
 
   try {
-    ui.loginSaveBtn.disabled = true;
+    setAccountLoginBusy(true);
     setAccountStatus("正在登录，请稍候...");
     await api("/api/accounts/login-save", {method: "POST", body: JSON.stringify({username, password, totp, remark})});
+    setAccountLoginOverlayStage({
+      percent: 60,
+      title: "正在同步账号信息",
+      detail: "正在更新本地账号列表..."
+    });
     await loadAccounts({preferUsername: username});
-    await switchAccountView(username, {silentSnapshotSummary: true});
-    await doRefresh({usernameOverride: username, force: true, silentRateLimit: true, silentInfo: true});
+    setAccountLoginOverlayStage({
+      percent: 90,
+      title: "正在切换账号视图",
+      detail: "正在切换到刚登录的账号..."
+    });
+    await switchAccountView(username, {
+      silentSnapshotSummary: true,
+      deferComponentTaskQueue: true
+    });
+    setAccountLoginOverlayStage({
+      percent: 100,
+      title: "登录完成",
+      detail: "正在准备后台刷新库存..."
+    });
+    clearAccountLoginOverlay();
+    setAccountLoginBusy(false);
     clearAccountInputs();
     closeAccountLoginModal();
     setAccountStatus("准备就绪");
+    void (async () => {
+      try {
+        handlePostLoginRefreshResult(
+          username,
+          await doRefresh({
+            usernameOverride: username,
+            force: true,
+            silentRateLimit: true,
+            silentInfo: true,
+            suppressReloginModal: true
+          })
+        );
+      } catch (_) {
+        // doRefresh already normalizes expected failures; ignore unexpected background refresh rejections
+      }
+    })();
+    return true;
   } catch (err) {
     setAccountStatus(formatLoginSaveError(err), true);
+    return false;
   } finally {
-    ui.loginSaveBtn.disabled = false;
+    clearAccountLoginOverlay();
+    if (state.accountLoginBusy) setAccountLoginBusy(false);
   }
 }
 
 function clearAccountForm() {
+  if (state.accountLoginBusy) return;
   clearAccountInputs();
   closeAccountLoginModal();
   setAccountStatus("");
@@ -4878,8 +5012,10 @@ function stepCraftExecutionOverlayPercentAnimation() {
   const current = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
   const target = normalizeCraftExecutionOverlayPercent(state.craftProgressPercentTarget);
   if (current >= target) {
-    state.craftProgressPercent = target;
-    renderCraftExecutionOverlay();
+    applyCraftExecutionOverlayController({
+      owner: craftExecutionOverlayOwner,
+      percent: target
+    });
     return;
   }
   const delta = target - current;
@@ -4890,8 +5026,10 @@ function stepCraftExecutionOverlayPercentAnimation() {
   else if (progressRatio >= 0.42) step = 4;
   else if (progressRatio >= 0.2) step = 3;
   else if (progressRatio >= 0.08) step = 2;
-  state.craftProgressPercent = Math.min(target, current + step);
-  renderCraftExecutionOverlay();
+  applyCraftExecutionOverlayController({
+    owner: craftExecutionOverlayOwner,
+    percent: Math.min(target, current + step)
+  });
   if (state.craftProgressPercent < target && typeof requestAnimationFrame === "function") {
     craftExecutionPercentAnimationFrame = requestAnimationFrame(stepCraftExecutionOverlayPercentAnimation);
   }
@@ -4905,13 +5043,17 @@ function queueCraftExecutionPercentAnimation() {
   const current = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
   const target = normalizeCraftExecutionOverlayPercent(state.craftProgressPercentTarget);
   if (current >= target) {
-    state.craftProgressPercent = target;
-    renderCraftExecutionOverlay();
+    applyCraftExecutionOverlayController({
+      owner: craftExecutionOverlayOwner,
+      percent: target
+    });
     return;
   }
   if (typeof requestAnimationFrame !== "function") {
-    state.craftProgressPercent = target;
-    renderCraftExecutionOverlay();
+    applyCraftExecutionOverlayController({
+      owner: craftExecutionOverlayOwner,
+      percent: target
+    });
     return;
   }
   if (craftExecutionPercentAnimationFrame) return;
@@ -4919,9 +5061,10 @@ function queueCraftExecutionPercentAnimation() {
 }
 function renderCraftExecutionOverlay() {
   if (!ui.craftExecutionOverlay || !ui.craftExecutionOverlayTitle || !ui.craftExecutionOverlayDetail) return;
-  const show = !!state.craftProgressEnabled && !!state.craftProgressVisible;
   const mode = String(state.craftProgressMode || "").trim();
   const isConnecting = mode === "connecting";
+  const isComponentPrepare = mode === "component_prepare";
+  const show = !!state.craftProgressEnabled && !!state.craftProgressVisible && !isComponentPrepare;
   const percent = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
   ui.craftExecutionOverlay.classList.toggle("hidden", !show);
   ui.craftExecutionOverlay.classList.toggle("connecting", show && isConnecting);
@@ -4936,47 +5079,46 @@ function renderCraftExecutionOverlay() {
   }
   ui.craftExecutionOverlayTitle.textContent = state.craftProgressTitle || "正在执行炼金任务";
   ui.craftExecutionOverlayDetail.textContent = state.craftProgressDetail || "请稍候...";
+  if (typeof renderCraftAssistBusyMask === "function") renderCraftAssistBusyMask();
 }
-function setCraftExecutionOverlayState({visible = false, mode = "", percent = 0, title = "", detail = ""} = {}) {
+function setCraftExecutionOverlayState({owner = "", enabled, visible = false, mode = "", percent = 0, title = "", detail = ""} = {}) {
+  const ownership = resolveCraftExecutionOverlayOwner(owner);
+  if (!ownership.canWrite) return false;
   const nextMode = String(mode || "").trim();
   const normalizedPercent = normalizeCraftExecutionOverlayPercent(percent);
   const prevMode = String(state.craftProgressMode || "").trim();
-  state.craftProgressVisible = !!visible;
-  state.craftProgressMode = nextMode;
+  let nextPercent = normalizedPercent;
   if (nextMode === "connecting") {
     if (prevMode !== "connecting") {
-      state.craftProgressPercent = 0;
+      nextPercent = 0;
     } else if (state.craftProgressPercent > normalizedPercent) {
-      state.craftProgressPercent = normalizedPercent;
+      nextPercent = normalizedPercent;
     } else {
-      state.craftProgressPercent = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
+      nextPercent = normalizeCraftExecutionOverlayPercent(state.craftProgressPercent);
     }
-    state.craftProgressPercentTarget = normalizedPercent;
   } else {
     cancelCraftExecutionPercentAnimation();
-    state.craftProgressPercent = normalizedPercent;
-    state.craftProgressPercentTarget = normalizedPercent;
   }
-  state.craftProgressTitle = String(title || "").trim();
-  state.craftProgressDetail = String(detail || "").trim();
-  renderCraftExecutionOverlay();
-  if (nextMode === "connecting" && visible) queueCraftExecutionPercentAnimation();
+  const applied = applyCraftExecutionOverlayController({
+    owner: ownership.effectiveOwner || owner,
+    enabled,
+    visible,
+    mode: nextMode,
+    percent: nextPercent,
+    percentTarget: normalizedPercent,
+    title,
+    detail
+  });
+  if (nextMode === "connecting" && visible && applied) queueCraftExecutionPercentAnimation();
 }
-function clearCraftExecutionOverlayState() {
-  cancelCraftExecutionPercentAnimation();
-  state.craftProgressEnabled = false;
-  state.craftProgressVisible = false;
-  state.craftProgressMode = "";
-  state.craftProgressPercent = 0;
-  state.craftProgressPercentTarget = 0;
-  state.craftProgressTitle = "";
-  state.craftProgressDetail = "";
-  renderCraftExecutionOverlay();
+function clearCraftExecutionOverlayState({owner = ""} = {}) {
+  return applyCraftExecutionOverlayController({owner, clear: true});
 }
 function createConnectProgressReporter() {
   return ({percent = 0, title = "正在连接账号", detail = ""} = {}) => {
-    state.craftProgressEnabled = true;
     setCraftExecutionOverlayState({
+      owner: "connect_flow",
+      enabled: true,
       visible: true,
       mode: "connecting",
       percent,
@@ -5020,13 +5162,67 @@ async function refreshWithConnectionOverlay({
       keepSelectedIds
     });
   } finally {
-    if (onProgress) clearCraftExecutionOverlayState();
+    if (onProgress) clearCraftExecutionOverlayState({owner: "connect_flow"});
   }
+}
+let craftExecutionOverlayOwner = "";
+function normalizeCraftExecutionOverlayOwner(owner) {
+  return String(owner || "").trim();
+}
+function resolveCraftExecutionOverlayOwner(owner = "") {
+  const requestedOwner = normalizeCraftExecutionOverlayOwner(owner);
+  const activeOwner = !!state.craftProgressEnabled ? normalizeCraftExecutionOverlayOwner(craftExecutionOverlayOwner) : "";
+  const effectiveOwner = requestedOwner || activeOwner;
+  return {
+    activeOwner,
+    effectiveOwner,
+    canWrite: !activeOwner || !effectiveOwner || activeOwner === effectiveOwner
+  };
+}
+function applyCraftExecutionOverlayController({
+  owner = "",
+  enabled,
+  visible,
+  mode,
+  percent,
+  percentTarget,
+  title,
+  detail,
+  clear = false
+} = {}) {
+  const ownership = resolveCraftExecutionOverlayOwner(owner);
+  if (!ownership.canWrite) return false;
+  if (clear) {
+    cancelCraftExecutionPercentAnimation();
+    state.craftProgressEnabled = false;
+    state.craftProgressVisible = false;
+    state.craftProgressMode = "";
+    state.craftProgressPercent = 0;
+    state.craftProgressPercentTarget = 0;
+    state.craftProgressTitle = "";
+    state.craftProgressDetail = "";
+    craftExecutionOverlayOwner = "";
+    renderCraftExecutionOverlay();
+    return true;
+  }
+  if (ownership.effectiveOwner) craftExecutionOverlayOwner = ownership.effectiveOwner;
+  if (enabled !== undefined) state.craftProgressEnabled = !!enabled;
+  if (visible !== undefined) state.craftProgressVisible = !!visible;
+  if (mode !== undefined) state.craftProgressMode = String(mode || "").trim();
+  if (percent !== undefined) state.craftProgressPercent = normalizeCraftExecutionOverlayPercent(percent);
+  if (percentTarget !== undefined) state.craftProgressPercentTarget = normalizeCraftExecutionOverlayPercent(percentTarget);
+  if (title !== undefined) state.craftProgressTitle = String(title || "").trim();
+  if (detail !== undefined) state.craftProgressDetail = String(detail || "").trim();
+  renderCraftExecutionOverlay();
+  return true;
 }
 function applyCraftComponentProgressEvent(data) {
   const display = buildCraftComponentProgressDisplay(data);
   setCraftExecutionOverlayState({
+    owner: "craft_flow",
+    enabled: true,
     visible: true,
+    mode: String(data && data.stage || "").trim() === "prepare" ? "component_prepare" : "",
     title: display.title,
     detail: display.detail
   });
@@ -8977,7 +9173,7 @@ function updateCraftPredictorHandleGeometry() {
   panel.style.setProperty("--craft-predictor-handle-height", `${nextHeight}px`);
   panel.style.setProperty("--craft-predictor-handle-width", `${nextWidth}px`);
 }
-function getComponentBusyMaskState() {
+function getCraftLeftPanelBusyState() {
   if (state.componentOpBusy) {
     const action = String(state.componentOpBusyAction || "").trim();
     const withdraw = action !== "deposit";
@@ -8987,11 +9183,17 @@ function getComponentBusyMaskState() {
       detail: withdraw ? "正在从组件取出物品，请稍候..." : "正在向组件存入物品，请稍候..."
     };
   }
-  return {show: false, title: "", detail: ""};
-}
-function getCraftLeftPanelBusyState() {
-  const componentBusyState = getComponentBusyMaskState();
-  if (componentBusyState.show) return componentBusyState;
+  if (
+    state.craftProgressEnabled
+    && state.craftProgressVisible
+    && String(state.craftProgressMode || "").trim() === "component_prepare"
+  ) {
+    return {
+      show: true,
+      title: String(state.craftProgressTitle || "").trim() || "正在从组件中取出物品",
+      detail: String(state.craftProgressDetail || "").trim() || "请稍候..."
+    };
+  }
   const runtimeState = syncCurrentCraftAssistRuntimeState();
   const action = String(runtimeState.craftAssistPendingUiAction || "").trim();
   const presetId = String(runtimeState.craftAssistPendingPresetId || "").trim();
@@ -9014,21 +9216,13 @@ function getCraftLeftPanelBusyState() {
       : "正在按当前面板配置选材，请稍候..."
   };
 }
-function renderBusyMask(maskEl, titleEl, detailEl, busyState) {
-  if (!maskEl || !titleEl || !detailEl) return;
-  const nextState = busyState && typeof busyState === "object"
-    ? busyState
-    : {show: false, title: "", detail: ""};
-  maskEl.classList.toggle("hidden", !nextState.show);
-  maskEl.setAttribute("aria-hidden", nextState.show ? "false" : "true");
-  titleEl.textContent = nextState.title;
-  detailEl.textContent = nextState.detail;
-}
 function renderCraftAssistBusyMask() {
-  renderBusyMask(ui.craftAssistBusyMask, ui.craftAssistBusyMaskTitle, ui.craftAssistBusyMaskDetail, getCraftLeftPanelBusyState());
-}
-function renderInventoryBusyMask() {
-  renderBusyMask(ui.inventoryBusyMask, ui.inventoryBusyMaskTitle, ui.inventoryBusyMaskDetail, getComponentBusyMaskState());
+  if (!ui.craftAssistBusyMask || !ui.craftAssistBusyMaskTitle || !ui.craftAssistBusyMaskDetail) return;
+  const busyState = getCraftLeftPanelBusyState();
+  ui.craftAssistBusyMask.classList.toggle("hidden", !busyState.show);
+  ui.craftAssistBusyMask.setAttribute("aria-hidden", busyState.show ? "false" : "true");
+  ui.craftAssistBusyMaskTitle.textContent = busyState.title;
+  ui.craftAssistBusyMaskDetail.textContent = busyState.detail;
 }
 function renderCraftAssistPanel() {
   if (!ui.craftAssistPanel || !ui.craftAssistOverlay) return;
@@ -9121,9 +9315,18 @@ async function requestCraftTradeUpPause() {
   state.craftPauseRequested = true;
   setCraftStatus("已请求暂停，当前提交完成后将停止后续配方");
   if (state.craftProgressEnabled) {
-    setCraftExecutionOverlayState({
-      visible: true,
+    const overlaySnapshot = {
+      visible: !!state.craftProgressVisible,
+      mode: String(state.craftProgressMode || "").trim(),
+      percent: normalizeCraftExecutionOverlayPercent(state.craftProgressPercentTarget),
       title: state.craftProgressTitle || "正在执行炼金任务",
+      detail: state.craftProgressDetail || "请稍候..."
+    };
+    setCraftExecutionOverlayState({
+      owner: "craft_flow",
+      visible: true,
+      mode: overlaySnapshot.mode,
+      title: overlaySnapshot.title,
       detail: "暂停请求已记录，当前配方完成后停止"
     });
     const username = String(state.currentAccountUsername || "").trim();
@@ -9135,6 +9338,14 @@ async function requestCraftTradeUpPause() {
         });
       } catch (err) {
         state.craftPauseRequested = false;
+        setCraftExecutionOverlayState({
+          owner: "craft_flow",
+          visible: overlaySnapshot.visible,
+          mode: overlaySnapshot.mode,
+          percent: overlaySnapshot.percent,
+          title: overlaySnapshot.title,
+          detail: overlaySnapshot.detail
+        });
         setCraftStatus(`暂停请求发送失败：${err.message}`, true);
       }
     }
@@ -11084,25 +11295,27 @@ async function ensureCraftConnectedForExecution() {
   if (isCurrentAccountConnected()) return true;
   const onProgress = createConnectProgressReporter();
   onProgress({percent: 10, detail: "正在准备连接账号..."});
-  const result = await doRefresh({
-    usernameOverride: username,
-    force: true,
-    silentRateLimit: true,
-    silentInfo: true,
-    onProgress
-  });
-  if (result && result.ok && isCurrentAccountConnected()) {
-    onProgress({percent: 100, detail: "账号已连接，准备执行配方..."});
-    clearCraftExecutionOverlayState();
-    return true;
+  try {
+    const result = await doRefresh({
+      usernameOverride: username,
+      force: true,
+      silentRateLimit: true,
+      silentInfo: true,
+      onProgress
+    });
+    if (result && result.ok && isCurrentAccountConnected()) {
+      onProgress({percent: 100, detail: "账号已连接，准备执行配方..."});
+      return true;
+    }
+    if (!(result && result.message)) {
+      setCraftStatus("连接账号失败，请先连接并刷新库存", true);
+    } else {
+      setCraftStatus(result.message, true);
+    }
+    return false;
+  } finally {
+    clearCraftExecutionOverlayState({owner: "connect_flow"});
   }
-  clearCraftExecutionOverlayState();
-  if (!(result && result.message)) {
-    setCraftStatus("连接账号失败，请先连接并刷新库存", true);
-  } else {
-    setCraftStatus(result.message, true);
-  }
-  return false;
 }
 async function ensureConnectedForComponentDeposit() {
   const username = String(
@@ -11264,17 +11477,19 @@ async function runCraftTradeUpQueue() {
   let lastDoneMsg = "";
   let remainingCount = 0;
   let paused = false;
-  state.craftProgressEnabled = componentFlow;
   state.craftPauseRequested = false;
   state.craftPaused = false;
   if (componentFlow) {
     setCraftExecutionOverlayState({
+      owner: "craft_flow",
+      enabled: true,
       visible: true,
+      mode: "component_prepare",
       title: `正在准备组件并执行 ${pendingRecipes.length} 组配方`,
       detail: "正在等待后端进度..."
     });
   } else {
-    clearCraftExecutionOverlayState();
+    clearCraftExecutionOverlayState({owner: "craft_flow"});
   }
   state.craftBusy = true;
   setCraftStatus(componentFlow ? `正在准备组件并执行 ${pendingRecipes.length} 组配方...` : `正在准备执行 ${pendingRecipes.length} 组配方...`);
@@ -11310,6 +11525,8 @@ async function runCraftTradeUpQueue() {
         currentRecipeRequest = buildCraftApiRecipePayload(readyRecipes[i]);
         const req = currentRecipeRequest;
         setCraftExecutionOverlayState({
+          owner: "craft_flow",
+          enabled: true,
           visible: true,
           title: `正在执行第 ${i + 1}/${readyRecipes.length} 组配方`,
           detail: `已完成 ${completedCount}/${readyRecipes.length} 组`
@@ -11353,7 +11570,7 @@ async function runCraftTradeUpQueue() {
         currentRecipePos = i;
         currentRecipeRequest = pendingRecipes[i];
         const req = currentRecipeRequest;
-        clearCraftExecutionOverlayState();
+        clearCraftExecutionOverlayState({owner: "craft_flow"});
         setCraftStatus(`正在串行执行第 ${i + 1}/${pendingRecipes.length} 组配方...`);
         const data = await api("/api/craft/tradeup", {
           method: "POST",
@@ -11466,7 +11683,7 @@ async function runCraftTradeUpQueue() {
     state.craftPaused = false;
   } finally {
     state.craftBusy = false;
-    clearCraftExecutionOverlayState();
+    clearCraftExecutionOverlayState({owner: "craft_flow"});
     renderCraftPage();
   }
 }
@@ -11910,18 +12127,15 @@ function syncComponentActionState() {
   }
   if (withdrawBlocked) {
     ui.componentWithdrawBtn.title = "处理中，请稍候";
-    renderInventoryBusyMask();
     return;
   }
   if (!connected) {
     ui.componentWithdrawBtn.title = "未连接时将在取出前自动连接并刷新库存";
-    renderInventoryBusyMask();
     return;
   }
   ui.componentWithdrawBtn.title = !currentComponent
     ? "请先选择组件"
     : "取出选中（优先低磨损）";
-  renderInventoryBusyMask();
 }
 function applyFilter() {
   const keyword = String(state.searchText || "").trim().toLowerCase();
@@ -12557,13 +12771,21 @@ function setRefreshBusy(busy) {
   if (ui.craftDisconnectBtn) ui.craftDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   if (ui.accountPageDisconnectBtn) ui.accountPageDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   if (ui.accountPageAddBtn) ui.accountPageAddBtn.disabled = state.refreshing;
-  ui.loginSaveBtn.disabled = state.refreshing;
+  syncAccountLoginActionState();
   syncComponentActionState();
   renderSavedAccounts();
   renderCraftPage();
 }
 
-async function doRefresh({usernameOverride = "", force = false, silentRateLimit = false, silentInfo = false, onProgress = null, keepSelectedIds = null} = {}) {
+async function doRefresh({
+  usernameOverride = "",
+  force = false,
+  silentRateLimit = false,
+  silentInfo = false,
+  onProgress = null,
+  keepSelectedIds = null,
+  suppressReloginModal = false
+} = {}) {
   if (state.refreshing) return {ok: false, message: "当前正在刷新库存"};
   const reportProgress = ({percent = 0, title = "正在连接账号", detail = ""} = {}) => {
     if (typeof onProgress !== "function") return;
@@ -12607,6 +12829,7 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
 
   try {
     setRefreshBusy(true);
+    state.refreshSilentInfo = !!silentInfo;
     reportProgress({percent: 10, detail: "正在准备连接账号..."});
     state.accountSelectedUsername = username;
     state.currentAccountUsername = username;
@@ -12671,22 +12894,25 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
         : (String(payload && payload.auth_state || "").trim() || "login_required");
       setAccountAuthState(username, {authState, authReason: reason});
       syncInventoryTop();
-      openAccountReloginModal({
-        username,
-        password: String(account && account.password || "").trim(),
-        reason
-      });
+      if (!suppressReloginModal) {
+        openAccountReloginModal({
+          username,
+          password: String(account && account.password || "").trim(),
+          reason
+        });
+      }
       const message = reason === "login_key_invalid"
         ? "登录失效，请重新登录后再刷新"
         : "当前账号缺少 loginKey，请重新登录后再刷新";
       setSummary(message);
-      return {ok: false, message, reloginRequired: true, reason};
+      return {ok: false, message, reloginRequired: true, reason, authState};
     }
     syncInventoryTop();
     const message = `刷新失败：${err.message}`;
     setSummary(message);
     return {ok: false, message};
   } finally {
+    state.refreshSilentInfo = false;
     setRefreshBusy(false);
   }
 }

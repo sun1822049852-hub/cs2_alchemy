@@ -138,6 +138,9 @@ function loadRenderCraftPageFns(initialState = {}, {connected = false, executabl
       craftConnectText: null
     },
     syncCurrentCraftAssistRuntimeState() {},
+    isGuestWorkspaceActive() {
+      return false;
+    },
     isCurrentAccountConnected() {
       return connected;
     },
@@ -183,7 +186,11 @@ function loadRenderCraftPageFns(initialState = {}, {connected = false, executabl
   return context;
 }
 
-function loadEnsureCraftConnectedFn(initialState = {}, {connectedInitially = false, refreshResult = {ok: true}} = {}) {
+function loadEnsureCraftConnectedFn(initialState = {}, {
+  connectedInitially = false,
+  refreshResult = {ok: true},
+  onDoRefresh = null
+} = {}) {
   const source = [
     extractBlock("function createConnectProgressReporter(", "function applyCraftComponentProgressEvent("),
     extractFunctionSource("ensureCraftConnectedForExecution")
@@ -222,6 +229,9 @@ function loadEnsureCraftConnectedFn(initialState = {}, {connectedInitially = fal
     },
     async doRefresh(options) {
       context.refreshCalls.push(options);
+      if (typeof onDoRefresh === "function") {
+        return onDoRefresh(options, context);
+      }
       if (refreshResult && refreshResult.ok) context.connected = true;
       return refreshResult;
     }
@@ -241,7 +251,22 @@ function testDisconnectedCraftRenderKeepsExecuteEnabledForAutoConnect() {
 }
 
 async function testEnsureCraftConnectedRefreshesDisconnectedAccountForExecution() {
-  const app = loadEnsureCraftConnectedFn({}, {connectedInitially: false, refreshResult: {ok: true}});
+  const refreshProgressSentinel = {
+    percent: 73,
+    title: "__refresh_internal_progress__",
+    detail: "refresh-only-signal"
+  };
+  let clearedOverlayBeforeRefreshReturns = -1;
+  const app = loadEnsureCraftConnectedFn({}, {
+    connectedInitially: false,
+    refreshResult: {ok: true},
+    onDoRefresh(options, context) {
+      options.onProgress(refreshProgressSentinel);
+      clearedOverlayBeforeRefreshReturns = context.clearedOverlay;
+      context.connected = true;
+      return {ok: true};
+    }
+  });
   assert.equal(typeof app.ensureCraftConnectedForExecution, "function", "expected auto-connect helper for craft execution");
 
   const ok = await app.ensureCraftConnectedForExecution();
@@ -253,26 +278,46 @@ async function testEnsureCraftConnectedRefreshesDisconnectedAccountForExecution(
   assert.equal(app.refreshCalls[0].silentInfo, true);
   assert.equal(typeof app.refreshCalls[0].onProgress, "function", "auto-connect refresh should wire progress callbacks into the centered overlay");
   assert.equal(app.overlayStates.length > 0, true, "auto-connect helper should surface centered progress overlay states");
+  assert.equal(
+    app.overlayStates.some((payload) => (
+      payload &&
+      payload.visible === true &&
+      payload.mode === "connecting" &&
+      payload.percent === refreshProgressSentinel.percent &&
+      payload.title === refreshProgressSentinel.title
+    )),
+    true,
+    "refresh-internal progress callback should drive a visible connecting overlay payload through the shared path"
+  );
+  assert.equal(clearedOverlayBeforeRefreshReturns, 0, "overlay should not clear until shared shutdown runs");
   assert.equal(app.clearedOverlay, 1, "auto-connect helper should clear the centered overlay after success");
 }
 
-function testSourceWiresAutoConnectBeforeCraftExecution() {
-  assert.equal(
-    APP_SOURCE.includes("async function ensureCraftConnectedForExecution() {"),
-    true,
-    "craft app should define a dedicated auto-connect helper before running recipes"
+async function testEnsureCraftConnectedClearsOverlayWhenRefreshThrows() {
+  let clearedOverlayBeforeThrow = -1;
+  const thrown = new Error("refresh exploded");
+  const app = loadEnsureCraftConnectedFn({}, {
+    connectedInitially: false,
+    onDoRefresh(options, context) {
+      options.onProgress({percent: 55, title: "正在连接账号", detail: "throw-path"});
+      clearedOverlayBeforeThrow = context.clearedOverlay;
+      throw thrown;
+    }
+  });
+
+  await assert.rejects(
+    app.ensureCraftConnectedForExecution(),
+    thrown,
+    "auto-connect helper should preserve thrown refresh errors"
   );
-  assert.equal(
-    APP_SOURCE.includes("const connectedOk = await ensureCraftConnectedForExecution();"),
-    true,
-    "craft execution should await auto-connect before submitting trade-up requests"
-  );
+  assert.equal(clearedOverlayBeforeThrow, 0, "overlay should remain active until shared finally cleanup runs");
+  assert.equal(app.clearedOverlay, 1, "auto-connect helper should clear the centered overlay even when refresh throws");
 }
 
 async function main() {
   testDisconnectedCraftRenderKeepsExecuteEnabledForAutoConnect();
   await testEnsureCraftConnectedRefreshesDisconnectedAccountForExecution();
-  testSourceWiresAutoConnectBeforeCraftExecution();
+  await testEnsureCraftConnectedClearsOverlayWhenRefreshThrows();
   console.log("craft-auto-connect-execution tests passed");
 }
 

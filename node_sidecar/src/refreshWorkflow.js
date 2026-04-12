@@ -74,6 +74,7 @@ async function refreshInventory({
   includeHidden = true,
   dumpRaw = false,
   logger,
+  onConnectionReady = null,
   sessionPool = null,
   accountStore = null,
   tokenStore = null,
@@ -156,6 +157,12 @@ async function refreshInventory({
       }
     }
     connected = true;
+    if (typeof onConnectionReady === "function") {
+      await onConnectionReady({
+        username: accountName,
+        connected: true
+      });
+    }
 
     if (logger) {
       logger.info("workflow", "phase=base-inventory");

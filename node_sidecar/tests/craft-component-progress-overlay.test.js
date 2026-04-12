@@ -112,6 +112,64 @@ function loadCraftProgressHelpers() {
   return context;
 }
 
+function loadCraftPauseHelpers({
+  apiImpl = null
+} = {}) {
+  const source = [
+    extractBlock("function buildCraftComponentProgressDisplay(", "function syncCraftSettingsControls("),
+    extractBlock("async function requestCraftTradeUpPause(", "function renderCraftQueue(")
+  ].join("\n");
+  const context = {
+    Math,
+    Number,
+    String,
+    JSON,
+    Promise,
+    console,
+    state: {
+      craftBusy: true,
+      craftPauseRequested: false,
+      craftProgressEnabled: true,
+      craftProgressVisible: true,
+      craftProgressTitle: "正在执行第 1/2 组汰换",
+      craftProgressDetail: "已完成 0/2 组",
+      craftProgressMode: "craft",
+      craftProgressPercent: 0,
+      craftProgressPercentTarget: 0,
+      currentAccountUsername: "acc-a"
+    },
+    ui: {
+      craftExecutionOverlay: {classList: createClassList()},
+      craftExecutionProgress: {
+        classList: createClassList(),
+        style: {
+          values: new Map(),
+          setProperty(name, value) {
+            this.values.set(String(name), String(value));
+          }
+        }
+      },
+      craftExecutionOverlayPercent: {textContent: ""},
+      craftExecutionOverlayTitle: {textContent: ""},
+      craftExecutionOverlayDetail: {textContent: ""}
+    },
+    lastCraftStatus: null,
+    renderCraftPageCalls: 0,
+    setCraftStatus(message, isError = false) {
+      context.lastCraftStatus = {message, isError};
+    },
+    renderCraftPage() {
+      context.renderCraftPageCalls += 1;
+    },
+    async api(...args) {
+      if (typeof apiImpl === "function") return apiImpl(...args);
+      return {ok: true};
+    }
+  };
+  vm.runInNewContext(source, context, {filename: APP_PATH});
+  return context;
+}
+
 function testProgressHelperFormatsPrepareAndCraftStages() {
   const app = loadCraftProgressHelpers();
   const prepare = app.buildCraftComponentProgressDisplay({
@@ -157,6 +215,23 @@ function testOverlayApplyAndClearBehavior() {
   assert.equal(app.ui.craftExecutionOverlay.classList.contains("hidden"), true);
 }
 
+function testPrepareStageKeepsCenteredOverlayHidden() {
+  const app = loadCraftProgressHelpers();
+  app.applyCraftComponentProgressEvent({
+    stage: "prepare",
+    phase: "item",
+    processed: 3,
+    total: 5,
+    success: 3,
+    failed: 0
+  });
+
+  assert.equal(app.state.craftProgressMode, "component_prepare");
+  assert.equal(app.ui.craftExecutionOverlay.classList.contains("hidden"), true);
+  assert.equal(app.state.craftProgressTitle, "正在从组件中取出物品 3/5");
+  assert.equal(app.state.craftProgressDetail, "成功 3，失败 0");
+}
+
 function testConnectingOverlayShowsPercentRing() {
   const app = loadCraftProgressHelpers();
   app.setCraftExecutionOverlayState({
@@ -191,6 +266,72 @@ function testConnectingOverlayShowsPercentRing() {
 
   app.flushAnimationFrames(60);
   assert.equal(app.ui.craftExecutionOverlayPercent.textContent, "80%");
+}
+
+function testOverlayOwnerWriteCannotClobberActiveOwner() {
+  const app = loadCraftProgressHelpers();
+  app.setCraftExecutionOverlayState({
+    visible: true,
+    mode: "connecting",
+    percent: 35,
+    title: "Owner Connecting",
+    detail: "owner detail",
+    owner: "connect_flow"
+  });
+
+  assert.equal(app.ui.craftExecutionOverlayTitle.textContent, "Owner Connecting");
+  assert.equal(app.state.craftProgressMode, "connecting");
+
+  app.setCraftExecutionOverlayState({
+    visible: true,
+    mode: "craft",
+    percent: 99,
+    title: "Non Owner Override",
+    detail: "intruding writer",
+    owner: "craft_flow"
+  });
+
+  assert.equal(app.state.craftProgressMode, "connecting", "non-owner write must not replace the active owner mode");
+  assert.equal(app.ui.craftExecutionOverlayTitle.textContent, "Owner Connecting", "non-owner write must not replace active owner title");
+}
+
+function testOverlayOwnerClearCannotClobberActiveOwner() {
+  const app = loadCraftProgressHelpers();
+  app.setCraftExecutionOverlayState({
+    visible: true,
+    mode: "connecting",
+    percent: 40,
+    title: "Owner Connecting",
+    detail: "owner detail",
+    owner: "connect_flow"
+  });
+
+  app.clearCraftExecutionOverlayState({owner: "craft_flow"});
+
+  assert.equal(app.state.craftProgressVisible, true, "non-owner clear must not hide active owner overlay");
+  assert.equal(app.state.craftProgressMode, "connecting", "non-owner clear must not reset active owner mode");
+  assert.equal(app.ui.craftExecutionOverlayTitle.textContent, "Owner Connecting", "non-owner clear must not erase active owner title");
+}
+
+async function testPauseFailureRollsBackOverlayDetail() {
+  const app = loadCraftPauseHelpers({
+    apiImpl() {
+      throw new Error("pause api failed");
+    }
+  });
+  app.renderCraftExecutionOverlay();
+
+  await app.requestCraftTradeUpPause();
+
+  assert.equal(app.state.craftPauseRequested, false, "pause failure should clear the pending pause request flag");
+  assert.equal(app.state.craftProgressTitle, "正在执行第 1/2 组汰换", "pause failure should preserve the active overlay title");
+  assert.equal(app.state.craftProgressDetail, "已完成 0/2 组", "pause failure should roll back the temporary pause detail");
+  assert.equal(app.ui.craftExecutionOverlayDetail.textContent, "已完成 0/2 组", "pause failure should restore the rendered overlay detail");
+  assert.deepEqual(
+    app.lastCraftStatus,
+    {message: "暂停请求发送失败：pause api failed", isError: true},
+    "pause failure should still surface an error status"
+  );
 }
 
 function testSourceWiresCenteredOverlayAndSseListener() {
@@ -257,12 +398,19 @@ function testSourceWiresCenteredOverlayAndSseListener() {
   );
 }
 
-function main() {
+async function main() {
   testProgressHelperFormatsPrepareAndCraftStages();
   testOverlayApplyAndClearBehavior();
+  testPrepareStageKeepsCenteredOverlayHidden();
   testConnectingOverlayShowsPercentRing();
+  testOverlayOwnerWriteCannotClobberActiveOwner();
+  testOverlayOwnerClearCannotClobberActiveOwner();
+  await testPauseFailureRollsBackOverlayDetail();
   testSourceWiresCenteredOverlayAndSseListener();
   console.log("craft-component-progress-overlay tests passed");
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
