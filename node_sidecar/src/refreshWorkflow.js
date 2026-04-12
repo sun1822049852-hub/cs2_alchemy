@@ -24,30 +24,82 @@ function mergeRawItem(baseItem, patchItem) {
   return merged;
 }
 
+function createRefreshAuthError(code, message, {status = 409, authState = "login_required", cause = null} = {}) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = status;
+  err.reason = code;
+  err.auth_state = authState;
+  if (cause) {
+    err.cause = cause;
+    const rawCode = asString(cause && (cause.code || cause.eresult || cause.result || "")).trim();
+    if (rawCode) {
+      err.raw_code = rawCode;
+    }
+    const rawMessage = asString(cause && cause.message ? cause.message : cause).trim();
+    if (rawMessage) {
+      err.raw_message = rawMessage;
+    }
+  }
+  return err;
+}
+
+function isLoginKeyInvalidError(err) {
+  const message = asString(err && err.message ? err.message : err).trim().toLowerCase();
+  const rawCode = asString(err && (err.code || err.eresult || err.result || "")).trim().toLowerCase();
+  const numericCode = Number(rawCode);
+  if (!message && !rawCode) {
+    return false;
+  }
+  if (["invalidpassword", "accessdenied", "accountlogondenied", "invalidloginauthcode"].includes(rawCode)) {
+    return true;
+  }
+  if (Number.isFinite(numericCode) && [5, 15, 63, 65].includes(numericCode)) {
+    return true;
+  }
+  return [
+    "invalidpassword",
+    "accessdenied",
+    "accountlogondenied",
+    "invalid login auth code",
+    "refresh token rejected",
+    "token rejected",
+    "token expired"
+  ].some((part) => message.includes(part));
+}
+
 async function refreshInventory({
   username,
   password,
   includeHidden = true,
   dumpRaw = false,
   logger,
-  sessionPool = null
+  sessionPool = null,
+  accountStore = null,
+  tokenStore = null,
+  schemaStore = null,
+  SessionClass = CS2Session,
+  parseInventoryFn = parseInventory,
+  preloadComponentContentsFn = preloadComponentContents,
+  saveProcessedSnapshotFn = saveProcessedSnapshot,
+  saveRawSnapshotFn = saveRawSnapshot
 }) {
-  const accounts = new AccountStore();
+  const accounts = accountStore || new AccountStore();
   const active = username ? accounts.get(username) : accounts.getActive();
   if (!active) {
     throw new Error(`account not found: ${username || "(active)"}`);
   }
   const accountName = active.username;
   const accountPassword = asString(password || active.password || "").trim();
-  const tokenStore = new TokenStore();
-  const refreshToken = tokenStore.get(accountName);
-  if (!refreshToken && !accountPassword) {
-    throw new Error(`password missing: ${accountName}`);
+  const tokens = tokenStore || new TokenStore();
+  const refreshToken = tokens.get(accountName);
+  if (!refreshToken) {
+    throw createRefreshAuthError("login_key_missing", `login key missing: ${accountName}`);
   }
-  const schemaStore = new SchemaStore();
-  const schema = schemaStore.load();
+  const schemas = schemaStore || new SchemaStore();
+  const schema = schemas.load();
 
-  const session = sessionPool ? null : new CS2Session({logger, tokenStore});
+  const session = sessionPool ? null : new SessionClass({logger, tokenStore: tokens});
   const usingSessionPool = Boolean(sessionPool);
   let pooledReused = false;
   let connected = false;
@@ -57,23 +109,47 @@ async function refreshInventory({
     }
     let csgo = null;
     if (usingSessionPool) {
-      const acquired = await sessionPool.acquire({
-        username: accountName,
-        password: accountPassword,
-        refreshToken,
-        tokenStore
-      });
+      let acquired;
+      try {
+        acquired = await sessionPool.acquire({
+          username: accountName,
+          password: accountPassword,
+          refreshToken,
+          tokenStore: tokens,
+          refreshTokenOnly: true
+        });
+      } catch (err) {
+        if (isLoginKeyInvalidError(err)) {
+          throw createRefreshAuthError("login_key_invalid", `login key invalid: ${accountName}`, {
+            authState: "auth_invalid",
+            cause: err
+          });
+        }
+        throw err;
+      }
       csgo = acquired.csgo;
       pooledReused = Boolean(acquired.reused);
       if (logger) {
         logger.info("workflow", `session mode=pool reused=${acquired.reused ? "true" : "false"}`);
       }
     } else {
-      const connectedSession = await session.connect({
-        username: accountName,
-        password: accountPassword,
-        refreshToken
-      });
+      let connectedSession;
+      try {
+        connectedSession = await session.connect({
+          username: accountName,
+          password: accountPassword,
+          refreshToken,
+          refreshTokenOnly: true
+        });
+      } catch (err) {
+        if (isLoginKeyInvalidError(err)) {
+          throw createRefreshAuthError("login_key_invalid", `login key invalid: ${accountName}`, {
+            authState: "auth_invalid",
+            cause: err
+          });
+        }
+        throw err;
+      }
       csgo = connectedSession.csgo;
       if (logger) {
         logger.info("workflow", "session mode=ephemeral");
@@ -89,7 +165,7 @@ async function refreshInventory({
     if (logger) {
       logger.info("workflow", "phase=component-preload");
     }
-    const componentStats = await preloadComponentContents(csgo, logger, {requestIntervalMs: 80});
+    const componentStats = await preloadComponentContentsFn(csgo, logger, {requestIntervalMs: 80});
     if (
       usingSessionPool &&
       pooledReused &&
@@ -127,12 +203,12 @@ async function refreshInventory({
     }
     const mergedRaw = Array.from(mergedById.values());
     // 快照始终保存全量（含隐藏），UI 再根据开关本地过滤，避免组件条目丢失。
-    const parsed = parseInventory(mergedRaw, schema, {includeHidden: true});
+    const parsed = parseInventoryFn(mergedRaw, schema, {includeHidden: true});
     const rows = parsed.rows;
-    const snapshotPath = saveProcessedSnapshot(rows);
+    const snapshotPath = saveProcessedSnapshotFn(rows);
     let rawPath = "";
     if (dumpRaw) {
-      rawPath = saveRawSnapshot(finalRaw);
+      rawPath = saveRawSnapshotFn(finalRaw);
     }
 
     const componentExpected = componentStats.expected_total;

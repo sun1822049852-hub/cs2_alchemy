@@ -106,6 +106,16 @@ function createRefreshRuntime({
     return active ? asString(active.username).trim() : "";
   }
 
+  function buildRefreshAuthError({account, reason, message, authState}) {
+    const err = new Error(message);
+    err.code = reason;
+    err.reason = reason;
+    err.status = 409;
+    err.auth_state = authState;
+    err.account = account;
+    return err;
+  }
+
   function emitCustomSse(event, payload) {
     broadcastSse(asString(event).trim() || "message", payload || {});
   }
@@ -187,6 +197,24 @@ function createRefreshRuntime({
     if (!account) {
       throw new Error("account not found: (active)");
     }
+    try {
+      const uiState = uiStateStoreFactory();
+      const accountCache = uiState && typeof uiState.getAccount === "function" ? uiState.getAccount(account) : null;
+      const persistedAuthState = asString(accountCache && accountCache.auth_state || "").trim();
+      const persistedAuthReason = asString(accountCache && accountCache.auth_reason || "").trim();
+      if (persistedAuthState === "auth_invalid") {
+        throw buildRefreshAuthError({
+          account,
+          reason: persistedAuthReason || "login_key_invalid",
+          message: "当前账号登录已失效，请重新登录",
+          authState: "auth_invalid"
+        });
+      }
+    } catch (err) {
+      if (asString(err && err.reason || "").trim()) {
+        throw err;
+      }
+    }
     if (refreshLocks.has(account)) {
       if (logger) {
         logger.info("ui_server", `refresh join in-flight: source=${source} account=${account}`);
@@ -206,6 +234,14 @@ function createRefreshRuntime({
           dumpRaw: false,
           logger
         });
+        try {
+          const uiState = uiStateStoreFactory();
+          if (uiState && typeof uiState.clearAccountAuthState === "function") {
+            uiState.clearAccountAuthState(account);
+          }
+        } catch (_) {
+          // ignore auth-state clear errors
+        }
         connectedAccounts.add(account);
         const payload = await buildRefreshPayload(result);
         eventBus.emit("inventory_refreshed", {
@@ -231,7 +267,12 @@ function createRefreshRuntime({
           username: account,
           source,
           connected: false,
-          message: asString(err && err.message ? err.message : err)
+          message: asString(err && err.message ? err.message : err),
+          reason: asString(err && (err.reason || err.code) || "").trim(),
+          auth_state: asString(err && err.auth_state || "").trim(),
+          relogin_required: ["login_key_missing", "login_key_invalid"].includes(
+            asString(err && (err.reason || err.code) || "").trim()
+          )
         });
         throw err;
       }

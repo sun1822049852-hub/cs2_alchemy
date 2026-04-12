@@ -189,6 +189,17 @@ class UiStateStore {
     return path.resolve(text);
   }
 
+  _normalizeAccountState(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const authState = asString(source.auth_state || "").trim();
+    return {
+      snapshot_path: asString(source.snapshot_path || "").trim(),
+      fetch_time: asString(source.fetch_time || "").trim(),
+      auth_state: authState || "normal",
+      auth_reason: asString(source.auth_reason || "").trim()
+    };
+  }
+
   _isManagedProcessedSnapshot(filePath) {
     const full = this._normalizeSnapshotPath(filePath);
     if (!full) return false;
@@ -233,10 +244,7 @@ class UiStateStore {
     if (!item || typeof item !== "object") {
       return null;
     }
-    return {
-      snapshot_path: asString(item.snapshot_path || "").trim(),
-      fetch_time: asString(item.fetch_time || "").trim()
-    };
+    return this._normalizeAccountState(item);
   }
 
   setAccountSnapshot(username, snapshotPath, fetchTime) {
@@ -244,9 +252,11 @@ class UiStateStore {
     if (!key) {
       return;
     }
-    const oldPath = asString(this.data.accounts[key] && this.data.accounts[key].snapshot_path ? this.data.accounts[key].snapshot_path : "").trim();
+    const current = this._normalizeAccountState(this.data.accounts[key]);
+    const oldPath = asString(current.snapshot_path || "").trim();
     const nextPath = asString(snapshotPath || "").trim();
     this.data.accounts[key] = {
+      ...current,
       snapshot_path: nextPath,
       fetch_time: asString(fetchTime || "").trim()
     };
@@ -254,6 +264,24 @@ class UiStateStore {
     if (oldPath && oldPath !== nextPath) {
       this._cleanupOldSnapshot(oldPath, key);
     }
+  }
+
+  setAccountAuthState(username, authState, authReason = "") {
+    const key = asString(username).trim();
+    if (!key) {
+      return;
+    }
+    const current = this._normalizeAccountState(this.data.accounts[key]);
+    this.data.accounts[key] = {
+      ...current,
+      auth_state: asString(authState || "").trim() || "normal",
+      auth_reason: asString(authReason || "").trim()
+    };
+    this.save();
+  }
+
+  clearAccountAuthState(username) {
+    this.setAccountAuthState(username, "normal", "");
   }
 
   removeAccount(username) {

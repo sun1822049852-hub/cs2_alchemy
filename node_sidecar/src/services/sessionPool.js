@@ -96,7 +96,8 @@ function createSessionPool({
     username,
     password,
     refreshToken,
-    tokenStore
+    tokenStore,
+    refreshTokenOnly = false
   }) {
     const account = asString(username).trim();
     if (!account) {
@@ -127,7 +128,8 @@ function createSessionPool({
       .connect({
         username: account,
         password,
-        refreshToken
+        refreshToken,
+        refreshTokenOnly
       })
       .then(({steam, csgo}) => {
         const readyEntry = {

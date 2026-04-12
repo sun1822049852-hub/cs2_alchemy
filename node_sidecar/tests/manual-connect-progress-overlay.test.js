@@ -44,6 +44,9 @@ function loadManualConnectFns({
     clearCraftExecutionOverlayState() {
       context.clearCalls += 1;
     },
+    guardGuestAction() {
+      return true;
+    },
     async doRefresh(options) {
       context.refreshCalls.push(options);
       return refreshResult;

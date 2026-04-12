@@ -2,6 +2,7 @@ const readline = require("readline");
 const SteamUser = require("steam-user");
 const GlobalOffensive = require("globaloffensive");
 const {withTimeout, asString} = require("./utils");
+const {attachGcTrace, observeGcArmoryState, readGcArmoryState, readGcTraceMessages} = require("./gcTrace");
 const {probeCmReachability} = require("./networkPrecheck");
 
 function normalizeMetaValue(value) {
@@ -68,7 +69,7 @@ class CS2Session {
     this.csgo = null;
   }
 
-  async connect({username, password, refreshToken, timeoutMs = 90000}) {
+  async connect({username, password, refreshToken, refreshTokenOnly = false, timeoutMs = 90000, gcTrace} = {}) {
     if (!username) {
       throw new Error("username required");
     }
@@ -83,6 +84,17 @@ class CS2Session {
 
     this.steam = steam;
     this.csgo = csgo;
+
+    const gcTraceOptions = gcTrace && typeof gcTrace === "object" ? gcTrace : {};
+    attachGcTrace({
+      steam,
+      logger: this.logger,
+      accountName,
+      enabled: Object.prototype.hasOwnProperty.call(gcTraceOptions, "enabled")
+        ? gcTraceOptions.enabled
+        : undefined,
+      onMessage: typeof gcTraceOptions.onMessage === "function" ? gcTraceOptions.onMessage : undefined
+    });
 
     let guardAnswered = false;
     let gcStarted = false;
@@ -164,7 +176,8 @@ class CS2Session {
 
     const details = {};
     const rt = asString(refreshToken || "").trim();
-    const loginMode = rt ? "refresh_token" : "password";
+    const forceRefreshToken = !!refreshTokenOnly;
+    const loginMode = rt ? "refresh_token" : (forceRefreshToken ? "refresh_token_only_missing" : "password");
     if (this.logger) {
       this.logger.info("auth", `steamgc login start: account=${accountName} mode=${loginMode} timeout_ms=${timeout}`);
     }
@@ -200,6 +213,10 @@ class CS2Session {
       if (this.logger) {
         this.logger.info("auth", `login using refresh_token: account=${accountName}`);
       }
+    } else if (forceRefreshToken) {
+      const err = new Error("refresh token required");
+      err.code = "refresh_token_required";
+      throw err;
     } else {
       details.accountName = accountName;
       details.password = asString(password).trim();
@@ -249,5 +266,9 @@ class CS2Session {
 }
 
 module.exports = {
-  CS2Session
+  CS2Session,
+  attachGcTrace,
+  observeGcArmoryState,
+  readGcArmoryState,
+  readGcTraceMessages
 };

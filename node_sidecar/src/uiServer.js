@@ -15,6 +15,7 @@ const {createComponentOpsService} = require("./services/componentOpsService");
 const {createComponentTaskQueue} = require("./services/componentTaskQueue");
 const {createCraftService} = require("./services/craftService");
 const {createCraftTradeupWithComponentsService} = require("./services/craftTradeupWithComponentsService");
+const {createWeaponArmoryService} = require("./services/weaponArmoryService");
 const {requestUsesComponentSourceRecipes} = require("./services/craftExecutionGuard");
 const {
   createCraftAssistService
@@ -51,6 +52,7 @@ const logger = new DedupLogger({windowMs: 800});
 const sessionPool = createSessionPool({logger});
 const componentOpsService = createComponentOpsService({sessionPool, logger});
 const craftService = createCraftService({sessionPool, logger});
+const weaponArmoryService = createWeaponArmoryService({sessionPool, logger});
 const craftTradeupWithComponentsService = createCraftTradeupWithComponentsService({
   loadRowsForAccount: async ({username}) => loadRowsForAccountFromSnapshot(username),
   componentOpsService,
@@ -467,6 +469,35 @@ function requirePermission(res, auth, code, message = "当前登录用户无权�
   return false;
 }
 
+function parseOptionalIntegerBodyValue(value, label, {allowZero = true} = {}) {
+  const raw = asString(value).trim();
+  if (!raw) {
+    return undefined;
+  }
+  if (!/^-?\d+$/.test(raw)) {
+    throw new Error(`${label} must be an integer`);
+  }
+  const numeric = Number(raw);
+  if (!Number.isInteger(numeric) || (!allowZero && numeric <= 0) || (allowZero && numeric < 0)) {
+    throw new Error(`${label} must be ${allowZero ? ">= 0" : "> 0"}`);
+  }
+  return numeric;
+}
+
+function parseBooleanBodyValue(value, defaultValue = false) {
+  const raw = asString(value).trim().toLowerCase();
+  if (!raw) {
+    return !!defaultValue;
+  }
+  if (raw === "1" || raw === "true" || raw === "yes") {
+    return true;
+  }
+  if (raw === "0" || raw === "false" || raw === "no") {
+    return false;
+  }
+  return !!defaultValue;
+}
+
 function buildLicenseStatePayload(state) {
   const value = state && typeof state === "object" ? state : {};
   return {
@@ -818,6 +849,37 @@ function normalizeLoginSaveError(err) {
   };
 }
 
+function normalizeRefreshError(err) {
+  const reason = asString(err && (err.reason || err.code) || "").trim();
+  const authState = asString(err && err.auth_state || "").trim();
+  const rawMessage = asString(err && err.message ? err.message : err).trim();
+  if (reason === "login_key_missing") {
+    return {
+      message: "当前账号缺少 loginKey，请重新登录后再刷新",
+      reason,
+      status: 409,
+      auth_state: authState || "login_required",
+      relogin_required: true
+    };
+  }
+  if (reason === "login_key_invalid") {
+    return {
+      message: "当前账号登录已失效，请重新登录后再刷新",
+      reason,
+      status: 409,
+      auth_state: authState || "auth_invalid",
+      relogin_required: true
+    };
+  }
+  return {
+    message: rawMessage || "刷新失败：未知错误，请稍后重试",
+    reason: reason || "refresh_failed",
+    status: Math.max(400, Number(err && err.status) || 500),
+    auth_state: authState,
+    relogin_required: false
+  };
+}
+
 function guessContentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
   if (filePath.endsWith(".js")) return "application/javascript; charset=utf-8";
@@ -1103,6 +1165,19 @@ function buildRefreshPayload(result) {
   };
 }
 
+function mergeAccountAuthState(account, uiState) {
+  const row = account && typeof account === "object" ? account : {};
+  const username = asString(row.username || "").trim();
+  const cache = username && uiState && typeof uiState.getAccount === "function"
+    ? uiState.getAccount(username)
+    : null;
+  return {
+    ...row,
+    auth_state: asString(cache && cache.auth_state || "").trim() || "normal",
+    auth_reason: asString(cache && cache.auth_reason || "").trim()
+  };
+}
+
 async function runInventoryDisplayImageAutoEnrichment({
   username,
   source,
@@ -1162,6 +1237,32 @@ const refreshRuntime = createRefreshRuntime({
   heartbeatCheckMs: 60 * 1000,
   sseKeepaliveMs: 25 * 1000
 });
+const defaultRefreshRuntime = refreshRuntime;
+
+function createServerRefreshRuntime(options = {}) {
+  if (options && typeof options.refreshRuntime === "object" && options.refreshRuntime) {
+    return options.refreshRuntime;
+  }
+  if (typeof options.refreshInventoryFn !== "function") {
+    return refreshRuntime;
+  }
+  return createRefreshRuntime({
+    logger,
+    refreshInventoryFn: options.refreshInventoryFn,
+    accountStoreFactory: typeof options.accountStoreFactory === "function"
+      ? options.accountStoreFactory
+      : () => new AccountStore(),
+    uiStateStoreFactory: typeof options.uiStateStoreFactory === "function"
+      ? () => options.uiStateStoreFactory({viewerUsername: ""})
+      : () => new UiStateStore(),
+    resolveRefreshTarget,
+    buildRefreshPayload,
+    runPostRefreshTask: runInventoryDisplayImageAutoEnrichment,
+    heartbeatStaleMs: 30 * 60 * 1000,
+    heartbeatCheckMs: 60 * 1000,
+    sseKeepaliveMs: 25 * 1000
+  });
+}
 
 const componentTaskQueue = createComponentTaskQueue({
   logger,
@@ -1257,6 +1358,11 @@ async function handleApi(req, res, urlObj, deps = {}) {
   const pathname = urlObj.pathname;
   const auth = resolveRequestAuth(req, deps);
   const config = getClientLicenseConfig(deps);
+  const refreshRuntime = deps && deps.refreshRuntime ? deps.refreshRuntime : defaultRefreshRuntime;
+  const loginAndSaveTokenFn = typeof deps.loginAndSaveTokenFn === "function" ? deps.loginAndSaveTokenFn : loginAndSaveToken;
+  const resolveAccountProfileFn = typeof deps.resolveAccountProfileFn === "function"
+    ? deps.resolveAccountProfileFn
+    : resolveAccountProfile;
   const viewerUsername = asString(auth && auth.user && auth.user.username ? auth.user.username : "").trim();
   const accountViewerUsername = resolveAccountViewerUsername(auth);
   try {
@@ -1471,9 +1577,11 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
       const store = getViewerAccountStore(auth, deps);
       const uiState = getUiStateStore(deps, viewerUsername);
+      const accounts = store.list().map((row) => mergeAccountAuthState(row, uiState));
+      const active = mergeAccountAuthState(store.getActive(), uiState);
       writeJson(res, 200, {
-        accounts: store.list(),
-        active: store.getActive(),
+        accounts,
+        active,
         last_selected_username: uiState.getLastSelected()
       });
       return true;
@@ -1654,7 +1762,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     logger.info("ui_server", `login-save request: account=${username} totp=yes`);
     try {
       const tokenStore = new TokenStore();
-      const result = await loginAndSaveToken({
+      const result = await loginAndSaveTokenFn({
         username,
         password,
         twoFactorCode: totp,
@@ -1670,7 +1778,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
       let profile = null;
       try {
-        profile = await resolveAccountProfile({
+        profile = await resolveAccountProfileFn({
           username,
           password,
           viewerUsername: accountViewerUsername,
@@ -1758,6 +1866,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
       const uiState = getUiStateStore(deps, viewerUsername);
       uiState.setLastSelected(username);
+      if (typeof uiState.clearAccountAuthState === "function") {
+        uiState.clearAccountAuthState(username);
+      }
       logger.info("ui_server", `login-save success: account=${username} token_saved=${Boolean(result.refresh_token)}`);
       writeJson(res, 200, {
         ok: true,
@@ -1921,8 +2032,136 @@ async function handleApi(req, res, urlObj, deps = {}) {
         component: payload.component
       });
     } catch (err) {
-      writeJson(res, 500, {
+      const normalized = normalizeRefreshError(err);
+      const targetAccount = username || resolveRefreshTarget("");
+      if (targetAccount && normalized.auth_state) {
+        try {
+          const uiState = getUiStateStore(deps, viewerUsername);
+          if (normalized.auth_state === "normal" && typeof uiState.clearAccountAuthState === "function") {
+            uiState.clearAccountAuthState(targetAccount);
+          } else if (typeof uiState.setAccountAuthState === "function") {
+            uiState.setAccountAuthState(targetAccount, normalized.auth_state, normalized.reason);
+          }
+        } catch (_) {
+          // ignore auth-state persistence errors
+        }
+      }
+      writeJson(res, normalized.status, {
         ok: false,
+        message: normalized.message,
+        reason: normalized.reason,
+        auth_state: normalized.auth_state,
+        relogin_required: normalized.relogin_required
+      });
+    }
+    return true;
+  }
+
+  if (pathname === "/api/inventory/redeem-mission-reward/options" && req.method === "GET") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
+    const username = asString(urlObj.searchParams.get("username") || "").trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    if (!refreshRuntime.isConnected(username)) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+
+    try {
+      const payload = await weaponArmoryService.inspect({
+        username
+      });
+      writeJson(res, 200, payload);
+    } catch (err) {
+      const code = asString(err && err.code || "").trim();
+      const status = code === "account_not_found"
+        ? 400
+        : (code === "armory_state_unavailable" ? 409 : 500);
+      writeJson(res, status, {
+        ok: false,
+        reason: code || "weapon_armory_options_failed",
+        message: asString(err && err.message ? err.message : err)
+      });
+    }
+    return true;
+  }
+
+  if (pathname === "/api/inventory/redeem-mission-reward" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    if (!refreshRuntime.isConnected(username)) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+
+    try {
+      const payload = await weaponArmoryService.redeem({
+        username,
+        password: asString(body.password).trim(),
+        campaignId: parseOptionalIntegerBodyValue(body.campaign_id, "campaign_id", {allowZero: false}),
+        redeemId: parseOptionalIntegerBodyValue(body.redeem_id, "redeem_id", {allowZero: true}),
+        redeemableBalance: parseOptionalIntegerBodyValue(
+          body.redeemable_balance,
+          "redeemable_balance",
+          {allowZero: true}
+        ),
+        expectedCost: parseOptionalIntegerBodyValue(body.expected_cost, "expected_cost", {allowZero: false}),
+        bidControl: parseOptionalIntegerBodyValue(body.bid_control, "bid_control", {allowZero: true}),
+        ackTracks: parseBooleanBodyValue(body.ack_tracks, true),
+        ackWaitMs: parseOptionalIntegerBodyValue(body.ack_wait_ms, "ack_wait_ms", {allowZero: true}),
+        waitMs: parseOptionalIntegerBodyValue(body.wait_ms, "wait_ms", {allowZero: true})
+      });
+      logger.info(
+        "ui_server",
+        [
+          "weapon-armory redeem success:",
+          `account=${username}`,
+          `campaign_id=${toInt(payload && payload.resolved && payload.resolved.campaign_id, 0)}`,
+          `redeem_id=${toInt(payload && payload.resolved && payload.resolved.redeem_id, 0)}`
+        ].join(" ")
+      );
+      writeJson(res, 200, payload);
+    } catch (err) {
+      const code = asString(err && err.code || "").trim();
+      const status = code === "bad_request"
+        ? 400
+        : (code === "armory_state_unavailable" || code === "armory_bid_ambiguous" || code === "redemption_not_confirmed"
+          ? 409
+          : (code === "account_not_found" || code === "password_missing" ? 400 : 500));
+      logger.warn(
+        "ui_server",
+        [
+          "weapon-armory redeem failed:",
+          `account=${username}`,
+          `status=${status}`,
+          `code=${code || "-"}`,
+          `msg=${asString(err && err.message ? err.message : err)}`
+        ].join(" ")
+      );
+      if (err && err.redemption_payload) {
+        writeJson(res, status, err.redemption_payload);
+        return true;
+      }
+      writeJson(res, status, {
+        ok: false,
+        reason: code || "weapon_armory_redeem_failed",
         message: asString(err && err.message ? err.message : err)
       });
     }
@@ -2548,7 +2787,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
         rows: [],
         component: {summary_map: {}, item_map: {}},
         fetch_time: "",
-        connected: refreshRuntime.isConnected(username)
+        connected: refreshRuntime.isConnected(username),
+        auth_state: asString(accountCache && accountCache.auth_state || "").trim() || "normal",
+        auth_reason: asString(accountCache && accountCache.auth_reason || "").trim()
       });
       return true;
     }
@@ -2560,7 +2801,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
         rows: [],
         component: {summary_map: {}, item_map: {}},
         fetch_time: asString(accountCache.fetch_time || ""),
-        connected: refreshRuntime.isConnected(username)
+        connected: refreshRuntime.isConnected(username),
+        auth_state: asString(accountCache.auth_state || "").trim() || "normal",
+        auth_reason: asString(accountCache.auth_reason || "").trim()
       });
       return true;
     }
@@ -2571,7 +2814,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
       rows: loaded.rows,
       component,
       fetch_time: asString(accountCache.fetch_time || ""),
-      connected: refreshRuntime.isConnected(username)
+      connected: refreshRuntime.isConnected(username),
+      auth_state: asString(accountCache.auth_state || "").trim() || "normal",
+      auth_reason: asString(accountCache.auth_reason || "").trim()
     });
     return true;
   }
@@ -2695,6 +2940,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
 function createServer(options = {}) {
   ensureRuntimeBootstrapped();
+  const serverRefreshRuntime = createServerRefreshRuntime(options);
+  if (serverRefreshRuntime && serverRefreshRuntime !== defaultRefreshRuntime && typeof serverRefreshRuntime.start === "function") {
+    serverRefreshRuntime.start();
+  }
   const apiDeps = {
     accountStoreFactory: options.accountStoreFactory,
     authStoreFactory: options.authStoreFactory,
@@ -2702,6 +2951,9 @@ function createServer(options = {}) {
     controlPlaneAuthClientFactory: options.controlPlaneAuthClientFactory,
     licenseConfigFactory: options.licenseConfigFactory,
     licenseRuntimeFactory: options.licenseRuntimeFactory,
+    loginAndSaveTokenFn: options.loginAndSaveTokenFn,
+    refreshRuntime: serverRefreshRuntime,
+    resolveAccountProfileFn: options.resolveAccountProfileFn,
     tradeupSimulationCatalog: options.tradeupSimulationCatalog,
     tradeupSimulationService: options.tradeupSimulationService,
     uiStateStoreFactory: options.uiStateStoreFactory

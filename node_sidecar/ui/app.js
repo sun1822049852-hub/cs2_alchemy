@@ -25,6 +25,8 @@ const WEAR_SUFFIX_RANGES = [
 const state = {
   currentPage: "accountPage", navDrawerOpen: false, accounts: [], activeAccount: "", accountSelectedUsername: "",
   accountPasswordVisible: false,
+  accountLoginMode: "add",
+  pendingRelogin: null,
   currentAccountUsername: "", connectedUsername: "", rows: [], mode: "grouped", searchText: "",
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
@@ -81,6 +83,7 @@ const ui = {
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
   accountPasswordToggle: document.getElementById("accountPasswordToggle"),
+  accountLoginModalTitle: document.getElementById("accountLoginModalTitle"), accountLoginHint: document.getElementById("accountLoginHint"),
   loginSaveBtn: document.getElementById("loginSaveBtn"), clearAccountBtn: document.getElementById("clearAccountBtn"), accountStatus: document.getElementById("accountStatus"), savedAccountsWrap: document.getElementById("savedAccountsWrap"),
   accountPageSummaryText: document.getElementById("accountPageSummaryText"), accountPageFetchTimeText: document.getElementById("accountPageFetchTimeText"), accountPageStatusText: document.getElementById("accountPageStatusText"),
   accountPageSelect: document.getElementById("accountPageSelect"), accountPageAddBtn: document.getElementById("accountPageAddBtn"), accountPageRefreshBtn: document.getElementById("accountPageRefreshBtn"), accountPageDisconnectBtn: document.getElementById("accountPageDisconnectBtn"),
@@ -98,12 +101,14 @@ const ui = {
   collectionSummary: document.getElementById("collectionSummary"), collectionMenu: document.getElementById("collectionMenu"), collectionSelectAll: document.getElementById("collectionSelectAll"), collectionClear: document.getElementById("collectionClear"),
   wearSortUp: document.getElementById("wearSortUp"), wearSortDown: document.getElementById("wearSortDown"), raritySortUp: document.getElementById("raritySortUp"), raritySortDown: document.getElementById("raritySortDown"),
   componentPanel: document.getElementById("componentPanel"), componentSelect: document.getElementById("componentSelect"), componentHint: document.getElementById("componentHint"),
+  inventoryWorkspace: document.getElementById("inventoryWorkspace"),
   componentAvailableHint: document.getElementById("componentAvailableHint"),
   showComponentItemsWrap: document.getElementById("showComponentItemsWrap"), showComponentItems: document.getElementById("showComponentItems"),
   componentDepositBtn: document.getElementById("componentDepositBtn"), componentWithdrawBtn: document.getElementById("componentWithdrawBtn"),
   componentCraftSettingsBtn: document.getElementById("componentCraftSettingsBtn"), componentCraftSettingsPanel: document.getElementById("componentCraftSettingsPanel"), componentCraftUseComponentItems: document.getElementById("componentCraftUseComponentItems"),
   componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowFullWear: document.getElementById("componentCraftShowFullWear"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistFastMode: document.getElementById("componentCraftAssistFastMode"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
   componentCraftCoolingHint: document.getElementById("componentCraftCoolingHint"),
+  inventoryBusyMask: document.getElementById("inventoryBusyMask"), inventoryBusyMaskTitle: document.getElementById("inventoryBusyMaskTitle"), inventoryBusyMaskDetail: document.getElementById("inventoryBusyMaskDetail"),
   componentTaskFloat: document.getElementById("componentTaskFloat"), componentTaskQueueList: document.getElementById("componentTaskQueueList"),
   componentTaskCancelBtn: document.getElementById("componentTaskCancelBtn"), componentTaskInfo: document.getElementById("componentTaskInfo"),
   targetComponentDrawer: document.getElementById("targetComponentDrawer"), targetComponentDrawerClose: document.getElementById("targetComponentDrawerClose"),
@@ -1082,7 +1087,10 @@ function deepCopyPlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function cacheSnapshotForAccount(username, {rows = [], component = null, snapshotPath = "", fetchTime = "", connected = false} = {}) {
+function cacheSnapshotForAccount(
+  username,
+  {rows = [], component = null, snapshotPath = "", fetchTime = "", connected = false, authState = "normal", authReason = ""} = {}
+) {
   const key = String(username || "").trim();
   if (!key) return;
   if (!(state.snapshotCacheByAccount instanceof Map)) {
@@ -1094,6 +1102,8 @@ function cacheSnapshotForAccount(username, {rows = [], component = null, snapsho
     snapshotPath: String(snapshotPath || "").trim(),
     fetchTime: String(fetchTime || "").trim(),
     connected: !!connected,
+    authState: String(authState || "").trim() || "normal",
+    authReason: String(authReason || "").trim(),
     cachedAt: Date.now()
   });
 }
@@ -1120,6 +1130,10 @@ function applyCachedSnapshotForAccount(username, {silentSummary = false} = {}) {
   state.currentAccountUsername = key;
   if (cached.connected === true) state.connectedUsername = key;
   else if (state.connectedUsername === key) state.connectedUsername = "";
+  setAccountAuthState(key, {
+    authState: String(cached.authState || "").trim() || "normal",
+    authReason: String(cached.authReason || "").trim()
+  });
   state.fetchTime = String(cached.fetchTime || "").trim();
   const rows = deepCopyPlain(Array.isArray(cached.rows) ? cached.rows : []);
   const component = deepCopyPlain(cached.component || {summary_map: {}, item_map: {}});
@@ -2378,6 +2392,73 @@ function setRefreshPhase(text) { state.refreshPhaseText = String(text || "").tri
 function clearRefreshPhase() { state.refreshPhaseText = ""; syncInventoryTop(); }
 const selectedAccount = () => state.accounts.find((x) => x.username === String(state.accountSelectedUsername || "").trim()) || null;
 const accountByUsername = (username) => state.accounts.find((x) => x.username === String(username || "").trim()) || null;
+function setAccountAuthState(username, {authState = "normal", authReason = ""} = {}) {
+  const key = String(username || "").trim();
+  if (!key) return;
+  const nextAuthState = String(authState || "").trim() || "normal";
+  const nextAuthReason = String(authReason || "").trim();
+  state.accounts = (Array.isArray(state.accounts) ? state.accounts : []).map((row) => {
+    if (String(row && row.username || "").trim() !== key) {
+      return row;
+    }
+    return {
+      ...row,
+      auth_state: nextAuthState,
+      auth_reason: nextAuthReason
+    };
+  });
+  if (state.snapshotCacheByAccount instanceof Map) {
+    const cached = state.snapshotCacheByAccount.get(key);
+    if (cached && typeof cached === "object") {
+      state.snapshotCacheByAccount.set(key, {
+        ...cached,
+        authState: nextAuthState,
+        authReason: nextAuthReason
+      });
+    }
+  }
+}
+function getAccountAuthState(username) {
+  const key = String(username || "").trim();
+  if (!key) return "normal";
+  const row = accountByUsername(key);
+  const rowState = String(row && row.auth_state || "").trim();
+  if (rowState) {
+    return rowState;
+  }
+  if (state.snapshotCacheByAccount instanceof Map) {
+    const cached = state.snapshotCacheByAccount.get(key);
+    const cachedState = String(cached && cached.authState || "").trim();
+    if (cachedState) {
+      return cachedState;
+    }
+  }
+  return "normal";
+}
+function getAccountConnectionLabel(username, {connected = false, phaseText = "", currentSnapshot = false} = {}) {
+  if (getAccountAuthState(username) === "auth_invalid") {
+    return {
+      text: "登录失效",
+      connected: false
+    };
+  }
+  if (currentSnapshot && phaseText) {
+    return {
+      text: normalizeTopStatusText(phaseText, false),
+      connected: isConnectedPhaseText(phaseText)
+    };
+  }
+  if (connected) {
+    return {
+      text: "已连接",
+      connected: true
+    };
+  }
+  return {
+    text: "未连接",
+    connected: false
+  };
+}
 function pickAvatarUrlFromProfile(profile) {
   if (!profile || typeof profile !== "object") return "";
   return String(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon || "").trim();
@@ -2537,10 +2618,13 @@ function syncInventoryTop() {
     }
     const isCurrentSnapshot = current === String(state.currentAccountUsername || "").trim();
     fetchEl.textContent = `库存获取时间：${isCurrentSnapshot ? (state.fetchTime || "-") : "-"}`;
-    if (isCurrentSnapshot && state.refreshPhaseText) statusEl.textContent = normalizeTopStatusText(state.refreshPhaseText, false);
-    else if (String(state.connectedUsername || "").trim() === current) statusEl.textContent = "已连接";
-    else statusEl.textContent = "未连接";
-    const connected = String(state.connectedUsername || "").trim() === current || (isCurrentSnapshot && isConnectedPhaseText(state.refreshPhaseText));
+    const presentation = getAccountConnectionLabel(current, {
+      connected: String(state.connectedUsername || "").trim() === current,
+      phaseText: state.refreshPhaseText,
+      currentSnapshot: isCurrentSnapshot
+    });
+    statusEl.textContent = presentation.text;
+    const connected = presentation.connected;
     setConnectionStatusTone(statusEl, connected);
     const clickable = !state.refreshing && !connected;
     statusEl.classList.toggle("status-clickable", clickable);
@@ -2614,27 +2698,71 @@ function bindAccountTotpNormalization() {
 }
 
 function clearAccountInputs({focusUsername = false} = {}) {
+  state.accountLoginMode = "add";
+  state.pendingRelogin = null;
   setAccountForm({username: "", password: "", totp: "", remark: ""});
   ensureAccountFormEditable({focusUsername});
 }
 
-function ensureAccountFormEditable({focusUsername = false} = {}) {
+function ensureAccountFormEditable({focusUsername = false, focusGuard = false} = {}) {
+  const reloginMode = String(state.accountLoginMode || "").trim() === "relogin";
   const fields = [ui.accountUsername, ui.accountPassword, ui.accountTotp, ui.accountRemark];
   for (const field of fields) {
     if (!field) continue;
     field.disabled = false;
     field.readOnly = false;
+    if (field.classList && typeof field.classList.toggle === "function") {
+      field.classList.toggle("is-locked", false);
+    }
+  }
+  if (ui.accountUsername) {
+    ui.accountUsername.readOnly = reloginMode;
+    if (ui.accountUsername.classList && typeof ui.accountUsername.classList.toggle === "function") {
+      ui.accountUsername.classList.toggle("is-locked", reloginMode);
+    }
+    if (typeof ui.accountUsername.setAttribute === "function") {
+      ui.accountUsername.setAttribute("aria-readonly", reloginMode ? "true" : "false");
+    }
+  }
+  if (ui.accountRemark) {
+    ui.accountRemark.disabled = reloginMode;
+    ui.accountRemark.readOnly = reloginMode;
+  }
+  if (ui.accountLoginModalTitle) {
+    ui.accountLoginModalTitle.textContent = reloginMode ? "重新登录" : "添加账号";
+  }
+  if (ui.accountLoginHint) {
+    ui.accountLoginHint.textContent = reloginMode
+      ? "为当前账号重新登录并获取新的 loginKey"
+      : "使用 Steam 账号登录并保存到当前客户端";
+  }
+  if (ui.loginSaveBtn) {
+    ui.loginSaveBtn.textContent = reloginMode ? "重新登录" : "登录并保存";
   }
   const modalVisible = !ui.accountLoginModal || !ui.accountLoginModal.classList.contains("hidden");
+  if (focusGuard && modalVisible && ui.accountTotp && typeof ui.accountTotp.focus === "function") {
+    ui.accountTotp.focus();
+    return;
+  }
   if (focusUsername && modalVisible && ui.accountUsername && typeof ui.accountUsername.focus === "function") {
     ui.accountUsername.focus();
   }
 }
 
-function openAccountLoginModal() {
+function openAccountLoginModal({focusUsername = false, focusGuard = false} = {}) {
   if (!ui.accountLoginModal) return;
   ui.accountLoginModal.classList.remove("hidden");
-  ensureAccountFormEditable({focusUsername: true});
+  ensureAccountFormEditable({focusUsername, focusGuard});
+}
+
+function openAccountReloginModal({username = "", password = "", reason = ""} = {}) {
+  state.accountLoginMode = "relogin";
+  state.pendingRelogin = {
+    username: String(username || "").trim(),
+    reason: String(reason || "").trim()
+  };
+  setAccountForm({username, password, totp: "", remark: ""});
+  openAccountLoginModal({focusGuard: true});
 }
 
 function closeAccountLoginModal() {
@@ -2818,6 +2946,7 @@ function renderSavedAccounts() {
     const accountName = String(row.username || "").trim();
     const displayName = displayAccountName(row) || accountName || "-";
     const avatarUrl = String(row.avatar_url || "").trim();
+    const badgePresentation = getAccountConnectionLabel(row.username, {connected});
     const card = document.createElement("div");
     card.className = `account-card${connected ? " connected" : ""}${selected ? " selected" : ""}`;
     const main = document.createElement("div");
@@ -2848,9 +2977,9 @@ function renderSavedAccounts() {
     const side = document.createElement("div");
     side.className = "account-card-side";
     const stateBadge = document.createElement("span");
-    stateBadge.className = `account-card-state status ${connected ? "status-connected" : "status-disconnected"}`;
-    stateBadge.textContent = connected ? "已连接" : "未连接";
-    if (!connected && !state.refreshing) {
+    stateBadge.className = `account-card-state status ${badgePresentation.connected ? "status-connected" : "status-disconnected"}`;
+    stateBadge.textContent = badgePresentation.text;
+    if (!badgePresentation.connected && !state.refreshing) {
       stateBadge.classList.add("status-clickable");
       stateBadge.title = "点击连接并刷新库存";
       stateBadge.onclick = async (e) => {
@@ -3038,13 +3167,19 @@ async function loadSnapshotForAccount(username, {silentSummary = false} = {}) {
   if (connected) state.connectedUsername = key;
   else if (state.connectedUsername === key) state.connectedUsername = "";
   state.fetchTime = fetchTime;
+  setAccountAuthState(key, {
+    authState: String(data.auth_state || "").trim() || "normal",
+    authReason: String(data.auth_reason || "").trim()
+  });
   setRows(rows, component, snapshotPath);
   cacheSnapshotForAccount(key, {
     rows,
     component,
     snapshotPath,
     fetchTime,
-    connected
+    connected,
+    authState: String(data.auth_state || "").trim() || "normal",
+    authReason: String(data.auth_reason || "").trim()
   });
   clearSnapshotDirty();
   syncInventoryTop();
@@ -3195,9 +3330,11 @@ function openAddAccountForm() {
   }) === false) {
     return;
   }
+  state.accountLoginMode = "add";
+  state.pendingRelogin = null;
   clearAccountInputs({focusUsername: true});
   setAccountStatus("");
-  openAccountLoginModal();
+  openAccountLoginModal({focusUsername: true});
 }
 
 async function connectByStatusBadge({preferCraft = false, usernameOverride = ""} = {}) {
@@ -8840,7 +8977,7 @@ function updateCraftPredictorHandleGeometry() {
   panel.style.setProperty("--craft-predictor-handle-height", `${nextHeight}px`);
   panel.style.setProperty("--craft-predictor-handle-width", `${nextWidth}px`);
 }
-function getCraftLeftPanelBusyState() {
+function getComponentBusyMaskState() {
   if (state.componentOpBusy) {
     const action = String(state.componentOpBusyAction || "").trim();
     const withdraw = action !== "deposit";
@@ -8850,6 +8987,11 @@ function getCraftLeftPanelBusyState() {
       detail: withdraw ? "正在从组件取出物品，请稍候..." : "正在向组件存入物品，请稍候..."
     };
   }
+  return {show: false, title: "", detail: ""};
+}
+function getCraftLeftPanelBusyState() {
+  const componentBusyState = getComponentBusyMaskState();
+  if (componentBusyState.show) return componentBusyState;
   const runtimeState = syncCurrentCraftAssistRuntimeState();
   const action = String(runtimeState.craftAssistPendingUiAction || "").trim();
   const presetId = String(runtimeState.craftAssistPendingPresetId || "").trim();
@@ -8872,13 +9014,21 @@ function getCraftLeftPanelBusyState() {
       : "正在按当前面板配置选材，请稍候..."
   };
 }
+function renderBusyMask(maskEl, titleEl, detailEl, busyState) {
+  if (!maskEl || !titleEl || !detailEl) return;
+  const nextState = busyState && typeof busyState === "object"
+    ? busyState
+    : {show: false, title: "", detail: ""};
+  maskEl.classList.toggle("hidden", !nextState.show);
+  maskEl.setAttribute("aria-hidden", nextState.show ? "false" : "true");
+  titleEl.textContent = nextState.title;
+  detailEl.textContent = nextState.detail;
+}
 function renderCraftAssistBusyMask() {
-  if (!ui.craftAssistBusyMask || !ui.craftAssistBusyMaskTitle || !ui.craftAssistBusyMaskDetail) return;
-  const busyState = getCraftLeftPanelBusyState();
-  ui.craftAssistBusyMask.classList.toggle("hidden", !busyState.show);
-  ui.craftAssistBusyMask.setAttribute("aria-hidden", busyState.show ? "false" : "true");
-  ui.craftAssistBusyMaskTitle.textContent = busyState.title;
-  ui.craftAssistBusyMaskDetail.textContent = busyState.detail;
+  renderBusyMask(ui.craftAssistBusyMask, ui.craftAssistBusyMaskTitle, ui.craftAssistBusyMaskDetail, getCraftLeftPanelBusyState());
+}
+function renderInventoryBusyMask() {
+  renderBusyMask(ui.inventoryBusyMask, ui.inventoryBusyMaskTitle, ui.inventoryBusyMaskDetail, getComponentBusyMaskState());
 }
 function renderCraftAssistPanel() {
   if (!ui.craftAssistPanel || !ui.craftAssistOverlay) return;
@@ -11760,15 +11910,18 @@ function syncComponentActionState() {
   }
   if (withdrawBlocked) {
     ui.componentWithdrawBtn.title = "处理中，请稍候";
+    renderInventoryBusyMask();
     return;
   }
   if (!connected) {
     ui.componentWithdrawBtn.title = "未连接时将在取出前自动连接并刷新库存";
+    renderInventoryBusyMask();
     return;
   }
   ui.componentWithdrawBtn.title = !currentComponent
     ? "请先选择组件"
     : "取出选中（优先低磨损）";
+  renderInventoryBusyMask();
 }
 function applyFilter() {
   const keyword = String(state.searchText || "").trim().toLowerCase();
@@ -12488,12 +12641,15 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
         ? new Set(keepSelectedIds.map((id) => String(id || "").trim()).filter(Boolean))
         : null);
     setRows(rows, component, snapshotPath, nextKeepSelectedIds ? {keepSelectedIds: nextKeepSelectedIds} : {});
+    setAccountAuthState(username, {authState: "normal", authReason: ""});
     cacheSnapshotForAccount(username, {
       rows,
       component,
       snapshotPath,
       fetchTime: state.fetchTime,
-      connected: true
+      connected: true,
+      authState: "normal",
+      authReason: ""
     });
     clearSnapshotDirty();
     clearRefreshPhase();
@@ -12507,6 +12663,25 @@ async function doRefresh({usernameOverride = "", force = false, silentRateLimit 
   } catch (err) {
     if (state.connectedUsername === username) state.connectedUsername = "";
     clearRefreshPhase();
+    const payload = err && err.data && typeof err.data === "object" ? err.data : null;
+    const reason = String(payload && payload.reason || "").trim();
+    if (reason === "login_key_missing" || reason === "login_key_invalid") {
+      const authState = reason === "login_key_invalid"
+        ? "auth_invalid"
+        : (String(payload && payload.auth_state || "").trim() || "login_required");
+      setAccountAuthState(username, {authState, authReason: reason});
+      syncInventoryTop();
+      openAccountReloginModal({
+        username,
+        password: String(account && account.password || "").trim(),
+        reason
+      });
+      const message = reason === "login_key_invalid"
+        ? "登录失效，请重新登录后再刷新"
+        : "当前账号缺少 loginKey，请重新登录后再刷新";
+      setSummary(message);
+      return {ok: false, message, reloginRequired: true, reason};
+    }
     syncInventoryTop();
     const message = `刷新失败：${err.message}`;
     setSummary(message);
