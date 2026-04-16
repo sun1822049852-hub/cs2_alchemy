@@ -64,6 +64,93 @@ function getCraftAssistOutcomeSafeTarget(targetValue) {
   return Math.max(0, target - CRAFT_ASSIST_OUTCOME_RELATIVE_GUARD);
 }
 
+function validateCraftAssistFinalOverall({
+  overall,
+  targetValue,
+  safeTargetValue,
+  approachMode = "below",
+  itemIds = [],
+  selectedItems = []
+} = {}) {
+  if (normalizeCraftAssistApproachMode(approachMode) !== "below") {
+    return {ok: true};
+  }
+  const numericOverall = Number(overall);
+  const numericSafeTarget = Number(safeTargetValue);
+  const normalizedItemIds = normalizeCraftRecipeItemIds(itemIds);
+  const normalizedSelectedItems = Array.isArray(selectedItems) ? selectedItems : [];
+  if (!Number.isFinite(numericOverall) || !Number.isFinite(numericSafeTarget)) {
+    return {
+      ok: false,
+      code: "final_result_invalid",
+      safe_target: numericSafeTarget,
+      approach_mode: normalizeCraftAssistApproachMode(approachMode),
+      item_ids: normalizedItemIds,
+      selected_items: normalizedSelectedItems,
+      message: "终局校验失败：结果均值无效，请调整材料范围"
+    };
+  }
+  if (numericOverall < numericSafeTarget - EPSILON) {
+    return {ok: true};
+  }
+  return {
+    ok: false,
+    code: "final_result_exceeds_target",
+    overall: numericOverall,
+    target: Number(targetValue),
+    safe_target: numericSafeTarget,
+    approach_mode: normalizeCraftAssistApproachMode(approachMode),
+    item_ids: normalizedItemIds,
+    selected_items: normalizedSelectedItems,
+    message: `终局校验拦截超过目标磨损：当前 ${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
+  };
+}
+
+function buildCraftAssistFailureLogText(result = {}) {
+  const code = asString(result && result.code || "").trim() || "unknown_error";
+  const parts = [`code=${code}`];
+  const rawMsg = asString(result && result.message || "").trim();
+  if (rawMsg && (code === "unknown_error" || code.startsWith("final_result_"))) {
+    parts.push(`msg=${encodeURIComponent(rawMsg)}`);
+  }
+  if (Number.isFinite(Number(result && result.overall))) {
+    parts.push(`overall=${numberTextTrunc(result.overall, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.target))) {
+    parts.push(`target=${numberTextTrunc(result.target, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.safe_target))) {
+    parts.push(`safe_target=${numberTextTrunc(result.safe_target, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.delta))) {
+    parts.push(`delta=${numberTextTrunc(result.delta, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.threshold))) {
+    parts.push(`threshold=${numberTextTrunc(result.threshold, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.lower_bound_overall))) {
+    parts.push(`lower_bound=${numberTextTrunc(result.lower_bound_overall, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.lower_bound_rarity))) {
+    parts.push(`lower_bound_rarity=${Number(result.lower_bound_rarity)}`);
+  }
+  const approachMode = asString(result && result.approach_mode || "").trim();
+  if (approachMode) {
+    parts.push(`approach_mode=${approachMode}`);
+  }
+  const itemIds = normalizeCraftRecipeItemIds(result && (result.item_ids || result.itemIds));
+  if (itemIds.length) {
+    parts.push(`item_ids=${itemIds.join(",")}`);
+  }
+  const selectedItems = Array.isArray(result && result.selected_items)
+    ? result.selected_items
+    : [];
+  if (selectedItems.length) {
+    parts.push(`selected_items=${JSON.stringify(selectedItems)}`);
+  }
+  return parts.join(" ");
+}
+
 function normalizeItemId(value) {
   return asString(value).trim();
 }
@@ -593,6 +680,34 @@ function buildCraftAssistSelectedIdSet(materialResults) {
     for (const item of Array.isArray(entry && entry.selected) ? entry.selected : []) {
       const id = asString(item && item.id || "").trim();
       if (id) out.add(id);
+    }
+  }
+  return out;
+}
+
+function collectCraftAssistSelectedItemIds(materialResults) {
+  const out = [];
+  for (const entry of Array.isArray(materialResults) ? materialResults : []) {
+    for (const item of Array.isArray(entry && entry.selected) ? entry.selected : []) {
+      out.push(asString(item && item.id || "").trim());
+    }
+  }
+  return normalizeCraftRecipeItemIds(out);
+}
+
+function collectCraftAssistSelectedItemDiagnostics(materialResults) {
+  const out = [];
+  for (const entry of Array.isArray(materialResults) ? materialResults : []) {
+    for (const item of Array.isArray(entry && entry.selected) ? entry.selected : []) {
+      const row = item && item.row && typeof item.row === "object" ? item.row : null;
+      const assetId = rowAssetId(row) || asString(item && item.id || "").trim();
+      if (!assetId) continue;
+      out.push({
+        asset_id: assetId,
+        name: itemDisplayName(row) || assetId,
+        absolute_wear: numberTextTrunc(getAbsoluteWearValue(row), WEAR_INPUT_DECIMALS),
+        relative_wear: numberTextTrunc(Number(item && item.value), WEAR_INPUT_DECIMALS)
+      });
     }
   }
   return out;
@@ -1653,6 +1768,24 @@ async function runCraftAssistSelectionForRecipe({
     }
   }
 
+  overall = calcCraftAssistOverallMean(materialResults);
+  if (overall == null) {
+    return {ok: false, code: "final_result_invalid", message: "终局校验失败：结果均值无效，请调整材料范围"};
+  }
+  const finalItemIds = collectCraftAssistSelectedItemIds(materialResults);
+  const finalSelectedItems = collectCraftAssistSelectedItemDiagnostics(materialResults);
+  const finalOverallCheck = validateCraftAssistFinalOverall({
+    overall,
+    targetValue,
+    safeTargetValue,
+    approachMode,
+    itemIds: finalItemIds,
+    selectedItems: finalSelectedItems
+  });
+  if (!finalOverallCheck.ok) {
+    return finalOverallCheck;
+  }
+
   const resultIds = [];
   for (const entry of materialResults) {
     const orderedSelected = [...(Array.isArray(entry.selected) ? entry.selected : [])]
@@ -1829,33 +1962,7 @@ function createCraftAssistService({logger} = {}) {
       );
     }
     if (logger && typeof logger.warn === "function" && !result.ok) {
-      const code = asString(result.code || "").trim() || "unknown_error";
-      const parts = [`code=${code}`];
-      if (code === "unknown_error") {
-        const rawMsg = asString(result.message || "").trim();
-        if (rawMsg) {
-          parts.push(`msg=${encodeURIComponent(rawMsg)}`);
-        }
-      }
-      if (Number.isFinite(Number(result.overall))) {
-        parts.push(`overall=${numberTextTrunc(result.overall, WEAR_INPUT_DECIMALS)}`);
-      }
-      if (Number.isFinite(Number(result.target))) {
-        parts.push(`target=${numberTextTrunc(result.target, WEAR_INPUT_DECIMALS)}`);
-      }
-      if (Number.isFinite(Number(result.delta))) {
-        parts.push(`delta=${numberTextTrunc(result.delta, WEAR_INPUT_DECIMALS)}`);
-      }
-      if (Number.isFinite(Number(result.threshold))) {
-        parts.push(`threshold=${numberTextTrunc(result.threshold, WEAR_INPUT_DECIMALS)}`);
-      }
-      if (Number.isFinite(Number(result.lower_bound_overall))) {
-        parts.push(`lower_bound=${numberTextTrunc(result.lower_bound_overall, WEAR_INPUT_DECIMALS)}`);
-      }
-      if (Number.isFinite(Number(result.lower_bound_rarity))) {
-        parts.push(`lower_bound_rarity=${Number(result.lower_bound_rarity)}`);
-      }
-      logger.warn("craft_assist", `select failed: ${parts.join(" ")}`);
+      logger.warn("craft_assist", `select failed: ${buildCraftAssistFailureLogText(result)}`);
     }
     return result;
   }
@@ -1869,5 +1976,9 @@ module.exports = {
   createCraftAssistService,
   selectCraftAssistForRecipe,
   buildCraftAssistSelectionContext,
-  buildCraftAssistSelectionContextFromCandidateRows
+  buildCraftAssistSelectionContextFromCandidateRows,
+  __test: {
+    validateCraftAssistFinalOverall,
+    buildCraftAssistFailureLogText
+  }
 };

@@ -4,7 +4,8 @@ const {
   createCraftAssistService,
   selectCraftAssistForRecipe,
   buildCraftAssistSelectionContext,
-  buildCraftAssistSelectionContextFromCandidateRows
+  buildCraftAssistSelectionContextFromCandidateRows,
+  __test
 } = require("../node_sidecar/src/services/craftAssistService");
 
 function makeRow({
@@ -1108,6 +1109,63 @@ async function test_duplicate_names_across_materials_fail_after_canonicalize_red
   assert.match(result.message, /材料数量之和必须等于 10，当前 5/);
 }
 
+async function test_final_validation_blocks_below_mode_when_result_crosses_safe_target() {
+  const result = __test.validateCraftAssistFinalOverall({
+    overall: 0.27000001072883606,
+    targetValue: 0.27,
+    safeTargetValue: 0.26999998,
+    approachMode: "below"
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "final_result_exceeds_target");
+  assert.equal(result.overall, 0.27000001072883606);
+}
+
+async function test_final_validation_skips_infinite_mode_cross_target_guard() {
+  const result = __test.validateCraftAssistFinalOverall({
+    overall: 0.27000001072883606,
+    targetValue: 0.27,
+    safeTargetValue: 0.26999998,
+    approachMode: "infinite"
+  });
+
+  assert.deepEqual(result, {ok: true});
+}
+
+async function test_failure_log_text_includes_final_validation_diagnostics() {
+  const text = __test.buildCraftAssistFailureLogText({
+    code: "final_result_exceeds_target",
+    overall: 0.27000001072883606,
+    target: 0.27,
+    safe_target: 0.26999998,
+    approach_mode: "below",
+    item_ids: ["a1", "a2", "a3"],
+    selected_items: [
+      {
+        asset_id: "a1",
+        name: "AK-47 | Redline",
+        absolute_wear: "0.123456",
+        relative_wear: "0.234567"
+      },
+      {
+        asset_id: "a2",
+        name: "M4A4 | Buzz Kill",
+        absolute_wear: "0.223344",
+        relative_wear: "0.255566"
+      }
+    ]
+  });
+
+  assert.match(text, /code=final_result_exceeds_target/);
+  assert.match(text, /overall=0\.270000/);
+  assert.match(text, /target=0\.270000/);
+  assert.match(text, /safe_target=0\.269999/);
+  assert.match(text, /approach_mode=below/);
+  assert.match(text, /item_ids=a1,a2,a3/);
+  assert.match(text, /selected_items=\[\{"asset_id":"a1","name":"AK-47 \| Redline","absolute_wear":"0\.123456","relative_wear":"0\.234567"\},\{"asset_id":"a2","name":"M4A4 \| Buzz Kill","absolute_wear":"0\.223344","relative_wear":"0\.255566"\}\]/);
+}
+
 (async () => {
   await test_over_target_prefers_squeezing_aux_before_main();
   await test_under_target_prioritizes_closer_overall_before_aux_low_bias();
@@ -1133,6 +1191,9 @@ async function test_duplicate_names_across_materials_fail_after_canonicalize_red
   await test_item_level_material_items_support_mixed_relative_absolute_filters_and_preserve_candidate_ordering();
   await test_context_refine_trace_uses_primary_name_projection_for_multi_item_materials();
   await test_duplicate_names_across_materials_fail_after_canonicalize_reduces_total_count();
+  await test_final_validation_blocks_below_mode_when_result_crosses_safe_target();
+  await test_final_validation_skips_infinite_mode_cross_target_guard();
+  await test_failure_log_text_includes_final_validation_diagnostics();
   console.log("craftAssistService tests passed");
 })().catch((err) => {
   console.error(err);
