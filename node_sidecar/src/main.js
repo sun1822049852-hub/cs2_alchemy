@@ -2,6 +2,9 @@
 const {TokenStore} = require("./tokenStore");
 const {DedupLogger} = require("./logger");
 const {refreshInventory} = require("./refreshWorkflow");
+const {redeemMissionRewardDebug} = require("./redeemMissionRewardWorkflow");
+const {captureGcSession} = require("./gcSessionCaptureWorkflow");
+const {normalizeRedeemMissionRewardOptions} = require("./redeemMissionReward");
 const {asString} = require("./utils");
 
 function parseArgs(argv) {
@@ -34,6 +37,8 @@ function printHelp() {
       "  node node_sidecar/src/main.js accounts use --account <name>",
       "  node node_sidecar/src/main.js accounts delete --account <name>",
       "  node node_sidecar/src/main.js tokens clear --account <name>",
+      "  node node_sidecar/src/main.js redeem-mission-reward --account <name> [--campaign-id <id>] [--redeem-id <idx>] [--balance <n>] [--cost <n>] [--bid-control <n>] [--ack-tracks true|false] [--ack-wait-ms <ms>] [--wait-ms <ms>]",
+      "  node node_sidecar/src/main.js gc-capture --account <name> [--duration-seconds <n>] [--ack-tracks true|false] [--ack-wait-ms <ms>] [--output <file>]",
       "",
       "Equivalent entry (inside node_sidecar):",
       "  node src/main.js ..."
@@ -111,6 +116,35 @@ async function cmdRefresh(args) {
   return 0;
 }
 
+async function cmdRedeemMissionReward(args) {
+  const logger = new DedupLogger({windowMs: 1000});
+  const normalized = normalizeRedeemMissionRewardOptions(args, {allowMissing: true});
+  const result = await redeemMissionRewardDebug({
+    ...normalized,
+    logger
+  });
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(result, null, 2));
+  return 0;
+}
+
+async function cmdGcCapture(args) {
+  const logger = new DedupLogger({windowMs: 1000});
+  const durationSeconds = Math.max(0, Number(args["duration-seconds"] || args.duration || 3) || 3);
+  const result = await captureGcSession({
+    accountName: asString(args.account).trim(),
+    password: asString(args.password).trim(),
+    durationMs: Math.round(durationSeconds * 1000),
+    ackTracks: asString(args["ack-tracks"] || "true") !== "false",
+    ackWaitMs: Math.max(0, Number(args["ack-wait-ms"] || 500) || 500),
+    outputPath: asString(args.output).trim(),
+    logger
+  });
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(result, null, 2));
+  return 0;
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const cmd = asString(args._positional[0] || "refresh").trim();
@@ -126,6 +160,12 @@ async function main() {
   }
   if (cmd === "refresh") {
     return cmdRefresh(args);
+  }
+  if (cmd === "redeem-mission-reward" || cmd === "xpshop-redeem") {
+    return cmdRedeemMissionReward(args);
+  }
+  if (cmd === "gc-capture") {
+    return cmdGcCapture(args);
   }
   throw new Error(`unknown command: ${cmd}`);
 }

@@ -1,0 +1,296 @@
+# Weapon Armory GC 调查记录
+
+## 用途
+
+这是 `cs2_alchemy` 内部调查笔记，用于后续继续复现和验证 CS2 Armory / XP Shop 的 GC 链路。
+这份文件不面向客户。
+
+## 当前结论
+
+- `welcome/type_id=6` 对应的是 XP shop 账户状态，不是兑换请求本身。
+- Armory 可兑换目录、名称、价格这类信息可以从本地 `items_game.txt` / 语言文件拿到。
+- 真正的兑换动作走 GC `9209`，也就是 `ClientRedeemMissionReward`。
+- `cs2-stars` 里的 `armoryId` 高置信对应 `9209` 的第二个字段，也就是 `redeem_id`。
+- 在现有 `cs2_armory_delivery` 实现里，标准 Armory 项的 `redeem_id` 已通过 `items_database.json` 中的 `armoryId` 静态维护，并在运行时作为 authoritative `redeem_id` 发给 `9209`。
+- 当前最稳的成功判据不是 callback body，而是 `9209` 发出后是否出现：
+  - `SO_Create`
+  - 星数余额更新
+  - `ItemCustomizationNotification(request=9209)`
+
+## 已确认的证据
+
+### 1. Welcome / XP shop 状态
+
+- `ClientWelcome` 会在 GC 连接后自动下发，不需要额外主动请求。
+- 某些账号会在 welcome 里出现 `type_id=6`。
+- 结合公开 proto，这个对象可解释为 `CSOAccountXpShop`，字段只有：
+  - `generation_time`
+  - `redeemable_balance`
+  - `xp_tracks`
+- 这能解释为什么抓到的 welcome 包里只有星数和 track 状态，没有兑换 ID。
+
+### 2. 公开 protobuf 证据
+
+公开 `SteamDatabase/Protobufs` 中可见：
+
+- `9209 = ClientRedeemMissionReward`
+- `9221 = GC2ClientNotifyXPShop`
+- `9222 = Client2GcAckXPShopTracks`
+- `CSOAccountXpShop { generation_time, redeemable_balance, xp_tracks }`
+- `CSOAccountXpShopBids { campaign_id, redeem_id, expected_cost, generation_time }`
+
+这说明：
+
+- `type_id=6` 这条线更像账户状态对象。
+- `9221` 更像 `GC -> client` 的 XP shop 状态通知。
+  当前可稳定解出：
+  - `prematch` / `postmatch` 两份 `CSOAccountXpShop` 快照
+  - `current_xp`
+  - `current_level`
+- `9222` 更像 `client -> GC` 的 XP shop track ack。
+  当前实现里发的是空 payload，作用更像确认/回执，不是“查询 redeem_id”的主动接口。
+- 真正与兑换参数贴近的公开对象是 `CSOAccountXpShopBids`。
+- 但当前实测中并没有稳定观察到 `xp shop bids` 被下发。
+
+### 3. 本地静态目录证据
+
+从 `items-parser` 的 `items/cs2.txt` 可以确认：
+
+- `seasonaloperations -> "11" -> redeemable_goods "xpshop"` 存在。
+- 同一个块里静态列出了当前 Armory 目录项，例如：
+  - `lootlist:set_train_2025`
+  - `lootlist:set_overpass_2024`
+  - `lootlist:set_realism_camo`
+  - `crate_community_35`，也就是 `Fever Case`
+  - 一批 keychain / sticker lootlist
+- 同块里还带有 `points`、`callout`、缩略图等信息。
+
+但是：
+
+- 这个静态目录块里没有直接明牌的 `redeem_id`
+- 也没有直接明牌的 `armoryId`
+
+所以它更像“目录与价格来源”，不是“最终发包 ID 来源”。
+
+### 4. `cs2-stars` 的直接发包方式
+
+`gradinazz/cs2-stars` 的 `ArmoryManager.encodeRedeemBody()` 会发四个 varint 字段：
+
+1. `11`
+2. `armoryId`
+3. `stars`
+4. `price`
+
+而公开 proto 中 `9209` 的字段顺序正好是：
+
+1. `campaign_id`
+2. `redeem_id`
+3. `redeemable_balance`
+4. `expected_cost`
+
+因此当前高置信推断为：
+
+- `campaign_id = 11`
+- `armoryId ~= redeem_id`
+
+### 5. `cs2_armory_delivery` 的工程实现（已跑通）
+
+当前 `cs2_armory_delivery` 没有等待 GC 动态下发全部标准 Armory `redeem_id`，而是直接走本地静态 authoritative 映射：
+
+- `items_database.json` 里直接维护 `{ name, price, armoryId }`
+- `src/itemsDatabaseMap.js` 会把 `armoryId / redeemId / redeem_id` 归一成同一个 authoritative ID
+- 映射时使用 `name + price` 反查 catalog 条目，再把命中的 `armoryId` 写成运行时 `option.redeem_id`
+- `src/services/weaponArmoryService.js` 在真实 redeem 前会校验：外部传入的 `redeem_id` 若与这份 authoritative 映射不一致，直接拒绝
+- 最终发包调用 `sendRedeemMissionReward()`，用 `resolved.redeem_id` 作为 `ClientRedeemMissionReward(9209)` 的 field 2 发给 GC
+
+这说明：
+
+- 当前 `cs2_armory_delivery` 在工程上已经可以通过本地静态 mapping 跑通标准 Armory 兑换链路
+- 这能证明“当前项目如何实现”，不能直接证明“Valve 官方客户端内部一定也这样取值”
+
+## 本轮新增实锤：真实 9209 成功样本
+
+这是一次真实成功兑换的 `9209` 发包记录。
+
+### 1. 发包
+
+- `msg=9209`
+- `payload_hex=080b10fe8ce6e80318c4012002`
+
+按 `ClientRedeemMissionReward` 解码可得：
+
+1. `08 0b`
+   - `field 1 = campaign_id = 11`
+2. `10 fe8ce6e803`
+   - `field 2 = redeem_id = 1025083006`
+3. `18 c401`
+   - `field 3 = redeemable_balance = 196`
+4. `20 02`
+   - `field 4 = expected_cost = 2`
+
+这与 `cs2-stars/items_database.json` 中的 `Fever Case` 完全吻合：
+
+- `name = Fever Case`
+- `price = 2`
+- `armoryId = 1025083006`
+
+因此这次样本已经把下面两点从“高置信推断”推进成了“实测吻合”：
+
+- `campaign_id = 11`
+- `armoryId = redeem_id`
+
+### 2. GC 回包一：`SO_Create`
+
+- `msg=21`
+- `name=SO_Create`
+- `bytes=68`
+- `payload_hex=10011a2908e0e8afeabd0110b8888dfb0218978480800c20df363804400048176208084b1a0470dae16998010121589b80037fd569002a0c080110b8`
+
+解包结果：
+
+```json
+{
+  "type_id": 1,
+  "item": {
+    "id": "50957382752",
+    "def_index": 7007,
+    "inventory": 3221226007,
+    "quality": 4,
+    "rarity": 1,
+    "origin": 23,
+    "quantity": 0,
+    "flags": 0,
+    "account_id": 795034680
+  }
+}
+```
+
+这说明兑换后 GC 真实创建了一个新物品对象。
+
+其中：
+
+- `def_index = 7007`
+- 这与 `Fever Case` 对应
+
+### 3. GC 回包二：`SO_UpdateMultiple`
+
+- `msg=26`
+- `name=SO_UpdateMultiple`
+- `bytes=64`
+- `payload_hex=120d0806120908f0a7ddce0610c20112180802121408041206080c100c200c18012090c6fbce06280119589b80037fd56900320c080110b8888dfb92`
+
+这条更新把星数从 `196` 改成了 `194`。
+
+也就是说：
+
+- 发包时余额是 `196`
+- 成功后余额变成 `194`
+- 扣减值正好等于 `expected_cost = 2`
+
+### 4. GC 回包三：`ItemCustomizationNotification`
+
+- `msg=1090`
+- `name=ItemCustomizationNotification`
+- `bytes=10`
+- `payload_hex=08e0e8afeabd0110f947`
+
+解包结果：
+
+```json
+{
+  "item_ids": ["50957382752"],
+  "request": 9209,
+  "request_name": "ClientRedeemMissionReward"
+}
+```
+
+这条消息非常关键，它把新 item id 和原始请求 `9209` 关联起来了。
+
+### 5. 那次实测的整体结果
+
+```json
+{
+  "before_balance": 196,
+  "after_balance": 194,
+  "callback_count": 0,
+  "so_create_count": 1,
+  "item_acquired_count": 1
+}
+```
+
+结论：
+
+- 没有 callback body 并不代表失败
+- 只要同时出现：
+  - `9209` 发出
+  - `SO_Create`
+  - 星数余额下降
+  - `ItemCustomizationNotification(request=9209)`
+- 就可以高置信判定兑换成功
+
+## 重要边界
+
+### 已确认
+
+- Armory 静态目录可以从本地游戏文件中找到
+- `type_id=6` 可以提供 XP shop 余额状态
+- `9221` 可以提供 XP shop 状态变化快照，但不是标准 Armory `redeem_id` 下发表
+- `9222` 是客户端发回 GC 的 XP shop track ack，不是查询 `redeem_id` 的接口
+- `9209` 是真实兑换请求
+- `campaign_id = 11` 已与真实样本吻合
+- `armoryId = redeem_id` 已与真实样本吻合
+- `cs2_armory_delivery` 已能用本地静态 authoritative 映射完成标准 Armory `redeem_id` 选取与真实发包
+- 成功后不一定有 callback body
+
+### 仍未确认
+
+- Valve 官方客户端是如何拿到所有标准 Armory 物品 `redeem_id` 的
+- `CSOAccountXpShopBids` 在什么条件下会真实下发
+- 是否所有普通 Armory 项都能从本地静态文件推出 `redeem_id`
+
+### 当前倾向
+
+- 普通 Armory 目录数据是静态的
+- `9221` 更像 XP shop 状态通知，不是目录或兑换 ID 下发表
+- `9222` 更像 XP shop track ack，不是“拉取标准 Armory redeem_id”的主动请求
+- `redeem_id` 可能来自隐藏静态映射，或者运行时内存中的未公开映射
+- 当前 welcome / `9221` / `9222` 这条线，不足以直接给出全部 `redeem_id`
+
+## 特殊项说明
+
+`AK-47 | Aphrodite` 这类特殊限量项，不在普通 `operational_point_redeemable` 目录块中直接明牌出现。
+
+当前 `items_game` 里更像是通过隐藏的：
+
+- `set_xpshop_wpn_*`
+- `Limited Edition Item`
+
+这类结构组织。
+
+所以特殊限量项很可能与普通目录项不是同一条静态映射链。
+
+## 下次复现建议
+
+1. 开启 `CS2_GC_TRACE=1`
+2. 在 `steam.logOn` 之前就挂好 `receivedFromGC`
+3. 先抓 `ClientWelcome`
+4. 把 `type_id=6` 当作余额/track 状态对象看，不要期待它给 `redeem_id`
+5. 不要把 `9222` 当作“获取兑换 ID”的核心入口
+6. 真要确认某个物品的 `redeem_id`，优先抓官方客户端实际点击兑换时发出的 `9209`
+7. 成功判据优先看：
+   - `SO_Create`
+   - `SO_UpdateMultiple` 是否扣星
+   - `ItemCustomizationNotification(request=9209)`
+
+## 外部参考仓库
+
+- `SteamDatabase/Protobufs`
+- `heapyxyz/items-parser`
+- `gradinazz/cs2-stars`
+- `sak0a/node-cs2` issue `#1`
+
+## 未决问题
+
+- 标准 Armory `redeem_id` 的真实来源
+- `CSOAccountXpShopBids` 是否只在少数状态下出现
+- 官方客户端是否持有未持久化到简单静态文件中的内存映射

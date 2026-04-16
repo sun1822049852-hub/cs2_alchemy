@@ -8,14 +8,19 @@
   "scripts": {
     "fetch-components": "node fetch_component_contents.js",
     "refresh": "node src/main.js refresh",
+    "gc:capture": "node src/main.js gc-capture",
     "main": "node src/main.js",
     "ui": "node src/uiServer.js",
     "ui:cli": "node src/main_ui.js",
     "ui:desktop": "electron electron-main.js",
+    "vpk:list": "node src/vpkDevCli.js list",
+    "vpk:cat": "node src/vpkDevCli.js cat",
+    "vpk:extract": "node src/vpkDevCli.js extract",
     "pack:win": "electron-builder --dir --win",
     "build:win": "electron-builder --win nsis"
   },
   "dependencies": {
+    "@lowly1337/vpk": "^0.2.6",
     "globaloffensive": "^3.2.0",
     "steam-user": "^4.29.0"
   },

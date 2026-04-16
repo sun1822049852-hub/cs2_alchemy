@@ -40,6 +40,13 @@ npm install
 npm run refresh -- --account <username>
 ```
 
+兑换武库奖励（缺省字段可由 live GC 状态自动补齐）：
+
+```powershell
+node src/main.js redeem-mission-reward --account <username> --ack-tracks true
+node src/main.js redeem-mission-reward --account <username> --redeem-id 0 --ack-tracks true
+```
+
 启动浏览器模式 UI：
 
 ```powershell
@@ -101,6 +108,37 @@ node src/main.js accounts delete --account <username>
 node src/main.js tokens clear --account <username>
 ```
 
+Browser / desktop UI 若需正式触发武库兑换，可调用：
+
+```http
+POST /api/inventory/redeem-mission-reward
+Content-Type: application/json
+
+{
+  "username": "your_account",
+  "redeem_id": 0,
+  "ack_tracks": true
+}
+```
+
+说明：
+
+- 当前账号必须已连接并完成一次库存刷新
+- `campaign_id`、`redeemable_balance`、`expected_cost` 缺省时会优先从当前会话缓存的武库状态自动补齐
+- 返回结果会带上 `resolved`、`success_evidence`、`armory_state_before`、`armory_state_after`
+
+正式兑换前，如需先读取当前账号可选的武库兑换项，可调用：
+
+```http
+GET /api/inventory/redeem-mission-reward/options?username=your_account
+```
+
+说明：
+
+- 返回结果会带上当前 `redeemable_balance`
+- `options` 中每项会包含 `campaign_id`、`redeem_id`、`expected_cost`、`balance_after_redeem`、`affordable`
+- 若直接调用兑换接口但当前存在多个候选项，`409` 响应也会带回同样的 `options` 供选择
+
 ## 炼金 UI 说明
 
 当前炼金页由 `ui/app.js` + `ui/styles.css` 驱动，重点能力包括：
@@ -120,6 +158,10 @@ node tests/craft-assist-busy-mask-render.test.js
 node tests/craft-predictor-panel-state.test.js
 node tests/craft-predictor-offline-render.test.js
 node tests/craft-queue-slot-remove-guard.test.js
+node tests/redeem-mission-reward.test.js
+node tests/cs2-session-gc-trace.test.js
+node tests/weapon-armory-service.test.js
+node tests/weapon-armory-route.test.js
 ```
 
 如果要在仓库根目录执行跨模块回归，可运行：
@@ -139,3 +181,28 @@ node tests/craftPredictorDrawerUi.test.js
 
 - 当前模块不依赖 Python Steam 库
 - 若要从项目根目录启动桌面 UI，可使用仓库根下的 `main_ui_node_desktop.js` 或 `run.bat`
+
+## VPK 开发工具
+
+当前仓库内已内置一个面向开发调试的 VPK CLI，适合直接列目录、读取资源、抽取文件，不再依赖系统外部 `vpk.exe`。
+
+先在 `node_sidecar/` 目录安装依赖：
+
+```powershell
+npm install
+```
+
+常用命令：
+
+```powershell
+npm run vpk:list -- --file "D:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive\game\csgo\pak01_dir.vpk" --pattern xpshop
+npm run vpk:cat -- --file "D:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive\game\csgo\pak01_dir.vpk" --entry "panorama/layout/xpshop.vxml_c" --encoding hex
+npm run vpk:extract -- --file "D:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive\game\csgo\pak01_dir.vpk" --entry "panorama/scripts/xpshop.vts_c" --output ".\\tmp\\xpshop.vts_c"
+```
+
+说明：
+
+- 支持 CS2 常见的 split VPK 结构，例如 `pak01_dir.vpk` 搭配 `pak01_000.vpk`
+- `vpk:list` 可配合 `--pattern`、`--limit` 快速筛路径
+- `vpk:cat` 支持 `utf8`、`hex`、`base64`
+- `vpk:extract` 会自动创建输出目录
