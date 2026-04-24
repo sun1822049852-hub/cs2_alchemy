@@ -15715,8 +15715,10 @@ function initBatchImport() {
   const selectFilesBtn = document.getElementById("batchImportSelectFilesBtn");
   const dropZone = document.getElementById("batchImportDropZone");
   const startBtn = document.getElementById("batchImportStartBtn");
-  const uniformPwd = document.getElementById("batchImportUniformPwd");
-  const pwdInput = document.getElementById("batchImportPasswordInput");
+  const pwdMode = document.getElementById("batchImportPwdMode");
+  const uniformSection = document.getElementById("batchImportUniformSection");
+  const pasteSection = document.getElementById("batchImportPasteSection");
+  const parseBtn = document.getElementById("batchImportParseBtn");
 
   if (!btn || !modal) return;
 
@@ -15726,6 +15728,12 @@ function initBatchImport() {
     renderBatchImportFileList();
     document.getElementById("batchImportProgress").classList.add("hidden");
     document.getElementById("batchImportResults").innerHTML = "";
+    document.getElementById("batchImportParseResult").innerHTML = "";
+    const ta = document.getElementById("batchImportPasteArea");
+    if (ta) ta.value = "";
+    // 默认粘贴模式
+    if (pwdMode) pwdMode.value = "paste";
+    switchBatchPwdMode("paste");
     modal.classList.remove("hidden");
   };
 
@@ -15743,12 +15751,23 @@ function initBatchImport() {
     handleBatchImportFiles(e.dataTransfer.files);
   };
 
-  uniformPwd.onchange = () => {
-    pwdInput.style.display = uniformPwd.checked ? "" : "none";
-    renderBatchImportFileList();
-  };
+  if (pwdMode) {
+    pwdMode.onchange = () => switchBatchPwdMode(pwdMode.value);
+  }
+
+  if (parseBtn) {
+    parseBtn.onclick = () => applyParsedCredentials();
+  }
 
   startBtn.onclick = () => startBatchImport();
+}
+
+function switchBatchPwdMode(mode) {
+  const uniformSection = document.getElementById("batchImportUniformSection");
+  const pasteSection = document.getElementById("batchImportPasteSection");
+  if (uniformSection) uniformSection.classList.toggle("hidden", mode !== "uniform");
+  if (pasteSection) pasteSection.classList.toggle("hidden", mode !== "paste");
+  renderBatchImportFileList();
 }
 
 async function handleBatchImportFiles(fileList) {
@@ -15768,14 +15787,24 @@ async function handleBatchImportFiles(fileList) {
 
 function renderBatchImportFileList() {
   const wrap = document.getElementById("batchImportFileList");
-  const uniform = document.getElementById("batchImportUniformPwd").checked;
+  const pwdMode = document.getElementById("batchImportPwdMode");
+  const mode = pwdMode ? pwdMode.value : "paste";
   wrap.innerHTML = "";
   for (let i = 0; i < batchImportState.files.length; i++) {
     const f = batchImportState.files[i];
     const div = document.createElement("div");
     div.className = "batch-import-file-item";
-    div.innerHTML = `<span class="file-name">${f.accountName || f.name}</span>`;
-    if (!uniform) {
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "file-name";
+    nameSpan.textContent = f.accountName || f.name;
+    div.append(nameSpan);
+    if (f.password && mode === "paste") {
+      const tag = document.createElement("span");
+      tag.style.cssText = "color:var(--success);font-size:11px;margin-left:8px;";
+      tag.textContent = "✓ 已匹配密码";
+      div.append(tag);
+    }
+    if (mode === "individual") {
       const pwd = document.createElement("input");
       pwd.type = "password";
       pwd.className = "file-pwd";
@@ -15793,11 +15822,79 @@ function renderBatchImportFileList() {
   }
 }
 
+/**
+ * 解析粘贴的账密文本，提取账号和密码对
+ * 支持格式：账号xxx密码yyy（后面可能还有令牌秘钥等，忽略）
+ * 每行一个账号
+ */
+function parseBatchCredentials(text) {
+  const result = new Map();
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  for (const line of lines) {
+    // 匹配「账号xxx密码yyy」格式，账号和密码之间可能有空格
+    const m = line.match(/账号\s*(\S+?)\s*密码\s*(\S+)/);
+    if (m) {
+      result.set(m[1].trim(), m[2].trim());
+    }
+  }
+  return result;
+}
+
+/**
+ * 将解析的账密映射应用到已导入的 maFile 列表
+ */
+function applyParsedCredentials() {
+  const ta = document.getElementById("batchImportPasteArea");
+  const resultDiv = document.getElementById("batchImportParseResult");
+  if (!ta || !resultDiv) return;
+
+  const text = ta.value.trim();
+  if (!text) {
+    resultDiv.innerHTML = '<span class="match-fail">请先粘贴账密文本</span>';
+    return;
+  }
+
+  const credMap = parseBatchCredentials(text);
+  if (credMap.size === 0) {
+    resultDiv.innerHTML = '<span class="match-fail">未识别到任何账号密码对，请检查格式</span>';
+    return;
+  }
+
+  let matched = 0;
+  let unmatched = [];
+  // 将密码匹配到已导入的文件
+  for (const f of batchImportState.files) {
+    const pwd = credMap.get(f.accountName);
+    if (pwd) {
+      f.password = pwd;
+      matched++;
+    }
+  }
+  // 检查哪些解析出的账号没有对应的 maFile
+  for (const [acct] of credMap) {
+    if (!batchImportState.files.some(f => f.accountName === acct)) {
+      unmatched.push(acct);
+    }
+  }
+
+  let html = `<span class="match-ok">解析到 ${credMap.size} 个账号，匹配成功 ${matched} 个</span>`;
+  if (unmatched.length > 0) {
+    html += `<br><span class="match-fail">未找到对应 maFile 的账号：${unmatched.join(", ")}</span>`;
+  }
+  const noPassword = batchImportState.files.filter(f => !f.password);
+  if (noPassword.length > 0) {
+    html += `<br><span class="match-fail">仍缺密码的账号：${noPassword.map(f => f.accountName).join(", ")}</span>`;
+  }
+  resultDiv.innerHTML = html;
+  renderBatchImportFileList();
+}
+
 async function startBatchImport() {
   if (batchImportState.running || batchImportState.files.length === 0) return;
   batchImportState.running = true;
 
-  const uniform = document.getElementById("batchImportUniformPwd").checked;
+  const pwdMode = document.getElementById("batchImportPwdMode");
+  const mode = pwdMode ? pwdMode.value : "paste";
   const uniformPassword = document.getElementById("batchImportPasswordInput").value;
   const progressWrap = document.getElementById("batchImportProgress");
   const progressFill = document.getElementById("batchImportProgressFill");
@@ -15813,7 +15910,7 @@ async function startBatchImport() {
 
   const accounts = batchImportState.files.map((f) => ({
     username: f.accountName,
-    password: uniform ? uniformPassword : f.password,
+    password: mode === "uniform" ? uniformPassword : f.password,
     maFileContent: f.content
   }));
 

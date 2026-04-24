@@ -801,11 +801,22 @@
           </div>
           <div id="batchImportFileList" class="batch-import-file-list"></div>
           <div class="batch-import-password-section">
-            <label>
-              <input id="batchImportUniformPwd" type="checkbox" checked />
-              统一密码
-            </label>
+            <label class="batch-import-pwd-mode-label">密码模式</label>
+            <select id="batchImportPwdMode" class="batch-import-pwd-mode-select">
+              <option value="paste">粘贴账密文本</option>
+              <option value="uniform">统一密码</option>
+              <option value="individual">独立密码</option>
+            </select>
+          </div>
+          <!-- 统一密码输入 -->
+          <div id="batchImportUniformSection" class="batch-import-uniform-section hidden">
             <input id="batchImportPasswordInput" type="password" placeholder="所有账号使用同一密码" class="batch-import-pwd-input" />
+          </div>
+          <!-- 粘贴账密文本 -->
+          <div id="batchImportPasteSection" class="batch-import-paste-section">
+            <textarea id="batchImportPasteArea" class="batch-import-paste-area" rows="5" placeholder="粘贴账密文本，每行一个账号&#10;格式示例：账号gb840489密码oo893199令牌秘钥xxx&#10;只需包含「账号」和「密码」关键词即可识别"></textarea>
+            <button id="batchImportParseBtn" type="button" class="batch-import-parse-btn">解析并匹配</button>
+            <div id="batchImportParseResult" class="batch-import-parse-result"></div>
           </div>
           <div id="batchImportProgress" class="batch-import-progress hidden">
             <div class="batch-import-progress-bar"><div id="batchImportProgressFill" class="progress-fill"></div></div>

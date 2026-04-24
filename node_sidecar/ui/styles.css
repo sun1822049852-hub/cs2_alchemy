@@ -9669,6 +9669,65 @@ body.batch-craft-split-dragging {
   color: var(--text);
   font-size: 13px;
 }
+.batch-import-pwd-mode-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.batch-import-pwd-mode-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.batch-import-uniform-section {
+  margin-top: 8px;
+}
+.batch-import-paste-section {
+  margin-top: 8px;
+}
+.batch-import-paste-area {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.batch-import-paste-area:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.batch-import-parse-btn {
+  margin-top: 6px;
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.batch-import-parse-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+.batch-import-parse-result {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.batch-import-parse-result .match-ok { color: var(--success); }
+.batch-import-parse-result .match-fail { color: var(--danger); }
 .batch-import-progress {
   margin-top: 12px;
 }
