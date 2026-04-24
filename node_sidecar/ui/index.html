@@ -157,6 +157,7 @@
                 <div class="account-list-head-actions">
                   <button id="accountPageAddBtn" type="button">添加账号</button>
                   <button id="accountPageBatchImportBtn" type="button">批量导入</button>
+                  <button id="accountPageEnrollBtn" type="button">绑定令牌</button>
                 </div>
               </div>
               <div id="savedAccountsWrap" class="saved-accounts"></div>
@@ -337,9 +338,10 @@
                 </label>
                 <label class="account-login-field">
                   <span>令牌码</span>
-                  <input id="accountTotp" type="text" maxlength="6" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" />
+                  <input id="accountTotp" type="text" maxlength="6" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="有令牌码则填写，无则留空" />
                 </label>
               </div>
+              <div id="accountGuardHint" class="account-guard-hint hidden" aria-live="polite"></div>
               <input id="accountRemark" type="hidden" value="" />
               <div class="account-login-actions">
                 <button id="loginSaveBtn" type="button">登录并保存</button>
@@ -875,6 +877,111 @@
       </div>
     </div>
 
+    <!-- ═══ Steam Guard 令牌绑定弹窗 ═══ -->
+    <div id="steamGuardEnrollModal" class="modal-overlay hidden">
+      <div class="modal-dialog steam-guard-enroll-dialog">
+        <div class="modal-header">
+          <h3>绑定 Steam Guard 令牌</h3>
+          <button id="steamGuardEnrollCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Step 1: 选择账号 -->
+          <div id="enrollStep1" class="enroll-step">
+            <div class="enroll-warning-box">
+              <p><strong>⚠ 风险提示</strong></p>
+              <ul>
+                <li>此操作将为选中账号注册新的 Steam Guard 令牌，可直接替换原有令牌</li>
+                <li>完成绑定后 <strong>两天内无法交易</strong></li>
+                <li>如果您尚未绑定过 Steam 令牌，则会有 <strong>15 天的市场交易冷却期</strong></li>
+                <li>请确保已启用加速器</li>
+              </ul>
+            </div>
+            <label class="enroll-select-label">选择账号
+              <select id="enrollAccountSelect"></select>
+            </label>
+          </div>
+          <!-- Step 2: SMS 验证 -->
+          <div id="enrollStep2" class="enroll-step hidden">
+            <div class="enroll-revocation-box">
+              <p><strong>恢复码（请务必记录）</strong></p>
+              <code id="enrollRevocationCode">-</code>
+            </div>
+            <label class="enroll-sms-label">SMS 验证码
+              <input id="enrollSmsInput" type="text" placeholder="输入手机收到的验证码" maxlength="10" autocomplete="off" />
+            </label>
+          </div>
+          <!-- Step 3: 完成 -->
+          <div id="enrollStep3" class="enroll-step hidden">
+            <div class="enroll-success-box">
+              <p>✅ Steam Guard 令牌绑定成功</p>
+              <p>恢复码：<code id="enrollFinalRevCode">-</code></p>
+              <p class="enroll-success-hint">请妥善保管恢复码，丢失后将无法恢复令牌。</p>
+            </div>
+          </div>
+          <!-- Status -->
+          <div id="enrollStatusText" class="enroll-status"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="enrollBackBtn" type="button" class="hidden">上一步</button>
+          <button id="enrollActionBtn" type="button" class="btn-primary">开始绑定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Steam Guard 令牌详情弹窗 ═══ -->
+    <div id="tokenDetailModal" class="modal-overlay hidden">
+      <div class="modal-dialog token-detail-dialog">
+        <div class="modal-header">
+          <h3>Steam Guard 令牌详情 — <span id="tokenDetailAccountName">-</span></h3>
+          <button id="tokenDetailCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="token-totp-section">
+            <div class="token-totp-label">实时 TOTP 码</div>
+            <div class="token-totp-row">
+              <span id="tokenTotpCode" class="token-totp-code">-----</span>
+              <button id="tokenTotpCopyBtn" type="button" class="token-copy-btn" title="复制">📋</button>
+            </div>
+            <div class="token-totp-timer">
+              <div id="tokenTotpBar" class="token-totp-bar"></div>
+              <span id="tokenTotpCountdown">30s</span>
+            </div>
+          </div>
+          <div class="token-info-grid">
+            <div class="token-info-row">
+              <span class="token-info-label">Device ID</span>
+              <span id="tokenDeviceId" class="token-info-value masked">●●●●●●●●</span>
+              <button class="token-toggle-btn" data-field="tokenDeviceId" title="显示/隐藏">👁</button>
+              <button class="token-copy-btn" data-copy="tokenDeviceId" title="复制">📋</button>
+            </div>
+            <div class="token-info-row">
+              <span class="token-info-label">恢复码</span>
+              <span id="tokenRevCode" class="token-info-value masked">●●●●●●●●</span>
+              <button class="token-toggle-btn" data-field="tokenRevCode" title="显示/隐藏">👁</button>
+              <button class="token-copy-btn" data-copy="tokenRevCode" title="复制">📋</button>
+            </div>
+            <div class="token-info-row">
+              <span class="token-info-label">账号名</span>
+              <span id="tokenAccName" class="token-info-value">-</span>
+            </div>
+            <div class="token-info-row">
+              <span class="token-info-label">SteamID64</span>
+              <span id="tokenSteamId" class="token-info-value">-</span>
+              <button class="token-copy-btn" data-copy="tokenSteamId" title="复制">📋</button>
+            </div>
+          </div>
+          <details class="token-raw-section">
+            <summary>SteamGuard 完整数据</summary>
+            <pre id="tokenRawData" class="token-raw-pre">-</pre>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <span></span>
+          <button id="tokenDetailDoneBtn" type="button">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ 市场上架弹窗 ═══ -->
     <div id="marketSellModal" class="modal-overlay hidden">
       <div class="modal-dialog market-sell-dialog">
@@ -897,6 +1004,32 @@
         <div class="modal-footer">
           <span id="marketSellSummary">0 件 · 预估收入 ¥0.00</span>
           <button id="marketSellStartBtn" type="button" class="btn-primary">确认上架</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 市场上架确认弹窗 ═══ -->
+    <div id="marketConfirmModal" class="modal-overlay hidden">
+      <div class="modal-dialog market-confirm-dialog">
+        <div class="modal-header">
+          <h3>市场上架确认</h3>
+          <button id="marketConfirmCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="market-confirm-toolbar">
+            <button id="marketConfirmRefreshBtn" type="button" class="web-inv-info-btn">刷新列表</button>
+            <label class="market-confirm-select-all-label"><input id="marketConfirmSelectAll" type="checkbox"> 全选</label>
+            <span id="marketConfirmCount" class="market-confirm-count">0 项待确认</span>
+          </div>
+          <div id="marketConfirmItemList" class="market-confirm-item-list"></div>
+          <div id="marketConfirmProgress" class="market-sell-progress hidden">
+            <div class="market-sell-progress-bar"><div id="marketConfirmProgressFill" class="progress-fill"></div></div>
+            <div id="marketConfirmProgressText">准备中...</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <span id="marketConfirmSummary">已选 0 项</span>
+          <button id="marketConfirmStartBtn" type="button" class="btn-primary">确认选中</button>
         </div>
       </div>
     </div>

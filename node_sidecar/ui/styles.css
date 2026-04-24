@@ -1810,6 +1810,20 @@ select.small {
   display: none;
 }
 
+.account-guard-hint {
+  margin: 4px 0 2px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #dca44c;
+  background: rgba(220, 164, 76, 0.08);
+  border: 1px solid rgba(220, 164, 76, 0.22);
+  border-radius: 4px;
+}
+.account-guard-hint.hidden {
+  display: none;
+}
+
 .btn-danger {
   color: var(--danger);
   border-color: #e2adb6;
@@ -1907,9 +1921,6 @@ select.small {
 
 .craft-right-panel {
   position: relative;
-  --craft-predictor-handle-top: 50%;
-  --craft-predictor-handle-height: 156px;
-  --craft-predictor-handle-width: 24px;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -3507,28 +3518,30 @@ select.small {
   position: fixed;
   right: 0;
   bottom: 0;
-  width: 380px;
+  width: 404px;  /* 380px panel + 24px handle */
   height: 50vh;
   min-height: 0;
   overflow: visible;
   pointer-events: none;
   z-index: 900;
-  transition: opacity 0.18s ease;
 }
 .craft-predictor-stage.collapsed {
-  pointer-events: none;
+  width: 24px;  /* 收起时只显示 handle */
 }
 
 .craft-predictor-panel {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 24px;  /* 给 handle 留位 */
   pointer-events: none;
   overflow: hidden;
 }
 
 .craft-predictor-stage > .craft-predictor-handle {
   position: absolute;
-  right: 100%;
+  right: 0;
   top: 50%;
   width: 24px;
   height: 156px;
@@ -3537,10 +3550,10 @@ select.small {
   justify-content: center;
   padding: 0;
   border: 1px solid rgba(37, 99, 235, 0.2);
-  border-radius: 18px 0 0 18px;
+  border-radius: 0 18px 18px 0;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(232, 239, 249, 0.96) 100%);
   color: #1f4b8f;
-  clip-path: polygon(0 12%, 100% 0, 100% 100%, 0 88%);
+  clip-path: polygon(0 0, 100% 12%, 100% 88%, 0 100%);
   box-shadow:
     0 16px 30px rgba(15, 23, 42, 0.18);
   transform: translateY(-50%);
@@ -3550,12 +3563,12 @@ select.small {
   transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
-.craft-right-panel > .craft-predictor-handle:hover {
+.craft-predictor-stage > .craft-predictor-handle:hover {
   border-color: rgba(37, 99, 235, 0.34);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(220, 231, 247, 1) 100%);
 }
 
-.craft-right-panel > .craft-predictor-handle:active {
+.craft-predictor-stage > .craft-predictor-handle:active {
   transform: translateY(-50%);
 }
 
@@ -3567,7 +3580,7 @@ select.small {
   transform: rotate(-135deg) translateX(-1px);
 }
 
-.craft-right-panel > .craft-predictor-handle[aria-expanded="true"] .craft-predictor-handle-arrow {
+.craft-predictor-stage > .craft-predictor-handle[aria-expanded="true"] .craft-predictor-handle-arrow {
   transform: rotate(45deg) translateX(-1px);
 }
 
@@ -6294,7 +6307,10 @@ select.small {
   }
 
   .craft-predictor-panel {
-    inset: 0;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 24px;
   }
 
   .craft-predictor-group-grid {
@@ -7762,11 +7778,11 @@ body.theme-inkblue #craftPage .craft-preview-candidates {
   background: transparent;
 }
 
-body.theme-inkblue #craftPage .craft-predictor-stage {
+body.theme-inkblue .craft-predictor-stage {
   background: transparent;
 }
 
-body.theme-inkblue #craftPage .craft-predictor-drawer {
+body.theme-inkblue .craft-predictor-drawer {
   border-color: rgba(157, 180, 213, 0.44);
   background: linear-gradient(180deg, rgba(17, 24, 39, 0.94) 0%, rgba(20, 28, 44, 0.96) 100%);
   box-shadow:
@@ -7774,14 +7790,14 @@ body.theme-inkblue #craftPage .craft-predictor-drawer {
     0 -10px 28px rgba(0, 0, 0, 0.24);
 }
 
-body.theme-inkblue #craftPage .craft-predictor-handle {
+body.theme-inkblue .craft-predictor-handle {
   border-color: rgba(243, 199, 121, 0.16);
   background: linear-gradient(180deg, rgba(36, 31, 23, 0.96) 0%, rgba(14, 16, 20, 0.98) 100%);
   color: #f3c779;
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
 }
 
-body.theme-inkblue #craftPage .craft-right-panel > .craft-predictor-handle:hover {
+body.theme-inkblue .craft-predictor-stage > .craft-predictor-handle:hover {
   border-color: rgba(243, 199, 121, 0.34);
   background: linear-gradient(180deg, rgba(48, 40, 28, 0.98) 0%, rgba(18, 20, 24, 0.98) 100%);
 }
@@ -10128,6 +10144,78 @@ body.web-inv-split-dragging {
   overflow: hidden;
 }
 
+/* ═══ Market confirm modal ═══ */
+.market-confirm-dialog {
+  max-width: 650px;
+}
+.market-confirm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 12px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 8px;
+}
+.market-confirm-select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.market-confirm-count {
+  margin-left: auto;
+  color: #888;
+}
+.market-confirm-item-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.market-confirm-item-row {
+  display: grid;
+  grid-template-columns: 28px 50px 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 12px;
+}
+.market-confirm-item-row img {
+  width: 44px;
+  height: 33px;
+  object-fit: contain;
+}
+.market-confirm-item-title {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-confirm-item-desc {
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dark gold theme for market confirm */
+body.theme-inkblue .market-confirm-toolbar {
+  border-bottom-color: var(--ops-border-soft, rgba(243,199,121,0.14));
+}
+body.theme-inkblue .market-confirm-item-row {
+  border-bottom-color: rgba(243,199,121,0.08);
+}
+body.theme-inkblue .market-confirm-item-title {
+  color: rgba(255,255,255,0.85);
+}
+body.theme-inkblue .market-confirm-item-desc {
+  color: rgba(243,199,121,0.5);
+}
+body.theme-inkblue .market-confirm-count {
+  color: rgba(243,199,121,0.5);
+}
+
 /* ═══ Dark gold theme overrides for webInventoryPage ═══ */
 body.theme-inkblue #webInventoryPage .web-inv-account-panel {
   border-right-color: var(--ops-border-soft, rgba(243,199,121,0.14));
@@ -10430,4 +10518,237 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   border-color: rgba(255, 255, 255, 0.32);
   background: linear-gradient(180deg, rgba(40, 43, 50, 0.98) 0%, rgba(12, 14, 18, 1) 100%);
   color: var(--ops-accent-strong, #f3c779);
+}
+
+/* ═══ Steam Guard 令牌绑定弹窗 ═══ */
+.steam-guard-enroll-dialog { max-width: 520px; }
+
+.enroll-step.hidden { display: none; }
+
+.enroll-warning-box {
+  background: rgba(255, 180, 50, 0.08);
+  border: 1px solid rgba(255, 180, 50, 0.25);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.enroll-warning-box p { margin: 0 0 6px; }
+.enroll-warning-box ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.enroll-warning-box li { margin-bottom: 4px; }
+
+.enroll-select-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.enroll-select-label select {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.enroll-revocation-box {
+  background: rgba(220, 164, 76, 0.10);
+  border: 1px solid rgba(220, 164, 76, 0.30);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+.enroll-revocation-box p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.enroll-revocation-box code {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #f3c779;
+  user-select: all;
+}
+
+.enroll-sms-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.enroll-sms-label input {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 15px;
+  letter-spacing: 3px;
+  text-align: center;
+}
+
+.enroll-success-box {
+  text-align: center;
+  padding: 16px 0;
+}
+.enroll-success-box p { margin: 6px 0; font-size: 14px; }
+.enroll-success-box code {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f3c779;
+  letter-spacing: 2px;
+  user-select: all;
+}
+.enroll-success-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.enroll-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 18px;
+}
+.enroll-status.error { color: var(--danger); }
+
+/* ═══ Steam Guard 令牌详情弹窗 ═══ */
+.token-detail-dialog { max-width: 480px; }
+
+.token-totp-section {
+  text-align: center;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.token-totp-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.token-totp-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.token-totp-code {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  font-family: "Consolas", "Monaco", monospace;
+  color: #f3c779;
+  user-select: all;
+}
+.token-totp-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.token-totp-bar {
+  width: 160px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.token-totp-bar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: var(--totp-progress, 100%);
+  background: linear-gradient(90deg, #dca44c, #f3c779);
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+#tokenTotpCountdown {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 28px;
+  text-align: right;
+}
+
+.token-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.token-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 6px 0;
+}
+.token-info-label {
+  min-width: 80px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.token-info-value {
+  flex: 1;
+  color: var(--text);
+  word-break: break-all;
+  font-family: "Consolas", "Monaco", monospace;
+  font-size: 12px;
+}
+.token-info-value.masked {
+  letter-spacing: 2px;
+}
+.token-toggle-btn,
+.token-copy-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1;
+  flex-shrink: 0;
+}
+.token-toggle-btn:hover,
+.token-copy-btn:hover {
+  border-color: var(--accent, #dca44c);
+  color: var(--text);
+}
+
+.token-raw-section {
+  margin-top: 14px;
+}
+.token-raw-section summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 6px 0;
+  user-select: none;
+}
+.token-raw-section summary:hover { color: var(--text); }
+.token-raw-pre {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-x: auto;
+  max-height: 300px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
 }

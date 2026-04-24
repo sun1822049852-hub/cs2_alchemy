@@ -7,7 +7,7 @@ const {AccountStore} = require("./accountStore");
 const {AppAuthStore} = require("./appAuthStore");
 const {TokenStore} = require("./tokenStore");
 const {UiStateStore} = require("./uiStateStore");
-const {loginAndSaveToken} = require("./authService");
+const {loginAndSaveToken, startLoginSession, submitGuardCode, removePendingSession} = require("./authService");
 const {parseMaFile, generateTotp} = require("./maFileParser");
 const {refreshWebCookie, refreshWebCookieFromToken} = require("./steamWebSession");
 const {fetchFullInventory} = require("./inventoryService");
@@ -51,6 +51,7 @@ const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./consta
 const { sellItem, getPriceOverview, calculateBuyerPrice, calculateSellerPrice, getMarketConfirmations, confirmMarketListings } = require("./steamMarketService");
 const { checkBansBatch, checkBanSingle, formatBanStatus, fetchBalance, fetchTradeUrl } = require("./steamAccountTools");
 const { getSteamApiKey, setSteamApiKey } = require("./steamApiKeyStore");
+const { enrollSteamGuard, finalizeSteamGuard } = require("./steamGuardEnrollService");
 
 const UI_DIR = path.resolve(__dirname, "..", "ui");
 const SESSION_COOKIE_NAME = "cs2_alchemy_session";
@@ -1144,6 +1145,24 @@ async function resolveAccountProfile({username, password = "", viewerUsername = 
     logger.info("ui_server", `profile steamid fallback: account=${accountName} source=gc account_id=${gcAccountId}`);
   }
 
+  // --- wallet: layer-1 from steam CM (auto-pushed on login) ---
+  let walletBalance = "";
+  let walletSource = "";
+  const WALLET_CURRENCY_SYMBOLS = {1: "$", 2: "£", 3: "€", 23: "¥", 13: "S$", 29: "HK$"};
+  if (steam && steam.wallet && steam.wallet.hasWallet) {
+    const wBal = steam.wallet.balance;
+    const wCur = steam.wallet.currency;
+    const sym = WALLET_CURRENCY_SYMBOLS[wCur] || `[${wCur}] `;
+    walletBalance = `${sym} ${Number(wBal).toFixed(2)}`;
+    walletSource = "steam_cm";
+    logger.info(
+      "ui_server",
+      `profile wallet from CM: account=${accountName} balance=${walletBalance} currency=${wCur}`
+    );
+  } else {
+    logger.info("ui_server", `profile wallet CM unavailable: account=${accountName}`);
+  }
+
   const profile = {
     username: accountName,
     steam_id64: finalSteamId64,
@@ -1158,7 +1177,9 @@ async function resolveAccountProfile({username, password = "", viewerUsername = 
     avatar_source: personaSource || "unavailable",
     gc_account_id: gcAccountId > 0 ? String(gcAccountId) : "",
     gc_player_level: gcPlayerLevel > 0 ? gcPlayerLevel : 0,
-    gc_player_cur_xp: gcPlayerCurXp > 0 ? gcPlayerCurXp : 0
+    gc_player_cur_xp: gcPlayerCurXp > 0 ? gcPlayerCurXp : 0,
+    wallet_balance: walletBalance,
+    wallet_source: walletSource
   };
   const avatarReady = Boolean(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon);
   if (!avatarReady) {
@@ -1739,9 +1760,17 @@ async function handleApi(req, res, urlObj, deps = {}) {
           `account profile save skipped: account=${profile.username} message=${asString(saveErr && saveErr.message ? saveErr.message : saveErr)}`
         );
       }
+      // persist wallet balance from CM if available
+      if (profile.wallet_balance) {
+        try {
+          const balStore = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
+          balStore.updateSteamAccountBalance(profile.username, profile.wallet_balance);
+          balStore.close();
+        } catch (_) {}
+      }
       logger.info(
         "ui_server",
-        `account profile: account=${profile.username} steamid=${profile.steam_id64 || "-"} avatar=${profile.avatar_url_full ? "yes" : "no"} source=${profile.avatar_source}`
+        `account profile: account=${profile.username} steamid=${profile.steam_id64 || "-"} avatar=${profile.avatar_url_full ? "yes" : "no"} source=${profile.avatar_source} wallet=${profile.wallet_balance || "-"}`
       );
       writeJson(res, 200, {ok: true, profile});
     } catch (err) {
@@ -1835,6 +1864,213 @@ async function handleApi(req, res, urlObj, deps = {}) {
     const uiState = getUiStateStore(deps, viewerUsername);
     uiState.setLastSelected(username);
     writeJson(res, 200, {ok: true, active: store.getActive()});
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // Two-phase login: Phase 1 — start session, return guard requirement
+  // -----------------------------------------------------------------------
+  if (pathname === "/api/accounts/login-start" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    const password = asString(body.password).trim();
+    const totp = asString(body.totp).trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!password) {
+      writeJson(res, 400, {ok: false, message: "password is required"});
+      return true;
+    }
+
+    logger.info("ui_server", `login-start request: account=${username} totp=${totp ? "yes" : "no"}`);
+    try {
+      const tokenStore = new TokenStore();
+      const phase1 = await startLoginSession({
+        username,
+        password,
+        twoFactorCode: totp,
+        tokenStore,
+        logger
+      });
+
+      if (phase1.done) {
+        // Login completed in one shot (totp was provided or no guard needed)
+        const result = phase1.result;
+        const accountStore = getViewerAccountStore(auth, deps);
+        const existed = accountStore.get(username);
+        const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
+        const authClient = getControlPlaneAuthClient(deps);
+        const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
+
+        let profile = null;
+        try {
+          profile = await resolveAccountProfileFn({
+            username,
+            password,
+            viewerUsername: accountViewerUsername,
+            accountStoreOptions: {
+              dbPath: auth.store.dbPath,
+              accountsFilePath: auth.store.accountsFilePath
+            }
+          });
+        } catch (profileErr) {
+          logger.warn("ui_server", `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`);
+        }
+        const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
+        if (requiresBindingCheck) {
+          if (!nextSteamId) {
+            writeJson(res, 502, {ok: false, reason: "steam_id_missing", message: "\u767b\u5f55\u6210\u529f\u4f46\u672a\u83b7\u53d6\u5230 SteamID\uff0c\u65e0\u6cd5\u6821\u9a8c\u7ed1\u5b9a\u8d44\u683c"});
+            return true;
+          }
+          const runtimeBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function" ? auth.licenseRuntime.readBundle() : null;
+          const refreshCredential = asString(runtimeBundle && runtimeBundle.refresh_credential).trim();
+          if (!refreshCredential || !authClient || typeof authClient.checkOrBindSteamAccount !== "function") {
+            writeJson(res, 503, {ok: false, reason: "steam_binding_auth_unavailable", message: "\u8ba4\u8bc1\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528"});
+            return true;
+          }
+          try {
+            const binding = await authClient.checkOrBindSteamAccount({
+              refreshCredential,
+              deviceId: getClientDeviceId(deps),
+              steamId: nextSteamId,
+              steamAccountName: username
+            });
+            if (!binding || binding.ok === false) {
+              writeJson(res, 409, {ok: false, reason: asString(binding && (binding.reason || binding.code) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(binding && binding.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
+              return true;
+            }
+          } catch (bindingErr) {
+            writeJson(res, Math.max(400, Number(bindingErr && bindingErr.status) || 409), {ok: false, reason: asString(bindingErr && (bindingErr.code || (bindingErr.data && bindingErr.data.reason)) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(bindingErr && bindingErr.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
+            return true;
+          }
+        }
+        const nextSteamName = asString(profile && profile.persona_name || "").trim();
+        const nextAvatarUrl = pickProfileAvatarUrl(profile);
+        accountStore.upsert({
+          username,
+          password,
+          remark: finalRemark,
+          steamName: nextSteamName || (existed ? existed.steam_name : ""),
+          steamId: nextSteamId || (existed ? existed.steam_id : ""),
+          avatarUrl: nextAvatarUrl || (existed ? existed.avatar_url : "")
+        });
+        const uiState = getUiStateStore(deps, viewerUsername);
+        uiState.setLastSelected(username);
+        if (typeof uiState.clearAccountAuthState === "function") uiState.clearAccountAuthState(username);
+        logger.info("ui_server", `login-start success (one-shot): account=${username}`);
+        writeJson(res, 200, {ok: true, done: true, active: accountStore.getActive(), accounts: accountStore.list()});
+      } else {
+        // Guard required — session cached, waiting for code
+        logger.info("ui_server", `login-start guard required: account=${username} guard_type=${phase1.guard_type} hint=${phase1.guard_hint || "-"}`);
+        writeJson(res, 200, {ok: true, done: false, guard_type: phase1.guard_type, guard_hint: phase1.guard_hint || ""});
+      }
+    } catch (err) {
+      const normalized = normalizeLoginSaveError(err);
+      logger.warn("ui_server", `login-start failed: account=${username} reason=${normalized.reason} status=${normalized.status} raw=${normalized.raw || "-"}`);
+      writeJson(res, normalized.status, {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw});
+    }
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // Two-phase login: Phase 2 — submit guard code
+  // -----------------------------------------------------------------------
+  if (pathname === "/api/accounts/login-submit-code" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    const code = asString(body.code).trim();
+    const password = asString(body.password).trim();
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+    if (!code) {
+      writeJson(res, 400, {ok: false, message: "code is required"});
+      return true;
+    }
+
+    logger.info("ui_server", `login-submit-code request: account=${username}`);
+    try {
+      const tokenStore = new TokenStore();
+      const phase2 = await submitGuardCode({username, code, tokenStore, logger});
+      const result = phase2.result;
+
+      const accountStore = getViewerAccountStore(auth, deps);
+      const existed = accountStore.get(username);
+      const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
+      const authClient = getControlPlaneAuthClient(deps);
+      const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
+
+      let profile = null;
+      try {
+        profile = await resolveAccountProfileFn({
+          username,
+          password,
+          viewerUsername: accountViewerUsername,
+          accountStoreOptions: {
+            dbPath: auth.store.dbPath,
+            accountsFilePath: auth.store.accountsFilePath
+          }
+        });
+      } catch (profileErr) {
+        logger.warn("ui_server", `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`);
+      }
+      const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
+      if (requiresBindingCheck) {
+        if (!nextSteamId) {
+          writeJson(res, 502, {ok: false, reason: "steam_id_missing", message: "\u767b\u5f55\u6210\u529f\u4f46\u672a\u83b7\u53d6\u5230 SteamID\uff0c\u65e0\u6cd5\u6821\u9a8c\u7ed1\u5b9a\u8d44\u683c"});
+          return true;
+        }
+        const runtimeBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function" ? auth.licenseRuntime.readBundle() : null;
+        const refreshCredential = asString(runtimeBundle && runtimeBundle.refresh_credential).trim();
+        if (!refreshCredential || !authClient || typeof authClient.checkOrBindSteamAccount !== "function") {
+          writeJson(res, 503, {ok: false, reason: "steam_binding_auth_unavailable", message: "\u8ba4\u8bc1\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528"});
+          return true;
+        }
+        try {
+          const binding = await authClient.checkOrBindSteamAccount({
+            refreshCredential,
+            deviceId: getClientDeviceId(deps),
+            steamId: nextSteamId,
+            steamAccountName: username
+          });
+          if (!binding || binding.ok === false) {
+            writeJson(res, 409, {ok: false, reason: asString(binding && (binding.reason || binding.code) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(binding && binding.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
+            return true;
+          }
+        } catch (bindingErr) {
+          writeJson(res, Math.max(400, Number(bindingErr && bindingErr.status) || 409), {ok: false, reason: asString(bindingErr && (bindingErr.code || (bindingErr.data && bindingErr.data.reason)) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(bindingErr && bindingErr.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
+          return true;
+        }
+      }
+      const nextSteamName = asString(profile && profile.persona_name || "").trim();
+      const nextAvatarUrl = pickProfileAvatarUrl(profile);
+      accountStore.upsert({
+        username,
+        password,
+        remark: finalRemark,
+        steamName: nextSteamName || (existed ? existed.steam_name : ""),
+        steamId: nextSteamId || (existed ? existed.steam_id : ""),
+        avatarUrl: nextAvatarUrl || (existed ? existed.avatar_url : "")
+      });
+      const uiState = getUiStateStore(deps, viewerUsername);
+      uiState.setLastSelected(username);
+      if (typeof uiState.clearAccountAuthState === "function") uiState.clearAccountAuthState(username);
+      logger.info("ui_server", `login-submit-code success: account=${username}`);
+      writeJson(res, 200, {ok: true, done: true, active: accountStore.getActive(), accounts: accountStore.list()});
+    } catch (err) {
+      const normalized = normalizeLoginSaveError(err);
+      logger.warn("ui_server", `login-submit-code failed: account=${username} reason=${normalized.reason} status=${normalized.status} raw=${normalized.raw || "-"}`);
+      writeJson(res, normalized.status, {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw});
+    }
     return true;
   }
 
@@ -3894,6 +4130,105 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const key = asString(body.key || "").trim();
       setSteamApiKey(key);
       writeJson(res, 200, {ok: true, message: key ? "已保存" : "已清除"});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  // ═══ Steam Guard 令牌绑定 + 令牌详情 ═══
+
+  if (pathname === "/api/accounts/enroll-steam-guard" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const username = asString(body.username || "").trim();
+      if (!username) {
+        writeJson(res, 400, {ok: false, message: "username required"});
+        return true;
+      }
+      const tokenStore = new TokenStore();
+      const refreshToken = tokenStore.get(username);
+      tokenStore.close();
+      if (!refreshToken) {
+        writeJson(res, 400, {ok: false, message: "该账号未登录或 refresh_token 不存在，请先登录"});
+        return true;
+      }
+      const result = await enrollSteamGuard({username, refreshToken, logger, timeoutMs: 60000});
+      writeJson(res, 200, result);
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  if (pathname === "/api/accounts/finalize-steam-guard" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const username = asString(body.username || "").trim();
+      const activationCode = asString(body.activationCode || "").trim();
+      if (!username || !activationCode) {
+        writeJson(res, 400, {ok: false, message: "username and activationCode required"});
+        return true;
+      }
+      const result = await finalizeSteamGuard({username, activationCode, logger});
+      if (result.ok && result.maFileContent) {
+        try {
+          const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
+          store.db.prepare("UPDATE steam_account SET mafile_content = ? WHERE username = ?").run(result.maFileContent, username);
+          store.close();
+        } catch (dbErr) {
+          logger.warn("steam_guard", `mafile db write failed: ${asString(dbErr.message || dbErr)}`);
+        }
+      }
+      writeJson(res, 200, result);
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  if (pathname === "/api/accounts/token-detail" && req.method === "GET") {
+    if (!requirePermission(res, auth, "accounts.read")) return true;
+    try {
+      const username = asString(urlObj.searchParams.get("username") || "").trim();
+      if (!username) {
+        writeJson(res, 400, {ok: false, message: "username required"});
+        return true;
+      }
+      const accountStore = getViewerAccountStore(auth, deps);
+      const acc = accountStore.get(username);
+      if (!acc || !acc.mafile_content) {
+        writeJson(res, 404, {ok: false, message: "该账号无 maFile 数据"});
+        return true;
+      }
+      const parsed = parseMaFile(acc.mafile_content);
+      const currentTotp = generateTotp(parsed.sharedSecret);
+      const crypto = require("crypto");
+      const secretKey = crypto.randomBytes(32);
+      const iv = crypto.randomBytes(16);
+      const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
+      let encrypted = cipher.update(parsed.sharedSecret, "utf8", "base64");
+      encrypted += cipher.final("base64");
+      const SteamTotp = require("steam-totp");
+      const serverTime = SteamTotp.time();
+      const localTime = Math.floor(Date.now() / 1000);
+      const serverTimeDiff = serverTime - localTime;
+      writeJson(res, 200, {
+        ok: true,
+        deviceId: parsed.deviceId || "",
+        revocationCode: parsed.revocationCode || "",
+        accountName: parsed.accountName || username,
+        steamId64: parsed.steamId64 || "",
+        currentTotp,
+        serverTimeDiff,
+        period: 30,
+        encryptedSecret: encrypted,
+        secretKeyHex: secretKey.toString("hex"),
+        ivHex: iv.toString("hex"),
+        steamData: acc.mafile_content
+      });
     } catch (err) {
       writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
     }

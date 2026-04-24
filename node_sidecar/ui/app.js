@@ -27,6 +27,7 @@ const state = {
   accountPasswordVisible: false,
   accountLoginMode: "add",
   pendingRelogin: null,
+  pendingGuard: null, // {username, password, guard_type, guard_hint} — two-phase login state
   accountLoginBusy: false,
   currentAccountUsername: "", connectedUsername: "", rows: [], mode: "grouped", searchText: "",
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
@@ -185,6 +186,12 @@ const ui = {
   marketSellPricePct: document.getElementById("marketSellPricePct"), marketSellApplyPctBtn: document.getElementById("marketSellApplyPctBtn"), marketSellFetchPricesBtn: document.getElementById("marketSellFetchPricesBtn"),
   marketSellItemList: document.getElementById("marketSellItemList"), marketSellProgress: document.getElementById("marketSellProgress"), marketSellProgressFill: document.getElementById("marketSellProgressFill"), marketSellProgressText: document.getElementById("marketSellProgressText"),
   marketSellSummary: document.getElementById("marketSellSummary"), marketSellStartBtn: document.getElementById("marketSellStartBtn"),
+  // ═══ 市场上架确认弹窗 ═══
+  marketConfirmModal: document.getElementById("marketConfirmModal"), marketConfirmCloseBtn: document.getElementById("marketConfirmCloseBtn"),
+  marketConfirmRefreshBtn: document.getElementById("marketConfirmRefreshBtn"), marketConfirmSelectAll: document.getElementById("marketConfirmSelectAll"),
+  marketConfirmCount: document.getElementById("marketConfirmCount"), marketConfirmItemList: document.getElementById("marketConfirmItemList"),
+  marketConfirmProgress: document.getElementById("marketConfirmProgress"), marketConfirmProgressFill: document.getElementById("marketConfirmProgressFill"), marketConfirmProgressText: document.getElementById("marketConfirmProgressText"),
+  marketConfirmSummary: document.getElementById("marketConfirmSummary"), marketConfirmStartBtn: document.getElementById("marketConfirmStartBtn"),
   // ═══ Steam API Key 弹窗 ═══
   steamApiKeyModal: document.getElementById("steamApiKeyModal"), steamApiKeyCloseBtn: document.getElementById("steamApiKeyCloseBtn"), steamApiKeyInput: document.getElementById("steamApiKeyInput"), steamApiKeySaveBtn: document.getElementById("steamApiKeySaveBtn")
 };
@@ -2562,28 +2569,32 @@ function pickAvatarUrlFromProfile(profile) {
   if (!profile || typeof profile !== "object") return "";
   return String(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon || "").trim();
 }
-function mergeAccountIdentity(username, {steamName = "", steamId = "", avatarUrl = ""} = {}) {
+function mergeAccountIdentity(username, {steamName = "", steamId = "", avatarUrl = "", balance = ""} = {}) {
   const key = String(username || "").trim();
   if (!key) return false;
   const nextSteamName = String(steamName || "").trim();
   const nextSteamId = String(steamId || "").trim();
   const nextAvatarUrl = String(avatarUrl || "").trim();
+  const nextBalance = String(balance || "").trim();
   let changed = false;
   state.accounts = state.accounts.map((row) => {
     if (String(row && row.username || "").trim() !== key) return row;
     const currentSteamName = String(row && row.steam_name || "").trim();
     const currentSteamId = String(row && row.steam_id || "").trim();
     const currentAvatarUrl = String(row && row.avatar_url || "").trim();
+    const currentBalance = String(row && row.balance || "").trim();
     const mergedSteamName = nextSteamName || currentSteamName;
     const mergedSteamId = nextSteamId || currentSteamId;
     const mergedAvatarUrl = nextAvatarUrl || currentAvatarUrl;
+    const mergedBalance = nextBalance || currentBalance;
     if (
       mergedSteamName === currentSteamName &&
       mergedSteamId === currentSteamId &&
-      mergedAvatarUrl === currentAvatarUrl
+      mergedAvatarUrl === currentAvatarUrl &&
+      mergedBalance === currentBalance
     ) return row;
     changed = true;
-    return {...row, steam_name: mergedSteamName, steam_id: mergedSteamId, avatar_url: mergedAvatarUrl};
+    return {...row, steam_name: mergedSteamName, steam_id: mergedSteamId, avatar_url: mergedAvatarUrl, balance: mergedBalance};
   });
   return changed;
 }
@@ -2608,7 +2619,8 @@ async function ensureAccountProfile(username, {force = false} = {}) {
     const changed = mergeAccountIdentity(key, {
       steamName: String(profile && profile.persona_name || "").trim(),
       steamId: String(profile && profile.steam_id64 || "").trim(),
-      avatarUrl: pickAvatarUrlFromProfile(profile)
+      avatarUrl: pickAvatarUrlFromProfile(profile),
+      balance: String(profile && profile.wallet_balance || "").trim()
     });
     state.profileHydratedUsernames.add(key);
     if (changed) {
@@ -2799,6 +2811,10 @@ function bindAccountTotpNormalization() {
 function clearAccountInputs({focusUsername = false} = {}) {
   state.accountLoginMode = "add";
   state.pendingRelogin = null;
+  if (state.pendingGuard) {
+    state.pendingGuard = null;
+    resetGuardHintUI();
+  }
   setAccountForm({username: "", password: "", totp: "", remark: ""});
   ensureAccountFormEditable({focusUsername});
 }
@@ -2964,6 +2980,15 @@ function showPage(pageId) {
   }
   if (pageId === "webInventoryPage") {
     renderWebInvAccountList();
+  }
+  /* 全局产物预测面板：仅在炼金汰换 / 多账号汰换页可见 */
+  const predictorPages = new Set(["craftPage", "batchCraftPage"]);
+  const stageEl = document.getElementById("craftPredictorStage");
+  if (stageEl) {
+    stageEl.style.display = predictorPages.has(pageId) ? "" : "none";
+  }
+  if (!predictorPages.has(pageId) && state.craftPredictorOpen) {
+    setCraftPredictorPanelOpen(false);
   }
 }
 function syncNavDrawerDom() {
@@ -3194,10 +3219,19 @@ function renderSavedAccounts() {
     webInvBtn.title = "查看 Web 库存（可选择物品转移）";
     webInvBtn.onclick = (e) => { e.stopPropagation(); showPage("webInventoryPage"); webInvSelectAccount(row.username); };
 
-    actions.append(remarkBtn, webInvBtn, delBtn);
+    const tokenBtn = document.createElement("button");
+    tokenBtn.textContent = "令牌详情";
+    tokenBtn.title = "查看 Steam Guard 令牌信息";
+    tokenBtn.style.display = row.mafile_content ? "" : "none";
+    tokenBtn.onclick = (e) => { e.stopPropagation(); openTokenDetailModal(row.username); };
+
+    actions.append(remarkBtn, tokenBtn, webInvBtn, delBtn);
     const sub = document.createElement("div");
     sub.className = "account-card-sub";
-    sub.textContent = `账号：${accountName || "-"}`;
+    const balanceText = String(row.balance || "").trim();
+    sub.textContent = balanceText
+      ? `账号：${accountName || "-"} · 余额：${balanceText}`
+      : `账号：${accountName || "-"}`;
     card.onclick = () => {
       state.accountSelectedUsername = row.username;
       syncInventoryAccountSelect();
@@ -3514,11 +3548,41 @@ async function loginAndSave() {
   const remark = "";
   if (!username) { setAccountStatus("请输入 Steam 账号", true); return; }
   if (!password) { setAccountStatus("请输入密码", true); return; }
-  if (!totp) { setAccountStatus("请输入令牌码", true); return; }
+
+  // --- Phase 2: submitting guard code for a pending session ---
+  if (state.pendingGuard && state.pendingGuard.username === username) {
+    if (!totp) { setAccountStatus("请输入验证码", true); return; }
+    if (setAccountLoginOverlayStage({percent: 25, title: "正在提交验证码", detail: "正在验证..."}) === false) {
+      setAccountStatus("当前有任务进行中，请稍后再试", true);
+      return false;
+    }
+    try {
+      setAccountLoginBusy(true);
+      setAccountStatus("正在提交验证码，请稍候...");
+      await api("/api/accounts/login-submit-code", {
+        method: "POST",
+        body: JSON.stringify({username, password, code: totp, remark})
+      });
+      state.pendingGuard = null;
+      resetGuardHintUI();
+      await finishLoginSuccess(username);
+      return true;
+    } catch (err) {
+      state.pendingGuard = null;
+      resetGuardHintUI();
+      setAccountStatus(formatLoginSaveError(err), true);
+      return false;
+    } finally {
+      clearAccountLoginOverlay();
+      if (state.accountLoginBusy) setAccountLoginBusy(false);
+    }
+  }
+
+  // --- Phase 1: start login (may complete immediately or require guard) ---
   if (setAccountLoginOverlayStage({
     percent: 25,
     title: "正在登录账号",
-    detail: "正在校验账号、密码与令牌码..."
+    detail: totp ? "正在校验账号、密码与令牌码..." : "正在校验账号与密码..."
   }) === false) {
     setAccountStatus("当前有任务进行中，请稍后再试", true);
     return false;
@@ -3527,48 +3591,23 @@ async function loginAndSave() {
   try {
     setAccountLoginBusy(true);
     setAccountStatus("正在登录，请稍候...");
-    await api("/api/accounts/login-save", {method: "POST", body: JSON.stringify({username, password, totp, remark})});
-    setAccountLoginOverlayStage({
-      percent: 60,
-      title: "正在同步账号信息",
-      detail: "正在更新本地账号列表..."
+    const resp = await api("/api/accounts/login-start", {
+      method: "POST",
+      body: JSON.stringify({username, password, totp, remark})
     });
-    await loadAccounts({preferUsername: username});
-    setAccountLoginOverlayStage({
-      percent: 90,
-      title: "正在切换账号视图",
-      detail: "正在切换到刚登录的账号..."
-    });
-    await switchAccountView(username, {
-      silentSnapshotSummary: true,
-      deferComponentTaskQueue: true
-    });
-    setAccountLoginOverlayStage({
-      percent: 100,
-      title: "登录完成",
-      detail: "正在准备后台刷新库存..."
-    });
-    clearAccountLoginOverlay();
-    setAccountLoginBusy(false);
-    clearAccountInputs();
-    closeAccountLoginModal();
-    setAccountStatus("准备就绪");
-    void (async () => {
-      try {
-        handlePostLoginRefreshResult(
-          username,
-          await doRefresh({
-            usernameOverride: username,
-            force: true,
-            silentRateLimit: true,
-            silentInfo: true,
-            suppressReloginModal: true
-          })
-        );
-      } catch (_) {
-        // doRefresh already normalizes expected failures; ignore unexpected background refresh rejections
-      }
-    })();
+    const data = resp && resp.data ? resp.data : resp;
+
+    if (data && data.done === false && data.guard_type) {
+      // Guard required — enter phase 2
+      clearAccountLoginOverlay();
+      setAccountLoginBusy(false);
+      state.pendingGuard = {username, password, guard_type: data.guard_type, guard_hint: data.guard_hint || ""};
+      applyGuardHintUI(data.guard_type, data.guard_hint || "");
+      return false;
+    }
+
+    // Login completed in one shot
+    await finishLoginSuccess(username);
     return true;
   } catch (err) {
     setAccountStatus(formatLoginSaveError(err), true);
@@ -3577,6 +3616,72 @@ async function loginAndSave() {
     clearAccountLoginOverlay();
     if (state.accountLoginBusy) setAccountLoginBusy(false);
   }
+}
+
+function applyGuardHintUI(guardType, guardHint) {
+  const label = guardType === "email_code"
+    ? (guardHint ? `邮箱验证码（已发送到 ${guardHint}）` : "邮箱验证码")
+    : "令牌码";
+  const totpLabel = ui.accountTotp && ui.accountTotp.closest && ui.accountTotp.closest("label");
+  if (totpLabel) {
+    const span = totpLabel.querySelector("span");
+    if (span) span.textContent = label;
+  }
+  if (ui.accountTotp) {
+    ui.accountTotp.value = "";
+    ui.accountTotp.maxLength = guardType === "email_code" ? 5 : 6;
+    ui.accountTotp.focus();
+  }
+  const hintEl = document.getElementById("accountGuardHint");
+  if (hintEl) {
+    if (guardType === "email_code" && guardHint) {
+      hintEl.textContent = `Steam 已向 ${guardHint} 发送验证码，请查收邮件`;
+      hintEl.classList.remove("hidden");
+    } else if (guardType === "device_code") {
+      hintEl.textContent = "请输入 Steam 手机令牌码";
+      hintEl.classList.remove("hidden");
+    } else {
+      hintEl.classList.add("hidden");
+    }
+  }
+  setAccountStatus(guardType === "email_code"
+    ? `验证码已发送到 ${guardHint || "邮箱"}，请输入后点击登录`
+    : "请输入令牌码后点击登录");
+  if (ui.loginSaveBtn) ui.loginSaveBtn.textContent = "提交验证码";
+}
+
+function resetGuardHintUI() {
+  state.pendingGuard = null;
+  const totpLabel = ui.accountTotp && ui.accountTotp.closest && ui.accountTotp.closest("label");
+  if (totpLabel) {
+    const span = totpLabel.querySelector("span");
+    if (span) span.textContent = "令牌码";
+  }
+  if (ui.accountTotp) ui.accountTotp.maxLength = 6;
+  const hintEl = document.getElementById("accountGuardHint");
+  if (hintEl) hintEl.classList.add("hidden");
+  syncAccountLoginActionState();
+}
+
+async function finishLoginSuccess(username) {
+  setAccountLoginOverlayStage({percent: 60, title: "正在同步账号信息", detail: "正在更新本地账号列表..."});
+  await loadAccounts({preferUsername: username});
+  setAccountLoginOverlayStage({percent: 90, title: "正在切换账号视图", detail: "正在切换到刚登录的账号..."});
+  await switchAccountView(username, {silentSnapshotSummary: true, deferComponentTaskQueue: true});
+  setAccountLoginOverlayStage({percent: 100, title: "登录完成", detail: "正在准备后台刷新库存..."});
+  clearAccountLoginOverlay();
+  setAccountLoginBusy(false);
+  clearAccountInputs();
+  closeAccountLoginModal();
+  setAccountStatus("准备就绪");
+  void (async () => {
+    try {
+      handlePostLoginRefreshResult(
+        username,
+        await doRefresh({usernameOverride: username, force: true, silentRateLimit: true, silentInfo: true, suppressReloginModal: true})
+      );
+    } catch (_) {}
+  })();
 }
 
 function clearAccountForm() {
@@ -4358,7 +4463,14 @@ function createEmptyCraftRecipeEntry({activate = true} = {}) {
 function findCraftRecipeById(recipeId) {
   const key = String(recipeId || "").trim();
   if (!key) return null;
-  return (Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : []).find((entry) => String(entry && entry.id || "").trim() === key) || null;
+  const found = (Array.isArray(state.craftRecipeQueue) ? state.craftRecipeQueue : []).find((entry) => String(entry && entry.id || "").trim() === key);
+  if (found) return found;
+  for (const group of (Array.isArray(state.batchCraftQueue) ? state.batchCraftQueue : [])) {
+    const recipes = Array.isArray(group && group.recipes) ? group.recipes : [];
+    const match = recipes.find((entry) => String(entry && entry.id || "").trim() === key);
+    if (match) return match;
+  }
+  return null;
 }
 function syncCraftSelectedIdsFromActiveRecipe() {
   state.craftSelectedItemIds.clear();
@@ -8766,7 +8878,7 @@ function selectCraftPredictorContext({type = "", id = "", label = "", autoOpen =
   state.craftPredictorContextType = nextType;
   state.craftPredictorContextId = resolvedId;
   state.craftPredictorContextLabel = String(label || "").trim() || (nextType === "draft" ? "当前配置" : "已选配方");
-  if (nextType === "draft" && preferredRowsById instanceof Map && preferredRowsById.size > 0) {
+  if (preferredRowsById instanceof Map && preferredRowsById.size > 0) {
     setCraftPredictorPreferredRows(nextKey, preferredRowsById);
   }
   if (autoOpen && (forceOpen || !state.craftPredictorAutoOpenMuted)) {
@@ -9202,6 +9314,8 @@ function renderCraftPredictorPanel() {
   const selectedLabel = context ? context.label : "未选择配方";
   const open = !!state.craftPredictorOpen;
   ui.craftPredictorPanel.classList.toggle("collapsed", !open);
+  const stage = ui.craftPredictorPanel.closest(".craft-predictor-stage");
+  if (stage) stage.classList.toggle("collapsed", !open);
   ui.craftPredictorHandle.setAttribute("aria-expanded", open ? "true" : "false");
   ui.craftPredictorHandle.setAttribute("aria-label", open ? "收起产物预测抽屉" : "展开产物预测抽屉");
   if (typeof updateCraftPredictorHandleGeometry === "function") updateCraftPredictorHandleGeometry();
@@ -9326,44 +9440,7 @@ function renderCraftPredictorPanel() {
   }
 }
 function updateCraftPredictorHandleGeometry() {
-  if (typeof ui === "undefined" || !ui) return;
-  const panel = ui.craftRightPanel;
-  const anchor = ui.craftPredictorPanel;
-  const drawer = ui.craftPredictorDrawer;
-  const fallbackTop = "50%";
-  const fallbackHeight = "156px";
-  const fallbackWidth = "24px";
-  const reset = () => {
-    if (!panel) return;
-    panel.style.setProperty("--craft-predictor-handle-top", fallbackTop);
-    panel.style.setProperty("--craft-predictor-handle-height", fallbackHeight);
-    panel.style.setProperty("--craft-predictor-handle-width", fallbackWidth);
-  };
-  if (!panel || !anchor || !drawer) {
-    reset();
-    return;
-  }
-  const panelRect = panel.getBoundingClientRect();
-  const anchorRect = anchor.getBoundingClientRect();
-  const drawerRect = drawer.getBoundingClientRect();
-  if (!(panelRect.height > 0) || !(drawerRect.height > 0) || !(anchorRect.right <= panelRect.right)) {
-    reset();
-    return;
-  }
-  const nextHeight = Math.round(Math.max(132, Math.min(168, drawerRect.height * 0.4)));
-  const nextWidth = Math.round(panelRect.right - anchorRect.right);
-  if (!(nextWidth > 0)) {
-    reset();
-    return;
-  }
-  const gapCenter = drawerRect.top + drawerRect.height / 2;
-  const nextTop = Math.max(
-    nextHeight / 2,
-    Math.min(panelRect.height - nextHeight / 2, gapCenter - panelRect.top)
-  );
-  panel.style.setProperty("--craft-predictor-handle-top", `${Math.round(nextTop)}px`);
-  panel.style.setProperty("--craft-predictor-handle-height", `${nextHeight}px`);
-  panel.style.setProperty("--craft-predictor-handle-width", `${nextWidth}px`);
+  /* 面板已提升为 fixed 全局浮动，handle 定位由 CSS 控制，无需动态计算 */
 }
 function getCraftLeftPanelBusyState() {
   if (state.componentOpBusy) {
@@ -13922,7 +13999,10 @@ function renderBatchCraftQueue() {
           renderBatchCraftQueue();
         },
         active: false,
-        selectable: false,
+        selectable: true,
+        onActivate: () => {
+          selectCraftPredictorContext({type: "recipe", id: recipe.id, label: accountDisplayName + " 配方", autoOpen: false, preferredRowsById: rowsById});
+        },
         extraClass: statusClass
       });
       const accountLabel = document.createElement("div");
@@ -13975,6 +14055,7 @@ function renderBatchCraftPage() {
     ui.batchCraftStatusText.classList.toggle("error", !!state.batchCraftStatusError);
   }
   syncBatchCraftSettingsControls();
+  if (typeof renderCraftPredictorPanel === "function") renderCraftPredictorPanel();
 }
 
 async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, existingItemIds) {
@@ -16300,6 +16381,10 @@ async function marketSellStart() {
               if (ui.marketSellProgressText) ui.marketSellProgressText.textContent = `上架中 ${data.index + 1}/${data.total}`;
             } else if (eventName === "done") {
               if (ui.marketSellProgressText) ui.marketSellProgressText.textContent = `完成: 成功 ${data.successCount}, 失败 ${data.failCount}`;
+              // 上架完成后，延迟 2 秒自动打开确认弹窗
+              if (data.successCount > 0) {
+                setTimeout(() => openMarketConfirmModal(), 2000);
+              }
             }
           } catch (_) {}
         }
@@ -16309,6 +16394,129 @@ async function marketSellStart() {
     alert("上架失败: " + err.message);
   } finally {
     if (ui.marketSellStartBtn) ui.marketSellStartBtn.disabled = false;
+  }
+}
+
+// ═══ 市场上架确认 ═══
+
+async function openMarketConfirmModal() {
+  const username = webInvState.selectedAccount;
+  if (!username) { alert("请先选择账号"); return; }
+
+  if (ui.marketConfirmModal) ui.marketConfirmModal.classList.remove("hidden");
+  if (ui.marketConfirmProgress) ui.marketConfirmProgress.classList.add("hidden");
+  if (ui.marketConfirmStartBtn) ui.marketConfirmStartBtn.disabled = false;
+  if (ui.marketConfirmItemList) ui.marketConfirmItemList.replaceChildren();
+  if (ui.marketConfirmCount) ui.marketConfirmCount.textContent = "加载中...";
+  if (ui.marketConfirmSummary) ui.marketConfirmSummary.textContent = "已选 0 项";
+  if (ui.marketConfirmSelectAll) ui.marketConfirmSelectAll.checked = false;
+
+  await marketConfirmRefresh();
+}
+
+async function marketConfirmRefresh() {
+  const username = webInvState.selectedAccount;
+  if (!username) return;
+
+  if (ui.marketConfirmRefreshBtn) ui.marketConfirmRefreshBtn.disabled = true;
+  if (ui.marketConfirmCount) ui.marketConfirmCount.textContent = "加载中...";
+  if (ui.marketConfirmItemList) ui.marketConfirmItemList.replaceChildren();
+
+  try {
+    const resp = await fetch("/api/market/confirmations", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username})
+    });
+    const data = await resp.json();
+    if (!data.ok) { alert(data.message || "获取确认列表失败"); return; }
+
+    const items = data.confirmations || [];
+    if (ui.marketConfirmCount) ui.marketConfirmCount.textContent = `${items.length} 项待确认`;
+
+    const list = ui.marketConfirmItemList;
+    if (!list) return;
+
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "market-confirm-item-row";
+      row.dataset.confirmId = item.id;
+      row.dataset.confirmKey = item.key;
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "market-confirm-item-cb";
+      cb.onchange = () => updateMarketConfirmSummary();
+
+      const icon = document.createElement("img");
+      icon.src = item.icon || "";
+      icon.width = 44; icon.height = 33;
+      icon.onerror = () => { icon.style.display = "none"; };
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "market-confirm-item-title";
+      titleSpan.textContent = item.title || "未知物品";
+
+      const descSpan = document.createElement("span");
+      descSpan.className = "market-confirm-item-desc";
+      descSpan.textContent = item.description || "";
+
+      row.append(cb, icon, titleSpan, descSpan);
+      list.appendChild(row);
+    }
+  } catch (err) {
+    alert("获取确认列表失败: " + err.message);
+  } finally {
+    if (ui.marketConfirmRefreshBtn) ui.marketConfirmRefreshBtn.disabled = false;
+  }
+}
+
+function updateMarketConfirmSummary() {
+  const cbs = (ui.marketConfirmItemList || document).querySelectorAll(".market-confirm-item-cb:checked");
+  if (ui.marketConfirmSummary) ui.marketConfirmSummary.textContent = `已选 ${cbs.length} 项`;
+}
+
+async function marketConfirmStart() {
+  const username = webInvState.selectedAccount;
+  if (!username) return;
+
+  const rows = (ui.marketConfirmItemList || document).querySelectorAll(".market-confirm-item-row");
+  const ids = [];
+  for (const row of rows) {
+    const cb = row.querySelector(".market-confirm-item-cb");
+    if (cb && cb.checked) {
+      ids.push(row.dataset.confirmId);
+    }
+  }
+  if (ids.length === 0) { alert("请先勾选要确认的物品"); return; }
+
+  if (ui.marketConfirmStartBtn) ui.marketConfirmStartBtn.disabled = true;
+  if (ui.marketConfirmProgress) ui.marketConfirmProgress.classList.remove("hidden");
+  if (ui.marketConfirmProgressFill) ui.marketConfirmProgressFill.style.width = "0%";
+  if (ui.marketConfirmProgressText) ui.marketConfirmProgressText.textContent = "确认中...";
+
+  try {
+    const resp = await fetch("/api/market/confirm-listings", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username, confirmationIds: ids})
+    });
+    const data = await resp.json();
+    if (!data.ok) { alert(data.message || "确认失败"); return; }
+
+    const results = data.results || [];
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.length - successCount;
+
+    if (ui.marketConfirmProgressFill) ui.marketConfirmProgressFill.style.width = "100%";
+    if (ui.marketConfirmProgressText) ui.marketConfirmProgressText.textContent = `完成: 成功 ${successCount}, 失败 ${failCount}`;
+
+    // 确认完成后刷新列表
+    setTimeout(() => marketConfirmRefresh(), 1500);
+  } catch (err) {
+    alert("确认失败: " + err.message);
+  } finally {
+    if (ui.marketConfirmStartBtn) ui.marketConfirmStartBtn.disabled = false;
   }
 }
 
@@ -16386,6 +16594,15 @@ function bindWebInvEvents() {
   if (ui.marketSellFetchPricesBtn) ui.marketSellFetchPricesBtn.onclick = () => marketSellFetchPrices();
   if (ui.marketSellApplyPctBtn) ui.marketSellApplyPctBtn.onclick = () => marketSellApplyPct();
   if (ui.marketSellStartBtn) ui.marketSellStartBtn.onclick = () => marketSellStart();
+  // Market confirm modal
+  if (ui.marketConfirmCloseBtn) ui.marketConfirmCloseBtn.onclick = () => { if (ui.marketConfirmModal) ui.marketConfirmModal.classList.add("hidden"); };
+  if (ui.marketConfirmRefreshBtn) ui.marketConfirmRefreshBtn.onclick = () => marketConfirmRefresh();
+  if (ui.marketConfirmSelectAll) ui.marketConfirmSelectAll.onchange = () => {
+    const checked = ui.marketConfirmSelectAll.checked;
+    (ui.marketConfirmItemList || document).querySelectorAll(".market-confirm-item-cb").forEach(cb => { cb.checked = checked; });
+    updateMarketConfirmSummary();
+  };
+  if (ui.marketConfirmStartBtn) ui.marketConfirmStartBtn.onclick = () => marketConfirmStart();
   // Steam API Key modal
   if (ui.steamApiKeyCloseBtn) ui.steamApiKeyCloseBtn.onclick = () => { if (ui.steamApiKeyModal) ui.steamApiKeyModal.classList.add("hidden"); };
   if (ui.steamApiKeySaveBtn) ui.steamApiKeySaveBtn.onclick = () => saveSteamApiKey();
@@ -16674,11 +16891,348 @@ async function startTradeTransfer() {
   startBtn.disabled = false;
 }
 
+// ═══ Steam Guard 令牌绑定 ═══
+
+let enrollState = { step: 1, username: "", revocationCode: "", running: false };
+
+function initSteamGuardEnroll() {
+  const btn = document.getElementById("accountPageEnrollBtn");
+  const modal = document.getElementById("steamGuardEnrollModal");
+  const closeBtn = document.getElementById("steamGuardEnrollCloseBtn");
+  const actionBtn = document.getElementById("enrollActionBtn");
+  const backBtn = document.getElementById("enrollBackBtn");
+
+  if (!btn || !modal) return;
+
+  btn.onclick = () => {
+    enrollState = { step: 1, username: "", revocationCode: "", running: false };
+    populateEnrollAccountSelect();
+    showEnrollStep(1);
+    document.getElementById("enrollStatusText").textContent = "";
+    document.getElementById("enrollStatusText").className = "enroll-status";
+    modal.classList.remove("hidden");
+  };
+
+  closeBtn.onclick = () => {
+    if (enrollState.running) return;
+    modal.classList.add("hidden");
+  };
+  modal.onclick = (e) => {
+    if (e.target === modal && !enrollState.running) modal.classList.add("hidden");
+  };
+
+  actionBtn.onclick = () => handleEnrollAction();
+  backBtn.onclick = () => {
+    if (enrollState.step === 2 && !enrollState.running) showEnrollStep(1);
+  };
+}
+
+function populateEnrollAccountSelect() {
+  const sel = document.getElementById("enrollAccountSelect");
+  sel.innerHTML = "";
+  const accounts = (state.accounts || []).filter(a => a.username);
+  if (!accounts.length) {
+    const opt = document.createElement("option");
+    opt.textContent = "无可用账号";
+    opt.disabled = true;
+    sel.append(opt);
+    return;
+  }
+  for (const acc of accounts) {
+    const opt = document.createElement("option");
+    opt.value = acc.username;
+    opt.textContent = acc.remark ? `${acc.remark} (${acc.username})` : acc.username;
+    sel.append(opt);
+  }
+}
+
+function showEnrollStep(step) {
+  enrollState.step = step;
+  document.getElementById("enrollStep1").classList.toggle("hidden", step !== 1);
+  document.getElementById("enrollStep2").classList.toggle("hidden", step !== 2);
+  document.getElementById("enrollStep3").classList.toggle("hidden", step !== 3);
+  const actionBtn = document.getElementById("enrollActionBtn");
+  const backBtn = document.getElementById("enrollBackBtn");
+  if (step === 1) {
+    actionBtn.textContent = "开始绑定";
+    actionBtn.disabled = false;
+    backBtn.classList.add("hidden");
+  } else if (step === 2) {
+    actionBtn.textContent = "确认绑定";
+    actionBtn.disabled = false;
+    backBtn.classList.remove("hidden");
+  } else if (step === 3) {
+    actionBtn.textContent = "完成";
+    actionBtn.disabled = false;
+    backBtn.classList.add("hidden");
+  }
+}
+
+async function handleEnrollAction() {
+  const statusEl = document.getElementById("enrollStatusText");
+  const actionBtn = document.getElementById("enrollActionBtn");
+
+  if (enrollState.step === 1) {
+    // Step 1 → call enroll API
+    const username = document.getElementById("enrollAccountSelect").value;
+    if (!username) { statusEl.textContent = "请选择账号"; statusEl.className = "enroll-status error"; return; }
+    enrollState.username = username;
+    enrollState.running = true;
+    actionBtn.disabled = true;
+    statusEl.textContent = "正在连接 Steam 服务器...";
+    statusEl.className = "enroll-status";
+    try {
+      const resp = await api("/api/accounts/enroll-steam-guard", {
+        method: "POST",
+        body: JSON.stringify({ username })
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        const reasons = {
+          already_has_authenticator: "该账号已绑定 Steam Guard 令牌",
+          rate_limited: "操作过于频繁，请稍后再试",
+          no_phone_number: "该账号未绑定手机号，请先在 Steam 客户端绑定手机",
+          unknown_error: `未知错误 (status=${data.status || "?"})`
+        };
+        statusEl.textContent = reasons[data.reason] || data.message || "绑定失败";
+        statusEl.className = "enroll-status error";
+        enrollState.running = false;
+        actionBtn.disabled = false;
+        return;
+      }
+      enrollState.revocationCode = data.revocation_code || "";
+      document.getElementById("enrollRevocationCode").textContent = enrollState.revocationCode;
+      document.getElementById("enrollSmsInput").value = "";
+      statusEl.textContent = "验证码已发送到绑定手机";
+      statusEl.className = "enroll-status";
+      enrollState.running = false;
+      showEnrollStep(2);
+    } catch (err) {
+      statusEl.textContent = `请求失败：${err.message}`;
+      statusEl.className = "enroll-status error";
+      enrollState.running = false;
+      actionBtn.disabled = false;
+    }
+  } else if (enrollState.step === 2) {
+    // Step 2 → call finalize API
+    const code = document.getElementById("enrollSmsInput").value.trim();
+    if (!code) { statusEl.textContent = "请输入验证码"; statusEl.className = "enroll-status error"; return; }
+    enrollState.running = true;
+    actionBtn.disabled = true;
+    statusEl.textContent = "正在验证...";
+    statusEl.className = "enroll-status";
+    try {
+      const resp = await api("/api/accounts/finalize-steam-guard", {
+        method: "POST",
+        body: JSON.stringify({ username: enrollState.username, activationCode: code })
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        statusEl.textContent = data.message || data.reason || "验证失败，请检查验证码";
+        statusEl.className = "enroll-status error";
+        enrollState.running = false;
+        actionBtn.disabled = false;
+        return;
+      }
+      document.getElementById("enrollFinalRevCode").textContent = data.revocation_code || enrollState.revocationCode;
+      statusEl.textContent = "";
+      enrollState.running = false;
+      showEnrollStep(3);
+      // Refresh account list
+      try { await loadAccounts(); } catch (_) {}
+    } catch (err) {
+      statusEl.textContent = `请求失败：${err.message}`;
+      statusEl.className = "enroll-status error";
+      enrollState.running = false;
+      actionBtn.disabled = false;
+    }
+  } else if (enrollState.step === 3) {
+    // Step 3 → close modal
+    document.getElementById("steamGuardEnrollModal").classList.add("hidden");
+  }
+}
+
+// ═══ Steam Guard 令牌详情 ═══
+
+let tokenDetailState = { interval: null, sharedSecret: null, serverTimeDiff: 0 };
+
+const STEAM_CHARS = "23456789BCDFGHJKMNPQRTVWXY";
+
+async function computeSteamTotp(sharedSecretB64, serverTimeDiff) {
+  const secretBytes = Uint8Array.from(atob(sharedSecretB64), c => c.charCodeAt(0));
+  const time = Math.floor((Date.now() / 1000 + serverTimeDiff) / 30);
+  const timeBytes = new ArrayBuffer(8);
+  const view = new DataView(timeBytes);
+  view.setUint32(4, time, false); // big-endian
+
+  const key = await crypto.subtle.importKey("raw", secretBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, timeBytes);
+  const hash = new Uint8Array(sig);
+
+  const offset = hash[hash.length - 1] & 0x0f;
+  let code = ((hash[offset] & 0x7f) << 24) | (hash[offset + 1] << 16) | (hash[offset + 2] << 8) | hash[offset + 3];
+
+  let result = "";
+  for (let i = 0; i < 5; i++) {
+    result += STEAM_CHARS[code % STEAM_CHARS.length];
+    code = Math.floor(code / STEAM_CHARS.length);
+  }
+  return result;
+}
+
+function getTotpRemaining(serverTimeDiff) {
+  return 30 - Math.floor((Date.now() / 1000 + serverTimeDiff) % 30);
+}
+
+async function openTokenDetailModal(username) {
+  const modal = document.getElementById("tokenDetailModal");
+  const nameEl = document.getElementById("tokenDetailAccountName");
+  const codeEl = document.getElementById("tokenTotpCode");
+  const barEl = document.getElementById("tokenTotpBar");
+  const countdownEl = document.getElementById("tokenTotpCountdown");
+
+  // Reset
+  nameEl.textContent = username;
+  codeEl.textContent = "-----";
+  barEl.style.setProperty("--totp-progress", "100%");
+  countdownEl.textContent = "30s";
+  document.getElementById("tokenDeviceId").textContent = "●●●●●●●●";
+  document.getElementById("tokenDeviceId").classList.add("masked");
+  document.getElementById("tokenRevCode").textContent = "●●●●●●●●";
+  document.getElementById("tokenRevCode").classList.add("masked");
+  document.getElementById("tokenAccName").textContent = "-";
+  document.getElementById("tokenSteamId").textContent = "-";
+  document.getElementById("tokenRawData").textContent = "加载中...";
+
+  // Clear previous interval
+  if (tokenDetailState.interval) { clearInterval(tokenDetailState.interval); tokenDetailState.interval = null; }
+  tokenDetailState.sharedSecret = null;
+
+  modal.classList.remove("hidden");
+
+  try {
+    const resp = await api(`/api/accounts/token-detail?username=${encodeURIComponent(username)}`);
+    const data = await resp.json();
+    if (!data.ok) {
+      codeEl.textContent = "ERROR";
+      document.getElementById("tokenRawData").textContent = data.message || "加载失败";
+      return;
+    }
+
+    // Populate info fields (store real values as data attributes)
+    document.getElementById("tokenDeviceId").dataset.real = data.deviceId || "-";
+    document.getElementById("tokenRevCode").dataset.real = data.revocationCode || "-";
+    document.getElementById("tokenAccName").textContent = data.accountName || "-";
+    document.getElementById("tokenSteamId").textContent = data.steamId64 || "-";
+    document.getElementById("tokenSteamId").dataset.real = data.steamId64 || "-";
+
+    // Raw data
+    try {
+      const raw = typeof data.steamData === "string" ? JSON.parse(data.steamData) : data.steamData;
+      document.getElementById("tokenRawData").textContent = JSON.stringify(raw, null, 2);
+    } catch (_) {
+      document.getElementById("tokenRawData").textContent = String(data.steamData || "-");
+    }
+
+    // Decrypt shared_secret
+    const keyBytes = new Uint8Array(data.secretKeyHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+    const ivBytes = new Uint8Array(data.ivHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+    const encBytes = Uint8Array.from(atob(data.encryptedSecret), c => c.charCodeAt(0));
+    const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["decrypt"]);
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-CBC", iv: ivBytes }, cryptoKey, encBytes);
+    const sharedSecret = new TextDecoder().decode(decrypted);
+
+    tokenDetailState.sharedSecret = sharedSecret;
+    tokenDetailState.serverTimeDiff = data.serverTimeDiff || 0;
+
+    // Initial TOTP
+    const totp = await computeSteamTotp(sharedSecret, tokenDetailState.serverTimeDiff);
+    codeEl.textContent = totp;
+
+    // Start interval
+    tokenDetailState.interval = setInterval(async () => {
+      try {
+        const code = await computeSteamTotp(tokenDetailState.sharedSecret, tokenDetailState.serverTimeDiff);
+        codeEl.textContent = code;
+        const remaining = getTotpRemaining(tokenDetailState.serverTimeDiff);
+        const pct = Math.round((remaining / 30) * 100);
+        barEl.style.setProperty("--totp-progress", pct + "%");
+        countdownEl.textContent = remaining + "s";
+      } catch (_) {}
+    }, 1000);
+
+  } catch (err) {
+    codeEl.textContent = "ERROR";
+    document.getElementById("tokenRawData").textContent = `加载失败：${err.message}`;
+  }
+}
+
+function initTokenDetailModal() {
+  const modal = document.getElementById("tokenDetailModal");
+  const closeBtn = document.getElementById("tokenDetailCloseBtn");
+  if (!modal) return;
+
+  const closeModal = () => {
+    modal.classList.add("hidden");
+    if (tokenDetailState.interval) { clearInterval(tokenDetailState.interval); tokenDetailState.interval = null; }
+    tokenDetailState.sharedSecret = null;
+  };
+
+  closeBtn.onclick = closeModal;
+  const doneBtn = document.getElementById("tokenDetailDoneBtn");
+  if (doneBtn) doneBtn.onclick = closeModal;
+  modal.onclick = (e) => { if (e.target === modal) closeModal(); };
+
+  // Copy buttons
+  modal.querySelectorAll(".token-copy-btn[data-copy]").forEach(btn => {
+    btn.onclick = () => {
+      const targetId = btn.dataset.copy;
+      const el = document.getElementById(targetId);
+      const text = el.dataset.real || el.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = "\u2713";
+        setTimeout(() => { btn.textContent = "\uD83D\uDCCB"; }, 1200);
+      }).catch(() => {});
+    };
+  });
+
+  // TOTP copy
+  const totpCopyBtn = document.getElementById("tokenTotpCopyBtn");
+  if (totpCopyBtn) {
+    totpCopyBtn.onclick = () => {
+      const code = document.getElementById("tokenTotpCode").textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        totpCopyBtn.textContent = "\u2713";
+        setTimeout(() => { totpCopyBtn.textContent = "\uD83D\uDCCB"; }, 1200);
+      }).catch(() => {});
+    };
+  }
+
+  // Toggle buttons
+  modal.querySelectorAll(".token-toggle-btn").forEach(btn => {
+    btn.onclick = () => {
+      const targetId = btn.dataset.field;
+      const el = document.getElementById(targetId);
+      if (el.classList.contains("masked")) {
+        el.textContent = el.dataset.real || "-";
+        el.classList.remove("masked");
+        btn.textContent = "\uD83D\uDD12";
+      } else {
+        el.textContent = "\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF";
+        el.classList.add("masked");
+        btn.textContent = "\uD83D\uDC41";
+      }
+    };
+  });
+}
+
 async function init() {
   bindEvents();
   initBatchImport();
   initWebInventoryModal();
   initTradeTransferModal();
+  initSteamGuardEnroll();
+  initTokenDetailModal();
   initWebInvBindings();
   try {
     renderLicenseGate();
