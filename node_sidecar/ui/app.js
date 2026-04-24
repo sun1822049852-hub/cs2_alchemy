@@ -32,7 +32,7 @@ const state = {
   raritySelected: new Set(), collectionSelected: new Set(), collectionValues: [], collectionMenuKey: "", collectionSourceKey: "",
   wearMin: null, wearMax: null, wearSort: "asc", raritySort: "desc", quantitySort: "desc", collectionSort: "asc",
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
-  craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 0,
+  craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftHideCollection: false, craftHideQuantity: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 0,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "", craftProgressMode: "", craftProgressPercent: 0, craftProgressPercentTarget: 0,
   craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistApproachMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
   simulationViewMode: "workspace", simulationOutputRole: "primary_output", simulationMaterialRole: "main_material", simulationOutputChooserOpen: false, simulationMaterialChooserOpen: false, simulationPresets: [], simulationActivePresetId: "", simulationWorkspacePreset: null, simulationWorkspaceSourcePresetId: "", simulationPickerOpen: false, simulationPickerMode: "", simulationPickerTitle: "", simulationPickerQuery: "", simulationPickerResults: [], simulationPickerError: "", simulationLoading: false, simulationPersisting: false, simulationSearchLoading: false, simulationRequestSeq: 0, simulationSearchSeq: 0, simulationModalOpen: false, simulationModalMode: "", simulationModalPresetId: "", simulationModalSlot: "", simulationModalItemType: "", simulationModalItemSnapshot: null,
@@ -107,7 +107,7 @@ const ui = {
   showComponentItemsWrap: document.getElementById("showComponentItemsWrap"), showComponentItems: document.getElementById("showComponentItems"),
   componentDepositBtn: document.getElementById("componentDepositBtn"), componentWithdrawBtn: document.getElementById("componentWithdrawBtn"),
   componentCraftSettingsBtn: document.getElementById("componentCraftSettingsBtn"), componentCraftSettingsPanel: document.getElementById("componentCraftSettingsPanel"), componentCraftUseComponentItems: document.getElementById("componentCraftUseComponentItems"),
-  componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowFullWear: document.getElementById("componentCraftShowFullWear"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftAssistFastMode: document.getElementById("componentCraftAssistFastMode"), componentCraftAssistWearOffsetPct: document.getElementById("componentCraftAssistWearOffsetPct"),
+  componentCraftIncludeCooling: document.getElementById("componentCraftIncludeCooling"), componentCraftShowSeed: document.getElementById("componentCraftShowSeed"), componentCraftShowFullWear: document.getElementById("componentCraftShowFullWear"), componentCraftShowCoolingTime: document.getElementById("componentCraftShowCoolingTime"), componentCraftHideCollection: document.getElementById("componentCraftHideCollection"), componentCraftHideQuantity: document.getElementById("componentCraftHideQuantity"),
   componentCraftCoolingHint: document.getElementById("componentCraftCoolingHint"),
   componentTaskFloat: document.getElementById("componentTaskFloat"), componentTaskQueueList: document.getElementById("componentTaskQueueList"),
   componentTaskCancelBtn: document.getElementById("componentTaskCancelBtn"), componentTaskInfo: document.getElementById("componentTaskInfo"),
@@ -123,7 +123,7 @@ const ui = {
   craftSelectedText: document.getElementById("craftSelectedText"), craftRecipeText: document.getElementById("craftRecipeText"),
   craftStatusText: document.getElementById("craftStatusText"), craftCoolingHint: document.getElementById("craftCoolingHint"), craftSelectionTitle: document.getElementById("craftSelectionTitle"),
   craftLeftPanel: document.getElementById("craftLeftPanel"), craftSelectionList: document.getElementById("craftSelectionList"), craftSettingsBtn: document.getElementById("craftSettingsBtn"),
-  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistFastMode: document.getElementById("craftAssistFastMode"), craftAssistApproachMode: document.getElementById("craftAssistApproachMode"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"),
+  craftSettingsPanel: document.getElementById("craftSettingsPanel"), craftUseComponentItems: document.getElementById("craftUseComponentItems"), craftIncludeCooling: document.getElementById("craftIncludeCooling"), craftShowSeed: document.getElementById("craftShowSeed"), craftShowFullWear: document.getElementById("craftShowFullWear"), craftShowCoolingTime: document.getElementById("craftShowCoolingTime"), craftAssistFastMode: document.getElementById("craftAssistFastMode"), craftAssistApproachMode: document.getElementById("craftAssistApproachMode"), craftAssistWearOffsetPct: document.getElementById("craftAssistWearOffsetPct"), craftHideCollection: document.getElementById("craftHideCollection"), craftHideQuantity: document.getElementById("craftHideQuantity"),
   craftAddRecipeBtn: document.getElementById("craftAddRecipeBtn"), craftExecuteQueueBtn: document.getElementById("craftExecuteQueueBtn"),
   craftClearQueueBtn: document.getElementById("craftClearQueueBtn"), craftPreviewViewport: document.getElementById("craftPreviewViewport"), craftQueueList: document.getElementById("craftQueueList"),
   craftAssistToggleBtn: document.getElementById("craftAssistToggleBtn"), craftAssistOverlay: document.getElementById("craftAssistOverlay"),
@@ -1831,6 +1831,8 @@ function saveCraftUiPrefs() {
           craft_show_seed: !!state.craftShowSeed,
         craft_show_full_wear: !!state.craftShowFullWear,
         craft_show_cooling_time: !!state.craftShowCoolingTime,
+        craft_hide_collection: !!state.craftHideCollection,
+        craft_hide_quantity: !!state.craftHideQuantity,
         craft_assist_fast_mode: !!state.craftAssistFastMode,
         craft_assist_approach_mode: !!state.craftAssistApproachMode,
         craft_assist_wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
@@ -1854,6 +1856,8 @@ function loadCraftUiPrefs() {
     if (typeof prefs.craft_show_seed === "boolean") state.craftShowSeed = prefs.craft_show_seed;
     if (typeof prefs.craft_show_full_wear === "boolean") state.craftShowFullWear = prefs.craft_show_full_wear;
     if (typeof prefs.craft_show_cooling_time === "boolean") state.craftShowCoolingTime = prefs.craft_show_cooling_time;
+    if (typeof prefs.craft_hide_collection === "boolean") state.craftHideCollection = prefs.craft_hide_collection;
+    if (typeof prefs.craft_hide_quantity === "boolean") state.craftHideQuantity = prefs.craft_hide_quantity;
     if (typeof prefs.craft_assist_fast_mode === "boolean") state.craftAssistFastMode = prefs.craft_assist_fast_mode;
     if (typeof prefs.craft_assist_approach_mode === "boolean") state.craftAssistApproachMode = prefs.craft_assist_approach_mode;
     if (Number.isFinite(Number(prefs.craft_assist_wear_offset_pct))) {
@@ -1865,7 +1869,7 @@ function loadCraftUiPrefs() {
       // 兼容旧默认值 320：迁移为自动高度（贴近底部），减少中间空白。
       state.craftAssistOverlayHeight = savedOverlayHeight === 320 ? 0 : savedOverlayHeight;
     }
-    if (Number.isFinite(Number(prefs.craft_assist_preset_width))) state.craftAssistPresetWidth = CRAFT_ASSIST_PRESET_MIN_WIDTH;
+    if (Number.isFinite(Number(prefs.craft_assist_preset_width))) state.craftAssistPresetWidth = Number(prefs.craft_assist_preset_width);
   } catch (_) {
     // ignore storage errors
   }
@@ -3197,9 +3201,43 @@ function getGroupedRows(filteredRows, filterKey) {
   return rows;
 }
 
+function backfillRowImages(newRows, oldRows) {
+  if (!Array.isArray(newRows) || !newRows.length || !Array.isArray(oldRows) || !oldRows.length) return;
+  const IMAGE_FIELDS = ["goods_icon_url", "goods_original_icon_url", "goods_share_thumbnail_url"];
+  const oldImageMap = new Map();
+  for (const old of oldRows) {
+    const mh = String(old.market_hash_name || "").trim();
+    if (!mh) continue;
+    const hasImage = IMAGE_FIELDS.some((f) => normalizeSkinImageUrl(old[f]));
+    if (hasImage && !oldImageMap.has(mh)) oldImageMap.set(mh, old);
+  }
+  if (!oldImageMap.size) return;
+  for (const row of newRows) {
+    const mh = String(row.market_hash_name || "").trim();
+    if (!mh) continue;
+    const hasNewImage = IMAGE_FIELDS.some((f) => normalizeSkinImageUrl(row[f]));
+    if (hasNewImage) continue;
+    const donor = oldImageMap.get(mh);
+    if (!donor) continue;
+    for (const f of IMAGE_FIELDS) {
+      const donorUrl = normalizeSkinImageUrl(donor[f]);
+      if (donorUrl && !normalizeSkinImageUrl(row[f])) row[f] = donorUrl;
+    }
+  }
+}
+
 function setRows(rows, component, snapshotPath = "", options = {}) {
   closeTargetComponentDrawer();
-  state.rows = Array.isArray(rows) ? rows : [];
+  const incoming = Array.isArray(rows) ? rows : [];
+  backfillRowImages(incoming, state.rows);
+  if (state.snapshotCacheByAccount instanceof Map) {
+    const accountKey = String(state.currentAccountUsername || "").trim();
+    const cached = accountKey ? state.snapshotCacheByAccount.get(accountKey) : null;
+    if (cached && Array.isArray(cached.rows) && cached.rows.length) {
+      backfillRowImages(incoming, cached.rows);
+    }
+  }
+  state.rows = incoming;
   state.component = component || {summary_map: {}, item_map: {}};
   state.snapshotPath = snapshotPath || "";
   clearCraftCandidateState();
@@ -4817,6 +4855,8 @@ function renderCraftGrouped(candidates) {
   }
   const showSeed = !!state.craftShowSeed;
   const showCooling = !!state.craftIncludeCooling;
+  const hideCollection = !!state.craftHideCollection;
+  const hideQuantity = !!state.craftHideQuantity;
   const groupedRows = buildCraftGroupRows(candidates);
   const queuedIds = getQueuedCraftItemIds();
   const table = document.createElement("table");
@@ -4824,10 +4864,10 @@ function renderCraftGrouped(candidates) {
   const quantityTitle = showCooling ? "数量(可用/冷却中)" : "数量";
   const headers = [
     "<th><div class=\"th-sort-wrap\"><span>稀有度</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"asc\" title=\"稀有度由低到高\" aria-label=\"稀有度由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"desc\" title=\"稀有度由高到低\" aria-label=\"稀有度由高到低\"></button></span></div></th>",
-    "<th class=\"group-name-heading\">名称</th>",
-    "<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>",
-    `<th><div class="th-sort-wrap"><span>${quantityTitle}</span><span class="sort-stack"><button type="button" class="arrow-tri up col-sort-btn" data-sort-key="quantity" data-sort-dir="asc" title="数量由低到高" aria-label="数量由低到高"></button><button type="button" class="arrow-tri down col-sort-btn" data-sort-key="quantity" data-sort-dir="desc" title="数量由高到低" aria-label="数量由高到低"></button></span></div></th>`
+    "<th class=\"group-name-heading\">名称</th>"
   ];
+  if (!hideCollection) headers.push("<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>");
+  if (!hideQuantity) headers.push(`<th><div class="th-sort-wrap"><span>${quantityTitle}</span><span class="sort-stack"><button type="button" class="arrow-tri up col-sort-btn" data-sort-key="quantity" data-sort-dir="asc" title="数量由低到高" aria-label="数量由低到高"></button><button type="button" class="arrow-tri down col-sort-btn" data-sort-key="quantity" data-sort-dir="desc" title="数量由高到低" aria-label="数量由高到低"></button></span></div></th>`);
   if (showSeed) headers.push("<th>种子</th>");
   headers.push("<th><div class=\"th-sort-wrap\"><span>磨损</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"asc\" title=\"磨损由低到高\" aria-label=\"磨损由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"desc\" title=\"磨损由高到低\" aria-label=\"磨损由高到低\"></button></span></div></th>");
   if (showCooling) headers.push("<th>冷却</th>");
@@ -4863,10 +4903,10 @@ function renderCraftGrouped(candidates) {
     parent.className = `group-parent${selectedCount > 0 ? " selected" : ""}`;
     const parentCells = [
       `<td>${parentRarityText}</td>`,
-      `<td>${row.name}</td>`,
-      `<td>${row.collection || ""}</td>`,
-      `<td>${showCooling ? `${row.available_count}/${row.cooling_count}` : row.available_count}</td>`
+      `<td>${row.name}</td>`
     ];
+    if (!hideCollection) parentCells.push(`<td>${row.collection || ""}</td>`);
+    if (!hideQuantity) parentCells.push(`<td>${showCooling ? `${row.available_count}/${row.cooling_count}` : row.available_count}</td>`);
       if (showSeed) parentCells.push("<td></td>");
       parentCells.push(`<td>${row.wear_range_text || ""}</td>`);
       if (showCooling) parentCells.push(`<td>${parentCooldownText}</td>`);
@@ -4905,10 +4945,10 @@ function renderCraftGrouped(candidates) {
       child.className = `group-child${selectable ? " selectable" : ""}${selected ? " selected" : ""}${locked ? " locked" : ""}${!componentRow && coolingUnlockTs(item) > 0 ? " cooling" : ""}`;
       const childCells = [
         "<td></td>",
-        `<td>${relativeWearDisplayLabel(item)}</td>`,
-        "<td></td>",
-        "<td></td>"
+        `<td>${relativeWearDisplayLabel(item)}</td>`
       ];
+      if (!hideCollection) childCells.push("<td></td>");
+      if (!hideQuantity) childCells.push("<td></td>");
       if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
       childCells.push(`<td>${itemHasWear(item) ? formatVisibleWearText(item.float_value, 8) : ""}</td>`);
       if (showCooling) {
@@ -5233,9 +5273,6 @@ function syncCraftSettingsControls(allCraftRows = null) {
   const showSeed = !!state.craftShowSeed;
   const showFullWear = !!state.craftShowFullWear;
   const showCoolingTime = !!state.craftShowCoolingTime;
-  const fastMode = !!state.craftAssistFastMode;
-  const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  state.craftAssistWearOffsetPct = wearOffsetPct;
   if (ui.craftUseComponentItems) ui.craftUseComponentItems.checked = useComponentItems;
   if (ui.componentCraftUseComponentItems) ui.componentCraftUseComponentItems.checked = useComponentItems;
   if (ui.craftIncludeCooling) ui.craftIncludeCooling.checked = includeCooling;
@@ -5246,15 +5283,20 @@ function syncCraftSettingsControls(allCraftRows = null) {
   if (ui.componentCraftShowFullWear) ui.componentCraftShowFullWear.checked = showFullWear;
   if (ui.craftShowCoolingTime) ui.craftShowCoolingTime.checked = showCoolingTime;
   if (ui.componentCraftShowCoolingTime) ui.componentCraftShowCoolingTime.checked = showCoolingTime;
+  const fastMode = !!state.craftAssistFastMode;
+  const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  state.craftAssistWearOffsetPct = wearOffsetPct;
   if (ui.craftAssistFastMode) ui.craftAssistFastMode.checked = fastMode;
   if (ui.craftAssistApproachMode) ui.craftAssistApproachMode.checked = !!state.craftAssistApproachMode;
-  if (ui.componentCraftAssistFastMode) ui.componentCraftAssistFastMode.checked = fastMode;
   if (ui.craftAssistWearOffsetPct && document.activeElement !== ui.craftAssistWearOffsetPct) {
     ui.craftAssistWearOffsetPct.value = craftAssistWearOffsetPctText(wearOffsetPct);
   }
-  if (ui.componentCraftAssistWearOffsetPct && document.activeElement !== ui.componentCraftAssistWearOffsetPct) {
-    ui.componentCraftAssistWearOffsetPct.value = craftAssistWearOffsetPctText(wearOffsetPct);
-  }
+  const hideCollection = !!state.craftHideCollection;
+  const hideQuantity = !!state.craftHideQuantity;
+  if (ui.craftHideCollection) ui.craftHideCollection.checked = hideCollection;
+  if (ui.componentCraftHideCollection) ui.componentCraftHideCollection.checked = hideCollection;
+  if (ui.craftHideQuantity) ui.craftHideQuantity.checked = hideQuantity;
+  if (ui.componentCraftHideQuantity) ui.componentCraftHideQuantity.checked = hideQuantity;
   const hintText = state.craftCandidateStats
     ? getCraftCoolingHintTextFromStats(state.craftCandidateStats)
     : getCraftCoolingHintText(Array.isArray(allCraftRows)
@@ -7948,6 +7990,7 @@ function duplicateCraftAssistPreset(presetId) {
 }
 function renderCraftAssistPresetPanel() {
   if (!ui.craftAssistPresetPanel || !ui.craftAssistPresetList) return;
+  const prevPresetScrollTop = Math.max(0, Number(ui.craftAssistPresetList.scrollTop || 0) || 0);
   if (ui.craftAssistPresetSaveBtn) {
     ui.craftAssistPresetSaveBtn.disabled = state.refreshing || state.craftBusy;
   }
@@ -8140,6 +8183,7 @@ function renderCraftAssistPresetPanel() {
     item.append(body, footer, duplicateBtn, removeBtn);
     ui.craftAssistPresetList.append(item);
   }
+  ui.craftAssistPresetList.scrollTop = prevPresetScrollTop;
 }
 function normalizeCraftAssistMaterialsForRun({materials = state.craftAssistMaterials, targetWear = state.craftAssistTargetWear, wearFilterMode = getCraftAssistFilterMode()} = {}) {
   const normalized = normalizeCraftAssistMaterialList(materials, {
@@ -12534,13 +12578,15 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
   table.className = "group-table";
   const showSeed = !!state.craftShowSeed;
   const showCoolingTime = !!state.craftShowCoolingTime;
+  const hideCollection = !!state.craftHideCollection;
+  const hideQuantity = !!state.craftHideQuantity;
   const headCells = [
     "<th class=\"select-col\"><input type=\"checkbox\" class=\"row-check group-check-all\" title=\"全选/全部取消\" aria-label=\"全选/全部取消\" /></th>",
     "<th><div class=\"th-sort-wrap\"><span>稀有度</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"asc\" title=\"稀有度由低到高\" aria-label=\"稀有度由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"rarity\" data-sort-dir=\"desc\" title=\"稀有度由高到低\" aria-label=\"稀有度由高到低\"></button></span></div></th>",
-    "<th class=\"group-name-heading\">名称</th>",
-    "<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>",
-    "<th><div class=\"th-sort-wrap\"><span>数量(可用/冷却中)</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"asc\" title=\"数量由低到高\" aria-label=\"数量由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"desc\" title=\"数量由高到低\" aria-label=\"数量由高到低\"></button></span></div></th>"
+    "<th class=\"group-name-heading\">名称</th>"
   ];
+  if (!hideCollection) headCells.push("<th><div class=\"th-sort-wrap\"><span>收藏品</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"asc\" title=\"收藏品按字符升序\" aria-label=\"收藏品按字符升序\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"collection\" data-sort-dir=\"desc\" title=\"收藏品按字符降序\" aria-label=\"收藏品按字符降序\"></button></span></div></th>");
+  if (!hideQuantity) headCells.push("<th><div class=\"th-sort-wrap\"><span>数量(可用/冷却中)</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"asc\" title=\"数量由低到高\" aria-label=\"数量由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"quantity\" data-sort-dir=\"desc\" title=\"数量由高到低\" aria-label=\"数量由高到低\"></button></span></div></th>");
   if (showSeed) headCells.push("<th>种子</th>");
   headCells.push("<th><div class=\"th-sort-wrap\"><span>磨损</span><span class=\"sort-stack\"><button type=\"button\" class=\"arrow-tri up col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"asc\" title=\"磨损由低到高\" aria-label=\"磨损由低到高\"></button><button type=\"button\" class=\"arrow-tri down col-sort-btn\" data-sort-key=\"wear\" data-sort-dir=\"desc\" title=\"磨损由高到低\" aria-label=\"磨损由高到低\"></button></span></div></th>");
   if (showCoolingTime) headCells.push("<th>冷却</th>");
@@ -12581,10 +12627,10 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
     const parentCells = [
       `<td class="select-col">${parentSelectCell}</td>`,
       `<td>${parentRarityText}</td>`,
-      `<td>${row.name}</td>`,
-      `<td>${row.collection || ""}</td>`,
-      `<td>${parentQuantityText}</td>`
+      `<td>${row.name}</td>`
     ];
+    if (!hideCollection) parentCells.push(`<td>${row.collection || ""}</td>`);
+    if (!hideQuantity) parentCells.push(`<td>${parentQuantityText}</td>`);
     if (showSeed) parentCells.push("<td></td>");
     parentCells.push(`<td>${row.wear_range_text || ""}</td>`);
     if (showCoolingTime) parentCells.push(`<td>${parentCooldownText}</td>`);
@@ -12623,10 +12669,10 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
       const childCells = [
         `<td class="select-col">${childSelectCell}</td>`,
         "<td></td>",
-        "<td></td>",
-        "<td></td>",
         "<td></td>"
       ];
+      if (!hideCollection) childCells.push("<td></td>");
+      if (!hideQuantity) childCells.push("<td></td>");
       if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
       childCells.push(`<td>${itemHasWear(item) ? formatVisibleWearText(item.float_value, 8) : ""}</td>`);
       if (showCoolingTime) childCells.push(`<td>${componentRow ? "" : cooldownText(item)}</td>`);
@@ -13843,11 +13889,6 @@ function bindEvents() {
       applyCraftAssistFastMode(ui.craftAssistFastMode.checked);
     };
   }
-  if (ui.componentCraftAssistFastMode) {
-    ui.componentCraftAssistFastMode.onchange = () => {
-      applyCraftAssistFastMode(ui.componentCraftAssistFastMode.checked);
-    };
-  }
   const applyCraftAssistApproachMode = (checked) => {
     state.craftAssistApproachMode = !!checked;
     saveCraftUiPrefs();
@@ -13889,27 +13930,38 @@ function bindEvents() {
       ui.craftAssistWearOffsetPct.blur();
     };
   }
-  if (ui.componentCraftAssistWearOffsetPct) {
-    ui.componentCraftAssistWearOffsetPct.onfocus = () => {
-      ui.componentCraftAssistWearOffsetPct.select();
+  const applyCraftHideCollection = (checked) => {
+    state.craftHideCollection = !!checked;
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+    render();
+    renderCraftPage();
+  };
+  if (ui.craftHideCollection) {
+    ui.craftHideCollection.onchange = () => {
+      applyCraftHideCollection(ui.craftHideCollection.checked);
     };
-    ui.componentCraftAssistWearOffsetPct.oninput = () => {
-      state.craftAssistWearOffsetPct = normalizeCraftAssistWearOffsetPct(
-        ui.componentCraftAssistWearOffsetPct.value,
-        state.craftAssistWearOffsetPct
-      );
+  }
+  if (ui.componentCraftHideCollection) {
+    ui.componentCraftHideCollection.onchange = () => {
+      applyCraftHideCollection(ui.componentCraftHideCollection.checked);
     };
-    ui.componentCraftAssistWearOffsetPct.onchange = () => {
-      applyCraftAssistWearOffsetPct(ui.componentCraftAssistWearOffsetPct);
+  }
+  const applyCraftHideQuantity = (checked) => {
+    state.craftHideQuantity = !!checked;
+    saveCraftUiPrefs();
+    syncCraftSettingsControls();
+    render();
+    renderCraftPage();
+  };
+  if (ui.craftHideQuantity) {
+    ui.craftHideQuantity.onchange = () => {
+      applyCraftHideQuantity(ui.craftHideQuantity.checked);
     };
-    ui.componentCraftAssistWearOffsetPct.onblur = () => {
-      applyCraftAssistWearOffsetPct(ui.componentCraftAssistWearOffsetPct);
-    };
-    ui.componentCraftAssistWearOffsetPct.onkeydown = (evt) => {
-      if (evt.key !== "Enter") return;
-      evt.preventDefault();
-      applyCraftAssistWearOffsetPct(ui.componentCraftAssistWearOffsetPct);
-      ui.componentCraftAssistWearOffsetPct.blur();
+  }
+  if (ui.componentCraftHideQuantity) {
+    ui.componentCraftHideQuantity.onchange = () => {
+      applyCraftHideQuantity(ui.componentCraftHideQuantity.checked);
     };
   }
   if (ui.craftSplitBar) {
