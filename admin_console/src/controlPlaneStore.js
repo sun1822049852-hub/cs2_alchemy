@@ -371,6 +371,34 @@ class ControlPlaneStore {
         revoked_at TEXT NOT NULL DEFAULT '',
         FOREIGN KEY (admin_user_id) REFERENCES admin_user(id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS login_attempt (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        success INTEGER NOT NULL DEFAULT 0,
+        ip TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_login_attempt_username_created
+      ON login_attempt(username, created_at);
+
+      CREATE TABLE IF NOT EXISTS register_session (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS verification_ticket (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket TEXT NOT NULL UNIQUE,
+        session_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        consumed_at TEXT NOT NULL DEFAULT ''
+      );
     `);
     this.ensureClientUserColumn("membership_expires_at", "TEXT NOT NULL DEFAULT ''");
   }
@@ -1057,6 +1085,102 @@ class ControlPlaneStore {
       WHERE token_hash = ? AND status = 'active' AND revoked_at = ''
     `).run(toIsoString(now), toIsoString(now), hashToken(sessionToken));
     return Number(result.changes) > 0 ? {ok: true} : {ok: false, reason: "admin_session_not_found"};
+  }
+
+  // --- P1: Login brute-force protection ---
+
+  recordLoginAttempt({username = "", success = false, ip = "", now = new Date()} = {}) {
+    this.db.prepare(`
+      INSERT INTO login_attempt(username, success, ip, created_at)
+      VALUES(?, ?, ?, ?)
+    `).run(asString(username).trim(), success ? 1 : 0, asString(ip).trim(), toIsoString(now));
+  }
+
+  getRecentFailedAttempts({username = "", windowMs = 15 * 60 * 1000, now = new Date()} = {}) {
+    const cutoff = new Date(now.getTime() - windowMs).toISOString();
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS cnt FROM login_attempt
+      WHERE username = ? AND success = 0 AND created_at >= ?
+    `).get(asString(username).trim(), cutoff);
+    return Number(row && row.cnt) || 0;
+  }
+
+  isLoginLocked({username = "", maxAttempts = 5, windowMs = 15 * 60 * 1000, now = new Date()} = {}) {
+    return this.getRecentFailedAttempts({username, windowMs, now}) >= maxAttempts;
+  }
+
+  // --- P2: Three-step registration ---
+
+  createRegisterSession({email = "", ttlMs = 10 * 60 * 1000, now = new Date()} = {}) {
+    const emailText = asString(email).trim().toLowerCase();
+    if (!emailText) {
+      throw new Error("email is required for register session");
+    }
+    const sessionId = crypto.randomUUID();
+    const stamp = toIsoString(now);
+    const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
+    this.db.prepare(`
+      UPDATE register_session SET status = 'expired'
+      WHERE email = ? AND status = 'pending'
+    `).run(emailText);
+    this.db.prepare(`
+      INSERT INTO register_session(session_id, email, status, created_at, expires_at)
+      VALUES(?, ?, 'pending', ?, ?)
+    `).run(sessionId, emailText, stamp, expiresAt);
+    return {session_id: sessionId, email: emailText, expires_at: expiresAt};
+  }
+
+  verifyCodeAndIssueTicket({email = "", code = "", sessionId = "", ticketTtlMs = 10 * 60 * 1000, now = new Date()} = {}) {
+    const emailText = asString(email).trim().toLowerCase();
+    const codeText = asString(code).trim();
+    const sessionIdText = asString(sessionId).trim();
+    if (!emailText || !codeText || !sessionIdText) {
+      return {ok: false, reason: "verify_payload_incomplete"};
+    }
+    const session = this.db.prepare(`
+      SELECT * FROM register_session WHERE session_id = ? AND email = ? AND status = 'pending'
+    `).get(sessionIdText, emailText);
+    if (!session) {
+      return {ok: false, reason: "register_session_not_found"};
+    }
+    if (parseTimeMs(session.expires_at) <= now.getTime()) {
+      this.db.prepare("UPDATE register_session SET status = 'expired' WHERE id = ?").run(session.id);
+      return {ok: false, reason: "register_session_expired"};
+    }
+    const verified = this.verifyEmailCode({email: emailText, scene: "register", code: codeText, now});
+    if (!verified.ok) {
+      return {ok: false, reason: verified.reason};
+    }
+    this.db.prepare("UPDATE register_session SET status = 'verified' WHERE id = ?").run(session.id);
+    const ticket = crypto.randomUUID();
+    const stamp = toIsoString(now);
+    const ticketExpiresAt = new Date(now.getTime() + ticketTtlMs).toISOString();
+    this.db.prepare(`
+      INSERT INTO verification_ticket(ticket, session_id, email, created_at, expires_at)
+      VALUES(?, ?, ?, ?, ?)
+    `).run(ticket, sessionIdText, emailText, stamp, ticketExpiresAt);
+    return {ok: true, ticket, expires_at: ticketExpiresAt};
+  }
+
+  consumeVerificationTicket({email = "", ticket = "", now = new Date()} = {}) {
+    const emailText = asString(email).trim().toLowerCase();
+    const ticketText = asString(ticket).trim();
+    if (!emailText || !ticketText) {
+      return {ok: false, reason: "ticket_payload_incomplete"};
+    }
+    const row = this.db.prepare(`
+      SELECT * FROM verification_ticket WHERE ticket = ? AND email = ? AND consumed_at = ''
+    `).get(ticketText, emailText);
+    if (!row) {
+      return {ok: false, reason: "ticket_not_found"};
+    }
+    if (parseTimeMs(row.expires_at) <= now.getTime()) {
+      return {ok: false, reason: "ticket_expired"};
+    }
+    this.db.prepare(`
+      UPDATE verification_ticket SET consumed_at = ? WHERE id = ?
+    `).run(toIsoString(now), row.id);
+    return {ok: true, reason: "consumed"};
   }
 }
 

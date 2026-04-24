@@ -7,6 +7,7 @@ const {createMailService} = require("./mailService");
 const {createEntitlementSigner} = require("./entitlementSigner");
 const {DEFAULTS, PATHS} = require("./constants");
 const {FEATURE_CODES} = require("../../shared/featureCodes");
+const {validatePassword, validateUsername} = require("../../shared/validation");
 const {asString} = require("../../node_sidecar/src/utils");
 
 const MIME_TYPES = {
@@ -165,6 +166,13 @@ function createServer({
     return resolved;
   }
 
+  function maskEmail(email) {
+    const [local, domain] = asString(email).split("@");
+    if (!local || !domain) return email;
+    const visible = local.length <= 2 ? local[0] : local.slice(0, 2);
+    return `${visible}${"*".repeat(Math.max(1, local.length - visible.length))}@${domain}`;
+  }
+
   async function handleSendCode(res, body, scene) {
     const email = asString(body && body.email).trim().toLowerCase();
     if (!isValidEmail(email)) {
@@ -181,11 +189,12 @@ function createServer({
       return;
     }
     const code = String(nextCode()).trim();
+    const codeTtlMs = Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60 * 1000;
     const row = store.createEmailCode({
       email,
       scene,
       code,
-      ttlMs: Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60 * 1000,
+      ttlMs: codeTtlMs,
       now: now()
     });
     try {
@@ -200,11 +209,21 @@ function createServer({
       writeError(res, 502, "mail_send_failed", asString(err && err.message).trim() || "验证码邮件发送失败");
       return;
     }
-    writeJson(res, 200, {
+    const expiresInSeconds = Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60;
+    const responsePayload = {
       ok: true,
       message: scene === "reset_password" ? "重置验证码已发送，请查收邮箱。" : "注册验证码已发送，请查收邮箱。",
-      expires_in_seconds: Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60
-    });
+      expires_in_seconds: expiresInSeconds
+    };
+    if (scene === "register") {
+      const session = store.createRegisterSession({email, ttlMs: codeTtlMs, now: now()});
+      responsePayload.register_session_id = session.session_id;
+      responsePayload.masked_email = maskEmail(email);
+      responsePayload.code_length = code.length;
+      responsePayload.code_expires_in_seconds = expiresInSeconds;
+      responsePayload.resend_after_seconds = Math.ceil(cooldownMs / 1000);
+    }
+    writeJson(res, 200, responsePayload);
   }
 
   function listAdminUsersPayload() {
@@ -491,7 +510,112 @@ function createServer({
       }
 
       if (req.method === "POST" && pathname === "/api/auth/email/send-code") {
-        await handleSendCode(res, await readJsonBody(req), "register");
+        const body = await readJsonBody(req);
+        const scene = asString(body && body.scene).trim() || "register";
+        await handleSendCode(res, body, scene);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/auth/register/readiness") {
+        writeJson(res, 200, {ok: true, ready: true, registration_flow_version: 3});
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/register/verify-code") {
+        const body = await readJsonBody(req);
+        const email = asString(body && body.email).trim().toLowerCase();
+        const code = asString(body && body.code).trim();
+        const registerSessionId = asString(body && body.register_session_id).trim();
+        if (!isValidEmail(email)) {
+          writeError(res, 400, "email_invalid", "邮箱格式不正确");
+          return;
+        }
+        if (!code || !registerSessionId) {
+          writeError(res, 400, "verify_code_payload_invalid", "验证码和注册会话ID不能为空");
+          return;
+        }
+        const result = store.verifyCodeAndIssueTicket({
+          email, code, sessionId: registerSessionId,
+          ticketTtlMs: 10 * 60 * 1000,
+          now: now()
+        });
+        if (!result.ok) {
+          writeError(res, 400, result.reason, "验证码校验失败");
+          return;
+        }
+        writeJson(res, 200, {
+          ok: true,
+          message: "验证码校验成功",
+          verification_ticket: result.ticket,
+          ticket_expires_in_seconds: 600
+        });
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/auth/register/complete") {
+        const body = await readJsonBody(req);
+        const email = asString(body && body.email).trim().toLowerCase();
+        const verificationTicket = asString(body && body.verification_ticket).trim();
+        const username = asString(body && body.username).trim();
+        const password = asString(body && body.password).trim();
+        const deviceId = asString(body && body.device_id).trim();
+        if (!isValidEmail(email)) {
+          writeError(res, 400, "email_invalid", "邮箱格式不正确");
+          return;
+        }
+        if (!verificationTicket || !username || !password) {
+          writeError(res, 400, "register_complete_payload_invalid", "注册参数不完整");
+          return;
+        }
+        const usernameCheck = validateUsername(username);
+        if (!usernameCheck.ok) {
+          writeError(res, 400, usernameCheck.reason, usernameCheck.message);
+          return;
+        }
+        const passwordCheck = validatePassword(password);
+        if (!passwordCheck.ok) {
+          writeError(res, 400, passwordCheck.reason, passwordCheck.message);
+          return;
+        }
+        const ticketResult = store.consumeVerificationTicket({email, ticket: verificationTicket, now: now()});
+        if (!ticketResult.ok) {
+          writeError(res, 400, ticketResult.reason, "验证票据无效或已过期");
+          return;
+        }
+        if (store.getClientUserByEmail(email)) {
+          writeError(res, 409, "email_already_exists", "该邮箱已注册");
+          return;
+        }
+        if (store.getClientUserByUsername(username)) {
+          writeError(res, 409, "username_already_exists", "用户名已存在");
+          return;
+        }
+        const registerNow = now();
+        const trialExpiresAt = new Date(registerNow.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const user = store.createClientUser({
+          email, username, password,
+          membershipPlan: "trial",
+          membershipExpiresAt: trialExpiresAt,
+          now: registerNow
+        });
+        const session = store.createRefreshSession({
+          userId: user.id,
+          deviceId: deviceId || "unknown",
+          ttlDays: config.refreshSessionDays,
+          now: registerNow
+        });
+        writeJson(res, 200, {
+          ok: true,
+          message: "注册成功",
+          user,
+          access_bundle: issueUserBundle({
+            user,
+            deviceId: deviceId || "unknown",
+            refreshCredential: session.refresh_token,
+            source: "remote_register"
+          }),
+          refresh_token: session.refresh_token
+        });
         return;
       }
 
@@ -507,6 +631,16 @@ function createServer({
         }
         if (!code || !username || !password) {
           writeError(res, 400, "register_payload_invalid", "注册参数不完整");
+          return;
+        }
+        const usernameCheck = validateUsername(username);
+        if (!usernameCheck.ok) {
+          writeError(res, 400, usernameCheck.reason, usernameCheck.message);
+          return;
+        }
+        const passwordCheck = validatePassword(password);
+        if (!passwordCheck.ok) {
+          writeError(res, 400, passwordCheck.reason, passwordCheck.message);
           return;
         }
         const verified = store.verifyEmailCode({email, scene: "register", code, now: now()});
@@ -525,9 +659,7 @@ function createServer({
         const registerNow = now();
         const trialExpiresAt = new Date(registerNow.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const user = store.createClientUser({
-          email,
-          username,
-          password,
+          email, username, password,
           membershipPlan: "trial",
           membershipExpiresAt: trialExpiresAt,
           now: registerNow
@@ -549,7 +681,13 @@ function createServer({
           writeError(res, 400, "login_payload_invalid", "用户名、密码、device_id 不能为空");
           return;
         }
+        const clientIp = asString(req.socket && req.socket.remoteAddress).trim();
+        if (store.isLoginLocked({username, maxAttempts: 5, windowMs: 15 * 60 * 1000, now: now()})) {
+          writeError(res, 429, "login_locked", "登录失败次数过多，请15分钟后再试");
+          return;
+        }
         const auth = store.authenticateClientUser({username, password});
+        store.recordLoginAttempt({username, success: auth.ok, ip: clientIp, now: now()});
         if (!auth.ok) {
           writeError(res, 401, auth.reason, "用户名或密码错误");
           return;
@@ -716,6 +854,11 @@ function createServer({
         }
         if (!code || !newPassword) {
           writeError(res, 400, "reset_payload_invalid", "重置参数不完整");
+          return;
+        }
+        const passwordCheck = validatePassword(newPassword);
+        if (!passwordCheck.ok) {
+          writeError(res, 400, passwordCheck.reason, passwordCheck.message);
           return;
         }
         const verified = store.verifyEmailCode({email, scene: "reset_password", code, now: now()});

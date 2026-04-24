@@ -1,6 +1,11 @@
 const {app, BrowserWindow, shell} = require("electron");
 const path = require("path");
-const {configureRuntimePaths} = require("./src/constants");
+const {configureRuntimePaths, PATHS} = require("./src/constants");
+const {resolveWindowIconPath} = require("./src/windowIconPath");
+const {
+  ensurePackagedRuntimeFiles,
+  resolvePackagedDefaultControlPlaneBaseUrl
+} = require("./src/packagedRuntimeBootstrap");
 
 let mainWindow = null;
 let uiServer = null;
@@ -9,16 +14,23 @@ async function startUiServer() {
   if (uiServer) {
     return uiServer;
   }
-  configureRuntimePaths({
+  const runtimePaths = configureRuntimePaths({
     isPackaged: app.isPackaged,
     projectRoot: path.resolve(__dirname, ".."),
     userDataDir: app.getPath("userData")
+  });
+  ensurePackagedRuntimeFiles({
+    isPackaged: app.isPackaged,
+    rootDir: runtimePaths.ROOT_DIR,
+    writableRoot: runtimePaths.WRITABLE_ROOT
   });
   const {createServer} = require("./src/uiServer");
   uiServer = createServer({
     licenseConfigFactory: () => ({
       defaultAuthMode: app.isPackaged ? "prod_login" : "debug_bundle",
-      defaultControlPlaneBaseUrl: app.isPackaged ? "http://127.0.0.1:8787" : ""
+      defaultControlPlaneBaseUrl: app.isPackaged
+        ? resolvePackagedDefaultControlPlaneBaseUrl({rootDir: PATHS.ROOT_DIR})
+        : ""
     })
   });
   await new Promise((resolve, reject) => {
@@ -29,12 +41,18 @@ async function startUiServer() {
 }
 
 function buildWindow(url) {
+  const windowIconPath = resolveWindowIconPath({
+    isPackaged: app.isPackaged,
+    appDir: __dirname,
+    resourcesPath: process.resourcesPath
+  });
   const win = new BrowserWindow({
     width: 1320,
     height: 780,
     minWidth: 1100,
     minHeight: 700,
     autoHideMenuBar: true,
+    icon: windowIconPath,
     title: "CS2 管理界面 (Node)",
     webPreferences: {
       contextIsolation: true,

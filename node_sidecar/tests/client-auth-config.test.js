@@ -28,42 +28,58 @@ function withEnv(overrides, run) {
   }
 }
 
+function withMissingClientConfig(run) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "client-auth-config-missing-"));
+  try {
+    withEnv({
+      CLIENT_CONFIG_FILE: path.join(tempDir, "missing-client_config.json")
+    }, run);
+  } finally {
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
 function test_defaults_to_debug_bundle_mode() {
-  withEnv({
-    CLIENT_AUTH_MODE: null,
-    CONTROL_PLANE_BASE_URL: null
-  }, () => {
-    const config = getLicenseConfig();
-    assert.equal(config.authMode, "debug_bundle");
-    assert.equal(config.allowManualImport, true);
-    assert.equal(config.controlPlaneBaseUrl, "");
+  withMissingClientConfig(() => {
+    withEnv({
+      CLIENT_AUTH_MODE: null,
+      CONTROL_PLANE_BASE_URL: null
+    }, () => {
+      const config = getLicenseConfig();
+      assert.equal(config.authMode, "debug_bundle");
+      assert.equal(config.allowManualImport, true);
+      assert.equal(config.controlPlaneBaseUrl, "");
+    });
   });
 }
 
 function test_uses_runtime_default_auth_mode_when_env_missing() {
-  withEnv({
-    CLIENT_AUTH_MODE: null,
-    CONTROL_PLANE_BASE_URL: null
-  }, () => {
-    const config = getLicenseConfig({
-      defaultAuthMode: "prod_login"
+  withMissingClientConfig(() => {
+    withEnv({
+      CLIENT_AUTH_MODE: null,
+      CONTROL_PLANE_BASE_URL: null
+    }, () => {
+      const config = getLicenseConfig({
+        defaultAuthMode: "prod_login"
+      });
+      assert.equal(config.authMode, "prod_login");
+      assert.equal(config.allowManualImport, false);
     });
-    assert.equal(config.authMode, "prod_login");
-    assert.equal(config.allowManualImport, false);
   });
 }
 
 function test_uses_runtime_default_control_plane_base_url_when_env_missing() {
-  withEnv({
-    CLIENT_AUTH_MODE: null,
-    CONTROL_PLANE_BASE_URL: null,
-    CLIENT_CONFIG_FILE: null
-  }, () => {
-    const config = getLicenseConfig({
-      defaultAuthMode: "prod_login",
-      defaultControlPlaneBaseUrl: "http://127.0.0.1:8787"
+  withMissingClientConfig(() => {
+    withEnv({
+      CLIENT_AUTH_MODE: null,
+      CONTROL_PLANE_BASE_URL: null
+    }, () => {
+      const config = getLicenseConfig({
+        defaultAuthMode: "prod_login",
+        defaultControlPlaneBaseUrl: "http://127.0.0.1:8787"
+      });
+      assert.equal(config.controlPlaneBaseUrl, "http://127.0.0.1:8787");
     });
-    assert.equal(config.controlPlaneBaseUrl, "http://127.0.0.1:8787");
   });
 }
 

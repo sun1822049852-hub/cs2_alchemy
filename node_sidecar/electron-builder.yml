@@ -13,6 +13,14 @@ files:
   - src/**
   - ui/**
 extraResources:
+  - from: build/client_config.release.json
+    to: client_config.json
+  - from: build/icon.ico
+    to: app-icon.ico
+  - from: ../schema_cache.json
+    to: schema_cache.json
+  - from: ../csgo_skins.db
+    to: csgo_skins.db
   - from: ../shared
     to: shared
   - from: ../keys
@@ -22,9 +30,9 @@ win:
   target:
     - nsis
 nsis:
-  oneClick: true
+  oneClick: false
   perMachine: false
-  allowToChangeInstallationDirectory: false
+  allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: CS Tools

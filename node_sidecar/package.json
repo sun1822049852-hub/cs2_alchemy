@@ -22,7 +22,9 @@
   "dependencies": {
     "@lowly1337/vpk": "^0.2.6",
     "globaloffensive": "^3.2.0",
-    "steam-user": "^4.29.0"
+    "steam-totp": "^2.1.2",
+    "steam-user": "^4.29.0",
+    "steamcommunity": "^3.50.0"
   },
   "devDependencies": {
     "electron": "^37.2.0",

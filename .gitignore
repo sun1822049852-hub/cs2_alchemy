@@ -18,8 +18,10 @@ machine_id.bin
 inventory_ui_state.json
 schema_cache.json
 client_license_state.json
+client_config.json
 
 # node runtime
+node_modules/
 node_sidecar/node_modules/
 node_sidecar/.npm-cache/
 admin_console/node_modules/
@@ -42,3 +44,7 @@ excal.py
 csgo_skins_export_*.xlsx
 tmp_fullscreen_now.png
 极限卡磨损教程.md
+
+# scratch / temp files
+_tmp_*
+*.maFile

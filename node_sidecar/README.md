@@ -61,13 +61,15 @@ npm run ui:desktop
 
 说明：
 
-- 仓库根目录的 `main_ui_node_desktop.js` / `run.bat` 默认按开发入口启动，会自动注入 `dev_auto_bundle`
-- `npm run ui:desktop` 适合直接调 Electron，本地如需走正式登录流可显式设置 `CLIENT_AUTH_MODE=prod_login`
+- 仓库根目录的 `main_ui_node_desktop.js` / `run.bat` 现在默认按正式入口启动，默认 `prod_login`
+- 如需显式走开发直通 `dev_auto_bundle`，请使用仓库根目录 `run-dev.bat`，或执行 `powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1`
+- `npm run ui:desktop` 仍是直接调 Electron 的底层开发入口；若要复现正式登录链，请显式设置 `CLIENT_AUTH_MODE=prod_login`
 
 release / 安装包说明：
 
 - packaged 客户端默认走 `prod_login`
-- 如本机运行控制台认证服务，客户端会默认连接 `http://127.0.0.1:8787`
+- 当前分支打出的 packaged 客户端默认连接 `http://8.138.39.139`
+- packaged 首次启动时，会把 `client_config.json`、`schema_cache.json`、`csgo_skins.db` 从安装包资源复制到 Electron `userData` 目录
 - 如需改成远端认证服务，可在用户目录下创建或修改 `client_config.json`
 
 示例：

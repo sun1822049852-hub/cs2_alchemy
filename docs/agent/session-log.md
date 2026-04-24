@@ -1,5 +1,88 @@
 # Session Log
 
+## 2026-04-20
+- Task: 按用户最新定案继续收敛根目录入口，彻底移除 `main_node.js` 这条 CLI 兼容旧链，让仓库根目录只保留用户桌面入口与开发桌面入口。
+- Investigation:
+  - 通过全仓检索确认 `main_node.js` 在当前仓库里没有被其他运行链引用，当前仅剩它自身与 [README.md](/c:/Users/18220/Desktop/cs2_alchemy/README.md) 把它描述成兼容入口。
+  - 为避免“直接删了但约束没人守”，先在 [tests/main-ui-node-desktop-launcher.test.js](/c:/Users/18220/Desktop/cs2_alchemy/tests/main-ui-node-desktop-launcher.test.js) 加入 `test_repo_root_has_no_cli_entry`，要求根目录不得存在 `main_node.js`。
+- Changes:
+  - 新增实现计划 [docs/superpowers/plans/2026-04-20-remove-root-cli-entry.md](/c:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-20-remove-root-cli-entry.md)。
+  - 更新 [tests/main-ui-node-desktop-launcher.test.js](/c:/Users/18220/Desktop/cs2_alchemy/tests/main-ui-node-desktop-launcher.test.js)，加入“根目录无 CLI 入口”的仓库契约测试。
+  - 删除根目录兼容文件 `main_node.js`。
+  - 更新 [README.md](/c:/Users/18220/Desktop/cs2_alchemy/README.md) 对外口径，明确根目录不再提供 CLI 入口，命令行使用 `node node_sidecar/src/main.js ...` 或 `node_sidecar` 内 `npm run ...`。
+  - 更新 [docs/agent/memory.md](/c:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 固化这一入口规则。
+- Verification:
+  - 红灯验证：`node tests/main-ui-node-desktop-launcher.test.js`，在新增断言后按预期失败，错误为 `repo root should not keep main_node.js`。
+  - 绿灯验证：`node tests/main-ui-node-desktop-launcher.test.js`，当前已通过。
+  - 检索验证：`rg -n "main_node\\.js" C:/Users/18220/Desktop/cs2_alchemy`，当前只剩测试、计划文档和会话日志里的历史记录，不再有活入口或对外说明。
+- Follow-up:
+  - 当前无额外代码阻塞；若用户还要进一步“视觉上更干净”，下一步可以继续评估是否把根目录 `main_ui_node_desktop.js` 也隐藏到更显式的桌面启动脚本后面，但这已超出本次定案范围。
+
+## 2026-04-19
+- Task: 把远程控制台部署到阿里云 Docker 实例，并打通未打包客户端的远端登录联调路径。
+- Investigation:
+  - 确认服务器 `8.138.39.139` 可用 `root` 账号通过 SSH 登录，Docker 版本为 `26.1.3`。
+  - 确认 `admin_console` 运行时除了自身目录，还依赖仓库根下的 `shared/` 与 `node_sidecar/src/utils.js`、`node_sidecar/src/licenseBundleIssuer.js`。
+  - 确认本地桌面开发入口默认强制走 `dev_auto_bundle`，未打包联调时必须显式切到 `prod_login` 并提供远端 `control_plane_base_url`。
+- Changes:
+  - 将控制台最小运行集打包上传至服务器 `/opt/cs2_alchemy/cs2_alchemy`。
+  - 复用本地 `tmp/client_license_private.pem` 与现有控制台 SQLite 数据文件，避免客户端公钥验签漂移。
+  - 使用 `node:24-bookworm-slim` 容器部署 `admin_console`，容器名 `cs2-admin`。
+  - 发现公网 `8787` 被云侧入口规则阻断后，将外部映射调整为 `80 -> 8787`，并同步修正 `AUTH_SERVICE_BASE_URL=http://8.138.39.139`。
+- Verification:
+  - 服务器本机 `http://127.0.0.1/api/health` 返回 `{"ok":true,"service":"admin_console"}`。
+  - 公网 `http://8.138.39.139/api/health` 返回 `{"ok":true,"service":"admin_console"}`。
+  - 公网 `http://8.138.39.139/api/admin/bootstrap/state` 返回 `{"ok":true,"needs_bootstrap":true}`。
+  - 公网 `http://8.138.39.139/admin` 可返回控制台 HTML。
+- Follow-up:
+  - 下一步由用户在 `/admin` 完成首个管理员账号初始化。
+  - 未打包客户端联调时，需要以 `CLIENT_AUTH_MODE=prod_login` 启动，并将 `CONTROL_PLANE_BASE_URL` 或 `client_config.json` 指向 `http://8.138.39.139`。
+  - 用户随后要求收敛桌面启动入口：仓库根目录默认入口改为正式登录，开发直通改成显式 `run-dev.bat`。
+  - 已将 [main_ui_node_desktop.js](/c:/Users/18220/Desktop/cs2_alchemy/main_ui_node_desktop.js) 默认模式切到 `release`，新增根目录 [run-dev.bat](/c:/Users/18220/Desktop/cs2_alchemy/run-dev.bat)，并同步更新 [README.md](/c:/Users/18220/Desktop/cs2_alchemy/README.md) 与 [node_sidecar/README.md](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/README.md)。
+  - 为当前分支的服务器联调落了本地运行态配置 [client_config.json](/c:/Users/18220/Desktop/cs2_alchemy/client_config.json)，默认指向 `http://8.138.39.139`，并将该文件加入 [.gitignore](/c:/Users/18220/Desktop/cs2_alchemy/.gitignore)。
+  - 回归验证：`node tests/main-ui-node-desktop-launcher.test.js`
+  - 开发入口验证：`powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1 -NoLaunch`
+  - 配置验证：`node -e "const {getLicenseConfig}=require('./node_sidecar/src/licenseConfig'); console.log(getLicenseConfig({ defaultAuthMode: 'prod_login' }).controlPlaneBaseUrl)"` 可读出 `http://8.138.39.139`
+  - 用户继续要求把打包链推进到“安装后可正常使用”的状态，因此新增 packaged 首启资源引导模块 [node_sidecar/src/packagedRuntimeBootstrap.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/packagedRuntimeBootstrap.js)，并将 [node_sidecar/build/client_config.release.json](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/build/client_config.release.json)、根目录 `schema_cache.json`、根目录 `csgo_skins.db` 纳入 [node_sidecar/electron-builder.yml](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/electron-builder.yml) 的 `extraResources`。
+  - [node_sidecar/electron-main.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/electron-main.js) 现在会在 packaged 模式下先把上述资源复制到 `userData`，再启动 UI 服务，并从内置 `client_config.json` 读取默认远端控制台地址。
+  - 新增回归：`node node_sidecar/tests/packaged-runtime-bootstrap.test.js`
+  - 更新回归：`node node_sidecar/tests/windows-installer-entrypoint.test.js`
+  - 配置回归：`node node_sidecar/tests/client-auth-config.test.js`
+  - 路径回归：`node node_sidecar/tests/runtime-paths.test.js`
+  - 打包验证：`npm run build:win`
+  - 包内容验证：`node_sidecar/dist/win-unpacked/resources/` 已包含 `client_config.json`、`schema_cache.json`、`csgo_skins.db`
+  - 烟测验证：直接启动 [node_sidecar/dist/win-unpacked/CS Tools.exe](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/dist/win-unpacked/CS%20Tools.exe) 并指定临时 `--user-data-dir` 后，三份资源都已自动落到运行目录
+- Task: 修复 Windows 安装包“安装后打不开、图标不对、安装目录不能自定义且桌面快捷方式要求固定生成”的收口问题。
+- Investigation:
+  - 先用 `ELECTRON_ENABLE_LOGGING=1` 直接跑 packaged `CS Tools.exe`，确认启动即退的第一根因是 [node_sidecar/src/uiServer.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 在运行时直接 `require("../../tools/enrichInventoryDisplayOnlyImages")`，导致安装包内缺失仓库根目录 `tools` 依赖。
+  - 把根目录 `tools/*.js` 临时塞进 `extraResources` 后，第二根因继续暴露：这些脚本内部又反向依赖 `../node_sidecar/src/...`，说明真正问题不是缺文件，而是 packaged 运行时错误跨出了 `node_sidecar/src` 边界。
+  - 为了修图标，一度尝试恢复 `signAndEditExecutable: true`；随后两次构建失败分别命中 `winCodeSign-2.6.0.7z` symlink 权限问题与旧包下载超时，进一步确认本机 Windows 打包不能把“修图标”寄托在内置 `rcedit` 链路上。
+- Changes:
+  - 新增内部运行时模块 [node_sidecar/src/services/inventoryDisplayImageEnrichment.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/inventoryDisplayImageEnrichment.js)，将 `inventory_display_only` 图片补全逻辑收回 `node_sidecar/src`。
+  - [node_sidecar/src/uiServer.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 改为引用内部模块，不再依赖仓库根目录 `tools`。
+  - [tools/enrichInventoryDisplayOnlyImages.js](/c:/Users/18220/Desktop/cs2_alchemy/tools/enrichInventoryDisplayOnlyImages.js) 改成薄封装，复用新内部模块，避免桌面运行链和 CLI 逻辑分叉。
+  - [node_sidecar/electron-builder.yml](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/electron-builder.yml) 改回 assisted installer：`oneClick: false`、`allowToChangeInstallationDirectory: true`、`createDesktopShortcut: always`，并保持 `shortcutName: CS Tools`。
+  - 同一配置文件关闭 `signAndEditExecutable`，新增 `build/icon.ico -> resources/app-icon.ico`，保证安装后与 `win-unpacked` 运行时都能读到同一份品牌图标资源。
+  - 新增 [node_sidecar/build/installer.nsh](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/build/installer.nsh)，在安装阶段覆写默认快捷方式，强制把桌面与开始菜单入口图标指向 `$INSTDIR\\resources\\app-icon.ico`。
+  - 新增 [node_sidecar/src/windowIconPath.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/windowIconPath.js)，并在 [node_sidecar/electron-main.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/electron-main.js) 的 `BrowserWindow` 上统一挂载窗口图标；开发态走 `build/icon.ico`，packaged 走 `resources/app-icon.ico`。
+  - 新增回归 [node_sidecar/tests/inventory-display-image-enrichment.test.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/inventory-display-image-enrichment.test.js) 与 [node_sidecar/tests/window-icon-path.test.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/window-icon-path.test.js)，并更新 [node_sidecar/tests/windows-installer-entrypoint.test.js](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/windows-installer-entrypoint.test.js) 以覆盖新的安装器/图标策略。
+- Verification:
+  - `node node_sidecar/tests/inventory-display-image-enrichment.test.js`
+  - `node node_sidecar/tests/window-icon-path.test.js`
+  - `node node_sidecar/tests/windows-installer-entrypoint.test.js`
+  - `node tests/enrichInventoryDisplayOnlyImagesTool.test.js`
+  - `node tests/enrichMissingImagesTool.test.js`
+  - `node node_sidecar/tests/packaged-runtime-bootstrap.test.js`
+  - `node node_sidecar/tests/runtime-paths.test.js`
+  - `node node_sidecar/tests/client-auth-config.test.js`
+  - `node tests/main-ui-node-desktop-launcher.test.js`
+  - `npm run build:win`
+  - 包内容验证：`node_sidecar/dist/win-unpacked/resources/app-icon.ico` 已存在。
+  - 冒烟验证：直接启动 [node_sidecar/dist/win-unpacked/CS Tools.exe](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/dist/win-unpacked/CS%20Tools.exe) 并指定临时 `--user-data-dir` 后，进程存活超过 8 秒，未再出现启动即退；日志只剩 Node SQLite 实验特性警告与 UI 心跳启动记录。
+- Follow-up:
+  - 最新安装包产物为 [node_sidecar/dist/CS Tools Setup 0.1.0.exe](/c:/Users/18220/Desktop/cs2_alchemy/node_sidecar/dist/CS%20Tools%20Setup%200.1.0.exe)。
+  - 当前未做“真实安装到新目录后检查桌面/开始菜单实际图标渲染”的人工点击验收；代码与 `win-unpacked` 冒烟已过，但最终视觉验收仍建议在干净路径手动安装一次确认。
+
 ## 2026-04-16
 - Task: 为炼金辅助选材的 `below` 模式补一层返回前终局校验，避免成功响应越过安全目标。
 - Investigation:

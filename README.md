@@ -5,9 +5,9 @@
 ## 目录说明
 
 - `node_sidecar/`: Node 主程序（账号、库存、炼金、UI 服务）
-- `main_ui_node_desktop.js`: 桌面入口（Electron）
-- `main_node.js`: 兼容入口（CLI/旧调用路径）
-- `run.bat`: Windows 一键启动桌面 UI
+- `main_ui_node_desktop.js`: 桌面主入口（Electron，默认正式登录）
+- `run.bat`: Windows 一键启动正式桌面 UI
+- `run-dev.bat`: Windows 一键启动开发直通桌面 UI
 
 ## 快速开始
 
@@ -19,7 +19,7 @@ cd node_sidecar
 npm install
 ```
 
-3. 启动桌面 UI（项目根目录）
+3. 启动正式桌面 UI（项目根目录）
 
 ```powershell
 node main_ui_node_desktop.js
@@ -29,11 +29,25 @@ node main_ui_node_desktop.js
 
 说明：
 
-- 仓库根目录桌面入口默认走 `dev_auto_bundle`，便于开发时直接进入已授权工作台
-- 如需验证正式登录流，可显式设置 `CLIENT_AUTH_MODE=prod_login`
+- 仓库根目录桌面入口默认走 `prod_login`，用于真实登录、远端控制台联调和后续打包链路
+- 如需开发直通 `dev_auto_bundle`，请使用根目录 `run-dev.bat`，或执行 `powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1`
+- 仓库根目录不再提供任何 CLI 入口；如需命令行能力，请直接执行 `node node_sidecar/src/main.js ...` 或 `cd node_sidecar` 后使用对应 `npm run ...`
 - packaged 客户端仍固定走 `prod_login`，不会继承本地开发直通态
 - 新注册用户默认开放账号、库存、刷新与汰换模拟
 - 真实炼金执行仍需要控制台单独下发 `craft.use`
+
+如果要让未打包客户端连接远端控制台，可通过以下任一方式配置：
+
+- 在启动前设置环境变量 `CONTROL_PLANE_BASE_URL`
+- 在项目根目录创建或修改 `client_config.json`
+
+示例：
+
+```json
+{
+  "control_plane_base_url": "http://8.138.39.139"
+}
+```
 
 ## 浏览器模式
 
@@ -82,8 +96,9 @@ npm run build:win
 - `pack:win` 生成 unpacked 目录，便于先做本地烟测
 - `build:win` 生成 NSIS 安装包
 - packaged 客户端默认使用 `prod_login`
-- packaged 客户端默认连接本机 `http://127.0.0.1:8787`
-- 如需改成远端认证服务，可编辑用户目录下的 `client_config.json`，写入 `control_plane_base_url`
+- 当前分支打出的 packaged 客户端会内置默认远端控制台 `http://8.138.39.139`
+- packaged 首次启动时，会把 `client_config.json`、`schema_cache.json`、`csgo_skins.db` 从安装包资源复制到 Electron `userData` 目录
+- 如需改成其他远端认证服务，可编辑用户目录下的 `client_config.json`，写入新的 `control_plane_base_url`
 - packaged 可写状态会落到 Electron `userData` 目录，不再写安装目录
 
 ## 皮肤库更新

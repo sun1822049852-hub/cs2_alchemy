@@ -190,6 +190,37 @@ function createControlPlaneAuthClient({
         password: asString(password).trim()
       });
     },
+    async getRegistrationReadiness() {
+      assertConfigured();
+      if (typeof fetchFn !== "function") {
+        throw buildClientAuthError({code: "fetch_unavailable", message: "当前运行时不支持远端认证请求", status: 500});
+      }
+      const response = await fetchFn(joinUrl(normalizedBaseUrl, "/api/auth/register/readiness"), {
+        method: "GET",
+        headers: {"Accept": "application/json"}
+      });
+      return readJsonResponse(response);
+    },
+    async verifyRegisterCode({email = "", code = "", registerSessionId = ""} = {}) {
+      return postJson("/api/auth/register/verify-code", {
+        email: asString(email).trim(),
+        code: asString(code).trim(),
+        register_session_id: asString(registerSessionId).trim()
+      });
+    },
+    async completeRegister({email = "", verificationTicket = "", username = "", password = "", deviceId = ""} = {}) {
+      const data = await postJson("/api/auth/register/complete", {
+        email: asString(email).trim(),
+        verification_ticket: asString(verificationTicket).trim(),
+        username: asString(username).trim(),
+        password: asString(password).trim(),
+        device_id: asString(deviceId).trim()
+      });
+      return {
+        ...data,
+        ...normalizeBundleAndRefresh(data)
+      };
+    },
     async sendResetCode({email = ""} = {}) {
       return postJson("/api/auth/password/send-reset-code", {
         email: asString(email).trim()
