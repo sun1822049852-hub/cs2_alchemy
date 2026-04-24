@@ -1160,7 +1160,8 @@ function searchRoleAwarePushSolution({groups, targetValue} = {}) {
 
   const polished = refineRoleAwareMaterialResults({
     materialResults: refined.materialResults,
-    targetValue
+    targetValue,
+    approachMode: "below"
   });
   if (polished && compareScoreTuples(polished.scoreTuple, refined.scoreTuple) < 0) {
     for (const step of Array.isArray(polished.traceSteps) ? polished.traceSteps : []) {
@@ -1467,12 +1468,118 @@ function cloneMaterialResultsWithSwaps(materialResults, swaps) {
   });
 }
 
-function scoreRoleAwareMaterialResults(materialResults, targetValue) {
+function findClosestCandidate(sortedAvailable, idealValue, selectedIds, constraint) {
+  const list = Array.isArray(sortedAvailable) ? sortedAvailable : [];
+  const pivot = lowerBoundByValueAsc(list, idealValue);
+  let bestCandidate = null;
+  let bestDist = Infinity;
+  const maxProbe = 8;
+  for (let dir = -1; dir <= 1; dir += 2) {
+    const start = dir < 0 ? pivot - 1 : pivot;
+    for (let step = 0; step < maxProbe; step += 1) {
+      const idx = start + dir * step;
+      if (idx < 0 || idx >= list.length) break;
+      const candidate = list[idx];
+      if (!candidate) continue;
+      const id = String(candidate.id || "");
+      if (!id || selectedIds.has(id)) continue;
+      const value = Number(candidate.value || 0);
+      if (constraint && !constraint(value)) continue;
+      const dist = Math.abs(value - idealValue);
+      if (dist < bestDist - EPSILON) {
+        bestDist = dist;
+        bestCandidate = candidate;
+      }
+    }
+  }
+  return bestCandidate;
+}
+
+function refineIndividualSlots({currentResults, currentScore, targetValue, totalCount, approachMode, traceSteps}) {
+  let results = currentResults;
+  let score = currentScore;
+  let improved = false;
+  const normalizedMode = normalizeApproachMode(approachMode);
+
+  const phases = normalizedMode === "below"
+    ? [{roles: ["main"], direction: "up"}, {roles: ["aux"], direction: "down"}]
+    : [{roles: ["main", "aux"], direction: "approach"}];
+
+  for (const phase of phases) {
+    for (let entryIndex = 0; entryIndex < results.length; entryIndex += 1) {
+      const entry = results[entryIndex];
+      const role = normalizeRole(entry && entry.material && entry.material.role);
+      if (!phase.roles.includes(role)) continue;
+      const selectedItems = Array.isArray(entry && entry.selected) ? entry.selected : [];
+      const sortedAvailable = (Array.isArray(entry && entry.available) ? entry.available : [])
+        .slice()
+        .sort(compareByValueAsc);
+
+      for (let slotIndex = 0; slotIndex < selectedItems.length; slotIndex += 1) {
+        const currentItem = selectedItems[slotIndex];
+        if (!currentItem) continue;
+        const currentValue = Number(currentItem.value || 0);
+        const gap = Number(targetValue) - Number(score.overall);
+        const idealNewValue = currentValue + gap * totalCount;
+        const selectedIds = makeSelectedIdSet(results);
+
+        let constraint;
+        if (normalizedMode === "below") {
+          if (phase.direction === "up") {
+            constraint = (v) => v > currentValue + EPSILON;
+          } else {
+            constraint = (v) => v < currentValue - EPSILON;
+          }
+        } else {
+          constraint = (v) => Math.abs(v - currentValue) > EPSILON;
+        }
+
+        const candidate = findClosestCandidate(sortedAvailable, idealNewValue, selectedIds, constraint);
+        if (!candidate) continue;
+
+        const nextResults = cloneMaterialResultsWithSwaps(results, [{
+          entryIndex,
+          oldId: String(currentItem.id || ""),
+          nextCandidate: candidate
+        }]);
+        const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, approachMode);
+        if (!nextScore) continue;
+        if (compareScoreTuples(nextScore.scoreTuple, score.scoreTuple) >= 0) continue;
+
+        const patternName = normalizedMode === "below"
+          ? (phase.direction === "up" ? "main_up_individual" : "aux_down_individual")
+          : "approach_individual";
+        traceSteps.push({
+          materialResults: nextResults,
+          overall: Number(nextScore.overall),
+          pattern: patternName,
+          changes: [{
+            index: entryIndex,
+            ...buildTraceMaterialFields(entry && entry.material),
+            role,
+            removedIds: [String(currentItem.id || "")].filter(Boolean),
+            addedIds: [String(candidate.id || "")].filter(Boolean)
+          }]
+        });
+        results = nextResults;
+        score = {
+          selected: nextScore.selected,
+          overall: nextScore.overall,
+          scoreTuple: nextScore.scoreTuple
+        };
+        improved = true;
+      }
+    }
+  }
+  return {currentResults: results, currentScore: score, improved};
+}
+
+function scoreRoleAwareMaterialResults(materialResults, targetValue, approachMode = "below") {
   const selected = [];
   for (const entry of Array.isArray(materialResults) ? materialResults : []) {
     selected.push(...(Array.isArray(entry && entry.selected) ? entry.selected : []));
   }
-  const scored = scoreCraftAssistSolutionMultiMaterial({selected, targetValue});
+  const scored = scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode: normalizeApproachMode(approachMode)});
   if (!scored) return null;
   return {
     selected,
@@ -1481,15 +1588,19 @@ function scoreRoleAwareMaterialResults(materialResults, targetValue) {
   };
 }
 
-function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterations = 4}) {
+function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterations = 4, approachMode = "below"}) {
+  const normalizedMode = normalizeApproachMode(approachMode);
   let currentResults = Array.isArray(materialResults) ? materialResults : [];
-  let currentScore = scoreRoleAwareMaterialResults(currentResults, targetValue);
+  let currentScore = scoreRoleAwareMaterialResults(currentResults, targetValue, normalizedMode);
   if (!currentScore) return null;
   const totalSelected = currentScore.selected.length;
   if (totalSelected <= 0) return null;
   const traceSteps = [];
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    let iterationImproved = false;
+
+    // === Step 1: Pair swap (preserved from original) ===
     const selectedIds = makeSelectedIdSet(currentResults);
     const currentGap = Number(targetValue) - Number(currentScore.overall);
     let bestImprovement = null;
@@ -1518,7 +1629,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
             oldId: String(oldMain && oldMain.id || ""),
             nextCandidate: newMain
           }]);
-          const singleMainScore = scoreRoleAwareMaterialResults(singleMainResults, targetValue);
+          const singleMainScore = scoreRoleAwareMaterialResults(singleMainResults, targetValue, normalizedMode);
           if (
             singleMainScore
             && compareScoreTuples(singleMainScore.scoreTuple, currentScore.scoreTuple) < 0
@@ -1593,7 +1704,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     nextCandidate: newAux
                   }
                 ]);
-                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue);
+                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode);
                 if (!nextScore) continue;
                 if (compareScoreTuples(nextScore.scoreTuple, currentScore.scoreTuple) >= 0) continue;
                 if (
@@ -1690,7 +1801,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     nextCandidate: newAux
                   }
                 ]);
-                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue);
+                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode);
                 if (!nextScore) continue;
                 if (compareScoreTuples(nextScore.scoreTuple, currentScore.scoreTuple) >= 0) continue;
                 if (
@@ -1811,7 +1922,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     nextCandidate: newAuxDown
                   }
                 ]);
-                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue);
+                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode);
                 if (!nextScore) continue;
                 if (compareScoreTuples(nextScore.scoreTuple, currentScore.scoreTuple) >= 0) continue;
                 if (
@@ -1849,19 +1960,38 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
       }
     }
 
-    if (!bestImprovement) break;
-    traceSteps.push({
-      materialResults: bestImprovement.materialResults,
-      overall: Number(bestImprovement.overall),
-      pattern: String(bestImprovement.pattern || ""),
-      changes: Array.isArray(bestImprovement.changes) ? bestImprovement.changes : []
+    if (bestImprovement) {
+      traceSteps.push({
+        materialResults: bestImprovement.materialResults,
+        overall: Number(bestImprovement.overall),
+        pattern: String(bestImprovement.pattern || ""),
+        changes: Array.isArray(bestImprovement.changes) ? bestImprovement.changes : []
+      });
+      currentResults = bestImprovement.materialResults;
+      currentScore = {
+        selected: Array.isArray(bestImprovement.selected) ? bestImprovement.selected : currentScore.selected,
+        overall: bestImprovement.overall,
+        scoreTuple: bestImprovement.scoreTuple
+      };
+      iterationImproved = true;
+    }
+
+    // === Step 2: Individual slot refinement ===
+    const individualResult = refineIndividualSlots({
+      currentResults,
+      currentScore,
+      targetValue,
+      totalCount: totalSelected,
+      approachMode: normalizedMode,
+      traceSteps
     });
-    currentResults = bestImprovement.materialResults;
-    currentScore = {
-      selected: Array.isArray(bestImprovement.selected) ? bestImprovement.selected : currentScore.selected,
-      overall: bestImprovement.overall,
-      scoreTuple: bestImprovement.scoreTuple
-    };
+    if (individualResult.improved) {
+      currentResults = individualResult.currentResults;
+      currentScore = individualResult.currentScore;
+      iterationImproved = true;
+    }
+
+    if (!iterationImproved) break;
   }
 
   return {
@@ -1942,10 +2072,11 @@ function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200, ap
     available: group.candidates,
     selected: selectedByGroup[index]
   }));
-  if (mode === "multi_material_role" && normalizedApproachMode === "below") {
+  if (mode === "multi_material_role") {
     const refined = refineRoleAwareMaterialResults({
       materialResults,
-      targetValue
+      targetValue,
+      approachMode: normalizedApproachMode
     });
     if (refined && compareScoreTuples(refined.scoreTuple, best.scoreTuple) < 0) {
       return {

@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 
 const {
+  refineRoleAwareMaterialResults,
   refineSingleMaterialCompensation,
   searchCraftAssistBestSolution,
   searchRoleAwarePushSolution
@@ -450,6 +451,130 @@ function test_role_aware_push_trace_uses_shared_material_projection() {
   assert.equal(result.trace.steps[0].groups[1].label, "Aux Alpha / Aux Beta");
 }
 
+function test_refine_individual_slots_below_mode_improves_main_up() {
+  // aux at index 0, main at index 1 to avoid entryIndex=0 swap bug
+  // 1 main at 0.40, 9 aux at 0.48 each → overall = (0.40 + 9*0.48)/10 = 0.472
+  // target = 0.50, gap = 0.028. Pair swap won't help (no aux to lower).
+  // Individual: idealNewValue for main = 0.40 + 0.028*10 = 0.68 → pick m_high (0.65)
+  // new overall = (0.65 + 9*0.48)/10 = 0.497 < 0.50 ✓
+  const materialResults = [
+    {
+      material: {name: "Aux", role: "aux", count: 9},
+      available: [
+        makeCandidate("a1", 0.48, 0, "aux"),
+        makeCandidate("a2", 0.48, 0, "aux"),
+        makeCandidate("a3", 0.48, 0, "aux"),
+        makeCandidate("a4", 0.48, 0, "aux"),
+        makeCandidate("a5", 0.48, 0, "aux"),
+        makeCandidate("a6", 0.48, 0, "aux"),
+        makeCandidate("a7", 0.48, 0, "aux"),
+        makeCandidate("a8", 0.48, 0, "aux"),
+        makeCandidate("a9", 0.48, 0, "aux")
+      ],
+      selected: [
+        makeCandidate("a1", 0.48, 0, "aux"),
+        makeCandidate("a2", 0.48, 0, "aux"),
+        makeCandidate("a3", 0.48, 0, "aux"),
+        makeCandidate("a4", 0.48, 0, "aux"),
+        makeCandidate("a5", 0.48, 0, "aux"),
+        makeCandidate("a6", 0.48, 0, "aux"),
+        makeCandidate("a7", 0.48, 0, "aux"),
+        makeCandidate("a8", 0.48, 0, "aux"),
+        makeCandidate("a9", 0.48, 0, "aux")
+      ]
+    },
+    {
+      material: {name: "Main", role: "main", count: 1},
+      available: [
+        makeCandidate("m1", 0.40, 1, "main"),
+        makeCandidate("m_high", 0.65, 1, "main"),
+        makeCandidate("m_too_high", 0.90, 1, "main")
+      ],
+      selected: [makeCandidate("m1", 0.40, 1, "main")]
+    }
+  ];
+
+  const result = refineRoleAwareMaterialResults({
+    materialResults,
+    targetValue: 0.50,
+    approachMode: "below"
+  });
+
+  assert.ok(result);
+  assert.equal(result.overall < 0.50, true);
+  assert.equal(result.overall > 0.472 + 1e-6, true, "should improve beyond initial 0.472");
+  const ids = pickedIds(result);
+  assert.equal(ids.includes("m_high"), true, "should swap main to m_high");
+  assert.equal(
+    result.traceSteps.some((s) => s.pattern === "main_up_individual" || s.pattern === "main_up"),
+    true,
+    "should have main_up or main_up_individual trace"
+  );
+}
+
+function test_refine_individual_slots_infinite_mode_approaches_target() {
+  // infinite mode: overall can be above or below target, goal is minimize |overall - target|
+  // 2 main at 0.60, 8 aux at 0.40 → overall = (2*0.60 + 8*0.40)/10 = 0.44
+  // target = 0.50, gap = 0.06
+  // Individual should push auxes higher to approach 0.50
+  const materialResults = [
+    {
+      material: {name: "Main", role: "main", count: 2},
+      available: [
+        makeCandidate("m1", 0.60, 0, "main"),
+        makeCandidate("m2", 0.60, 0, "main"),
+        makeCandidate("m3", 0.80, 0, "main")
+      ],
+      selected: [
+        makeCandidate("m1", 0.60, 0, "main"),
+        makeCandidate("m2", 0.60, 0, "main")
+      ]
+    },
+    {
+      material: {name: "Aux", role: "aux", count: 8},
+      available: [
+        makeCandidate("a1", 0.40, 1, "aux"),
+        makeCandidate("a2", 0.40, 1, "aux"),
+        makeCandidate("a3", 0.40, 1, "aux"),
+        makeCandidate("a4", 0.40, 1, "aux"),
+        makeCandidate("a5", 0.40, 1, "aux"),
+        makeCandidate("a6", 0.40, 1, "aux"),
+        makeCandidate("a7", 0.40, 1, "aux"),
+        makeCandidate("a8", 0.40, 1, "aux"),
+        makeCandidate("a_high", 0.49, 1, "aux"),
+        makeCandidate("a_high2", 0.48, 1, "aux"),
+        makeCandidate("a_high3", 0.47, 1, "aux")
+      ],
+      selected: [
+        makeCandidate("a1", 0.40, 1, "aux"),
+        makeCandidate("a2", 0.40, 1, "aux"),
+        makeCandidate("a3", 0.40, 1, "aux"),
+        makeCandidate("a4", 0.40, 1, "aux"),
+        makeCandidate("a5", 0.40, 1, "aux"),
+        makeCandidate("a6", 0.40, 1, "aux"),
+        makeCandidate("a7", 0.40, 1, "aux"),
+        makeCandidate("a8", 0.40, 1, "aux")
+      ]
+    }
+  ];
+
+  const result = refineRoleAwareMaterialResults({
+    materialResults,
+    targetValue: 0.50,
+    approachMode: "infinite"
+  });
+
+  assert.ok(result);
+  // Should be closer to 0.50 than initial 0.44
+  assert.equal(Math.abs(result.overall - 0.50) < Math.abs(0.44 - 0.50) - 1e-6, true,
+    `should approach target: got ${result.overall}`);
+  assert.equal(
+    result.traceSteps.some((s) => s.pattern === "approach_individual"),
+    true,
+    "should have approach_individual trace"
+  );
+}
+
 test_role_aware_push_slides_aux_window_down_when_over_target();
 test_role_aware_push_slides_main_window_up_when_under_target();
 test_role_aware_push_prefers_closer_aux_raise_when_main_raise_would_block_it();
@@ -459,4 +584,6 @@ test_single_material_compensation_chooses_closest_global_second_swap();
 test_single_material_compensation_exposes_second_swap_pruning_trace();
 test_search_best_solution_infinite_mode_can_cross_target_for_closer_single_material_match();
 test_role_aware_push_trace_uses_shared_material_projection();
+test_refine_individual_slots_below_mode_improves_main_up();
+test_refine_individual_slots_infinite_mode_approaches_target();
 console.log("craftAssistSearch tests passed");
