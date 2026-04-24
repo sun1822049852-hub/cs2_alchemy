@@ -67,7 +67,23 @@ const state = {
   clientAuthModalOpen: false,
   clientAuthPromptTitle: "",
   clientAuthPromptHint: "",
-  workspaceHydratedFor: ""
+  workspaceHydratedFor: "",
+  // --- 多账号汰换 ---
+  batchCraftAccounts: [],
+  batchCraftSelectedPresetId: "",
+  batchCraftLimit: 10,
+  batchCraftQueue: [],
+  batchCraftBusy: false,
+  batchCraftStatusText: "",
+  batchCraftStatusError: false,
+  batchCraftActiveAccount: "",
+  batchCraftUseComponentItems: false,
+  batchCraftIncludeCooling: false,
+  batchCraftFastMode: false,
+  batchCraftApproachMode: false,
+  batchCraftWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+  batchCraftSettingsOpen: false,
+  batchCraftPresetWidth: 200
 };
 
 const ui = {
@@ -142,7 +158,18 @@ const ui = {
   craftAssistPresetModalClose: document.getElementById("craftAssistPresetModalClose"), craftAssistPresetModalSaveBtn: document.getElementById("craftAssistPresetModalSaveBtn"), craftAssistPresetModalCancelBtn: document.getElementById("craftAssistPresetModalCancelBtn"),
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel"),
   craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionProgress: document.getElementById("craftExecutionProgress"), craftExecutionOverlayPercent: document.getElementById("craftExecutionOverlayPercent"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail"),
-  simulationModeSavedBtn: document.getElementById("simulationModeSavedBtn"), simulationModeWorkspaceBtn: document.getElementById("simulationModeWorkspaceBtn"), simulationSavedPresets: document.getElementById("simulationSavedPresets"), simulationWorkspace: document.getElementById("simulationWorkspace"), simulationWorkspaceActionsBar: document.getElementById("simulationWorkspaceActionsBar"), simulationSavePresetBtn: document.getElementById("simulationSavePresetBtn"), simulationCancelEditBtn: document.getElementById("simulationCancelEditBtn"), simulationLayout: document.getElementById("simulationLayout"), simulationOutputPanel: document.getElementById("simulationOutputPanel"), simulationMaterialPanel: document.getElementById("simulationMaterialPanel"), simulationOutputRoleChooser: document.getElementById("simulationOutputRoleChooser"), simulationOutputRoleChooserText: document.getElementById("simulationOutputRoleChooserText"), simulationOutputRoleSplit: document.getElementById("simulationOutputRoleSplit"), simulationMaterialRoleChooser: document.getElementById("simulationMaterialRoleChooser"), simulationMaterialRoleChooserText: document.getElementById("simulationMaterialRoleChooserText"), simulationMaterialRoleSplit: document.getElementById("simulationMaterialRoleSplit"), simulationOutputLane: document.getElementById("simulationOutputLane"), simulationMaterialLane: document.getElementById("simulationMaterialLane"), simulationPickerModal: document.getElementById("simulationPickerModal"), simulationPickerTitle: document.getElementById("simulationPickerTitle"), simulationPickerRoleBadge: document.getElementById("simulationPickerRoleBadge"), simulationPickerHint: document.getElementById("simulationPickerHint"), simulationPickerMeta: document.getElementById("simulationPickerMeta"), simulationPickerSearchInput: document.getElementById("simulationPickerSearchInput"), simulationPickerSearchBtn: document.getElementById("simulationPickerSearchBtn"), simulationPickerSearchResults: document.getElementById("simulationPickerSearchResults"), simulationPickerClose: document.getElementById("simulationPickerClose"), simulationPickerCancelBtn: document.getElementById("simulationPickerCancelBtn"), simulationCardModal: document.getElementById("simulationCardModal"), simulationCardModalTitle: document.getElementById("simulationCardModalTitle"), simulationCardModalBody: document.getElementById("simulationCardModalBody"), simulationCardModalField: document.getElementById("simulationCardModalField"), simulationCardModalWearInput: document.getElementById("simulationCardModalWearInput"), simulationCardModalWearHint: document.getElementById("simulationCardModalWearHint"), simulationCardModalReadonlyNote: document.getElementById("simulationCardModalReadonlyNote"), simulationCardModalClose: document.getElementById("simulationCardModalClose"), simulationCardModalSaveBtn: document.getElementById("simulationCardModalSaveBtn"), simulationCardModalCancelBtn: document.getElementById("simulationCardModalCancelBtn")
+  simulationModeSavedBtn: document.getElementById("simulationModeSavedBtn"), simulationModeWorkspaceBtn: document.getElementById("simulationModeWorkspaceBtn"), simulationSavedPresets: document.getElementById("simulationSavedPresets"), simulationWorkspace: document.getElementById("simulationWorkspace"), simulationWorkspaceActionsBar: document.getElementById("simulationWorkspaceActionsBar"), simulationSavePresetBtn: document.getElementById("simulationSavePresetBtn"), simulationCancelEditBtn: document.getElementById("simulationCancelEditBtn"), simulationLayout: document.getElementById("simulationLayout"), simulationOutputPanel: document.getElementById("simulationOutputPanel"), simulationMaterialPanel: document.getElementById("simulationMaterialPanel"), simulationOutputRoleChooser: document.getElementById("simulationOutputRoleChooser"), simulationOutputRoleChooserText: document.getElementById("simulationOutputRoleChooserText"), simulationOutputRoleSplit: document.getElementById("simulationOutputRoleSplit"), simulationMaterialRoleChooser: document.getElementById("simulationMaterialRoleChooser"), simulationMaterialRoleChooserText: document.getElementById("simulationMaterialRoleChooserText"), simulationMaterialRoleSplit: document.getElementById("simulationMaterialRoleSplit"), simulationOutputLane: document.getElementById("simulationOutputLane"), simulationMaterialLane: document.getElementById("simulationMaterialLane"), simulationPickerModal: document.getElementById("simulationPickerModal"), simulationPickerTitle: document.getElementById("simulationPickerTitle"), simulationPickerRoleBadge: document.getElementById("simulationPickerRoleBadge"), simulationPickerHint: document.getElementById("simulationPickerHint"), simulationPickerMeta: document.getElementById("simulationPickerMeta"), simulationPickerSearchInput: document.getElementById("simulationPickerSearchInput"), simulationPickerSearchBtn: document.getElementById("simulationPickerSearchBtn"), simulationPickerSearchResults: document.getElementById("simulationPickerSearchResults"), simulationPickerClose: document.getElementById("simulationPickerClose"), simulationPickerCancelBtn: document.getElementById("simulationPickerCancelBtn"), simulationCardModal: document.getElementById("simulationCardModal"), simulationCardModalTitle: document.getElementById("simulationCardModalTitle"), simulationCardModalBody: document.getElementById("simulationCardModalBody"), simulationCardModalField: document.getElementById("simulationCardModalField"), simulationCardModalWearInput: document.getElementById("simulationCardModalWearInput"), simulationCardModalWearHint: document.getElementById("simulationCardModalWearHint"), simulationCardModalReadonlyNote: document.getElementById("simulationCardModalReadonlyNote"), simulationCardModalClose: document.getElementById("simulationCardModalClose"), simulationCardModalSaveBtn: document.getElementById("simulationCardModalSaveBtn"), simulationCardModalCancelBtn: document.getElementById("simulationCardModalCancelBtn"),
+  batchCraftPage: document.getElementById("batchCraftPage"), navBatchCraft: document.getElementById("navBatchCraft"), batchCraftStatusText: document.getElementById("batchCraftStatusText"),
+  batchCraftAddAccountBtn: document.getElementById("batchCraftAddAccountBtn"), batchCraftAccountPicker: document.getElementById("batchCraftAccountPicker"), batchCraftClearAccountsBtn: document.getElementById("batchCraftClearAccountsBtn"),
+  batchCraftActiveAccountText: document.getElementById("batchCraftActiveAccountText"), batchCraftAccountCards: document.getElementById("batchCraftAccountCards"),
+  batchCraftPresetPanel: document.getElementById("batchCraftPresetPanel"), batchCraftPresetList: document.getElementById("batchCraftPresetList"), batchCraftLimitInput: document.getElementById("batchCraftLimitInput"),
+  batchCraftRunSelectBtn: document.getElementById("batchCraftRunSelectBtn"), batchCraftExecuteBtn: document.getElementById("batchCraftExecuteBtn"),
+  batchCraftSettingsBtn: document.getElementById("batchCraftSettingsBtn"), batchCraftSettingsPanel: document.getElementById("batchCraftSettingsPanel"),
+  batchCraftUseComponentItems: document.getElementById("batchCraftUseComponentItems"), batchCraftIncludeCooling: document.getElementById("batchCraftIncludeCooling"),
+  batchCraftFastMode: document.getElementById("batchCraftFastMode"), batchCraftApproachMode: document.getElementById("batchCraftApproachMode"), batchCraftWearOffsetPct: document.getElementById("batchCraftWearOffsetPct"),
+  batchCraftSplitBar: document.getElementById("batchCraftSplitBar"),
+  batchCraftQueuePanel: document.getElementById("batchCraftQueuePanel"), batchCraftQueueTitle: document.getElementById("batchCraftQueueTitle"), batchCraftQueueList: document.getElementById("batchCraftQueueList"), batchCraftClearQueueBtn: document.getElementById("batchCraftClearQueueBtn"),
+  batchCraftOverlay: document.getElementById("batchCraftOverlay"), batchCraftOverlayTitle: document.getElementById("batchCraftOverlayTitle"), batchCraftOverlayDetail: document.getElementById("batchCraftOverlayDetail"), batchCraftOverlayProgressBar: document.getElementById("batchCraftOverlayProgressBar")
 };
 
 const authSessionStore = typeof window !== "undefined" ? (window.cs2AlchemyAuthSessionStore || null) : null;
@@ -189,6 +216,7 @@ let errorToastHideTimer = null;
 let lastErrorToastText = "";
 let lastErrorToastTs = 0;
 const CRAFT_UI_PREFS_KEY = "craft_ui_prefs_v2";
+const BATCH_CRAFT_UI_PREFS_KEY = "batch_craft_ui_prefs_v1";
 const CRAFT_ASSIST_PRESETS_KEY = "craft_assist_presets_v1";
 const TRADEUP_SIMULATION_PRESETS_KEY = "tradeup_simulation_presets_v1";
 const ERROR_TOAST_DURATION_MS = 2800;
@@ -748,6 +776,7 @@ async function initializeAuthenticatedWorkspace() {
     return;
   }
   loadCraftUiPrefs();
+  loadBatchCraftUiPrefs();
   await loadCraftAssistPresetsFromStorage();
   await loadTradeupSimulationPresetsFromStorage();
   initWearOptions();
@@ -1875,6 +1904,33 @@ function loadCraftUiPrefs() {
   }
 }
 
+function saveBatchCraftUiPrefs() {
+  try {
+    localStorage.setItem(BATCH_CRAFT_UI_PREFS_KEY, JSON.stringify({
+      use_component_items: !!state.batchCraftUseComponentItems,
+      include_cooling: !!state.batchCraftIncludeCooling,
+      fast_mode: !!state.batchCraftFastMode,
+      approach_mode: !!state.batchCraftApproachMode,
+      wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.batchCraftWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT)
+    }));
+  } catch (_) {}
+}
+
+function loadBatchCraftUiPrefs() {
+  try {
+    const raw = localStorage.getItem(BATCH_CRAFT_UI_PREFS_KEY);
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    if (typeof p.use_component_items === "boolean") state.batchCraftUseComponentItems = p.use_component_items;
+    if (typeof p.include_cooling === "boolean") state.batchCraftIncludeCooling = p.include_cooling;
+    if (typeof p.fast_mode === "boolean") state.batchCraftFastMode = p.fast_mode;
+    if (typeof p.approach_mode === "boolean") state.batchCraftApproachMode = p.approach_mode;
+    if (Number.isFinite(Number(p.wear_offset_pct))) {
+      state.batchCraftWearOffsetPct = normalizeCraftAssistWearOffsetPct(p.wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+    }
+  } catch (_) {}
+}
+
 function startCraftSplitDrag(evt) {
   if (evt.button !== 0) return;
   if (!ui.craftSplitBar || !ui.craftLayout) return;
@@ -2859,7 +2915,7 @@ function showPage(pageId) {
   if (ui.navShell && ui.navShell.contains(document.activeElement) && typeof document.activeElement.blur === "function") {
     document.activeElement.blur();
   }
-  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft], ["simulationPage", ui.navSimulation]]) {
+  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft], ["simulationPage", ui.navSimulation], ["batchCraftPage", ui.navBatchCraft]]) {
     const active = id === pageId;
     document.getElementById(id).classList.toggle("hidden", !active);
     if (btn) {
@@ -2878,6 +2934,11 @@ function showPage(pageId) {
       openBlankTradeupSimulationWorkspaceDraft();
     }
     renderSimulationPage();
+  }
+  if (pageId === "batchCraftPage") {
+    applyBatchCraftPresetWidth();
+    renderBatchCraftPage();
+    void ensureBatchCraftAccountsCached();
   }
 }
 function syncNavDrawerDom() {
@@ -3103,7 +3164,12 @@ function renderSavedAccounts() {
     delBtn.disabled = state.refreshing;
     delBtn.onclick = async (e) => { e.stopPropagation(); await deleteAccount(row); };
 
-    actions.append(remarkBtn, delBtn);
+    const webInvBtn = document.createElement("button");
+    webInvBtn.textContent = "Web库存";
+    webInvBtn.title = "查看 Web 库存（可选择物品转移）";
+    webInvBtn.onclick = (e) => { e.stopPropagation(); openWebInventoryModal(row.username); };
+
+    actions.append(remarkBtn, webInvBtn, delBtn);
     const sub = document.createElement("div");
     sub.className = "account-card-sub";
     sub.textContent = `账号：${accountName || "-"}`;
@@ -4579,6 +4645,52 @@ function averageAbsoluteWearText(rows) {
   const total = values.reduce((sum, value) => sum + value, 0);
   return wearTextFull(total / values.length);
 }
+function getCraftRowWearLabel(row) {
+  if (!row || typeof row !== "object") return "-";
+  const fromName = inferTradeupSimulationWearLabelFromName(
+    row.market_hash_name || row.name || row.alchemy_name || ""
+  );
+  if (fromName) return fromName;
+  const wear = getAbsoluteWearValue(row);
+  if (wear == null) return "-";
+  if (wear < 0.07) return "崭新出厂";
+  if (wear < 0.15) return "略有磨损";
+  if (wear < 0.38) return "久经沙场";
+  if (wear < 0.45) return "破损不堪";
+  return "战痕累累";
+}
+function getCraftRowWearToneClass(row) {
+  const label = getCraftRowWearLabel(row);
+  return getTradeupSimulationWearBadgeToneClass({wear_label: label});
+}
+function makeCraftQueueResultCardNode(row) {
+  const imageUrl = preferredRowSkinImageUrl(row);
+  const rarityVisual = getTradeupSimulationRarityVisuals(row && row.rarity_name);
+  const styleParts = [`--simulation-card-rarity-color:${rarityVisual.color}`];
+  if (imageUrl) styleParts.push(`--simulation-card-art-image:${cssUrlValue(imageUrl)}`);
+  const wearValue = getAbsoluteWearValue(row);
+  const wearText = wearValue != null ? (state.craftShowFullWear ? wearTextFull(wearValue) : numberTextTrunc(wearValue, 8)) : "-";
+  const wearLabel = getCraftRowWearLabel(row);
+  const wearToneClass = getCraftRowWearToneClass(row);
+  const name = escapeHtml(itemDisplayName(row) || "未命名物品");
+  const html = `
+    <article class="simulation-output-card">
+      <div class="simulation-card-art${imageUrl ? " has-image" : ""}" style='${styleParts.join(";")}'>
+        <span class="simulation-card-wear-badge${wearToneClass}">${escapeHtml(wearLabel)}</span>
+        ${renderTradeupSimulationWearStack(wearValue, wearText, wearToneClass)}
+        ${imageUrl ? "" : '<span class="simulation-card-art-empty">暂无图</span>'}
+      </div>
+      <div class="simulation-card-content">
+        <div class="simulation-card-name">${name}</div>
+      </div>
+    </article>
+  `;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = html.trim();
+  const card = wrap.firstElementChild;
+  card.title = `${itemDisplayName(row) || "未命名物品"}\n${wearLabel} ${wearText}`;
+  return card;
+}
 function makeCraftSlotNode({row = null, rawId = "", onRemove = null, removeDisabled = false}) {
   const slot = document.createElement("div");
   slot.className = "craft-slot";
@@ -5344,7 +5456,9 @@ function normalizeCraftAssistEntryCount(value, fallback = 1) {
   return Math.max(1, Math.min(10, n));
 }
 function normalizeCraftAssistApplyCount(value, fallback = 1) {
-  return normalizeCraftAssistEntryCount(value, fallback);
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n)) return Math.max(1, Math.min(100, Math.trunc(Number(fallback) || 1)));
+  return Math.max(1, Math.min(100, n));
 }
 function normalizeCraftAssistWearOffsetPct(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT) {
   const fallbackNum = Number(fallback);
@@ -8110,7 +8224,7 @@ function renderCraftAssistPresetPanel() {
     const applyCountInput = document.createElement("input");
     applyCountInput.type = "number";
     applyCountInput.min = "1";
-    applyCountInput.max = "10";
+    applyCountInput.max = "100";
     applyCountInput.step = "1";
     applyCountInput.value = String(applyCountValue);
     applyCountInput.setAttribute("aria-label", "应用数量");
@@ -9517,25 +9631,24 @@ function renderCraftQueue() {
 
     const doneRow = document.createElement("div");
     doneRow.className = `craft-queue-item done${showDeleteAction ? " deletable" : ""}`;
-    const resultWrap = document.createElement("div");
-    resultWrap.className = "craft-queue-result";
     const gainedIds = normalizeCraftRecipeItemIds(entry && entry.gained_ids);
-    const names = [];
-    const wears = [];
-    for (const id of gainedIds) {
-      const row = rowsById.get(id);
-      if (!row) continue;
-      names.push(itemDisplayName(row));
-      wears.push(absoluteWearLabel(row, {prefix: false}));
+    const gainedRows = gainedIds.map((id) => rowsById.get(id)).filter(Boolean);
+    if (gainedRows.length) {
+      const cardGrid = document.createElement("div");
+      cardGrid.className = "craft-queue-result-card-grid";
+      for (const row of gainedRows) {
+        cardGrid.append(makeCraftQueueResultCardNode(row));
+      }
+      doneRow.append(cardGrid);
+    } else {
+      const resultWrap = document.createElement("div");
+      resultWrap.className = "craft-queue-result";
+      const resultTitle = document.createElement("div");
+      resultTitle.className = "craft-queue-result-title";
+      resultTitle.textContent = "产物：待确认";
+      resultWrap.append(resultTitle);
+      doneRow.append(resultWrap);
     }
-    const resultTitle = document.createElement("div");
-    resultTitle.className = "craft-queue-result-title";
-    resultTitle.textContent = names.length ? `产物：${names.join("，")}` : "产物：待确认";
-    const wearLine = document.createElement("div");
-    wearLine.className = "craft-queue-result-wear";
-    wearLine.textContent = `wear: ${wears.length ? wears.join("，") : "-"}`;
-    resultWrap.append(resultTitle, wearLine);
-    doneRow.append(resultWrap);
     if (showDeleteAction) {
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
@@ -12993,6 +13106,854 @@ async function doRefresh({
   }
 }
 
+// ===== 多账号汰换 (Batch Craft) =====
+
+const batchCraftSplitDrag = {active: false, startX: 0, startWidth: 0};
+
+function clampBatchCraftPresetWidth(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 200;
+  return Math.max(160, Math.min(400, n));
+}
+
+function applyBatchCraftPresetWidth() {
+  if (!ui.batchCraftPage) return;
+  state.batchCraftPresetWidth = clampBatchCraftPresetWidth(state.batchCraftPresetWidth);
+  const main = ui.batchCraftPage.querySelector(".batch-craft-main");
+  if (main) main.style.setProperty("--batch-craft-preset-width", `${state.batchCraftPresetWidth}px`);
+}
+
+function startBatchCraftSplitDrag(evt) {
+  if (evt.button !== 0) return;
+  if (!ui.batchCraftSplitBar) return;
+  batchCraftSplitDrag.active = true;
+  batchCraftSplitDrag.startX = evt.clientX;
+  batchCraftSplitDrag.startWidth = clampBatchCraftPresetWidth(state.batchCraftPresetWidth);
+  document.body.classList.add("batch-craft-split-dragging");
+  evt.preventDefault();
+}
+
+function moveBatchCraftSplitDrag(evt) {
+  if (!batchCraftSplitDrag.active) return;
+  const deltaX = evt.clientX - batchCraftSplitDrag.startX;
+  state.batchCraftPresetWidth = clampBatchCraftPresetWidth(batchCraftSplitDrag.startWidth + deltaX);
+  applyBatchCraftPresetWidth();
+}
+
+function stopBatchCraftSplitDrag() {
+  if (!batchCraftSplitDrag.active) return;
+  batchCraftSplitDrag.active = false;
+  document.body.classList.remove("batch-craft-split-dragging");
+}
+
+function setBatchCraftStatus(text, isError = false) {
+  state.batchCraftStatusText = String(text || "").trim();
+  state.batchCraftStatusError = !!isError;
+  if (ui.batchCraftStatusText) {
+    ui.batchCraftStatusText.textContent = state.batchCraftStatusText;
+    ui.batchCraftStatusText.classList.toggle("error", state.batchCraftStatusError);
+  }
+}
+
+function setBatchCraftOverlay(visible, {title = "", detail = "", percent = 0} = {}) {
+  if (!ui.batchCraftOverlay) return;
+  ui.batchCraftOverlay.classList.toggle("hidden", !visible);
+  if (ui.batchCraftOverlayTitle) ui.batchCraftOverlayTitle.textContent = title;
+  if (ui.batchCraftOverlayDetail) ui.batchCraftOverlayDetail.textContent = detail;
+  if (ui.batchCraftOverlayProgressBar) ui.batchCraftOverlayProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+}
+
+function hasCachedSnapshotForAccount(username) {
+  const key = String(username || "").trim();
+  if (!key) return false;
+  if (key === String(state.currentAccountUsername || "").trim() && Array.isArray(state.rows) && state.rows.length > 0) return true;
+  if (!(state.snapshotCacheByAccount instanceof Map)) return false;
+  const cached = state.snapshotCacheByAccount.get(key);
+  return !!(cached && Array.isArray(cached.rows) && cached.rows.length > 0);
+}
+
+function getCachedFetchTimeForAccount(username) {
+  const key = String(username || "").trim();
+  if (!key) return "";
+  if (key === String(state.currentAccountUsername || "").trim()) return String(state.fetchTime || "").trim();
+  if (!(state.snapshotCacheByAccount instanceof Map)) return "";
+  const cached = state.snapshotCacheByAccount.get(key);
+  return String(cached && cached.fetchTime || "").trim();
+}
+
+function getAccountRowByUsername(username) {
+  const key = String(username || "").trim();
+  if (!key) return null;
+  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
+  return accounts.find((a) => String(a && a.username || "").trim() === key) || null;
+}
+
+async function ensureSnapshotCachedForAccount(username) {
+  const key = String(username || "").trim();
+  if (!key) return;
+  if (hasCachedSnapshotForAccount(key)) return;
+  try {
+    const data = await api(`/api/snapshot/account?username=${encodeURIComponent(key)}`);
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    if (!rows.length) return;
+    cacheSnapshotForAccount(key, {
+      rows,
+      component: data.component || {summary_map: {}, item_map: {}},
+      snapshotPath: data.snapshot && data.snapshot.path ? data.snapshot.path : "",
+      fetchTime: String(data.fetch_time || "").trim(),
+      connected: false,
+      authState: String(data.auth_state || "").trim() || "normal",
+      authReason: String(data.auth_reason || "").trim()
+    });
+  } catch (_) {
+    // 离线快照不存在，静默忽略
+  }
+}
+
+async function ensureBatchCraftAccountsCached() {
+  const uncached = state.batchCraftAccounts.filter((u) => !hasCachedSnapshotForAccount(u));
+  if (!uncached.length) return;
+  await Promise.allSettled(uncached.map((u) => ensureSnapshotCachedForAccount(u)));
+  renderBatchCraftPage();
+}
+
+async function addBatchCraftAccount(username) {
+  const key = String(username || "").trim();
+  if (!key) return;
+  if (state.batchCraftAccounts.includes(key)) return;
+  state.batchCraftAccounts.push(key);
+  renderBatchCraftPage();
+  await ensureSnapshotCachedForAccount(key);
+  renderBatchCraftPage();
+}
+
+function removeBatchCraftAccount(username) {
+  const key = String(username || "").trim();
+  state.batchCraftAccounts = state.batchCraftAccounts.filter((u) => u !== key);
+  state.batchCraftQueue = state.batchCraftQueue.filter((e) => e.username !== key);
+  renderBatchCraftPage();
+}
+
+function clearBatchCraftAccounts() {
+  state.batchCraftAccounts = [];
+  state.batchCraftQueue = [];
+  renderBatchCraftPage();
+}
+
+function clearBatchCraftQueue() {
+  state.batchCraftQueue = [];
+  renderBatchCraftPage();
+}
+
+function renderBatchCraftAccountCards() {
+  if (!ui.batchCraftAccountCards) return;
+  ui.batchCraftAccountCards.replaceChildren();
+  for (const username of state.batchCraftAccounts) {
+    const row = getAccountRowByUsername(username);
+    const displayName = (row && displayAccountName(row)) || username;
+    const avatarUrl = String(row && row.avatar_url || "").trim();
+    const fetchTime = getCachedFetchTimeForAccount(username);
+    const isActive = username === state.batchCraftActiveAccount;
+
+    const card = document.createElement("div");
+    card.className = `batch-craft-account-card${isActive ? " active" : ""}`;
+
+    const avatarWrap = document.createElement("div");
+    avatarWrap.className = "batch-craft-account-card-avatar";
+    if (avatarUrl) {
+      const img = document.createElement("img");
+      img.src = avatarUrl;
+      img.alt = displayName;
+      img.loading = "lazy";
+      img.onerror = () => {
+        avatarWrap.replaceChildren();
+        const fb = document.createElement("span");
+        fb.textContent = (displayName || "?").slice(0, 1).toUpperCase();
+        avatarWrap.append(fb);
+      };
+      avatarWrap.append(img);
+    } else {
+      const fb = document.createElement("span");
+      fb.textContent = (displayName || "?").slice(0, 1).toUpperCase();
+      avatarWrap.append(fb);
+    }
+
+    const info = document.createElement("div");
+    info.className = "batch-craft-account-card-info";
+    const nameEl = document.createElement("div");
+    nameEl.className = "batch-craft-account-card-name";
+    nameEl.textContent = displayName;
+    nameEl.title = displayName;
+    const timeEl = document.createElement("div");
+    timeEl.className = "batch-craft-account-card-time";
+    timeEl.textContent = fetchTime ? `刷新：${fetchTime}` : "未刷新";
+    info.append(nameEl, timeEl);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "batch-craft-account-card-remove";
+    removeBtn.title = "移除";
+    removeBtn.textContent = "×";
+    removeBtn.disabled = !!state.batchCraftBusy;
+    removeBtn.onclick = (evt) => {
+      evt.stopPropagation();
+      if (state.batchCraftBusy) return;
+      removeBatchCraftAccount(username);
+    };
+
+    card.append(avatarWrap, info, removeBtn);
+    ui.batchCraftAccountCards.append(card);
+  }
+}
+
+function renderBatchCraftAccountPicker() {
+  if (!ui.batchCraftAccountPicker) return;
+  ui.batchCraftAccountPicker.replaceChildren();
+  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
+  const added = new Set(state.batchCraftAccounts);
+  const available = accounts.filter((a) => !added.has(String(a && a.username || "").trim()));
+  if (!available.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "无可添加账号";
+    ui.batchCraftAccountPicker.append(opt);
+    return;
+  }
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "选择账号...";
+  ui.batchCraftAccountPicker.append(placeholder);
+  for (const row of available) {
+    const opt = document.createElement("option");
+    opt.value = String(row.username || "").trim();
+    opt.textContent = displayAccountName(row) || String(row.username || "").trim();
+    ui.batchCraftAccountPicker.append(opt);
+  }
+}
+
+function renderBatchCraftPresetList() {
+  if (!ui.batchCraftPresetList) return;
+  ui.batchCraftPresetList.replaceChildren();
+  const list = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "batch-craft-preset-empty";
+    empty.textContent = "暂无配方，请先在炼金汰换页面保存";
+    ui.batchCraftPresetList.append(empty);
+    return;
+  }
+  for (const preset of list) {
+    const id = String(preset && preset.id || "").trim();
+    const item = document.createElement("div");
+    item.className = `batch-craft-preset-item${id === state.batchCraftSelectedPresetId ? " selected" : ""}`;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "batch-craft-preset-item-name";
+    nameSpan.textContent = String(preset && preset.name || "未命名配置");
+    item.title = nameSpan.textContent;
+
+    const expandBtn = document.createElement("button");
+    expandBtn.type = "button";
+    expandBtn.className = "batch-craft-preset-expand-btn";
+    expandBtn.title = "查看配方物品";
+    expandBtn.innerHTML = '<svg viewBox="0 0 6 10"><path d="M0 0L6 5L0 10Z"/></svg>';
+    expandBtn.onclick = (e) => {
+      e.stopPropagation();
+      showBatchCraftPresetPopover(preset, expandBtn);
+    };
+
+    item.append(nameSpan, expandBtn);
+    item.onclick = () => {
+      state.batchCraftSelectedPresetId = id;
+      renderBatchCraftPresetList();
+    };
+    ui.batchCraftPresetList.append(item);
+  }
+}
+
+/* 配方物品浮窗 */
+let _batchCraftPopover = null;
+let _batchCraftPopoverCleanup = null;
+function closeBatchCraftPresetPopover() {
+  if (_batchCraftPopover && _batchCraftPopover.parentNode) {
+    _batchCraftPopover.parentNode.removeChild(_batchCraftPopover);
+  }
+  _batchCraftPopover = null;
+  if (_batchCraftPopoverCleanup) {
+    _batchCraftPopoverCleanup();
+    _batchCraftPopoverCleanup = null;
+  }
+}
+function showBatchCraftPresetPopover(preset, anchorEl) {
+  closeBatchCraftPresetPopover();
+  const materials = Array.isArray(preset && preset.materials) ? preset.materials : [];
+  const pop = document.createElement("div");
+  pop.className = "batch-craft-preset-popover";
+
+  const title = document.createElement("div");
+  title.className = "batch-craft-preset-popover-title";
+  title.textContent = String(preset && preset.name || "未命名配置");
+  pop.append(title);
+
+  let hasItems = false;
+  for (const mat of materials) {
+    const role = normalizeCraftAssistRole(mat && mat.role);
+    const roleText = role === "main" ? "主料" : "辅料";
+    const names = Array.isArray(mat && mat.items) && mat.items.length
+      ? mat.items.map((it) => String(it && it.name || "").trim()).filter(Boolean)
+      : Array.isArray(mat && mat.names) ? mat.names.map((n) => String(n || "").trim()).filter(Boolean)
+      : mat && mat.name ? [String(mat.name).trim()] : [];
+    const count = mat && mat.count != null ? mat.count : 1;
+    if (!names.length) continue;
+    hasItems = true;
+
+    /* --- role group card --- */
+    const group = document.createElement("div");
+    group.className = "batch-craft-popover-group";
+
+    const head = document.createElement("div");
+    head.className = "batch-craft-popover-group-head";
+    const badge = document.createElement("span");
+    badge.className = `batch-craft-popover-role-tag ${role}`;
+    badge.textContent = roleText;
+    head.append(badge);
+
+    /* qty control */
+    const qtyShell = document.createElement("div");
+    qtyShell.className = "batch-craft-popover-qty-shell";
+    const qtyLabel = document.createElement("span");
+    qtyLabel.className = "batch-craft-popover-qty-label";
+    qtyLabel.textContent = "数量";
+    const qtyDec = document.createElement("button");
+    qtyDec.type = "button";
+    qtyDec.className = "batch-craft-popover-qty-step decrement";
+    qtyDec.textContent = "−";
+    qtyDec.title = "减少数量";
+    const qtyInput = document.createElement("input");
+    qtyInput.type = "number";
+    qtyInput.className = "batch-craft-popover-qty-input";
+    qtyInput.min = "1";
+    qtyInput.max = "10";
+    qtyInput.step = "1";
+    qtyInput.value = String(count);
+    const qtyInc = document.createElement("button");
+    qtyInc.type = "button";
+    qtyInc.className = "batch-craft-popover-qty-step increment";
+    qtyInc.textContent = "+";
+    qtyInc.title = "增加数量";
+
+    const commitQty = (val) => {
+      const n = Math.max(1, Math.min(10, Math.round(Number(val) || 1)));
+      qtyInput.value = String(n);
+      mat.count = n;
+      saveCraftAssistPresetsToStorage();
+    };
+    qtyDec.onclick = (e) => { e.stopPropagation(); commitQty(Number(qtyInput.value) - 1); };
+    qtyInc.onclick = (e) => { e.stopPropagation(); commitQty(Number(qtyInput.value) + 1); };
+    qtyInput.onchange = () => commitQty(qtyInput.value);
+    qtyInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); commitQty(qtyInput.value); qtyInput.blur(); } };
+
+    qtyShell.append(qtyLabel, qtyDec, qtyInput, qtyInc);
+    head.append(qtyShell);
+    group.append(head);
+
+    /* item cards */
+    const cardList = document.createElement("div");
+    cardList.className = "batch-craft-popover-card-list";
+    for (const n of names) {
+      const card = document.createElement("div");
+      card.className = "batch-craft-popover-card";
+      card.textContent = n;
+      card.title = n;
+      cardList.append(card);
+    }
+    group.append(cardList);
+    pop.append(group);
+  }
+  if (!hasItems) {
+    const empty = document.createElement("div");
+    empty.className = "batch-craft-preset-popover-empty";
+    empty.textContent = "无物品数据";
+    pop.append(empty);
+  }
+
+  document.body.append(pop);
+  _batchCraftPopover = pop;
+
+  /* 定位：锚点右侧 */
+  const rect = anchorEl.getBoundingClientRect();
+  let left = rect.right + 6;
+  let top = rect.top;
+  const popW = pop.offsetWidth;
+  const popH = pop.offsetHeight;
+  if (left + popW > window.innerWidth - 8) left = rect.left - popW - 6;
+  if (top + popH > window.innerHeight - 8) top = Math.max(8, window.innerHeight - popH - 8);
+  pop.style.position = "fixed";
+  pop.style.left = left + "px";
+  pop.style.top = top + "px";
+
+  /* 点击外部关闭 */
+  const onClickOutside = (e) => {
+    if (pop.contains(e.target) || anchorEl.contains(e.target)) return;
+    closeBatchCraftPresetPopover();
+  };
+  setTimeout(() => document.addEventListener("pointerdown", onClickOutside), 0);
+  _batchCraftPopoverCleanup = () => document.removeEventListener("pointerdown", onClickOutside);
+}
+
+function renderBatchCraftQueue() {
+  if (!ui.batchCraftQueueList) return;
+  ui.batchCraftQueueList.replaceChildren();
+  const queue = Array.isArray(state.batchCraftQueue) ? state.batchCraftQueue : [];
+  if (!queue.length) {
+    const empty = document.createElement("div");
+    empty.className = "batch-craft-queue-empty";
+    empty.textContent = "选择配方后点击「快捷选材」生成配方";
+    ui.batchCraftQueueList.append(empty);
+    return;
+  }
+  let globalIdx = 0;
+  for (const entry of queue) {
+    const accountRows = getCraftRowsForAccount(entry.username);
+    const rowsById = buildRowsByAssetId(accountRows);
+    const accountRow = getAccountRowByUsername(entry.username);
+    const accountDisplayName = (accountRow && displayAccountName(accountRow)) || entry.username;
+    for (const recipe of entry.recipes) {
+      globalIdx += 1;
+      const itemIds = Array.isArray(recipe.item_ids) ? recipe.item_ids : [];
+      const recipeRows = itemIds.map((id) => rowsById.get(id)).filter(Boolean);
+      const title = buildPendingCraftQueueTitle({pendingIndex: globalIdx, recipeRows});
+      const statusClass = recipe.status === "done" ? " done" : recipe.status === "failed" ? " prepare-failed" : "";
+      const card = renderCraftQueueSlots({
+        title,
+        itemIds,
+        rowsById,
+        showDeleteAction: !state.batchCraftBusy && recipe.status !== "done",
+        onRemove: () => {
+          entry.recipes = entry.recipes.filter((r) => r.id !== recipe.id);
+          if (!entry.recipes.length) {
+            state.batchCraftQueue = state.batchCraftQueue.filter((e) => e !== entry);
+          }
+          renderBatchCraftQueue();
+        },
+        active: false,
+        selectable: false,
+        extraClass: statusClass
+      });
+      const accountLabel = document.createElement("div");
+      accountLabel.className = "batch-craft-account-label";
+      accountLabel.textContent = accountDisplayName;
+      card.append(accountLabel);
+      if (recipe.status === "done" && recipe.result) {
+        const gainedIds = normalizeCraftRecipeItemIds(recipe.result.gained_ids);
+        const gainedRows = gainedIds.map((id) => rowsById.get(id)).filter(Boolean);
+        if (gainedRows.length) {
+          const cardGrid = document.createElement("div");
+          cardGrid.className = "craft-queue-result-card-grid";
+          for (const gr of gainedRows) {
+            cardGrid.append(makeCraftQueueResultCardNode(gr));
+          }
+          card.append(cardGrid);
+        }
+      }
+      ui.batchCraftQueueList.append(card);
+    }
+  }
+  if (ui.batchCraftQueueTitle) {
+    const totalRecipes = queue.reduce((s, e) => s + e.recipes.length, 0);
+    ui.batchCraftQueueTitle.textContent = `配方预览（${totalRecipes} 组）`;
+  }
+}
+
+function syncBatchCraftSettingsControls() {
+  if (ui.batchCraftUseComponentItems) ui.batchCraftUseComponentItems.checked = !!state.batchCraftUseComponentItems;
+  if (ui.batchCraftIncludeCooling) ui.batchCraftIncludeCooling.checked = !!state.batchCraftIncludeCooling;
+  if (ui.batchCraftFastMode) ui.batchCraftFastMode.checked = !!state.batchCraftFastMode;
+  if (ui.batchCraftApproachMode) ui.batchCraftApproachMode.checked = !!state.batchCraftApproachMode;
+  const wop = normalizeCraftAssistWearOffsetPct(state.batchCraftWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  state.batchCraftWearOffsetPct = wop;
+  if (ui.batchCraftWearOffsetPct && document.activeElement !== ui.batchCraftWearOffsetPct) {
+    ui.batchCraftWearOffsetPct.value = craftAssistWearOffsetPctText(wop);
+  }
+}
+
+function renderBatchCraftPage() {
+  if (!ui.batchCraftPage) return;
+  renderBatchCraftAccountCards();
+  renderBatchCraftAccountPicker();
+  renderBatchCraftPresetList();
+  renderBatchCraftQueue();
+  if (ui.batchCraftActiveAccountText) {
+    ui.batchCraftActiveAccountText.textContent = state.batchCraftActiveAccount
+      ? `正在处理：${state.batchCraftActiveAccount}`
+      : "";
+  }
+  if (ui.batchCraftLimitInput) {
+    ui.batchCraftLimitInput.value = String(state.batchCraftLimit || 10);
+  }
+  const busy = !!state.batchCraftBusy;
+  if (ui.batchCraftRunSelectBtn) ui.batchCraftRunSelectBtn.disabled = busy;
+  if (ui.batchCraftExecuteBtn) ui.batchCraftExecuteBtn.disabled = busy;
+  if (ui.batchCraftAddAccountBtn) ui.batchCraftAddAccountBtn.disabled = busy;
+  if (ui.batchCraftClearAccountsBtn) ui.batchCraftClearAccountsBtn.disabled = busy;
+  if (ui.batchCraftClearQueueBtn) ui.batchCraftClearQueueBtn.disabled = busy;
+  if (ui.batchCraftStatusText) {
+    ui.batchCraftStatusText.textContent = state.batchCraftStatusText;
+    ui.batchCraftStatusText.classList.toggle("error", !!state.batchCraftStatusError);
+  }
+  syncBatchCraftSettingsControls();
+}
+
+async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, existingItemIds) {
+  const accountRows = getCraftRowsForAccount(username);
+  if (!accountRows.length) return null;
+  const wearFilterMode = normalizeCraftAssistFilterMode(draftSnapshot.wear_filter_mode);
+  const targetValue = parseOptionalWear01(draftSnapshot.target_wear);
+  const materials = normalizeCraftAssistMaterialsForRun({
+    materials: draftSnapshot.materials,
+    targetWear: targetValue,
+    wearFilterMode
+  });
+  if (!materials.length || targetValue == null) return null;
+  const mode = craftAssistTargetCountFromMaterials(materials);
+  const payload = {
+    username,
+    target_wear: targetValue,
+    wear_filter_mode: wearFilterMode,
+    materials,
+    mode,
+    use_component_items: !!state.batchCraftUseComponentItems,
+    include_cooling: !!state.batchCraftIncludeCooling,
+    fast_mode: !!state.batchCraftFastMode,
+    approach_mode: !!state.batchCraftApproachMode,
+    wear_offset_pct: state.batchCraftWearOffsetPct,
+    exclude_item_ids: existingItemIds
+  };
+  try {
+    const data = await api("/api/craft/assist-select", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    if (!data || !data.runs || !data.runs.length) return null;
+    const run = data.runs[0];
+    const itemIds = normalizeCraftRecipeItemIds(run && (run.item_ids || run.itemIds));
+    if (itemIds.length !== mode) return null;
+    return {
+      id: `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      item_ids: itemIds,
+      status: "pending",
+      result: null
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+async function runBatchCraftAssistSelect() {
+  if (state.batchCraftBusy) return;
+  if (!state.batchCraftAccounts.length) {
+    setBatchCraftStatus("请先添加参与账号", true);
+    return;
+  }
+  const presetId = String(state.batchCraftSelectedPresetId || "").trim();
+  if (!presetId) {
+    setBatchCraftStatus("请先选择一个选材配方", true);
+    return;
+  }
+  const presetList = Array.isArray(state.craftAssistPresets) ? state.craftAssistPresets : [];
+  const preset = presetList.find((p) => String(p && p.id || "").trim() === presetId);
+  if (!preset) {
+    setBatchCraftStatus("所选配方不存在", true);
+    return;
+  }
+  const sanitized = sanitizeCraftAssistPresetPayload(preset);
+  if (!sanitized) {
+    setBatchCraftStatus("配方数据异常", true);
+    return;
+  }
+  const missingAccounts = state.batchCraftAccounts.filter((u) => !hasCachedSnapshotForAccount(u));
+  if (missingAccounts.length) {
+    setBatchCraftStatus(`以下账号无库存缓存：${missingAccounts.join(", ")}`, true);
+    return;
+  }
+  const limit = Math.max(1, Math.min(100, Math.trunc(Number(state.batchCraftLimit) || 10)));
+  state.batchCraftBusy = true;
+  state.batchCraftQueue = [];
+  setBatchCraftStatus("正在并行选材...");
+  renderBatchCraftPage();
+
+  const draftSnapshot = {
+    target_wear: sanitized.target_wear,
+    wear_filter_mode: sanitized.wear_filter_mode,
+    materials: sanitized.materials,
+    pick_role: "main"
+  };
+
+  // 并行：所有账号同时选材
+  const promises = state.batchCraftAccounts.map(async (username) => {
+    const accountEntry = {username, recipes: []};
+    const usedItemIds = [];
+    // 每个账号最多尝试 limit 次（总数上限由后面统一截断）
+    for (let r = 0; r < limit; r++) {
+      const result = await callBatchCraftAssistSelectForAccount(username, draftSnapshot, usedItemIds);
+      if (!result) break;
+      accountEntry.recipes.push(result);
+      usedItemIds.push(...result.item_ids);
+    }
+    return accountEntry;
+  });
+
+  const results = await Promise.allSettled(promises);
+  const allEntries = [];
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value.recipes.length > 0) {
+      allEntries.push(result.value);
+    }
+  }
+
+  // 按总数上限截断
+  let totalCount = 0;
+  for (const entry of allEntries) {
+    const remaining = limit - totalCount;
+    if (remaining <= 0) {
+      entry.recipes = [];
+    } else if (entry.recipes.length > remaining) {
+      entry.recipes = entry.recipes.slice(0, remaining);
+    }
+    totalCount += entry.recipes.length;
+  }
+  state.batchCraftQueue = allEntries.filter((e) => e.recipes.length > 0);
+
+  state.batchCraftBusy = false;
+  const totalRecipes = state.batchCraftQueue.reduce((s, e) => s + e.recipes.length, 0);
+  setBatchCraftStatus(`选材完成：${state.batchCraftQueue.length} 个账号，共 ${totalRecipes} 组配方`);
+  renderBatchCraftPage();
+}
+
+async function runBatchCraftExecution() {
+  if (state.batchCraftBusy) return;
+  const pendingEntries = state.batchCraftQueue.filter((e) => e.recipes.some((r) => r.status === "pending"));
+  if (!pendingEntries.length) {
+    setBatchCraftStatus("无待执行配方", true);
+    return;
+  }
+  const totalRecipes = pendingEntries.reduce((s, e) => s + e.recipes.filter((r) => r.status === "pending").length, 0);
+  const ok = await openConfirmModal({
+    title: "确认执行多账号汰换",
+    message: `即将对 ${pendingEntries.length} 个账号执行共 ${totalRecipes} 组配方，确认？`,
+    confirmText: "确认执行",
+    cancelText: "取消"
+  });
+  if (!ok) {
+    setBatchCraftStatus("已取消执行");
+    return;
+  }
+
+  state.batchCraftBusy = true;
+  let completedCount = 0;
+  let failedCount = 0;
+  setBatchCraftOverlay(true, {title: "正在执行多账号汰换...", detail: "准备中"});
+  renderBatchCraftPage();
+
+  for (let ai = 0; ai < pendingEntries.length; ai++) {
+    const entry = pendingEntries[ai];
+    const pendingRecipes = entry.recipes.filter((r) => r.status === "pending");
+    if (!pendingRecipes.length) continue;
+
+    state.batchCraftActiveAccount = entry.username;
+    renderBatchCraftAccountCards();
+
+    // 连接该账号
+    setBatchCraftOverlay(true, {
+      title: `正在连接账号 ${entry.username}（${ai + 1}/${pendingEntries.length}）`,
+      detail: "连接中...",
+      percent: (ai / pendingEntries.length) * 100
+    });
+
+    try {
+      await api("/api/accounts/active", {
+        method: "POST",
+        body: JSON.stringify({username: entry.username})
+      });
+      const refreshResult = await doRefresh({
+        usernameOverride: entry.username,
+        force: true,
+        silentRateLimit: true,
+        silentInfo: true
+      });
+      if (!refreshResult || !refreshResult.ok) {
+        for (const recipe of pendingRecipes) {
+          recipe.status = "failed";
+          recipe.result = {error: "连接失败"};
+          failedCount++;
+        }
+        renderBatchCraftQueue();
+        continue;
+      }
+    } catch (err) {
+      for (const recipe of pendingRecipes) {
+        recipe.status = "failed";
+        recipe.result = {error: err.message};
+        failedCount++;
+      }
+      renderBatchCraftQueue();
+      continue;
+    }
+
+    // 逐个执行配方
+    for (let ri = 0; ri < pendingRecipes.length; ri++) {
+      const recipe = pendingRecipes[ri];
+      const overallDone = completedCount + failedCount;
+      const overallTotal = totalRecipes;
+      setBatchCraftOverlay(true, {
+        title: `${entry.username}：执行第 ${ri + 1}/${pendingRecipes.length} 组`,
+        detail: `总进度 ${overallDone}/${overallTotal}`,
+        percent: (overallDone / overallTotal) * 100
+      });
+
+      try {
+        const data = await api("/api/craft/tradeup", {
+          method: "POST",
+          body: JSON.stringify({
+            username: entry.username,
+            allow_cooling: !!state.craftIncludeCooling,
+            use_component_items: false,
+            recipes: [{
+              queue_index: ri,
+              item_ids: recipe.item_ids,
+              item_sources: {}
+            }]
+          })
+        });
+        recipe.status = "done";
+        recipe.result = data;
+        completedCount++;
+      } catch (err) {
+        recipe.status = "failed";
+        recipe.result = {error: err.message};
+        failedCount++;
+      }
+      renderBatchCraftQueue();
+    }
+  }
+
+  state.batchCraftActiveAccount = "";
+  state.batchCraftBusy = false;
+  setBatchCraftOverlay(false);
+  setBatchCraftStatus(`执行完成：成功 ${completedCount} 组，失败 ${failedCount} 组`);
+  renderBatchCraftPage();
+}
+
+function bindBatchCraftEvents() {
+  if (ui.batchCraftAddAccountBtn) {
+    ui.batchCraftAddAccountBtn.onclick = () => {
+      if (state.batchCraftBusy) return;
+      if (!ui.batchCraftAccountPicker) return;
+      ui.batchCraftAccountPicker.classList.toggle("hidden");
+      if (!ui.batchCraftAccountPicker.classList.contains("hidden")) {
+        renderBatchCraftAccountPicker();
+        ui.batchCraftAccountPicker.focus();
+      }
+    };
+  }
+  if (ui.batchCraftAccountPicker) {
+    ui.batchCraftAccountPicker.onchange = () => {
+      const value = ui.batchCraftAccountPicker.value;
+      if (value) {
+        void addBatchCraftAccount(value);
+        ui.batchCraftAccountPicker.classList.add("hidden");
+      }
+    };
+    ui.batchCraftAccountPicker.onblur = () => {
+      setTimeout(() => {
+        if (ui.batchCraftAccountPicker) ui.batchCraftAccountPicker.classList.add("hidden");
+      }, 150);
+    };
+  }
+  if (ui.batchCraftClearAccountsBtn) {
+    ui.batchCraftClearAccountsBtn.onclick = () => {
+      if (state.batchCraftBusy) return;
+      clearBatchCraftAccounts();
+    };
+  }
+  if (ui.batchCraftLimitInput) {
+    ui.batchCraftLimitInput.onchange = () => {
+      state.batchCraftLimit = Math.max(1, Math.min(100, Math.trunc(Number(ui.batchCraftLimitInput.value) || 10)));
+      ui.batchCraftLimitInput.value = String(state.batchCraftLimit);
+    };
+  }
+  if (ui.batchCraftRunSelectBtn) {
+    ui.batchCraftRunSelectBtn.onclick = () => void runBatchCraftAssistSelect();
+  }
+  if (ui.batchCraftExecuteBtn) {
+    ui.batchCraftExecuteBtn.onclick = () => void runBatchCraftExecution();
+  }
+  if (ui.batchCraftClearQueueBtn) {
+    ui.batchCraftClearQueueBtn.onclick = () => {
+      if (state.batchCraftBusy) return;
+      clearBatchCraftQueue();
+    };
+  }
+  // -- batch craft settings panel --
+  if (ui.batchCraftSettingsBtn) {
+    ui.batchCraftSettingsBtn.onclick = () => {
+      state.batchCraftSettingsOpen = !state.batchCraftSettingsOpen;
+      if (ui.batchCraftSettingsPanel) ui.batchCraftSettingsPanel.classList.toggle("hidden", !state.batchCraftSettingsOpen);
+      if (ui.batchCraftSettingsBtn) ui.batchCraftSettingsBtn.classList.toggle("active", state.batchCraftSettingsOpen);
+      if (state.batchCraftSettingsOpen) syncBatchCraftSettingsControls();
+    };
+  }
+  if (ui.batchCraftUseComponentItems) {
+    ui.batchCraftUseComponentItems.onchange = () => {
+      state.batchCraftUseComponentItems = !!ui.batchCraftUseComponentItems.checked;
+      saveBatchCraftUiPrefs();
+    };
+  }
+  if (ui.batchCraftIncludeCooling) {
+    ui.batchCraftIncludeCooling.onchange = () => {
+      state.batchCraftIncludeCooling = !!ui.batchCraftIncludeCooling.checked;
+      saveBatchCraftUiPrefs();
+    };
+  }
+  if (ui.batchCraftFastMode) {
+    ui.batchCraftFastMode.onchange = () => {
+      state.batchCraftFastMode = !!ui.batchCraftFastMode.checked;
+      saveBatchCraftUiPrefs();
+    };
+  }
+  if (ui.batchCraftApproachMode) {
+    ui.batchCraftApproachMode.onchange = () => {
+      state.batchCraftApproachMode = !!ui.batchCraftApproachMode.checked;
+      saveBatchCraftUiPrefs();
+    };
+  }
+  if (ui.batchCraftWearOffsetPct) {
+    ui.batchCraftWearOffsetPct.onfocus = () => { ui.batchCraftWearOffsetPct.select(); };
+    ui.batchCraftWearOffsetPct.oninput = () => {
+      state.batchCraftWearOffsetPct = normalizeCraftAssistWearOffsetPct(ui.batchCraftWearOffsetPct.value, state.batchCraftWearOffsetPct);
+    };
+    const applyBatchWearOffset = () => {
+      const v = normalizeCraftAssistWearOffsetPct(ui.batchCraftWearOffsetPct.value, state.batchCraftWearOffsetPct);
+      state.batchCraftWearOffsetPct = v;
+      ui.batchCraftWearOffsetPct.value = craftAssistWearOffsetPctText(v);
+      saveBatchCraftUiPrefs();
+    };
+    ui.batchCraftWearOffsetPct.onchange = applyBatchWearOffset;
+    ui.batchCraftWearOffsetPct.onblur = applyBatchWearOffset;
+    ui.batchCraftWearOffsetPct.onkeydown = (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      applyBatchWearOffset();
+      ui.batchCraftWearOffsetPct.blur();
+    };
+  }
+  if (ui.batchCraftSplitBar) {
+    ui.batchCraftSplitBar.onmousedown = (evt) => startBatchCraftSplitDrag(evt);
+  }
+  document.addEventListener("mousemove", moveBatchCraftSplitDrag);
+  document.addEventListener("mouseup", stopBatchCraftSplitDrag);
+}
+
 function bindEvents() {
   if (ui.clientAuthLoginTabBtn) {
     ui.clientAuthLoginTabBtn.onclick = () => {
@@ -13140,6 +14101,15 @@ function bindEvents() {
       const inBtn = (craftBtn && craftBtn.contains(target)) || (componentBtn && componentBtn.contains(target));
       if (!inPanel && !inBtn) {
         setCraftSettingsPanelOpen(false);
+      }
+    }
+    if (state.batchCraftSettingsOpen) {
+      const bPanel = ui.batchCraftSettingsPanel;
+      const bBtn = ui.batchCraftSettingsBtn;
+      if ((!bPanel || !bPanel.contains(target)) && (!bBtn || !bBtn.contains(target))) {
+        state.batchCraftSettingsOpen = false;
+        if (ui.batchCraftSettingsPanel) ui.batchCraftSettingsPanel.classList.add("hidden");
+        if (ui.batchCraftSettingsBtn) ui.batchCraftSettingsBtn.classList.remove("active");
       }
     }
     if (state.craftAssistPickerOpen || state.craftAssistRoleChooserOpen) {
@@ -13305,6 +14275,7 @@ function bindEvents() {
   ui.navInventory.onclick = () => showPage("inventoryPage");
   ui.navCraft.onclick = () => showPage("craftPage");
   ui.navSimulation.onclick = () => showPage("simulationPage");
+  if (ui.navBatchCraft) ui.navBatchCraft.onclick = () => showPage("batchCraftPage");
   syncNavDrawerDom();
 
   if (ui.simulationModeSavedBtn) {
@@ -14213,10 +15184,455 @@ function bindEvents() {
       clearCraftQueue();
     };
   }
+  bindBatchCraftEvents();
+}
+
+// ===== 批量导入 maFile =====
+
+const batchImportState = {
+  files: [],  // { name, content, password }
+  running: false
+};
+
+function initBatchImport() {
+  const btn = document.getElementById("accountPageBatchImportBtn");
+  const modal = document.getElementById("batchImportModal");
+  const closeBtn = document.getElementById("batchImportCloseBtn");
+  const fileInput = document.getElementById("batchImportFileInput");
+  const selectFilesBtn = document.getElementById("batchImportSelectFilesBtn");
+  const dropZone = document.getElementById("batchImportDropZone");
+  const startBtn = document.getElementById("batchImportStartBtn");
+  const uniformPwd = document.getElementById("batchImportUniformPwd");
+  const pwdInput = document.getElementById("batchImportPasswordInput");
+
+  if (!btn || !modal) return;
+
+  btn.onclick = () => {
+    batchImportState.files = [];
+    batchImportState.running = false;
+    renderBatchImportFileList();
+    document.getElementById("batchImportProgress").classList.add("hidden");
+    document.getElementById("batchImportResults").innerHTML = "";
+    modal.classList.remove("hidden");
+  };
+
+  closeBtn.onclick = () => { if (!batchImportState.running) modal.classList.add("hidden"); };
+  modal.onclick = (e) => { if (e.target === modal && !batchImportState.running) modal.classList.add("hidden"); };
+
+  selectFilesBtn.onclick = () => fileInput.click();
+  fileInput.onchange = () => { handleBatchImportFiles(fileInput.files); fileInput.value = ""; };
+
+  dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); };
+  dropZone.ondragleave = () => dropZone.classList.remove("drag-over");
+  dropZone.ondrop = (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    handleBatchImportFiles(e.dataTransfer.files);
+  };
+
+  uniformPwd.onchange = () => {
+    pwdInput.style.display = uniformPwd.checked ? "" : "none";
+    renderBatchImportFileList();
+  };
+
+  startBtn.onclick = () => startBatchImport();
+}
+
+async function handleBatchImportFiles(fileList) {
+  for (const file of fileList) {
+    try {
+      const content = await file.text();
+      JSON.parse(content); // validate JSON
+      const parsed = JSON.parse(content);
+      const accountName = parsed.account_name || file.name.replace(/\.maFile$/i, "");
+      batchImportState.files.push({name: file.name, accountName, content, password: ""});
+    } catch (err) {
+      console.warn("maFile parse error:", file.name, err);
+    }
+  }
+  renderBatchImportFileList();
+}
+
+function renderBatchImportFileList() {
+  const wrap = document.getElementById("batchImportFileList");
+  const uniform = document.getElementById("batchImportUniformPwd").checked;
+  wrap.innerHTML = "";
+  for (let i = 0; i < batchImportState.files.length; i++) {
+    const f = batchImportState.files[i];
+    const div = document.createElement("div");
+    div.className = "batch-import-file-item";
+    div.innerHTML = `<span class="file-name">${f.accountName || f.name}</span>`;
+    if (!uniform) {
+      const pwd = document.createElement("input");
+      pwd.type = "password";
+      pwd.className = "file-pwd";
+      pwd.placeholder = "密码";
+      pwd.value = f.password;
+      pwd.oninput = () => { f.password = pwd.value; };
+      div.append(pwd);
+    }
+    const rm = document.createElement("button");
+    rm.className = "file-remove";
+    rm.textContent = "×";
+    rm.onclick = () => { batchImportState.files.splice(i, 1); renderBatchImportFileList(); };
+    div.append(rm);
+    wrap.append(div);
+  }
+}
+
+async function startBatchImport() {
+  if (batchImportState.running || batchImportState.files.length === 0) return;
+  batchImportState.running = true;
+
+  const uniform = document.getElementById("batchImportUniformPwd").checked;
+  const uniformPassword = document.getElementById("batchImportPasswordInput").value;
+  const progressWrap = document.getElementById("batchImportProgress");
+  const progressFill = document.getElementById("batchImportProgressFill");
+  const progressText = document.getElementById("batchImportProgressText");
+  const resultsWrap = document.getElementById("batchImportResults");
+  const startBtn = document.getElementById("batchImportStartBtn");
+
+  progressWrap.classList.remove("hidden");
+  progressFill.style.width = "0%";
+  progressText.textContent = "准备中...";
+  resultsWrap.innerHTML = "";
+  startBtn.disabled = true;
+
+  const accounts = batchImportState.files.map((f) => ({
+    username: f.accountName,
+    password: uniform ? uniformPassword : f.password,
+    maFileContent: f.content
+  }));
+
+  try {
+    const resp = await fetch("/api/accounts/batch-import", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({accounts})
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      let eventName = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventName = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (eventName === "progress" || eventName === "account_result") {
+              const pct = data.total > 0 ? Math.round((data.done / data.total) * 100) : 0;
+              progressFill.style.width = pct + "%";
+              progressText.textContent = `${data.done || 0} / ${data.total || 0}`;
+            }
+            if (eventName === "account_result") {
+              const item = document.createElement("div");
+              item.className = `batch-import-result-item ${data.ok ? "ok" : "fail"}`;
+              item.textContent = `${data.ok ? "✓" : "✗"} ${data.username}: ${data.message}`;
+              resultsWrap.append(item);
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    progressText.textContent = `导入出错: ${err.message}`;
+  }
+
+  batchImportState.running = false;
+  startBtn.disabled = false;
+
+  // 刷新账号列表
+  try { await loadAccounts(); } catch (_) {}
+}
+
+// ===== Web 库存查看 =====
+
+const webInventoryState = {
+  username: "",
+  items: [],
+  selectedAssetIds: new Set()
+};
+
+function openWebInventoryModal(username) {
+  webInventoryState.username = username;
+  webInventoryState.items = [];
+  webInventoryState.selectedAssetIds.clear();
+
+  const modal = document.getElementById("webInventoryModal");
+  document.getElementById("webInventoryAccountName").textContent = username;
+  document.getElementById("webInventoryLoading").style.display = "";
+  document.getElementById("webInventoryList").innerHTML = "";
+  document.getElementById("webInventoryEmpty").classList.add("hidden");
+  document.getElementById("webInventoryCount").textContent = "0 件物品";
+  modal.classList.remove("hidden");
+
+  fetchWebInventory(username);
+}
+
+async function fetchWebInventory(username) {
+  try {
+    const resp = await fetch(`/api/accounts/${encodeURIComponent(username)}/inventory`);
+    const data = await resp.json();
+    document.getElementById("webInventoryLoading").style.display = "none";
+
+    if (!data.ok) {
+      document.getElementById("webInventoryEmpty").textContent = data.message || "拉取失败";
+      document.getElementById("webInventoryEmpty").classList.remove("hidden");
+      return;
+    }
+
+    webInventoryState.items = data.items || [];
+    if (webInventoryState.items.length === 0) {
+      document.getElementById("webInventoryEmpty").classList.remove("hidden");
+      return;
+    }
+
+    renderWebInventoryList();
+  } catch (err) {
+    document.getElementById("webInventoryLoading").style.display = "none";
+    document.getElementById("webInventoryEmpty").textContent = `错误: ${err.message}`;
+    document.getElementById("webInventoryEmpty").classList.remove("hidden");
+  }
+}
+
+function renderWebInventoryList() {
+  const wrap = document.getElementById("webInventoryList");
+  wrap.innerHTML = "";
+
+  for (const item of webInventoryState.items) {
+    const div = document.createElement("div");
+    div.className = `web-inventory-item${item.tradable ? "" : " not-tradable"}`;
+    if (webInventoryState.selectedAssetIds.has(item.assetid)) div.classList.add("selected");
+
+    const img = document.createElement("img");
+    img.src = item.icon_url ? `https://community.akamai.steamstatic.com/economy/image/${item.icon_url}/96fx96f` : "";
+    img.alt = item.name;
+    img.loading = "lazy";
+
+    const name = document.createElement("div");
+    name.className = "item-name";
+    name.textContent = item.name || item.market_hash_name || "-";
+    if (item.name_color) name.style.color = `#${item.name_color}`;
+
+    div.append(img, name);
+
+    if (!item.tradable) {
+      const badge = document.createElement("span");
+      badge.className = "item-tradable-badge";
+      badge.textContent = "不可交易";
+      div.append(badge);
+    }
+
+    div.onclick = () => {
+      if (!item.tradable) return;
+      if (webInventoryState.selectedAssetIds.has(item.assetid)) {
+        webInventoryState.selectedAssetIds.delete(item.assetid);
+        div.classList.remove("selected");
+      } else {
+        webInventoryState.selectedAssetIds.add(item.assetid);
+        div.classList.add("selected");
+      }
+      document.getElementById("webInventoryCount").textContent = `${webInventoryState.selectedAssetIds.size} 件已选`;
+    };
+
+    wrap.append(div);
+  }
+
+  document.getElementById("webInventoryCount").textContent = `${webInventoryState.items.length} 件物品`;
+}
+
+function initWebInventoryModal() {
+  const modal = document.getElementById("webInventoryModal");
+  const closeBtn = document.getElementById("webInventoryCloseBtn");
+  const transferBtn = document.getElementById("webInventoryTransferBtn");
+
+  if (!modal) return;
+
+  closeBtn.onclick = () => modal.classList.add("hidden");
+  modal.onclick = (e) => { if (e.target === modal) modal.classList.add("hidden"); };
+
+  transferBtn.onclick = () => {
+    if (webInventoryState.selectedAssetIds.size === 0) return;
+    modal.classList.add("hidden");
+    openTradeTransferModal(webInventoryState.username, [...webInventoryState.selectedAssetIds]);
+  };
+}
+
+// ===== 库存转移 =====
+
+const tradeTransferState = {
+  fromUsername: "",
+  assetIds: [],
+  running: false
+};
+
+function openTradeTransferModal(fromUsername, assetIds) {
+  tradeTransferState.fromUsername = fromUsername;
+  tradeTransferState.assetIds = assetIds || [];
+  tradeTransferState.running = false;
+
+  const modal = document.getElementById("tradeTransferModal");
+  const fromSelect = document.getElementById("tradeTransferFromSelect");
+  const toAccountSelect = document.getElementById("tradeTransferToAccountSelect");
+  const itemsWrap = document.getElementById("tradeTransferSelectedItems");
+  const progressWrap = document.getElementById("tradeTransferProgress");
+
+  // 填充发送方下拉
+  fromSelect.innerHTML = "";
+  for (const acc of state.accounts) {
+    if (!acc.mafile_content) continue;
+    const opt = document.createElement("option");
+    opt.value = acc.username;
+    opt.textContent = acc.remark || acc.username;
+    if (acc.username === fromUsername) opt.selected = true;
+    fromSelect.append(opt);
+  }
+
+  // 填充接收方下拉
+  toAccountSelect.innerHTML = "";
+  for (const acc of state.accounts) {
+    if (acc.username === fromUsername) continue;
+    const opt = document.createElement("option");
+    opt.value = acc.username;
+    opt.textContent = acc.remark || acc.username;
+    toAccountSelect.append(opt);
+  }
+
+  // 显示选中物品
+  itemsWrap.innerHTML = "";
+  const selectedItems = webInventoryState.items.filter((it) => assetIds.includes(it.assetid));
+  for (const item of selectedItems) {
+    const chip = document.createElement("span");
+    chip.className = "trade-transfer-item-chip";
+    chip.textContent = item.name || item.market_hash_name || item.assetid;
+    itemsWrap.append(chip);
+  }
+
+  document.getElementById("tradeTransferItemCount").textContent = `${assetIds.length} 件物品`;
+  progressWrap.classList.add("hidden");
+  progressWrap.innerHTML = "";
+  modal.classList.remove("hidden");
+}
+
+function initTradeTransferModal() {
+  const modal = document.getElementById("tradeTransferModal");
+  const closeBtn = document.getElementById("tradeTransferCloseBtn");
+  const startBtn = document.getElementById("tradeTransferStartBtn");
+  const toMode = document.getElementById("tradeTransferToMode");
+
+  if (!modal) return;
+
+  closeBtn.onclick = () => { if (!tradeTransferState.running) modal.classList.add("hidden"); };
+  modal.onclick = (e) => { if (e.target === modal && !tradeTransferState.running) modal.classList.add("hidden"); };
+
+  toMode.onchange = () => {
+    document.getElementById("tradeTransferUrlWrap").classList.toggle("hidden", toMode.value !== "url");
+    document.getElementById("tradeTransferAccountWrap").classList.toggle("hidden", toMode.value !== "account");
+  };
+
+  startBtn.onclick = () => startTradeTransfer();
+}
+
+async function startTradeTransfer() {
+  if (tradeTransferState.running) return;
+  tradeTransferState.running = true;
+
+  const fromUsername = document.getElementById("tradeTransferFromSelect").value;
+  const toMode = document.getElementById("tradeTransferToMode").value;
+  let toTradeUrl = "";
+
+  if (toMode === "url") {
+    toTradeUrl = document.getElementById("tradeTransferUrl").value.trim();
+  } else {
+    // 从库中账号获取交易链接 — 暂时需要用户手动输入
+    // TODO: 存储账号交易链接
+    toTradeUrl = prompt("请输入接收方的交易链接：");
+  }
+
+  if (!toTradeUrl) {
+    tradeTransferState.running = false;
+    return;
+  }
+
+  const progressWrap = document.getElementById("tradeTransferProgress");
+  const startBtn = document.getElementById("tradeTransferStartBtn");
+  progressWrap.classList.remove("hidden");
+  progressWrap.innerHTML = '<div class="step-line">开始转移...</div>';
+  startBtn.disabled = true;
+
+  try {
+    const resp = await fetch("/api/accounts/send-trade-offer", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        fromUsername,
+        toTradeUrl,
+        assetIds: tradeTransferState.assetIds
+      })
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      let eventName = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventName = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            const stepDiv = document.createElement("div");
+            if (eventName === "step") {
+              stepDiv.className = "step-line";
+              stepDiv.textContent = data.message || JSON.stringify(data);
+            } else if (eventName === "done") {
+              stepDiv.className = "step-line ok";
+              stepDiv.textContent = "转移完成！报价ID: " + (data.tradeofferid || "-");
+            } else if (eventName === "error") {
+              stepDiv.className = "step-line error";
+              stepDiv.textContent = "错误: " + (data.message || "未知错误");
+            }
+            if (stepDiv.textContent) progressWrap.append(stepDiv);
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    const errDiv = document.createElement("div");
+    errDiv.className = "step-line error";
+    errDiv.textContent = `请求失败: ${err.message}`;
+    progressWrap.append(errDiv);
+  }
+
+  tradeTransferState.running = false;
+  startBtn.disabled = false;
 }
 
 async function init() {
   bindEvents();
+  initBatchImport();
+  initWebInventoryModal();
+  initTradeTransferModal();
   try {
     renderLicenseGate();
     await loadLicenseState({hydrateWorkspace: true});
