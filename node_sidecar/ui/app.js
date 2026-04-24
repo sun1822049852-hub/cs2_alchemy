@@ -3859,8 +3859,17 @@ const assetIdNumber = (row) => { const n = Number(rowAssetId(row)); return Numbe
 function compactComponentName(name) { let t = String(name || "").trim(); if (!t) return "未命名组件"; if (t.toLowerCase().startsWith("storage unit")) { t = t.slice("Storage Unit".length).trim(); if (t.startsWith("|")) t = t.slice(1).trim(); } if (t.startsWith("(") && t.endsWith(")")) t = t.slice(1, -1).trim(); return t || "未命名组件"; }
 const componentNameById = (id) => { const key = String(id || "").trim(); if (!key) return ""; const s = state.component.summary_map[key]; return s ? s.name || key : key; };
 const selectedComponentId = () => String(state.selectedComponentId || "").trim();
+function isAllInventoryMode() { return selectedComponentId() === "__ALL__"; }
 function rowsForComponentScope() {
   const selected = selectedComponentId();
+  if (selected === "__ALL__") {
+    const mainRows = state.rows.filter((x) => !String(x.casket_id || "").trim());
+    const componentRows = [];
+    for (const [, items] of Object.entries(state.component.item_map || {})) {
+      if (Array.isArray(items)) componentRows.push(...items);
+    }
+    return mainRows.concat(componentRows);
+  }
   if (selected) return state.component.item_map[selected] || [];
   return state.rows.filter((x) => !String(x.casket_id || "").trim());
 }
@@ -11901,6 +11910,12 @@ function refreshComponentControls() {
     return assetIdNumber(a) - assetIdNumber(b);
   });
   ui.componentSelect.replaceChildren();
+  if (summaries.length) {
+    const viewAllOpt = document.createElement("option");
+    viewAllOpt.value = "__ALL__";
+    viewAllOpt.textContent = "查看全部库存";
+    ui.componentSelect.append(viewAllOpt);
+  }
   const allOpt = document.createElement("option");
   allOpt.value = "";
   allOpt.textContent = "主库存";
@@ -11937,7 +11952,7 @@ function refreshComponentControls() {
   ui.componentSelect.disabled = false;
   state.showComponentItems = false;
   if (ui.showComponentItems) ui.showComponentItems.checked = false;
-  if (state.selectedComponentId && !Object.prototype.hasOwnProperty.call(state.component.summary_map, state.selectedComponentId)) {
+  if (state.selectedComponentId && state.selectedComponentId !== "__ALL__" && !Object.prototype.hasOwnProperty.call(state.component.summary_map, state.selectedComponentId)) {
     state.selectedComponentId = "";
     state.selectedComponentItemIds.clear();
   }
@@ -11962,6 +11977,11 @@ function updateComponentHint(visibleCount = null) {
   const slotEstimate = estimateMainInventoryFreeSlots();
   updateMainInventoryAvailableHint(slotEstimate);
   const selected = selectedComponentId();
+  if (selected === "__ALL__") {
+    ui.componentHint.textContent = `全部 ${count}`;
+    ui.componentHint.title = `全部库存物品 ${count}，当前选中 ${getSelectedRows().length} 件`;
+    return;
+  }
   if (selected) {
     const totalCapacity = 1000;
     ui.componentHint.textContent = `${count}/${totalCapacity}`;
@@ -12185,7 +12205,9 @@ function applyFilter() {
   const keyword = String(state.searchText || "").trim().toLowerCase();
   const allRows = rowsForComponentScope();
   const selected = selectedComponentId();
-  if (selected) {
+  if (selected === "__ALL__") {
+    state.emptyHint = allRows.length > 0 ? "全部库存在当前条件下无物品" : "库存为空，请先刷新库存";
+  } else if (selected) {
     if (allRows.length > 0) {
       state.emptyHint = "该组件在当前条件下无物品";
     } else {
@@ -12672,7 +12694,15 @@ function renderGrouped(filteredRows, totalRows, filterKey = "") {
         "<td></td>"
       ];
       if (!hideCollection) childCells.push("<td></td>");
-      if (!hideQuantity) childCells.push("<td></td>");
+      if (!hideQuantity) {
+        const itemCasketId = String(item.casket_id || "").trim();
+        if (isAllInventoryMode() && itemCasketId) {
+          const cName = compactComponentName(componentNameById(itemCasketId));
+          childCells.push(`<td class="component-origin-tag" title="所属组件：${cName}">${cName}</td>`);
+        } else {
+          childCells.push("<td></td>");
+        }
+      }
       if (showSeed) childCells.push(`<td>${Number(item.paint_seed || 0)}</td>`);
       childCells.push(`<td>${itemHasWear(item) ? formatVisibleWearText(item.float_value, 8) : ""}</td>`);
       if (showCoolingTime) childCells.push(`<td>${componentRow ? "" : cooldownText(item)}</td>`);
@@ -13735,6 +13765,49 @@ function bindEvents() {
     }
     const connected = await ensureConnectedForComponentWithdraw();
     if (!connected) return;
+    if (isAllInventoryMode()) {
+      const selectedRows = getSelectedRows()
+        .filter((row) => !!String(row && row.casket_id || "").trim())
+        .sort(compareRowsByWearAsc);
+      if (!selectedRows.length) {
+        setSummary("请先选择组件内的物品进行取出");
+        return;
+      }
+      const slotEstimate = estimateMainInventoryFreeSlots();
+      const freeSlots = slotEstimate.freeSlots;
+      if (freeSlots <= 0) {
+        setSummary("主库存空间已满，无法取出");
+        return;
+      }
+      let submitRows = selectedRows;
+      if (selectedRows.length > freeSlots) {
+        const ok = window.confirm(
+          `已选可取出 ${selectedRows.length} 件，但主库存仅剩 ${freeSlots} 个空间。\n` +
+          `是否继续，仅按磨损从低到高取出前 ${freeSlots} 件？`
+        );
+        if (!ok) { setSummary("已取消取出"); return; }
+        submitRows = selectedRows.slice(0, freeSlots);
+      }
+      const byComponent = new Map();
+      for (const row of submitRows) {
+        const cid = String(row.casket_id || "").trim();
+        if (!cid) continue;
+        if (!byComponent.has(cid)) byComponent.set(cid, []);
+        byComponent.get(cid).push(row);
+      }
+      try {
+        for (const [cid, rows] of byComponent.entries()) {
+          const itemIds = rows.map((r) => rowAssetId(r)).filter(Boolean);
+          await runComponentMove("withdraw", itemIds, cid);
+          for (const id of itemIds) state.selectedComponentItemIds.delete(String(id || "").trim());
+        }
+        refreshComponentControls();
+        render();
+      } catch (err) {
+        setSummary(`取出失败：${err.message}`);
+      }
+      return;
+    }
     const componentStillExists = listComponentChoices().some((choice) => String(choice && choice.id || "").trim() === currentComponentId);
     if (!componentStillExists) {
       setSummary("自动校对后当前组件已变化，请重新选择组件");

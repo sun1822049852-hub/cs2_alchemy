@@ -1341,6 +1341,15 @@ select.small {
   color: #0f172a;
 }
 
+.component-origin-tag {
+  font-size: 0.82em;
+  color: #6366f1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
 .row-check {
   width: 13px;
   height: 13px;
@@ -8141,6 +8150,10 @@ body.theme-inkblue #inventoryPage .group-parent.selected,
 body.theme-inkblue #inventoryPage .group-child.selected {
   background: linear-gradient(135deg, rgba(243, 199, 121, 0.26), rgba(220, 164, 76, 0.12));
   box-shadow: inset 3px 0 0 rgba(243, 199, 121, 0.74);
+}
+
+body.theme-inkblue .component-origin-tag {
+  color: #a5b4fc;
 }
 
 body.theme-inkblue #inventoryPage .task-queue-list,
