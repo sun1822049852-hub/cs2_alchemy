@@ -114,6 +114,8 @@
           <button class="nav-btn" data-page="inventoryPage" id="navInventory">库存总览</button>
           <button class="nav-btn" data-page="craftPage" id="navCraft">炼金汰换</button>
           <button class="nav-btn" data-page="simulationPage" id="navSimulation">汰换模拟</button>
+          <button class="nav-btn" data-page="batchCraftPage" id="navBatchCraft">多账号汰换</button>
+          <button class="nav-btn" data-page="webInventoryPage" id="navWebInventory">库存管理</button>
         </aside>
       </div>
 
@@ -154,6 +156,7 @@
                 </div>
                 <div class="account-list-head-actions">
                   <button id="accountPageAddBtn" type="button">添加账号</button>
+                  <button id="accountPageBatchImportBtn" type="button">批量导入</button>
                 </div>
               </div>
               <div id="savedAccountsWrap" class="saved-accounts"></div>
@@ -447,22 +450,6 @@
                   <div id="craftPreviewCandidates" class="craft-preview-candidates">
                     <div id="craftQueueList" class="craft-queue-list"></div>
                   </div>
-                  <div id="craftPredictorStage" class="craft-predictor-stage">
-                    <section id="craftPredictorPanel" class="craft-predictor-panel collapsed" aria-live="polite" aria-label="产物预测抽屉">
-                      <div id="craftPredictorDrawer" class="craft-predictor-drawer">
-                        <div class="craft-predictor-head">
-                          <div class="craft-predictor-title-wrap">
-                            <div id="craftPredictorTitle" class="craft-predictor-title">模拟结果</div>
-                            <div id="craftPredictorSubtitle" class="craft-predictor-subtitle">等待选择配方</div>
-                          </div>
-                          <button id="craftPredictorCloseBtn" class="craft-predictor-close" type="button" aria-label="收起产物预测抽屉">×</button>
-                        </div>
-                        <div class="craft-predictor-body">
-                          <div id="craftPredictorList" class="craft-predictor-list"></div>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
                 </div>
                 <div class="row craft-queue-run-row">
                   <button id="craftExecuteQueueBtn" class="icon-btn craft-execute-btn" type="button" title="执行配方" aria-label="执行配方">
@@ -470,9 +457,6 @@
                   </button>
                 </div>
               </div>
-              <button id="craftPredictorHandle" class="craft-predictor-handle" type="button" aria-label="展开产物预测抽屉" aria-controls="craftPredictorDrawer" aria-expanded="false">
-                <span class="craft-predictor-handle-arrow" aria-hidden="true"></span>
-              </button>
             </section>
           </div>
         </section>
@@ -608,6 +592,59 @@
           </div>
         </div>
 
+        <div id="simExportCraftModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="simExportCraftModalTitle">
+          <div class="modal-card sim-export-craft-modal-card">
+            <div class="modal-header">
+              <h3 id="simExportCraftModalTitle">导出到快速选材</h3>
+              <button id="simExportCraftModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="sim-export-craft-body">
+              <div class="sim-export-craft-material-header">
+                <span>材料列表</span>
+                <button id="simExportCraftAddBtn" class="sim-export-craft-add-btn" type="button">+ 添加材料</button>
+              </div>
+              <div id="simExportCraftMaterialList" class="sim-export-craft-material-list"></div>
+              <div id="simExportCraftSearchPanel" class="sim-export-craft-search-panel hidden">
+                <div class="sim-export-craft-search-row">
+                  <input id="simExportCraftSearchInput" type="text" placeholder="搜索物品名称..." />
+                  <button id="simExportCraftSearchBtn" type="button">搜索</button>
+                </div>
+                <div id="simExportCraftSearchResults" class="sim-export-craft-search-results"></div>
+              </div>
+              <div class="sim-export-craft-form">
+                <div class="form-row">
+                  <label for="simExportCraftName">配置名称</label>
+                  <input id="simExportCraftName" type="text" maxlength="24" placeholder="请输入配置名称" />
+                </div>
+                <div class="form-row">
+                  <label for="simExportCraftTargetWear">目标磨损</label>
+                  <input id="simExportCraftTargetWear" type="text" inputmode="decimal" placeholder="0.00 ~ 1.00" />
+                </div>
+                <div class="form-row">
+                  <label for="simExportCraftMainCount">主料数量</label>
+                  <input id="simExportCraftMainCount" type="number" min="1" max="10" value="5" />
+                </div>
+                <div id="simExportCraftAuxCountRow" class="form-row">
+                  <label for="simExportCraftAuxCount">辅料数量</label>
+                  <input id="simExportCraftAuxCount" type="number" min="0" max="9" value="5" />
+                </div>
+                <div class="form-row">
+                  <label>相对磨损范围</label>
+                  <div class="sim-export-craft-range-pair">
+                    <input id="simExportCraftWearMin" type="text" inputmode="decimal" placeholder="最小" />
+                    <span class="sim-export-craft-range-sep">~</span>
+                    <input id="simExportCraftWearMax" type="text" inputmode="decimal" placeholder="最大" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row modal-actions">
+              <button id="simExportCraftConfirmBtn" type="button">导出配置</button>
+              <button id="simExportCraftCancelBtn" type="button">取消</button>
+            </div>
+          </div>
+        </div>
+
         <section id="craftExecutionOverlay" class="craft-execution-overlay hidden" aria-live="polite" aria-label="炼金执行进度">
           <div class="craft-execution-card">
             <div id="craftExecutionProgress" class="craft-execution-progress hidden" aria-hidden="true">
@@ -619,7 +656,287 @@
             <div id="craftExecutionOverlayDetail" class="craft-execution-detail">请稍候...</div>
           </div>
         </section>
+
+        <section class="page hidden" id="batchCraftPage">
+          <header class="topbar batch-craft-topbar">
+            <h1>多账号汰换</h1>
+            <div class="topbar-meta">
+              <span id="batchCraftStatusText" class="status-text"></span>
+            </div>
+          </header>
+
+          <div class="batch-craft-body">
+            <!-- 上栏：账号选择（横排一行） -->
+            <section class="batch-craft-account-bar">
+              <button id="batchCraftAddAccountBtn" class="batch-craft-add-btn" type="button" title="添加账号" aria-label="添加账号">+</button>
+              <select id="batchCraftAccountPicker" class="batch-craft-account-picker hidden"></select>
+              <button id="batchCraftClearAccountsBtn" class="batch-craft-clear-btn" type="button" title="清空所有账号" aria-label="清空所有账号">&#xd7;</button>
+              <span id="batchCraftActiveAccountText" class="batch-craft-active-account"></span>
+              <div id="batchCraftAccountCards" class="batch-craft-account-cards"></div>
+            </section>
+
+            <!-- 下栏：左右分栏配方区 -->
+            <div class="batch-craft-main">
+              <!-- 左侧：preset 列表 + 操作按钮 -->
+              <aside id="batchCraftPresetPanel" class="batch-craft-preset-panel">
+                <div class="batch-craft-preset-head">
+                  <span class="batch-craft-preset-title">选材配方</span>
+                </div>
+                <div id="batchCraftPresetList" class="batch-craft-preset-list"></div>
+                <div class="batch-craft-preset-foot">
+                  <div class="batch-craft-foot-top-row">
+                    <div class="craft-settings-wrap">
+                      <button id="batchCraftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="批量设置" aria-label="批量设置">
+                        <span class="craft-gear-glyph" aria-hidden="true"></span>
+                      </button>
+                      <div id="batchCraftSettingsPanel" class="craft-settings-panel hidden">
+                        <label class="inline"><span>使用组件中物品</span><input id="batchCraftUseComponentItems" type="checkbox" /></label>
+                        <label class="inline"><span>使用冷却中的物品</span><input id="batchCraftIncludeCooling" type="checkbox" /></label>
+                        <label class="inline"><span>高速选材</span><input id="batchCraftFastMode" type="checkbox" /></label>
+                        <label class="inline"><span>逼近磨损模式</span><input id="batchCraftApproachMode" type="checkbox" /></label>
+                        <label class="inline"><span>磨损偏移阈值(%)</span><input id="batchCraftWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
+                      </div>
+                    </div>
+                    <label class="batch-craft-limit-label">总数上限
+                      <input id="batchCraftLimitInput" type="number" min="1" max="100" step="1" value="10" />
+                    </label>
+                  </div>
+                  <button id="batchCraftRunSelectBtn" class="btn-primary" type="button">快捷选材</button>
+                  <button id="batchCraftExecuteBtn" class="btn-primary" type="button">执行汰换</button>
+                </div>
+              </aside>
+
+              <!-- 分隔条 -->
+              <div id="batchCraftSplitBar" class="batch-craft-split-bar" title="拖拽调整左右区域宽度" aria-hidden="true"></div>
+
+              <!-- 右侧：配方卡片 -->
+              <section id="batchCraftQueuePanel" class="batch-craft-queue-panel">
+                <div class="batch-craft-queue-head">
+                  <span id="batchCraftQueueTitle" class="batch-craft-queue-title">配方预览</span>
+                  <button id="batchCraftClearQueueBtn" class="icon-btn" type="button" title="清空配方" aria-label="清空配方">
+                    <span class="craft-close-glyph" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div id="batchCraftQueueList" class="batch-craft-queue-list"></div>
+              </section>
+            </div>
+          </div>
+
+          <!-- 执行进度遮罩 -->
+          <div id="batchCraftOverlay" class="batch-craft-overlay hidden">
+            <div class="batch-craft-overlay-card">
+              <div id="batchCraftOverlayTitle" class="batch-craft-overlay-title">正在执行...</div>
+              <div id="batchCraftOverlayDetail" class="batch-craft-overlay-detail"></div>
+              <div class="batch-craft-overlay-progress-track">
+                <div id="batchCraftOverlayProgressBar" class="batch-craft-overlay-progress-bar"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ Web 库存管理页 ═══ -->
+        <section class="page hidden" id="webInventoryPage">
+          <div class="web-inv-layout">
+            <!-- 左侧：精简账号列表 -->
+            <aside class="web-inv-account-panel" id="webInvAccountPanel">
+              <div class="web-inv-account-head">
+                <span class="web-inv-account-title">账号列表</span>
+                <div class="web-inv-account-actions">
+                  <button id="webInvBatchBanCheck" class="web-inv-head-btn" title="批量封禁检测">封禁检测</button>
+                  <button id="webInvBatchTradeUrl" class="web-inv-head-btn" title="批量刷新交易链接">刷新链接</button>
+                </div>
+              </div>
+              <div id="webInvAccountList" class="web-inv-account-list"></div>
+            </aside>
+            <div class="web-inv-split-bar" id="webInvSplitBar"></div>
+            <!-- 右侧：账号信息栏 + 库存网格 -->
+            <main class="web-inv-main" id="webInvMain">
+              <!-- 选中账号的信息栏 -->
+              <div id="webInvAccountInfo" class="web-inv-account-info hidden">
+                <div class="web-inv-info-row">
+                  <span id="webInvAccName" class="web-inv-acc-name"></span>
+                  <span id="webInvAccBalance" class="web-inv-acc-balance"></span>
+                  <span id="webInvAccBanStatus" class="web-inv-acc-ban"></span>
+                </div>
+                <div class="web-inv-info-row">
+                  <span id="webInvAccTradeUrl" class="web-inv-acc-trade-url" title="点击复制"></span>
+                  <button id="webInvBalanceBtn" class="web-inv-info-btn">查询余额</button>
+                </div>
+              </div>
+              <!-- 操作工具栏 -->
+              <div class="web-inv-toolbar">
+                <button id="webInvFetchBtn" class="btn-primary">拉取库存</button>
+                <label class="web-inv-toolbar-label"><input type="checkbox" id="webInvTradableOnly"> 仅可交易</label>
+                <button id="webInvSelectAll" class="web-inv-toolbar-btn">全选</button>
+                <span id="webInvSelectedCount" class="web-inv-toolbar-count">已选 0 件</span>
+              </div>
+              <!-- 物品网格 -->
+              <div id="webInvItemGrid" class="web-inv-item-grid"></div>
+              <!-- 底部操作栏（选中 > 0 时显示） -->
+              <div id="webInvActionBar" class="web-inv-action-bar hidden">
+                <span id="webInvActionCount"></span>
+                <button id="webInvTransferBtn" class="btn-primary">转移选中</button>
+                <button id="webInvSellBtn" class="web-inv-sell-btn">上架选中</button>
+              </div>
+            </main>
+          </div>
+        </section>
       </main>
+    </div>
+
+    <!-- ═══ 批量导入弹窗 ═══ -->
+    <div id="batchImportModal" class="modal-overlay hidden">
+      <div class="modal-dialog batch-import-dialog">
+        <div class="modal-header">
+          <h3>批量导入 maFile 账号</h3>
+          <button id="batchImportCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="batch-import-file-zone" id="batchImportDropZone">
+            <p>拖拽 .maFile 文件到此处，或点击选择</p>
+            <input id="batchImportFileInput" type="file" multiple accept=".maFile,.mafile,.json" style="display:none" />
+            <button id="batchImportSelectFilesBtn" type="button">选择文件</button>
+          </div>
+          <div id="batchImportFileList" class="batch-import-file-list"></div>
+          <div class="batch-import-password-section">
+            <label>
+              <input id="batchImportUniformPwd" type="checkbox" checked />
+              统一密码
+            </label>
+            <input id="batchImportPasswordInput" type="password" placeholder="所有账号使用同一密码" class="batch-import-pwd-input" />
+          </div>
+          <div id="batchImportProgress" class="batch-import-progress hidden">
+            <div class="batch-import-progress-bar"><div id="batchImportProgressFill" class="progress-fill"></div></div>
+            <div id="batchImportProgressText" class="batch-import-progress-text">准备中...</div>
+          </div>
+          <div id="batchImportResults" class="batch-import-results"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="batchImportStartBtn" type="button" class="btn-primary">开始导入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Web 库存查看弹窗 ═══ -->
+    <div id="webInventoryModal" class="modal-overlay hidden">
+      <div class="modal-dialog web-inventory-dialog">
+        <div class="modal-header">
+          <h3>Web 库存 — <span id="webInventoryAccountName">-</span></h3>
+          <button id="webInventoryCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="webInventoryLoading" class="web-inventory-loading">正在拉取库存...</div>
+          <div id="webInventoryList" class="web-inventory-list"></div>
+          <div id="webInventoryEmpty" class="web-inventory-empty hidden">该账号库存为空</div>
+        </div>
+        <div class="modal-footer">
+          <span id="webInventoryCount">0 件物品</span>
+          <button id="webInventoryTransferBtn" type="button" class="btn-primary">转移选中物品</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 库存转移弹窗 ═══ -->
+    <div id="tradeTransferModal" class="modal-overlay hidden">
+      <div class="modal-dialog trade-transfer-dialog">
+        <div class="modal-header">
+          <h3>库存转移</h3>
+          <button id="tradeTransferCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="trade-transfer-form">
+            <label>发送方
+              <select id="tradeTransferFromSelect"></select>
+            </label>
+            <label>接收方式
+              <select id="tradeTransferToMode">
+                <option value="url">交易链接</option>
+                <option value="account">库中账号</option>
+              </select>
+            </label>
+            <div id="tradeTransferUrlWrap">
+              <label>交易链接
+                <input id="tradeTransferUrl" type="text" placeholder="https://steamcommunity.com/tradeoffer/new/?partner=xxx&token=xxx" />
+              </label>
+            </div>
+            <div id="tradeTransferAccountWrap" class="hidden">
+              <label>接收账号
+                <select id="tradeTransferToAccountSelect"></select>
+              </label>
+            </div>
+          </div>
+          <div id="tradeTransferSelectedItems" class="trade-transfer-items"></div>
+          <div id="tradeTransferProgress" class="trade-transfer-progress hidden"></div>
+        </div>
+        <div class="modal-footer">
+          <span id="tradeTransferItemCount">0 件物品</span>
+          <button id="tradeTransferStartBtn" type="button" class="btn-primary">发送报价</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 市场上架弹窗 ═══ -->
+    <div id="marketSellModal" class="modal-overlay hidden">
+      <div class="modal-dialog market-sell-dialog">
+        <div class="modal-header">
+          <h3>市场上架</h3>
+          <button id="marketSellCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="market-sell-quick-price">
+            <label>按市场最低价 <input id="marketSellPricePct" type="number" value="100" min="1" max="200" step="1" class="market-sell-pct-input">% 定价</label>
+            <button id="marketSellApplyPctBtn" type="button" class="web-inv-info-btn">应用</button>
+            <button id="marketSellFetchPricesBtn" type="button" class="web-inv-info-btn">查询市场价</button>
+          </div>
+          <div id="marketSellItemList" class="market-sell-item-list"></div>
+          <div id="marketSellProgress" class="market-sell-progress hidden">
+            <div class="market-sell-progress-bar"><div id="marketSellProgressFill" class="progress-fill"></div></div>
+            <div id="marketSellProgressText">准备中...</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <span id="marketSellSummary">0 件 · 预估收入 ¥0.00</span>
+          <button id="marketSellStartBtn" type="button" class="btn-primary">确认上架</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Steam API Key 配置弹窗 ═══ -->
+    <div id="steamApiKeyModal" class="modal-overlay hidden">
+      <div class="modal-dialog" style="max-width:420px">
+        <div class="modal-header">
+          <h3>Steam API Key</h3>
+          <button id="steamApiKeyCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:12px;color:#888;margin:0 0 8px">用于批量封禁检测（可选）。获取地址：steamcommunity.com/dev/apikey</p>
+          <input id="steamApiKeyInput" type="password" placeholder="Steam Web API Key" style="width:100%" />
+        </div>
+        <div class="modal-footer">
+          <button id="steamApiKeySaveBtn" type="button" class="btn-primary">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 全局产物预测浮动面板 ═══ -->
+    <div id="craftPredictorStage" class="craft-predictor-stage collapsed">
+      <section id="craftPredictorPanel" class="craft-predictor-panel collapsed" aria-live="polite" aria-label="产物预测抽屉">
+        <div id="craftPredictorDrawer" class="craft-predictor-drawer">
+          <div class="craft-predictor-head">
+            <div class="craft-predictor-title-wrap">
+              <div id="craftPredictorTitle" class="craft-predictor-title">模拟结果</div>
+              <div id="craftPredictorSubtitle" class="craft-predictor-subtitle">等待选择配方</div>
+            </div>
+            <button id="craftPredictorCloseBtn" class="craft-predictor-close" type="button" aria-label="收起产物预测抽屉">×</button>
+          </div>
+          <div class="craft-predictor-body">
+            <div id="craftPredictorList" class="craft-predictor-list"></div>
+          </div>
+        </div>
+      </section>
+      <button id="craftPredictorHandle" class="craft-predictor-handle" type="button" aria-label="展开产物预测抽屉" aria-controls="craftPredictorDrawer" aria-expanded="false">
+        <span class="craft-predictor-handle-arrow" aria-hidden="true"></span>
+      </button>
     </div>
 
     <script src="/authSessionStore.js"></script>

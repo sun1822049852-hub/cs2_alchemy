@@ -3504,29 +3504,34 @@ select.small {
 }
 
 .craft-predictor-stage {
-  position: absolute;
-  left: 0;
+  position: fixed;
   right: 0;
   bottom: 0;
-  height: 50%;
+  width: 380px;
+  height: 50vh;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
-  z-index: 8;
+  z-index: 900;
+  transition: opacity 0.18s ease;
+}
+.craft-predictor-stage.collapsed {
+  pointer-events: none;
 }
 
 .craft-predictor-panel {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  overflow: hidden;
 }
 
-.craft-right-panel > .craft-predictor-handle {
+.craft-predictor-stage > .craft-predictor-handle {
   position: absolute;
-  right: 0;
-  top: var(--craft-predictor-handle-top);
-  width: var(--craft-predictor-handle-width);
-  height: var(--craft-predictor-handle-height);
+  right: 100%;
+  top: 50%;
+  width: 24px;
+  height: 156px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7663,7 +7668,7 @@ body.theme-inkblue .page:not(.hidden) {
   background: transparent;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) {
   --ops-page-bg: linear-gradient(180deg, #16181c 0%, #0f1114 100%);
   --ops-surface-main: linear-gradient(180deg, rgba(24, 28, 34, 0.95), rgba(15, 18, 22, 0.96));
   --ops-surface-subtle: linear-gradient(180deg, rgba(31, 36, 43, 0.88), rgba(19, 22, 27, 0.94));
@@ -7687,36 +7692,36 @@ body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) {
   border-radius: 20px;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(h1, h2, h3),
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(h1, h2, h3),
 body.theme-inkblue #inventoryPage :is(.filter-sub-title, .task-float-title, .drawer-title),
 body.theme-inkblue #craftPage :is(.craft-left-head > span, .craft-queue-group-title, .craft-queue-result-title, .craft-slot-name, .craft-assist-title, .craft-assist-item-title, .craft-assist-preset-title, .craft-assist-preset-name, .craft-queue-empty-body strong, .modal-header h3, .craft-assist-busy-title) {
   color: var(--ops-text-main);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage) :is(.muted, .hint),
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage, #webInventoryPage) :is(.muted, .hint),
 body.theme-inkblue #inventoryPage :is(#fetchTimeText, #summaryText, .component-toolbar-search-label, .menu-item, .task-queue-empty, #componentTaskInfo, .drawer-hint, .task-queue-item),
 body.theme-inkblue #craftPage :is(#craftTopFetchTimeText, .craft-queue-meta, .craft-slot-wear, .craft-queue-empty-body, .craft-assist-field, .craft-assist-item-hint, .craft-assist-range-label, .craft-assist-preset-meta, .craft-assist-list-empty, .craft-assist-busy-detail, #craftStatusText, #craftCoolingHint),
 body.theme-inkblue #simulationPage :is(.simulation-card-meta, .simulation-card-note, .simulation-row-empty, .simulation-summary-meta) {
   color: var(--ops-text-soft);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage) :is(input, select, textarea, .drawer-select-list) {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage, #webInventoryPage) :is(input, select, textarea, .drawer-select-list) {
   background: rgba(10, 12, 16, 0.52);
   border-color: var(--ops-border-soft);
   color: var(--ops-text-main);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage) :is(input, textarea)::placeholder {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage, #webInventoryPage) :is(input, textarea)::placeholder {
   color: #9aa3af;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage) :is(input, select, textarea, button):focus-visible {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage, #webInventoryPage) :is(input, select, textarea, button):focus-visible {
   outline: var(--ops-focus-outline);
   outline-offset: 2px;
   box-shadow: var(--ops-focus-halo);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage) :is(input[type="checkbox"], input[type="radio"]) {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #simulationPage, #webInventoryPage) :is(input[type="checkbox"], input[type="radio"]) {
   accent-color: var(--ops-accent);
 }
 
@@ -8098,12 +8103,12 @@ body.theme-inkblue #inventoryPage :is(.card, .group-parent, .group-child, .group
   color: var(--ops-text-main);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(.group-table, .craft-selection-table, .deposit-table, .deposit-excluded-table) {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(.group-table, .craft-selection-table, .deposit-table, .deposit-excluded-table) {
   background: transparent;
   border-color: rgba(243, 199, 121, 0.08);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(.group-table th, .group-table td, .craft-selection-table th, .craft-selection-table td, .deposit-table th, .deposit-table td, .deposit-excluded-table th, .deposit-excluded-table td) {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(.group-table th, .group-table td, .craft-selection-table th, .craft-selection-table td, .deposit-table th, .deposit-table td, .deposit-excluded-table th, .deposit-excluded-table td) {
   border-color: rgba(243, 199, 121, 0.08);
   background-clip: padding-box;
 }
@@ -8115,7 +8120,7 @@ body.theme-inkblue #inventoryPage .group-child {
   box-shadow: none;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .row-check {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .row-check {
   appearance: none;
   -webkit-appearance: none;
   width: 13px;
@@ -8128,46 +8133,46 @@ body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .row-check {
   vertical-align: middle;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .row-check:checked {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .row-check:checked {
   border-color: rgba(243, 199, 121, 0.62);
   background: linear-gradient(135deg, #f3c779, #dca44c);
   box-shadow: inset 0 0 0 2px rgba(25, 20, 11, 0.78);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .row-check:indeterminate {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .row-check:indeterminate {
   border-color: rgba(243, 199, 121, 0.62);
   background: linear-gradient(135deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
   box-shadow: inset 0 0 0 4px rgba(25, 20, 11, 0.78);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .sort-stack {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .sort-stack {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .arrow-tri {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .arrow-tri {
   background: transparent;
   border-radius: 0;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .arrow-tri.up::before {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .arrow-tri.up::before {
   border-bottom-color: var(--ops-text-dim);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .arrow-tri.down::before {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .arrow-tri.down::before {
   border-top-color: var(--ops-text-dim);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .arrow-tri.active.up::before {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .arrow-tri.active.up::before {
   border-bottom-color: var(--ops-accent-strong);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .arrow-tri.active.down::before {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .arrow-tri.active.down::before {
   border-top-color: var(--ops-accent-strong);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) .arrow-tri:hover {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) .arrow-tri:hover {
   background: transparent;
 }
 
@@ -8248,28 +8253,28 @@ body.theme-inkblue #craftPage .craft-selection-table th {
   color: var(--ops-text-main);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList) {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList) {
   scrollbar-width: thin;
   scrollbar-color: rgba(220, 164, 76, 0.72) rgba(12, 14, 18, 0.88);
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar-track {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar-track {
   background: rgba(12, 14, 18, 0.88);
   border-radius: 999px;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar-thumb {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, rgba(243, 199, 121, 0.82), rgba(220, 164, 76, 0.54));
   border: 2px solid rgba(12, 14, 18, 0.88);
   border-radius: 999px;
 }
 
-body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar-corner {
+body.theme-inkblue :is(#inventoryPage, #craftPage, #batchCraftPage, #webInventoryPage) :is(#listWrap, .menu-list, .task-queue-list, .drawer-select-list, .craft-selection-list, .craft-queue-list, .craft-assist-picker, .craft-assist-list, .craft-assist-preset-list, #craftPredictorList)::-webkit-scrollbar-corner {
   background: rgba(12, 14, 18, 0.88);
 }
 
@@ -8372,12 +8377,12 @@ body.theme-inkblue #craftPage .craft-queue-group {
   border-color: var(--ops-border-soft);
 }
 
-body.theme-inkblue #craftPage .craft-queue-item.done {
+body.theme-inkblue :is(#craftPage, #batchCraftPage) .craft-queue-item.done {
   background: var(--ops-surface-main);
   border-color: rgba(101, 79, 39, 0.3);
 }
 
-body.theme-inkblue #craftPage .craft-queue-item.done .simulation-output-card {
+body.theme-inkblue :is(#craftPage, #batchCraftPage) .craft-queue-item.done .simulation-output-card {
   background: var(--ops-surface-main);
   border-color: var(--ops-border-soft);
   color: var(--ops-text-main);
@@ -8400,7 +8405,7 @@ body.theme-inkblue .craft-queue-group.done .craft-queue-group-title {
   color: var(--ops-text-main);
 }
 
-body.theme-inkblue .craft-queue-group.done .batch-craft-account-label {
+body.theme-inkblue :is(.craft-queue-group.done, .craft-queue-item.done) .batch-craft-account-label {
   color: var(--ops-text-dim);
   background: var(--ops-surface-subtle);
 }
@@ -9479,7 +9484,7 @@ body.batch-craft-split-dragging {
   line-height: 1.4;
 }
 
-.craft-queue-group.done .batch-craft-account-label {
+:is(.craft-queue-group.done, .craft-queue-item.done) .batch-craft-account-label {
   color: #bac8dc;
   background: rgba(18, 18, 18, 0.72);
   top: 8px;
@@ -9796,3 +9801,633 @@ body.batch-craft-split-dragging {
 }
 .trade-transfer-progress .step-line.ok { color: var(--success); }
 .trade-transfer-progress .step-line.error { color: var(--danger); }
+
+/* ═══ Web 库存管理页 ═══ */
+.web-inv-layout {
+  display: grid;
+  grid-template-columns: var(--web-inv-panel-width, 220px) 6px 1fr;
+  height: calc(100vh - 48px);
+  overflow: hidden;
+}
+.web-inv-account-panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e0e0e0;
+  overflow: hidden;
+  min-width: 160px;
+}
+.web-inv-account-head {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #e8eef6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.web-inv-account-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.web-inv-account-actions {
+  display: flex;
+  gap: 4px;
+}
+.web-inv-head-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.web-inv-head-btn:hover {
+  background: #f0f0f0;
+}
+.web-inv-account-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+.web-inv-account-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.12s;
+  margin-bottom: 2px;
+}
+.web-inv-account-item:hover {
+  background: #f0f4fa;
+}
+.web-inv-account-item.selected {
+  background: #dbe7f5;
+  font-weight: 600;
+}
+.web-inv-account-item-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.web-inv-account-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.web-inv-account-item-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.web-inv-account-item-badge.ban-ok { background: #e6f9e6; color: #2a7a2a; }
+.web-inv-account-item-badge.ban-warn { background: #fff3e0; color: #b36b00; }
+.web-inv-account-item-badge.ban-bad { background: #fde8e8; color: #c33; }
+
+.web-inv-split-bar {
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+}
+.web-inv-split-bar::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 32px;
+  border-radius: 2px;
+  background: #c5d0e0;
+  transition: background 0.12s;
+}
+.web-inv-split-bar:hover::after {
+  background: #7ea6d8;
+}
+body.web-inv-split-dragging {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.web-inv-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 12px;
+}
+.web-inv-account-info {
+  padding: 10px 0;
+  border-bottom: 1px solid #e8eef6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.web-inv-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.web-inv-acc-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.web-inv-acc-balance {
+  font-size: 13px;
+  color: #2a7a2a;
+}
+.web-inv-acc-ban {
+  font-size: 12px;
+}
+.web-inv-acc-trade-url {
+  font-size: 11px;
+  color: #666;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.web-inv-acc-trade-url:hover {
+  color: #333;
+  text-decoration: underline;
+}
+.web-inv-info-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: transparent;
+  cursor: pointer;
+}
+.web-inv-info-btn:hover {
+  background: #f0f0f0;
+}
+
+.web-inv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+.web-inv-toolbar-label {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.web-inv-toolbar-btn {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: transparent;
+  cursor: pointer;
+}
+.web-inv-toolbar-btn:hover {
+  background: #f0f0f0;
+}
+.web-inv-toolbar-count {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
+}
+
+.web-inv-item-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  padding: 8px 0;
+  align-content: start;
+}
+.web-inv-item-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+.web-inv-item-card:hover {
+  border-color: #aaa;
+}
+.web-inv-item-card.selected {
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.25);
+}
+.web-inv-item-card.untradable {
+  opacity: 0.5;
+}
+.web-inv-item-card-img {
+  width: 80px;
+  height: 60px;
+  object-fit: contain;
+}
+.web-inv-item-card-name {
+  font-size: 11px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+.web-inv-item-card-wear {
+  font-size: 10px;
+  color: #888;
+}
+.web-inv-item-card-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+}
+
+.web-inv-action-bar {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  border-top: 1px solid #e0e0e0;
+  padding: 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.web-inv-sell-btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid #dca44c;
+  background: transparent;
+  color: #dca44c;
+  font-weight: 600;
+  cursor: pointer;
+}
+.web-inv-sell-btn:hover {
+  background: rgba(220, 164, 76, 0.1);
+}
+
+/* Market sell modal */
+.market-sell-dialog {
+  max-width: 700px;
+}
+.market-sell-quick-price {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 12px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 8px;
+}
+.market-sell-pct-input {
+  width: 56px;
+  text-align: center;
+}
+.market-sell-item-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.market-sell-item-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 100px 100px 100px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 12px;
+}
+.market-sell-item-row img {
+  width: 44px;
+  height: 33px;
+  object-fit: contain;
+}
+.market-sell-item-row input {
+  width: 80px;
+  text-align: right;
+}
+.market-sell-progress {
+  margin-top: 8px;
+}
+.market-sell-progress-bar {
+  height: 6px;
+  background: #eee;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* ═══ Dark gold theme overrides for webInventoryPage ═══ */
+body.theme-inkblue #webInventoryPage .web-inv-account-panel {
+  border-right-color: var(--ops-border-soft, rgba(243,199,121,0.14));
+  background: rgba(0,0,0,0.15);
+}
+body.theme-inkblue #webInventoryPage .web-inv-account-head {
+  border-bottom-color: var(--ops-border-soft);
+}
+body.theme-inkblue #webInventoryPage .web-inv-account-title {
+  color: var(--ops-accent-strong, #f3c779);
+}
+body.theme-inkblue #webInventoryPage .web-inv-head-btn {
+  border-color: var(--ops-border-soft);
+  color: var(--ops-accent, #dca44c);
+}
+body.theme-inkblue #webInventoryPage .web-inv-head-btn:hover {
+  background: rgba(220,164,76,0.12);
+}
+body.theme-inkblue #webInventoryPage .web-inv-account-item:hover {
+  background: rgba(220,164,76,0.08);
+}
+body.theme-inkblue #webInventoryPage .web-inv-account-item.selected {
+  background: rgba(220,164,76,0.18);
+  color: var(--ops-accent-strong);
+}
+body.theme-inkblue #webInventoryPage .web-inv-split-bar::after {
+  background: rgba(220,164,76,0.3);
+}
+body.theme-inkblue #webInventoryPage .web-inv-split-bar:hover::after {
+  background: var(--ops-accent);
+}
+body.theme-inkblue #webInventoryPage .web-inv-account-info {
+  border-bottom-color: var(--ops-border-soft);
+}
+body.theme-inkblue #webInventoryPage .web-inv-acc-name {
+  color: var(--ops-accent-strong);
+}
+body.theme-inkblue #webInventoryPage .web-inv-acc-trade-url {
+  color: rgba(243,199,121,0.5);
+}
+body.theme-inkblue #webInventoryPage .web-inv-acc-trade-url:hover {
+  color: var(--ops-accent);
+}
+body.theme-inkblue #webInventoryPage .web-inv-info-btn {
+  border-color: var(--ops-border-soft);
+  color: var(--ops-accent);
+}
+body.theme-inkblue #webInventoryPage .web-inv-info-btn:hover {
+  background: rgba(220,164,76,0.12);
+}
+body.theme-inkblue #webInventoryPage .web-inv-toolbar-btn {
+  border-color: var(--ops-border-soft);
+  color: var(--ops-accent);
+}
+body.theme-inkblue #webInventoryPage .web-inv-toolbar-btn:hover {
+  background: rgba(220,164,76,0.12);
+}
+body.theme-inkblue #webInventoryPage .web-inv-toolbar-count {
+  color: rgba(243,199,121,0.5);
+}
+body.theme-inkblue #webInventoryPage .web-inv-item-card {
+  border-color: var(--ops-border-soft);
+  background: rgba(0,0,0,0.1);
+}
+body.theme-inkblue #webInventoryPage .web-inv-item-card:hover {
+  border-color: var(--ops-accent);
+}
+body.theme-inkblue #webInventoryPage .web-inv-item-card.selected {
+  border-color: var(--ops-accent-strong);
+  box-shadow: 0 0 0 2px rgba(220,164,76,0.25);
+}
+body.theme-inkblue #webInventoryPage .web-inv-item-card-name {
+  color: rgba(255,255,255,0.85);
+}
+body.theme-inkblue #webInventoryPage .web-inv-item-card-wear {
+  color: rgba(243,199,121,0.5);
+}
+body.theme-inkblue #webInventoryPage .web-inv-action-bar {
+  background: rgba(0,0,0,0.3);
+  border-top-color: var(--ops-border-soft);
+}
+body.theme-inkblue #webInventoryPage .web-inv-sell-btn {
+  border-color: var(--ops-accent);
+  color: var(--ops-accent);
+}
+body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
+  background: rgba(220,164,76,0.15);
+}
+
+/* ── Simulation Export to Craft Assist Modal ── */
+.sim-export-craft-modal-card {
+  width: min(520px, calc(100vw - 40px));
+  max-height: calc(100vh - 60px);
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+}
+.sim-export-craft-body {
+  overflow-y: auto;
+  padding: 0 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sim-export-craft-material-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ops-accent-strong, #f3c779);
+  padding-top: 4px;
+}
+.sim-export-craft-add-btn {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--ops-border-soft, rgba(243,199,121,0.14));
+  background: transparent;
+  color: var(--ops-accent, #dca44c);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sim-export-craft-add-btn:hover {
+  background: rgba(220,164,76,0.12);
+  color: var(--ops-accent-strong, #f3c779);
+}
+.sim-export-craft-material-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.sim-export-craft-material-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.03);
+  font-size: 12px;
+  min-height: 30px;
+}
+.sim-export-craft-material-row:hover {
+  background: rgba(255,255,255,0.06);
+}
+.sim-export-craft-material-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ccc;
+}
+.sim-export-craft-role-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid;
+  cursor: pointer;
+  font-weight: 600;
+  min-width: 42px;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.sim-export-craft-role-btn[data-role="main"] {
+  color: #f3c779;
+  border-color: rgba(243,199,121,0.35);
+  background: rgba(243,199,121,0.08);
+}
+.sim-export-craft-role-btn[data-role="main"]:hover {
+  background: rgba(243,199,121,0.18);
+}
+.sim-export-craft-role-btn[data-role="aux"] {
+  color: #7ec8e3;
+  border-color: rgba(126,200,227,0.35);
+  background: rgba(126,200,227,0.08);
+}
+.sim-export-craft-role-btn[data-role="aux"]:hover {
+  background: rgba(126,200,227,0.18);
+}
+.sim-export-craft-remove-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.sim-export-craft-remove-btn:hover {
+  background: rgba(255,80,80,0.15);
+  color: #ff5050;
+}
+.sim-export-craft-search-panel {
+  border: 1px solid var(--ops-border-soft, rgba(243,199,121,0.14));
+  border-radius: 6px;
+  padding: 8px;
+  background: rgba(0,0,0,0.15);
+}
+.sim-export-craft-search-row {
+  display: flex;
+  gap: 6px;
+}
+.sim-export-craft-search-row input {
+  flex: 1;
+  min-width: 0;
+}
+.sim-export-craft-search-row button {
+  flex-shrink: 0;
+}
+.sim-export-craft-search-results {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sim-export-craft-search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #ccc;
+  background: transparent;
+  border: none;
+  text-align: left;
+  width: 100%;
+  transition: background 0.15s;
+}
+.sim-export-craft-search-item:hover {
+  background: rgba(220,164,76,0.12);
+  color: #f3c779;
+}
+.sim-export-craft-search-item.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.sim-export-craft-search-empty {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+  padding: 8px 0;
+}
+.sim-export-craft-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sim-export-craft-range-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sim-export-craft-range-pair input {
+  flex: 1;
+  min-width: 0;
+}
+.sim-export-craft-range-sep {
+  color: #666;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.simulation-saved-export-btn {
+  position: absolute;
+  top: 10px;
+  right: 44px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, rgba(28, 30, 36, 0.96) 0%, rgba(8, 9, 12, 0.98) 100%);
+  color: var(--ops-accent, #dca44c);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+  z-index: 3;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 18px rgba(0, 0, 0, 0.28);
+}
+.simulation-saved-export-btn:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: linear-gradient(180deg, rgba(40, 43, 50, 0.98) 0%, rgba(12, 14, 18, 1) 100%);
+  color: var(--ops-accent-strong, #f3c779);
+}

@@ -77,6 +77,11 @@ function sanitizeSteamAccount(row, activeUsername = "") {
     steam_name: asString(row.steam_name).trim(),
     steam_id: asString(row.steam_id).trim(),
     avatar_url: asString(row.avatar_url).trim(),
+    mafile_content: asString(row.mafile_content).trim(),
+    steam_id64: asString(row.steam_id64).trim(),
+    ban_status: asString(row.ban_status || ""),
+    trade_url: asString(row.trade_url || ""),
+    balance: asString(row.balance || ""),
     is_active: !!username && username === asString(activeUsername).trim()
   };
 }
@@ -183,6 +188,8 @@ class AppAuthStore {
         steam_name TEXT NOT NULL DEFAULT '',
         steam_id TEXT NOT NULL DEFAULT '',
         avatar_url TEXT NOT NULL DEFAULT '',
+        mafile_content TEXT NOT NULL DEFAULT '',
+        steam_id64 TEXT NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
@@ -206,6 +213,13 @@ class AppAuthStore {
         FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
       );
     `);
+
+    // 兼容已有数据库：新增字段（如果不存在则 ALTER TABLE）
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN mafile_content TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN steam_id64 TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN ban_status TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN trade_url TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN balance TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
   }
 
   seedSystemData() {
@@ -261,8 +275,8 @@ class AppAuthStore {
     const legacy = this.readLegacyAccountsState();
     const accounts = legacy && legacy.accounts && typeof legacy.accounts === "object" ? legacy.accounts : {};
     const upsert = this.db.prepare(`
-      INSERT INTO steam_account(username, password, remark, steam_name, steam_id, avatar_url, updated_at)
-      VALUES(?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO steam_account(username, password, remark, steam_name, steam_id, avatar_url, mafile_content, steam_id64, updated_at)
+      VALUES(?, ?, ?, ?, ?, ?, '', '', ?)
       ON CONFLICT(username) DO UPDATE SET
         password = excluded.password,
         remark = excluded.remark,
@@ -592,14 +606,16 @@ class AppAuthStore {
       throw new Error("viewer cannot manage this steam account");
     }
     this.db.prepare(`
-      INSERT INTO steam_account(username, password, remark, steam_name, steam_id, avatar_url, updated_at)
-      VALUES(?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO steam_account(username, password, remark, steam_name, steam_id, avatar_url, mafile_content, steam_id64, updated_at)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(username) DO UPDATE SET
         password = excluded.password,
         remark = excluded.remark,
         steam_name = excluded.steam_name,
         steam_id = excluded.steam_id,
         avatar_url = excluded.avatar_url,
+        mafile_content = CASE WHEN excluded.mafile_content != '' THEN excluded.mafile_content ELSE steam_account.mafile_content END,
+        steam_id64 = CASE WHEN excluded.steam_id64 != '' THEN excluded.steam_id64 ELSE steam_account.steam_id64 END,
         updated_at = excluded.updated_at
     `).run(
       username,
@@ -608,6 +624,8 @@ class AppAuthStore {
       asString(data.steamName || data.steam_name).trim(),
       asString(data.steamId || data.steam_id).trim(),
       asString(data.avatarUrl || data.avatar_url).trim(),
+      asString(data.mafileContent || data.mafile_content).trim(),
+      asString(data.steamId64 || data.steam_id64).trim(),
       nowSqlText()
     );
     if (setActive && viewerUsername) {
@@ -667,6 +685,31 @@ class AppAuthStore {
   getActiveSteamAccount(viewerUsername) {
     const key = this.getViewerActiveSteamUsername(viewerUsername);
     return key ? this.getSteamAccountForUser(viewerUsername, key, {includeAll: this.isSuperAdmin(viewerUsername)}) : null;
+  }
+
+  /**
+   * Update a single field on steam_account by username
+   */
+  updateSteamAccountField(username, field, value) {
+    const allowed = ["ban_status", "trade_url", "balance", "remark", "steam_name", "avatar_url"];
+    if (!allowed.includes(field)) {
+      throw new Error(`不允许更新字段: ${field}`);
+    }
+    this.db.prepare(
+      `UPDATE steam_account SET ${field} = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`
+    ).run(String(value), String(username));
+  }
+
+  updateSteamAccountBanStatus(username, banStatus) {
+    this.updateSteamAccountField(username, "ban_status", banStatus);
+  }
+
+  updateSteamAccountTradeUrl(username, tradeUrl) {
+    this.updateSteamAccountField(username, "trade_url", tradeUrl);
+  }
+
+  updateSteamAccountBalance(username, balance) {
+    this.updateSteamAccountField(username, "balance", balance);
   }
 }
 

@@ -8,6 +8,10 @@ const {AppAuthStore} = require("./appAuthStore");
 const {TokenStore} = require("./tokenStore");
 const {UiStateStore} = require("./uiStateStore");
 const {loginAndSaveToken} = require("./authService");
+const {parseMaFile, generateTotp} = require("./maFileParser");
+const {refreshWebCookie, refreshWebCookieFromToken} = require("./steamWebSession");
+const {fetchFullInventory} = require("./inventoryService");
+const {parseTradeUrl, sendTradeOffer, confirmTradeOffer, acceptTradeOffer, cancelTradeOffer, steamId64ToAccountId} = require("./tradeService");
 const {refreshInventory} = require("./refreshWorkflow");
 const {createRefreshRuntime} = require("./services/refreshRuntime");
 const {createSessionPool} = require("./services/sessionPool");
@@ -31,7 +35,7 @@ const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {buildComponentSummary: buildSharedComponentSummary} = require("./services/componentSummary");
 const {
   enrichInventoryDisplayOnlyImages
-} = require("../../tools/enrichInventoryDisplayOnlyImages");
+} = require("./services/inventoryDisplayImageEnrichment");
 const {DedupLogger} = require("./logger");
 const {hashCraftPermitPayload} = require("../../shared/craftPermitPolicy");
 const {getLicenseConfig} = require("./licenseConfig");
@@ -44,6 +48,9 @@ const {createLicenseScheduler} = require("./licenseScheduler");
 const {bootstrapDevLicense} = require("./devLicenseBootstrap");
 const {asString, toInt, nowString} = require("./utils");
 const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./constants");
+const { sellItem, getPriceOverview, calculateBuyerPrice, calculateSellerPrice, getMarketConfirmations, confirmMarketListings } = require("./steamMarketService");
+const { checkBansBatch, checkBanSingle, formatBanStatus, fetchBalance, fetchTradeUrl } = require("./steamAccountTools");
+const { getSteamApiKey, setSteamApiKey } = require("./steamApiKeyStore");
 
 const UI_DIR = path.resolve(__dirname, "..", "ui");
 const SESSION_COOKIE_NAME = "cs2_alchemy_session";
@@ -140,6 +147,42 @@ function getViewerAccountStore(auth, deps = {}) {
     accountsFilePath: auth && auth.store ? auth.store.accountsFilePath : PATHS.ACCOUNTS_FILE,
     viewerUsername
   });
+}
+
+/**
+ * 为任意账号解析 Web Session（优先 maFile，fallback 到 TokenStore refresh_token）
+ * @param {object} account — accountStore.get() 返回的行
+ * @returns {{ webSession, hasMaFile: boolean }}
+ */
+async function resolveWebSessionForAccount(account) {
+  if (!account) throw new Error("账号不存在");
+  const username = asString(account.username).trim();
+
+  // 优先 maFile
+  if (account.mafile_content) {
+    const maData = parseMaFile(account.mafile_content);
+    const webSession = await refreshWebCookie(maData);
+    return {webSession, hasMaFile: true, maData};
+  }
+
+  // fallback: TokenStore refresh_token
+  const tokenStore = new TokenStore();
+  const refreshToken = tokenStore.get(username);
+  if (!refreshToken) {
+    throw new Error(`账号 ${username} 既无 maFile 也无 refresh_token，无法获取 Web Session`);
+  }
+
+  // 需要 steamId64 — 从 account 的 steam_id64 或 steam_id 字段取
+  let steamId64 = asString(account.steam_id64 || "").trim();
+  if (!steamId64) {
+    steamId64 = asString(account.steam_id || "").trim();
+  }
+  if (!steamId64) {
+    throw new Error(`账号 ${username} 缺少 steamId64，无法组装 Web Cookie（请先通过连接刷新获取）`);
+  }
+
+  const webSession = await refreshWebCookieFromToken(refreshToken, steamId64);
+  return {webSession, hasMaFile: false, maData: null};
 }
 
 function getLicenseRuntime(deps = {}) {
@@ -416,6 +459,9 @@ function isPublicApiRoute(pathname) {
     || pathname === "/api/client-auth/login"
     || pathname === "/api/client-auth/logout"
     || pathname === "/api/client-auth/register/send-code"
+    || pathname === "/api/client-auth/register/verify-code"
+    || pathname === "/api/client-auth/register/complete"
+    || pathname === "/api/client-auth/register/readiness"
     || pathname === "/api/client-auth/register"
     || pathname === "/api/client-auth/password/send-reset-code"
     || pathname === "/api/client-auth/password/reset";
@@ -1475,6 +1521,60 @@ async function handleApi(req, res, urlObj, deps = {}) {
         writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
       } catch (err) {
         writeClientAuthError(res, err, "注册失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/register/readiness" && req.method === "GET") {
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.getRegistrationReadiness();
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true, registration_flow_version: 2});
+      } catch (err) {
+        writeJson(res, 200, {ok: true, registration_flow_version: 2});
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/register/verify-code" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.verifyRegisterCode({
+          email: asString(body && body.email).trim(),
+          code: asString(body && body.code).trim(),
+          registerSessionId: asString(body && body.register_session_id).trim()
+        });
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+      } catch (err) {
+        writeClientAuthError(res, err, "验证码校验失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/client-auth/register/complete" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.completeRegister({
+          email: asString(body && body.email).trim(),
+          verificationTicket: asString(body && body.verification_ticket).trim(),
+          username: asString(body && body.username).trim(),
+          password: asString(body && body.password).trim(),
+          deviceId: asString(body && body.device_id).trim()
+        });
+        if (result && result.bundle) {
+          const licenseRuntime = deps && deps.auth && deps.auth.licenseRuntime;
+          if (licenseRuntime && typeof licenseRuntime.importBundle === "function") {
+            licenseRuntime.importBundle({
+              ...result.bundle,
+              refresh_credential: result.refreshCredential || ""
+            });
+          }
+        }
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+      } catch (err) {
+        writeClientAuthError(res, err, "注册完成失败");
       }
       return true;
     }
@@ -2923,6 +3023,880 @@ async function handleApi(req, res, urlObj, deps = {}) {
       fetch_time: asString(accountCache && accountCache.fetch_time ? accountCache.fetch_time : "").trim(),
       connected: refreshRuntime.isConnected(username)
     });
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 批量导入 maFile 账号（SSE 流式返回）
+  // ═══════════════════════════════════════════════════════════════
+  if (pathname === "/api/accounts/batch-import" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const accounts = Array.isArray(body && body.accounts) ? body.accounts : [];
+    if (accounts.length === 0) {
+      writeJson(res, 400, {ok: false, message: "accounts 列表为空"});
+      return true;
+    }
+
+    // SSE 流式响应
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*"
+    });
+
+    const sendSse = (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    sendSse("progress", {total: accounts.length, done: 0, message: "开始批量导入..."});
+
+    const tokenStore = new TokenStore();
+    const accountStore = getViewerAccountStore(auth, deps);
+    let doneCount = 0;
+
+    for (const entry of accounts) {
+      const username = asString(entry && entry.username).trim();
+      const password = asString(entry && entry.password).trim();
+      const maFileContent = asString(entry && entry.maFileContent).trim();
+
+      if (!username || !password || !maFileContent) {
+        doneCount++;
+        sendSse("account_result", {
+          username: username || "(空)",
+          ok: false,
+          message: "缺少用户名、密码或 maFile 内容",
+          done: doneCount,
+          total: accounts.length
+        });
+        continue;
+      }
+
+      try {
+        // 1. 解析 maFile
+        const maData = parseMaFile(maFileContent);
+
+        // 2. 生成 TOTP
+        const totp = generateTotp(maData.sharedSecret);
+
+        sendSse("account_progress", {username, step: "login", message: `${username} 正在登录...`});
+
+        // 3. 登录
+        const result = await loginAndSaveTokenFn({
+          username,
+          password,
+          twoFactorCode: totp,
+          tokenStore,
+          logger
+        });
+
+        // 4. 入库
+        const steamId64 = maData.steamId64 || "";
+        accountStore.upsert({
+          username,
+          password,
+          remark: asString(entry.remark || "").trim(),
+          steamName: maData.accountName || "",
+          steamId: steamId64,
+          avatarUrl: "",
+          mafileContent: maFileContent,
+          steamId64
+        });
+
+        doneCount++;
+        sendSse("account_result", {
+          username,
+          ok: true,
+          message: "登录成功，已保存",
+          steam_id64: steamId64,
+          token_saved: Boolean(result.refresh_token),
+          done: doneCount,
+          total: accounts.length
+        });
+        logger.info("ui_server", `batch-import success: account=${username} steam_id64=${steamId64}`);
+      } catch (err) {
+        doneCount++;
+        const msg = asString(err && err.message ? err.message : err).trim() || "未知错误";
+        sendSse("account_result", {
+          username,
+          ok: false,
+          message: msg,
+          done: doneCount,
+          total: accounts.length
+        });
+        logger.warn("ui_server", `batch-import failed: account=${username} error=${msg}`);
+      }
+    }
+
+    sendSse("done", {total: accounts.length, done: doneCount, message: "批量导入完成"});
+    res.end();
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 批量拉取库存（SSE 流式返回）
+  // ═══════════════════════════════════════════════════════════════
+  if (pathname === "/api/accounts/batch-inventory" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.read")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const usernames = Array.isArray(body && body.usernames) ? body.usernames : [];
+    if (usernames.length === 0) {
+      writeJson(res, 400, {ok: false, message: "usernames 列表为空"});
+      return true;
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*"
+    });
+
+    const sendSse = (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const accountStore = getViewerAccountStore(auth, deps);
+    let doneCount = 0;
+
+    for (const uname of usernames) {
+      const username = asString(uname).trim();
+      if (!username) {
+        doneCount++;
+        continue;
+      }
+
+      try {
+        const account = accountStore.get(username);
+        if (!account) {
+          throw new Error("账号不存在");
+        }
+
+        sendSse("inventory_progress", {username, step: "cookie", message: `${username} 刷新 Cookie...`});
+
+        const {webSession} = await resolveWebSessionForAccount(account);
+
+        sendSse("inventory_progress", {username, step: "fetch", message: `${username} 拉取库存...`});
+
+        const items = await fetchFullInventory({
+          steamId64: webSession.steamId64,
+          cookieString: webSession.cookieString,
+          onPage: (pageIdx, pageItems, totalSoFar) => {
+            sendSse("inventory_page", {username, page: pageIdx, page_count: pageItems.length, total: totalSoFar});
+          }
+        });
+
+        doneCount++;
+        sendSse("inventory_result", {
+          username,
+          ok: true,
+          item_count: items.length,
+          items,
+          done: doneCount,
+          total: usernames.length
+        });
+        logger.info("ui_server", `batch-inventory success: account=${username} items=${items.length}`);
+      } catch (err) {
+        doneCount++;
+        const msg = asString(err && err.message ? err.message : err).trim() || "未知错误";
+        sendSse("inventory_result", {
+          username,
+          ok: false,
+          message: msg,
+          items: [],
+          done: doneCount,
+          total: usernames.length
+        });
+        logger.warn("ui_server", `batch-inventory failed: account=${username} error=${msg}`);
+      }
+    }
+
+    sendSse("done", {total: usernames.length, done: doneCount});
+    res.end();
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 单账号库存拉取
+  // ═══════════════════════════════════════════════════════════════
+  if (pathname.startsWith("/api/accounts/") && pathname.endsWith("/inventory") && req.method === "GET") {
+    if (!requirePermission(res, auth, "inventory.read")) {
+      return true;
+    }
+    const parts = pathname.split("/");
+    const username = decodeURIComponent(parts[3] || "");
+    if (!username) {
+      writeJson(res, 400, {ok: false, message: "username is required"});
+      return true;
+    }
+
+    try {
+      const accountStore = getViewerAccountStore(auth, deps);
+      const account = accountStore.get(username);
+      if (!account) {
+        writeJson(res, 400, {ok: false, message: "账号不存在"});
+        return true;
+      }
+
+      const {webSession} = await resolveWebSessionForAccount(account);
+      const items = await fetchFullInventory({
+        steamId64: webSession.steamId64,
+        cookieString: webSession.cookieString
+      });
+
+      writeJson(res, 200, {ok: true, username, item_count: items.length, items});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 发送交易报价（全自动三步：发送 → A确认 → B接受确认）
+  // ═══════════════════════════════════════════════════════════════
+  if (pathname === "/api/accounts/send-trade-offer" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const fromUsername = asString(body && body.fromUsername).trim();
+    const toTradeUrl = asString(body && body.toTradeUrl).trim();
+    const assetIds = Array.isArray(body && body.assetIds) ? body.assetIds.map((id) => asString(id).trim()).filter(Boolean) : [];
+
+    if (!fromUsername || !toTradeUrl || assetIds.length === 0) {
+      writeJson(res, 400, {ok: false, message: "fromUsername, toTradeUrl, assetIds 均为必填"});
+      return true;
+    }
+
+    // SSE 流式
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*"
+    });
+
+    const sendSse = (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const accountStore = getViewerAccountStore(auth, deps);
+      const fromAccount = accountStore.get(fromUsername);
+      if (!fromAccount) {
+        sendSse("error", {message: "发送方账号不存在"});
+        res.end();
+        return true;
+      }
+
+      const {webSession: fromSession, hasMaFile: fromHasMaFile, maData: fromMaData} = await resolveWebSessionForAccount(fromAccount);
+      const {partnerId, tradeToken} = parseTradeUrl(toTradeUrl);
+
+      // 计算接收方 SteamID64
+      const partnerSteamId64 = String(BigInt(partnerId) + BigInt("76561197960265728"));
+
+      // Step 1: Cookie 已刷新
+      sendSse("step", {step: "cookie", message: "发送方 Cookie 已就绪" + (fromHasMaFile ? "" : "（Token 模式）")});
+
+      // Step 2: 发送报价
+      sendSse("step", {step: "send", message: `发送交易报价 (${assetIds.length} 件物品)...`});
+      const {tradeofferid} = await sendTradeOffer({
+        cookieString: fromSession.cookieString,
+        sessionid: fromSession.sessionid,
+        partnerSteamId64,
+        partnerId,
+        tradeToken,
+        assetIds,
+        message: asString(body.message || "").trim()
+      });
+      sendSse("step", {step: "sent", message: `报价已发送 ID=${tradeofferid}`, tradeofferid});
+      logger.info("ui_server", `trade-offer sent: from=${fromUsername} offer=${tradeofferid} items=${assetIds.length}`);
+
+      // Step 3: A号确认（需要 identity_secret，仅 maFile 账号可自动）
+      let confirmed = false;
+      if (fromHasMaFile && fromMaData && fromMaData.identitySecret) {
+        sendSse("step", {step: "confirm_sender", message: "发送方自动确认交易..."});
+        confirmed = await confirmTradeOffer({
+          cookieString: fromSession.cookieString,
+          steamId64: fromSession.steamId64,
+          identitySecret: fromMaData.identitySecret,
+          tradeofferId: tradeofferid
+        });
+        sendSse("step", {step: "sender_confirmed", message: confirmed ? "发送方已自动确认" : "发送方确认未找到（可能需手动确认）", confirmed});
+      } else {
+        sendSse("step", {step: "sender_manual_confirm", message: "⚠ 发送方无 maFile，请在 Steam 手机 App 中手动确认此交易", needs_manual: true});
+      }
+
+      // Step 4: 尝试 B号自动接受（如果B号也在库中）
+      let receiverAccepted = false;
+      const allAccounts = accountStore.list();
+      const receiverAccount = allAccounts.find((a) => {
+        const sid = asString(a.steam_id64 || a.steam_id || "").trim();
+        return sid === partnerSteamId64;
+      });
+
+      if (receiverAccount) {
+        try {
+          const {webSession: receiverSession, hasMaFile: recvHasMaFile, maData: recvMaData} = await resolveWebSessionForAccount(receiverAccount);
+          sendSse("step", {step: "accept_receiver", message: `接收方 ${receiverAccount.username} 自动接受...`});
+
+          await acceptTradeOffer({
+            cookieString: receiverSession.cookieString,
+            sessionid: receiverSession.sessionid,
+            tradeofferId: tradeofferid,
+            partnerSteamId64: fromSession.steamId64
+          });
+
+          // B号确认
+          if (recvHasMaFile && recvMaData && recvMaData.identitySecret) {
+            const receiverConfirmed = await confirmTradeOffer({
+              cookieString: receiverSession.cookieString,
+              steamId64: receiverSession.steamId64,
+              identitySecret: recvMaData.identitySecret,
+              tradeofferId: tradeofferid
+            });
+            receiverAccepted = true;
+            sendSse("step", {step: "receiver_confirmed", message: "接收方已接受并自动确认", confirmed: receiverConfirmed});
+          } else {
+            sendSse("step", {step: "receiver_accepted_no_confirm", message: `接收方 ${receiverAccount.username} 已接受，但无 maFile，请在 Steam 手机 App 中手动确认`, needs_manual: true});
+          }
+        } catch (recvErr) {
+          sendSse("step", {step: "receiver_failed", message: `接收方自动接受失败: ${asString(recvErr.message || recvErr).slice(0, 200)}`});
+        }
+      } else {
+        sendSse("step", {step: "receiver_manual", message: "接收方不在库中，需手动接受"});
+      }
+
+      sendSse("done", {
+        ok: true,
+        tradeofferid,
+        sender_confirmed: confirmed,
+        receiver_accepted: receiverAccepted,
+        needs_manual_confirm: !fromHasMaFile
+      });
+    } catch (err) {
+      sendSse("error", {message: asString(err && err.message ? err.message : err).trim()});
+    }
+    res.end();
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 接受传入报价
+  // ═══════════════════════════════════════════════════════════════
+  if (pathname === "/api/accounts/accept-offers" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const username = asString(body && body.username).trim();
+    const tradeofferIds = Array.isArray(body && body.tradeofferIds) ? body.tradeofferIds.map((id) => asString(id).trim()).filter(Boolean) : [];
+
+    if (!username || tradeofferIds.length === 0) {
+      writeJson(res, 400, {ok: false, message: "username 和 tradeofferIds 均为必填"});
+      return true;
+    }
+
+    try {
+      const accountStore = getViewerAccountStore(auth, deps);
+      const account = accountStore.get(username);
+      if (!account) {
+        writeJson(res, 400, {ok: false, message: "账号不存在"});
+        return true;
+      }
+
+      const {webSession, hasMaFile, maData} = await resolveWebSessionForAccount(account);
+      const results = [];
+
+      for (const offerId of tradeofferIds) {
+        try {
+          await acceptTradeOffer({
+            cookieString: webSession.cookieString,
+            sessionid: webSession.sessionid,
+            tradeofferId: offerId,
+            partnerSteamId64: ""
+          });
+
+          let confirmed = false;
+          if (hasMaFile && maData && maData.identitySecret) {
+            confirmed = await confirmTradeOffer({
+              cookieString: webSession.cookieString,
+              steamId64: webSession.steamId64,
+              identitySecret: maData.identitySecret,
+              tradeofferId: offerId
+            });
+          }
+
+          results.push({tradeofferid: offerId, ok: true, confirmed, needs_manual_confirm: !hasMaFile});
+        } catch (err) {
+          results.push({tradeofferid: offerId, ok: false, message: asString(err.message || err).slice(0, 200)});
+        }
+      }
+
+      writeJson(res, 200, {ok: true, results, needs_manual_confirm: !hasMaFile});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 撤销已发出报价
+  // ═══════════════════════════════════════════════════════════════
+  if (pathname === "/api/accounts/cancel-sent-offers" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const username = asString(body && body.username).trim();
+    const tradeofferIds = Array.isArray(body && body.tradeofferIds) ? body.tradeofferIds.map((id) => asString(id).trim()).filter(Boolean) : [];
+
+    if (!username || tradeofferIds.length === 0) {
+      writeJson(res, 400, {ok: false, message: "username 和 tradeofferIds 均为必填"});
+      return true;
+    }
+
+    try {
+      const accountStore = getViewerAccountStore(auth, deps);
+      const account = accountStore.get(username);
+      if (!account) {
+        writeJson(res, 400, {ok: false, message: "账号不存在"});
+        return true;
+      }
+
+      const {webSession} = await resolveWebSessionForAccount(account);
+      const results = [];
+
+      for (const offerId of tradeofferIds) {
+        try {
+          await cancelTradeOffer({
+            cookieString: webSession.cookieString,
+            sessionid: webSession.sessionid,
+            tradeofferId: offerId
+          });
+          results.push({tradeofferid: offerId, ok: true});
+        } catch (err) {
+          results.push({tradeofferid: offerId, ok: false, message: asString(err.message || err).slice(0, 200)});
+        }
+      }
+
+      writeJson(res, 200, {ok: true, results});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Steam Market / Account Tools
+  // ═══════════════════════════════════════════════════════════════════════
+
+  if (pathname === "/api/market/batch-sell" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const username = asString(body.username || "").trim();
+      const items = Array.isArray(body.items) ? body.items : [];
+      if (!username || items.length === 0) {
+        writeJson(res, 400, {ok: false, message: "缺少 username 或 items"});
+        return true;
+      }
+
+      const accountStore = getViewerAccountStore(auth, deps);
+      const account = accountStore.get(username);
+      if (!account) { writeJson(res, 404, {ok: false, message: "账号不存在"}); return true; }
+
+      const {webSession} = await resolveWebSessionForAccount(account);
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*"
+      });
+      const sendSse = (event, data) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+
+      let successCount = 0, failCount = 0;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const assetId = asString(item.assetId || "").trim();
+        const priceInCents = Number(item.priceInCents) || 0;
+        const currency = Number(item.currency) || 23;
+
+        sendSse("progress", {index: i, total: items.length, assetId, status: "selling"});
+
+        try {
+          const result = await sellItem({
+            cookieString: webSession.cookieString,
+            sessionid: webSession.sessionid,
+            steamId64: webSession.steamId64,
+            assetId,
+            priceInCents,
+            currency
+          });
+          if (result.success) successCount++; else failCount++;
+          sendSse("item-result", {index: i, assetId, ...result});
+        } catch (err) {
+          failCount++;
+          sendSse("item-result", {index: i, assetId, success: false, message: asString(err.message || err).slice(0, 200)});
+        }
+
+        // Rate limit: 2s between sells
+        if (i < items.length - 1) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+
+      sendSse("done", {successCount, failCount, total: items.length});
+      res.end();
+    } catch (err) {
+      if (!res.headersSent) {
+        writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      } else {
+        try { res.end(); } catch (_) {}
+      }
+    }
+    return true;
+  }
+
+  // ── 获取市场确认列表 ──────────────────────────────────────
+  if (pathname === "/api/market/confirmations" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const username = asString(body.username || "").trim();
+      if (!username) {
+        writeJson(res, 400, {ok: false, message: "缺少 username"});
+        return true;
+      }
+
+      const accountStore = getViewerAccountStore(auth, deps);
+      const account = accountStore.get(username);
+      if (!account) { writeJson(res, 404, {ok: false, message: "账号不存在"}); return true; }
+
+      const {webSession, hasMaFile, maData} = await resolveWebSessionForAccount(account);
+      if (!hasMaFile || !maData || !maData.identitySecret) {
+        writeJson(res, 400, {ok: false, message: "该账号无 maFile 或缺少 identity_secret，无法获取确认列表"});
+        return true;
+      }
+
+      const confirmations = await getMarketConfirmations({
+        cookieString: webSession.cookieString,
+        identitySecret: maData.identitySecret
+      });
+      writeJson(res, 200, {ok: true, confirmations});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  // ── 批量确认市场上架 ──────────────────────────────────────
+  if (pathname === "/api/market/confirm-listings" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const username = asString(body.username || "").trim();
+      const confirmationIds = Array.isArray(body.confirmationIds) ? body.confirmationIds : [];
+      if (!username || confirmationIds.length === 0) {
+        writeJson(res, 400, {ok: false, message: "缺少 username 或 confirmationIds"});
+        return true;
+      }
+
+      const accountStore = getViewerAccountStore(auth, deps);
+      const account = accountStore.get(username);
+      if (!account) { writeJson(res, 404, {ok: false, message: "账号不存在"}); return true; }
+
+      const {webSession, hasMaFile, maData} = await resolveWebSessionForAccount(account);
+      if (!hasMaFile || !maData || !maData.identitySecret) {
+        writeJson(res, 400, {ok: false, message: "该账号无 maFile 或缺少 identity_secret，无法确认上架"});
+        return true;
+      }
+
+      const {results} = await confirmMarketListings({
+        cookieString: webSession.cookieString,
+        identitySecret: maData.identitySecret,
+        confirmationIds
+      });
+      writeJson(res, 200, {ok: true, results});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  if (pathname === "/api/market/price" && req.method === "GET") {
+    try {
+      const qs = new URL(req.url, "http://localhost").searchParams;
+      const marketHashName = qs.get("market_hash_name") || "";
+      const currency = Number(qs.get("currency")) || 23;
+      if (!marketHashName) {
+        writeJson(res, 400, {ok: false, message: "缺少 market_hash_name"});
+        return true;
+      }
+      const result = await getPriceOverview({marketHashName, currency});
+      writeJson(res, 200, {ok: result.success, ...result});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  if (pathname === "/api/market/batch-price" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const items = Array.isArray(body.items) ? body.items : [];
+      const currency = Number(body.currency) || 23;
+      if (items.length === 0) {
+        writeJson(res, 400, {ok: false, message: "缺少 items"});
+        return true;
+      }
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*"
+      });
+      const sendSse = (event, data) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+
+      for (let i = 0; i < items.length; i++) {
+        const marketHashName = asString(items[i].marketHashName || "").trim();
+        if (!marketHashName) { sendSse("price-result", {index: i, success: false, message: "名称为空"}); continue; }
+        try {
+          const result = await getPriceOverview({marketHashName, currency});
+          sendSse("price-result", {index: i, marketHashName, ...result});
+        } catch (err) {
+          sendSse("price-result", {index: i, marketHashName, success: false, message: asString(err.message || err).slice(0, 200)});
+        }
+        if (i < items.length - 1) await new Promise(r => setTimeout(r, 1500));
+      }
+
+      sendSse("done", {total: items.length});
+      res.end();
+    } catch (err) {
+      if (!res.headersSent) {
+        writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      } else {
+        try { res.end(); } catch (_) {}
+      }
+    }
+    return true;
+  }
+
+  if (pathname === "/api/accounts/check-bans" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const usernames = Array.isArray(body.usernames) ? body.usernames : [];
+      if (usernames.length === 0) {
+        writeJson(res, 400, {ok: false, message: "缺少 usernames"});
+        return true;
+      }
+
+      const accountStore = getViewerAccountStore(auth, deps);
+      const apiKey = getSteamApiKey();
+
+      // Collect steamId64 -> username mapping
+      const id64Map = new Map();
+      for (const u of usernames) {
+        const acc = accountStore.get(u);
+        if (acc && acc.steam_id64) id64Map.set(acc.steam_id64, u);
+      }
+
+      if (id64Map.size === 0) {
+        writeJson(res, 400, {ok: false, message: "没有可检测的账号（缺少 steamId64）"});
+        return true;
+      }
+
+      if (apiKey) {
+        // Batch mode — fast, single JSON response
+        const banMap = await checkBansBatch([...id64Map.keys()], apiKey);
+        const results = [];
+        for (const [sid, username] of id64Map) {
+          const banInfo = banMap.get(sid) || null;
+          const status = banInfo ? formatBanStatus(banInfo) : "未知";
+          // Persist
+          try {
+            const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
+            store.updateSteamAccountBanStatus(username, status);
+            store.close();
+          } catch (_) {}
+          results.push({username, steamId64: sid, banStatus: status, banInfo});
+        }
+        writeJson(res, 200, {ok: true, results});
+      } else {
+        // SSE mode — one by one, no API key
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*"
+        });
+        const sendSse = (event, data) => {
+          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        };
+
+        let idx = 0;
+        for (const [sid, username] of id64Map) {
+          sendSse("progress", {index: idx, total: id64Map.size, username});
+          try {
+            const acc = accountStore.get(username);
+            const {webSession} = await resolveWebSessionForAccount(acc);
+            const banInfo = await checkBanSingle({cookieString: webSession.cookieString, steamId64: sid});
+            const status = formatBanStatus(banInfo);
+            try {
+              const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
+              store.updateSteamAccountBanStatus(username, status);
+              store.close();
+            } catch (_) {}
+            sendSse("ban-result", {index: idx, username, steamId64: sid, banStatus: status, banInfo});
+          } catch (err) {
+            sendSse("ban-result", {index: idx, username, steamId64: sid, banStatus: "检测失败", error: asString(err.message || err).slice(0, 200)});
+          }
+          idx++;
+          if (idx < id64Map.size) await new Promise(r => setTimeout(r, 1000));
+        }
+        sendSse("done", {total: id64Map.size});
+        res.end();
+      }
+    } catch (err) {
+      if (!res.headersSent) {
+        writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      } else {
+        try { res.end(); } catch (_) {}
+      }
+    }
+    return true;
+  }
+
+  if (pathname === "/api/accounts/fetch-balance" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const usernames = Array.isArray(body.usernames) ? body.usernames : [];
+      if (usernames.length === 0) {
+        writeJson(res, 400, {ok: false, message: "缺少 usernames"});
+        return true;
+      }
+
+      const accountStore = getViewerAccountStore(auth, deps);
+      const results = [];
+
+      for (const u of usernames) {
+        const acc = accountStore.get(u);
+        if (!acc) { results.push({username: u, success: false, message: "账号不存在"}); continue; }
+        try {
+          const {webSession} = await resolveWebSessionForAccount(acc);
+          const balResult = await fetchBalance({
+            cookieString: webSession.cookieString,
+            accessToken: webSession.accessToken,
+            steamId64: webSession.steamId64
+          });
+          if (balResult.success) {
+            try {
+              const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
+              store.updateSteamAccountBalance(u, balResult.balance);
+              store.close();
+            } catch (_) {}
+          }
+          results.push({username: u, ...balResult});
+        } catch (err) {
+          results.push({username: u, success: false, message: asString(err.message || err).slice(0, 200)});
+        }
+      }
+
+      writeJson(res, 200, {ok: true, results});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
+    return true;
+  }
+
+  if (pathname === "/api/accounts/refresh-trade-url" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const usernames = Array.isArray(body.usernames) ? body.usernames : [];
+      if (usernames.length === 0) {
+        writeJson(res, 400, {ok: false, message: "缺少 usernames"});
+        return true;
+      }
+
+      const accountStore = getViewerAccountStore(auth, deps);
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*"
+      });
+      const sendSse = (event, data) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+
+      let successCount = 0;
+      for (let i = 0; i < usernames.length; i++) {
+        const u = usernames[i];
+        sendSse("progress", {index: i, total: usernames.length, username: u});
+        try {
+          const acc = accountStore.get(u);
+          if (!acc) { sendSse("url-result", {index: i, username: u, success: false, message: "账号不存在"}); continue; }
+          const {webSession} = await resolveWebSessionForAccount(acc);
+          const result = await fetchTradeUrl({cookieString: webSession.cookieString, steamId64: webSession.steamId64});
+          if (result.success) {
+            successCount++;
+            try {
+              const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
+              store.updateSteamAccountTradeUrl(u, result.tradeUrl);
+              store.close();
+            } catch (_) {}
+          }
+          sendSse("url-result", {index: i, username: u, ...result});
+        } catch (err) {
+          sendSse("url-result", {index: i, username: u, success: false, message: asString(err.message || err).slice(0, 200)});
+        }
+        if (i < usernames.length - 1) await new Promise(r => setTimeout(r, 800));
+      }
+
+      sendSse("done", {successCount, total: usernames.length});
+      res.end();
+    } catch (err) {
+      if (!res.headersSent) {
+        writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      } else {
+        try { res.end(); } catch (_) {}
+      }
+    }
+    return true;
+  }
+
+  if (pathname === "/api/settings/steam-api-key" && req.method === "GET") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    const key = getSteamApiKey();
+    writeJson(res, 200, {ok: true, hasKey: !!key, maskedKey: key ? key.slice(0, 4) + "..." : ""});
+    return true;
+  }
+
+  if (pathname === "/api/settings/steam-api-key" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    try {
+      const body = await readJsonBody(req);
+      const key = asString(body.key || "").trim();
+      setSteamApiKey(key);
+      writeJson(res, 200, {ok: true, message: key ? "已保存" : "已清除"});
+    } catch (err) {
+      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    }
     return true;
   }
 

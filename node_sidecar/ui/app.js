@@ -159,6 +159,7 @@ const ui = {
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel"),
   craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionProgress: document.getElementById("craftExecutionProgress"), craftExecutionOverlayPercent: document.getElementById("craftExecutionOverlayPercent"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail"),
   simulationModeSavedBtn: document.getElementById("simulationModeSavedBtn"), simulationModeWorkspaceBtn: document.getElementById("simulationModeWorkspaceBtn"), simulationSavedPresets: document.getElementById("simulationSavedPresets"), simulationWorkspace: document.getElementById("simulationWorkspace"), simulationWorkspaceActionsBar: document.getElementById("simulationWorkspaceActionsBar"), simulationSavePresetBtn: document.getElementById("simulationSavePresetBtn"), simulationCancelEditBtn: document.getElementById("simulationCancelEditBtn"), simulationLayout: document.getElementById("simulationLayout"), simulationOutputPanel: document.getElementById("simulationOutputPanel"), simulationMaterialPanel: document.getElementById("simulationMaterialPanel"), simulationOutputRoleChooser: document.getElementById("simulationOutputRoleChooser"), simulationOutputRoleChooserText: document.getElementById("simulationOutputRoleChooserText"), simulationOutputRoleSplit: document.getElementById("simulationOutputRoleSplit"), simulationMaterialRoleChooser: document.getElementById("simulationMaterialRoleChooser"), simulationMaterialRoleChooserText: document.getElementById("simulationMaterialRoleChooserText"), simulationMaterialRoleSplit: document.getElementById("simulationMaterialRoleSplit"), simulationOutputLane: document.getElementById("simulationOutputLane"), simulationMaterialLane: document.getElementById("simulationMaterialLane"), simulationPickerModal: document.getElementById("simulationPickerModal"), simulationPickerTitle: document.getElementById("simulationPickerTitle"), simulationPickerRoleBadge: document.getElementById("simulationPickerRoleBadge"), simulationPickerHint: document.getElementById("simulationPickerHint"), simulationPickerMeta: document.getElementById("simulationPickerMeta"), simulationPickerSearchInput: document.getElementById("simulationPickerSearchInput"), simulationPickerSearchBtn: document.getElementById("simulationPickerSearchBtn"), simulationPickerSearchResults: document.getElementById("simulationPickerSearchResults"), simulationPickerClose: document.getElementById("simulationPickerClose"), simulationPickerCancelBtn: document.getElementById("simulationPickerCancelBtn"), simulationCardModal: document.getElementById("simulationCardModal"), simulationCardModalTitle: document.getElementById("simulationCardModalTitle"), simulationCardModalBody: document.getElementById("simulationCardModalBody"), simulationCardModalField: document.getElementById("simulationCardModalField"), simulationCardModalWearInput: document.getElementById("simulationCardModalWearInput"), simulationCardModalWearHint: document.getElementById("simulationCardModalWearHint"), simulationCardModalReadonlyNote: document.getElementById("simulationCardModalReadonlyNote"), simulationCardModalClose: document.getElementById("simulationCardModalClose"), simulationCardModalSaveBtn: document.getElementById("simulationCardModalSaveBtn"), simulationCardModalCancelBtn: document.getElementById("simulationCardModalCancelBtn"),
+  simExportCraftModal: document.getElementById("simExportCraftModal"), simExportCraftModalTitle: document.getElementById("simExportCraftModalTitle"), simExportCraftModalClose: document.getElementById("simExportCraftModalClose"), simExportCraftMaterialList: document.getElementById("simExportCraftMaterialList"), simExportCraftAddBtn: document.getElementById("simExportCraftAddBtn"), simExportCraftSearchPanel: document.getElementById("simExportCraftSearchPanel"), simExportCraftSearchInput: document.getElementById("simExportCraftSearchInput"), simExportCraftSearchBtn: document.getElementById("simExportCraftSearchBtn"), simExportCraftSearchResults: document.getElementById("simExportCraftSearchResults"), simExportCraftName: document.getElementById("simExportCraftName"), simExportCraftTargetWear: document.getElementById("simExportCraftTargetWear"), simExportCraftMainCount: document.getElementById("simExportCraftMainCount"), simExportCraftAuxCount: document.getElementById("simExportCraftAuxCount"), simExportCraftAuxCountRow: document.getElementById("simExportCraftAuxCountRow"), simExportCraftWearMin: document.getElementById("simExportCraftWearMin"), simExportCraftWearMax: document.getElementById("simExportCraftWearMax"), simExportCraftConfirmBtn: document.getElementById("simExportCraftConfirmBtn"), simExportCraftCancelBtn: document.getElementById("simExportCraftCancelBtn"),
   batchCraftPage: document.getElementById("batchCraftPage"), navBatchCraft: document.getElementById("navBatchCraft"), batchCraftStatusText: document.getElementById("batchCraftStatusText"),
   batchCraftAddAccountBtn: document.getElementById("batchCraftAddAccountBtn"), batchCraftAccountPicker: document.getElementById("batchCraftAccountPicker"), batchCraftClearAccountsBtn: document.getElementById("batchCraftClearAccountsBtn"),
   batchCraftActiveAccountText: document.getElementById("batchCraftActiveAccountText"), batchCraftAccountCards: document.getElementById("batchCraftAccountCards"),
@@ -169,7 +170,23 @@ const ui = {
   batchCraftFastMode: document.getElementById("batchCraftFastMode"), batchCraftApproachMode: document.getElementById("batchCraftApproachMode"), batchCraftWearOffsetPct: document.getElementById("batchCraftWearOffsetPct"),
   batchCraftSplitBar: document.getElementById("batchCraftSplitBar"),
   batchCraftQueuePanel: document.getElementById("batchCraftQueuePanel"), batchCraftQueueTitle: document.getElementById("batchCraftQueueTitle"), batchCraftQueueList: document.getElementById("batchCraftQueueList"), batchCraftClearQueueBtn: document.getElementById("batchCraftClearQueueBtn"),
-  batchCraftOverlay: document.getElementById("batchCraftOverlay"), batchCraftOverlayTitle: document.getElementById("batchCraftOverlayTitle"), batchCraftOverlayDetail: document.getElementById("batchCraftOverlayDetail"), batchCraftOverlayProgressBar: document.getElementById("batchCraftOverlayProgressBar")
+  batchCraftOverlay: document.getElementById("batchCraftOverlay"), batchCraftOverlayTitle: document.getElementById("batchCraftOverlayTitle"), batchCraftOverlayDetail: document.getElementById("batchCraftOverlayDetail"), batchCraftOverlayProgressBar: document.getElementById("batchCraftOverlayProgressBar"),
+  // ═══ Web 库存管理页 ═══
+  webInventoryPage: document.getElementById("webInventoryPage"), navWebInventory: document.getElementById("navWebInventory"),
+  webInvAccountPanel: document.getElementById("webInvAccountPanel"), webInvAccountList: document.getElementById("webInvAccountList"),
+  webInvBatchBanCheck: document.getElementById("webInvBatchBanCheck"), webInvBatchTradeUrl: document.getElementById("webInvBatchTradeUrl"),
+  webInvSplitBar: document.getElementById("webInvSplitBar"), webInvMain: document.getElementById("webInvMain"),
+  webInvAccountInfo: document.getElementById("webInvAccountInfo"), webInvAccName: document.getElementById("webInvAccName"), webInvAccBalance: document.getElementById("webInvAccBalance"), webInvAccBanStatus: document.getElementById("webInvAccBanStatus"), webInvAccTradeUrl: document.getElementById("webInvAccTradeUrl"), webInvBalanceBtn: document.getElementById("webInvBalanceBtn"),
+  webInvFetchBtn: document.getElementById("webInvFetchBtn"), webInvTradableOnly: document.getElementById("webInvTradableOnly"), webInvSelectAll: document.getElementById("webInvSelectAll"), webInvSelectedCount: document.getElementById("webInvSelectedCount"),
+  webInvItemGrid: document.getElementById("webInvItemGrid"),
+  webInvActionBar: document.getElementById("webInvActionBar"), webInvActionCount: document.getElementById("webInvActionCount"), webInvTransferBtn: document.getElementById("webInvTransferBtn"), webInvSellBtn: document.getElementById("webInvSellBtn"),
+  // ═══ 市场上架弹窗 ═══
+  marketSellModal: document.getElementById("marketSellModal"), marketSellCloseBtn: document.getElementById("marketSellCloseBtn"),
+  marketSellPricePct: document.getElementById("marketSellPricePct"), marketSellApplyPctBtn: document.getElementById("marketSellApplyPctBtn"), marketSellFetchPricesBtn: document.getElementById("marketSellFetchPricesBtn"),
+  marketSellItemList: document.getElementById("marketSellItemList"), marketSellProgress: document.getElementById("marketSellProgress"), marketSellProgressFill: document.getElementById("marketSellProgressFill"), marketSellProgressText: document.getElementById("marketSellProgressText"),
+  marketSellSummary: document.getElementById("marketSellSummary"), marketSellStartBtn: document.getElementById("marketSellStartBtn"),
+  // ═══ Steam API Key 弹窗 ═══
+  steamApiKeyModal: document.getElementById("steamApiKeyModal"), steamApiKeyCloseBtn: document.getElementById("steamApiKeyCloseBtn"), steamApiKeyInput: document.getElementById("steamApiKeyInput"), steamApiKeySaveBtn: document.getElementById("steamApiKeySaveBtn")
 };
 
 const authSessionStore = typeof window !== "undefined" ? (window.cs2AlchemyAuthSessionStore || null) : null;
@@ -202,6 +219,11 @@ let remarkModalAccount = "";
 let confirmModalResolver = null;
 let craftAssistPresetModalResolver = null;
 let craftAssistPresetModalOptions = null;
+let simExportCraftResolver = null;
+let simExportCraftMaterials = [];
+let simExportCraftSearchResults = [];
+let simExportCraftSearchLoading = false;
+let simExportCraftSearchSeq = 0;
 let targetDrawerDrag = {active: false, offsetX: 0, offsetY: 0};
 let craftSplitDrag = {active: false, startX: 0, startWidth: 360};
 let craftAssistOverlayDrag = {active: false, startY: 0, startHeight: 0};
@@ -2915,7 +2937,7 @@ function showPage(pageId) {
   if (ui.navShell && ui.navShell.contains(document.activeElement) && typeof document.activeElement.blur === "function") {
     document.activeElement.blur();
   }
-  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft], ["simulationPage", ui.navSimulation], ["batchCraftPage", ui.navBatchCraft]]) {
+  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft], ["simulationPage", ui.navSimulation], ["batchCraftPage", ui.navBatchCraft], ["webInventoryPage", ui.navWebInventory]]) {
     const active = id === pageId;
     document.getElementById(id).classList.toggle("hidden", !active);
     if (btn) {
@@ -2939,6 +2961,9 @@ function showPage(pageId) {
     applyBatchCraftPresetWidth();
     renderBatchCraftPage();
     void ensureBatchCraftAccountsCached();
+  }
+  if (pageId === "webInventoryPage") {
+    renderWebInvAccountList();
   }
 }
 function syncNavDrawerDom() {
@@ -3167,7 +3192,7 @@ function renderSavedAccounts() {
     const webInvBtn = document.createElement("button");
     webInvBtn.textContent = "Web库存";
     webInvBtn.title = "查看 Web 库存（可选择物品转移）";
-    webInvBtn.onclick = (e) => { e.stopPropagation(); openWebInventoryModal(row.username); };
+    webInvBtn.onclick = (e) => { e.stopPropagation(); showPage("webInventoryPage"); webInvSelectAccount(row.username); };
 
     actions.append(remarkBtn, webInvBtn, delBtn);
     const sub = document.createElement("div");
@@ -10417,7 +10442,7 @@ function renderSimulationSavedPresets() {
       titleText: summary.presetName,
       sublineHtml: renderTradeupSimulationSavedCardSubline(summary.collectionText),
       extraClasses: `simulation-saved-card${active ? " simulation-anchor-active" : ""}`,
-      extraArtHtml: `<button class="simulation-saved-remove-btn" type="button" data-simulation-delete-preset-id="${String(preset && preset.id || "").trim()}" aria-label="删除该配方" title="删除该配方">×</button>`,
+      extraArtHtml: `<button class="simulation-saved-export-btn" type="button" data-simulation-export-preset-id="${String(preset && preset.id || "").trim()}" aria-label="导出到快速选材" title="导出到快速选材">⇥</button><button class="simulation-saved-remove-btn" type="button" data-simulation-delete-preset-id="${String(preset && preset.id || "").trim()}" aria-label="删除该配方" title="删除该配方">×</button>`,
       dataAttrs: `data-simulation-preset-id="${String(preset && preset.id || "").trim()}"`,
       ariaLabel: `查看已保存配方 ${summary.presetName}`,
       actionBadgeText: "",
@@ -10437,6 +10462,19 @@ function renderSimulationSavedPresets() {
   };
   for (const card of ui.simulationSavedPresets.querySelectorAll("[data-simulation-preset-id]")) {
     const removeBtn = card.querySelector("[data-simulation-delete-preset-id]");
+    const exportBtn = card.querySelector("[data-simulation-export-preset-id]");
+    if (exportBtn) {
+      exportBtn.onclick = async (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        const presetId = String(exportBtn.getAttribute("data-simulation-export-preset-id") || "").trim();
+        if (!presetId) return;
+        const list = Array.isArray(state.simulationPresets) ? state.simulationPresets : [];
+        const preset = list.find((entry) => String(entry && entry.id || "").trim() === presetId);
+        if (!preset) return;
+        await openSimExportCraftModal(preset);
+      };
+    }
     if (removeBtn) {
       removeBtn.onclick = async (evt) => {
         evt.preventDefault();
@@ -10491,6 +10529,305 @@ function renderSimulationWorkspaceActionsBar(preset) {
   }
   if (ui.simulationCancelEditBtn) {
     ui.simulationCancelEditBtn.disabled = !!state.simulationPersisting;
+  }
+}
+// ── Simulation Export to Craft Assist ──
+function extractSimExportCraftMaterials(preset) {
+  const mainMat = sanitizeTradeupSimulationTargetItem(preset && preset.main_material);
+  const auxMat = sanitizeTradeupSimulationTargetItem(preset && preset.aux_material);
+  const mainCollection = String(mainMat && mainMat.collection || "").trim();
+  const auxCollection = String(auxMat && auxMat.collection || "").trim();
+  const rows = Array.isArray(preset && preset.material_rows) ? preset.material_rows : [];
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const materials = Array.isArray(row && row.materials) ? row.materials : [];
+    for (const item of materials) {
+      const t = sanitizeTradeupSimulationTargetItem(item);
+      if (!t) continue;
+      const key = String(t.markethashname || "").trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const col = String(t.collection || "").trim();
+      let role = "main";
+      if (auxCollection && col === auxCollection && col !== mainCollection) role = "aux";
+      else if (auxCollection && col === auxCollection && col === mainCollection) {
+        const auxKey = String(auxMat && auxMat.markethashname || "").trim();
+        if (key === auxKey) role = "aux";
+      }
+      out.push({
+        markethashname: key,
+        basename: String(t.basename || t.basemarkethashname || key).trim(),
+        role,
+        artUrl: String(t.goods_icon_url || t.goods_share_thumbnail_url || "").trim(),
+        collection: col
+      });
+    }
+  }
+  if (!out.length) {
+    if (mainMat) {
+      const mk = String(mainMat.markethashname || "").trim();
+      if (mk && !seen.has(mk)) {
+        seen.add(mk);
+        out.push({markethashname: mk, basename: String(mainMat.basename || mainMat.basemarkethashname || mk).trim(), role: "main", artUrl: String(mainMat.goods_icon_url || "").trim(), collection: mainCollection});
+      }
+    }
+    if (auxMat) {
+      const mk = String(auxMat.markethashname || "").trim();
+      if (mk && !seen.has(mk)) {
+        seen.add(mk);
+        out.push({markethashname: mk, basename: String(auxMat.basename || auxMat.basemarkethashname || mk).trim(), role: "aux", artUrl: String(auxMat.goods_icon_url || "").trim(), collection: auxCollection});
+      }
+    }
+  }
+  return out;
+}
+function renderSimExportCraftMaterialList() {
+  if (!ui.simExportCraftMaterialList) return;
+  if (!simExportCraftMaterials.length) {
+    ui.simExportCraftMaterialList.innerHTML = '<div class="sim-export-craft-search-empty">暂无材料</div>';
+    return;
+  }
+  ui.simExportCraftMaterialList.innerHTML = simExportCraftMaterials.map((m, i) => {
+    const label = String(m.basename || m.markethashname || "").trim();
+    const shortLabel = label.length > 36 ? label.slice(0, 34) + "…" : label;
+    const role = m.role === "aux" ? "aux" : "main";
+    const roleText = role === "aux" ? "辅料" : "主料";
+    return `<div class="sim-export-craft-material-row" data-sim-export-idx="${i}">` +
+      `<span class="sim-export-craft-material-name" title="${escapeHtmlAttribute(label)}">${escapeHtml(shortLabel)}</span>` +
+      `<button class="sim-export-craft-role-btn" type="button" data-role="${role}" data-sim-export-role-idx="${i}" title="点击切换角色">${roleText}</button>` +
+      `<button class="sim-export-craft-remove-btn" type="button" data-sim-export-remove-idx="${i}" title="移除该材料">×</button>` +
+      `</div>`;
+  }).join("");
+  for (const btn of ui.simExportCraftMaterialList.querySelectorAll("[data-sim-export-role-idx]")) {
+    btn.onclick = (evt) => {
+      evt.preventDefault();
+      const idx = Number(btn.getAttribute("data-sim-export-role-idx"));
+      if (!Number.isInteger(idx) || idx < 0 || idx >= simExportCraftMaterials.length) return;
+      simExportCraftMaterials[idx].role = simExportCraftMaterials[idx].role === "aux" ? "main" : "aux";
+      renderSimExportCraftMaterialList();
+      syncSimExportCraftAuxVisibility();
+    };
+  }
+  for (const btn of ui.simExportCraftMaterialList.querySelectorAll("[data-sim-export-remove-idx]")) {
+    btn.onclick = (evt) => {
+      evt.preventDefault();
+      const idx = Number(btn.getAttribute("data-sim-export-remove-idx"));
+      if (!Number.isInteger(idx) || idx < 0 || idx >= simExportCraftMaterials.length) return;
+      simExportCraftMaterials.splice(idx, 1);
+      renderSimExportCraftMaterialList();
+      syncSimExportCraftAuxVisibility();
+    };
+  }
+}
+function syncSimExportCraftAuxVisibility() {
+  const hasAux = simExportCraftMaterials.some((m) => m.role === "aux");
+  if (ui.simExportCraftAuxCountRow) {
+    ui.simExportCraftAuxCountRow.classList.toggle("hidden", !hasAux);
+  }
+  if (!hasAux && ui.simExportCraftMainCount) {
+    ui.simExportCraftMainCount.value = "10";
+    if (ui.simExportCraftAuxCount) ui.simExportCraftAuxCount.value = "0";
+  }
+}
+function closeSimExportCraftModal(result) {
+  if (ui.simExportCraftModal) ui.simExportCraftModal.classList.add("hidden");
+  if (ui.simExportCraftSearchPanel) ui.simExportCraftSearchPanel.classList.add("hidden");
+  simExportCraftMaterials = [];
+  simExportCraftSearchResults = [];
+  simExportCraftSearchLoading = false;
+  const resolver = simExportCraftResolver;
+  simExportCraftResolver = null;
+  if (typeof resolver === "function") resolver(result);
+}
+function openSimExportCraftModal(preset) {
+  simExportCraftMaterials = extractSimExportCraftMaterials(preset);
+  simExportCraftSearchResults = [];
+  simExportCraftSearchLoading = false;
+  if (ui.simExportCraftSearchPanel) ui.simExportCraftSearchPanel.classList.add("hidden");
+  if (ui.simExportCraftSearchResults) ui.simExportCraftSearchResults.innerHTML = "";
+  if (ui.simExportCraftSearchInput) ui.simExportCraftSearchInput.value = "";
+  const presetName = String(preset && preset.name || "").trim();
+  if (ui.simExportCraftName) ui.simExportCraftName.value = presetName;
+  const anchorWear = Number(preset && preset.active_anchor_abs_wear);
+  if (ui.simExportCraftTargetWear) {
+    ui.simExportCraftTargetWear.value = Number.isFinite(anchorWear) ? anchorWear.toFixed(8) : "";
+  }
+  const hasAux = simExportCraftMaterials.some((m) => m.role === "aux");
+  if (ui.simExportCraftMainCount) ui.simExportCraftMainCount.value = hasAux ? "5" : "10";
+  if (ui.simExportCraftAuxCount) ui.simExportCraftAuxCount.value = hasAux ? "5" : "0";
+  if (ui.simExportCraftWearMin) ui.simExportCraftWearMin.value = "0";
+  if (ui.simExportCraftWearMax) ui.simExportCraftWearMax.value = "1";
+  syncSimExportCraftAuxVisibility();
+  renderSimExportCraftMaterialList();
+  if (!ui.simExportCraftModal) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    simExportCraftResolver = resolve;
+    ui.simExportCraftModal.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      if (ui.simExportCraftName) ui.simExportCraftName.focus();
+    });
+  });
+}
+function confirmSimExportCraftModal() {
+  const name = String(ui.simExportCraftName && ui.simExportCraftName.value || "").trim();
+  if (!name) {
+    showErrorToast("请输入配置名称");
+    return;
+  }
+  const targetWear = parseOptionalWear01(ui.simExportCraftTargetWear && ui.simExportCraftTargetWear.value);
+  if (targetWear == null) {
+    showErrorToast("请输入有效的目标磨损（0~1）");
+    return;
+  }
+  if (!simExportCraftMaterials.length) {
+    showErrorToast("至少需要一个材料");
+    return;
+  }
+  const mainCount = Math.max(1, Math.min(10, Math.round(Number(ui.simExportCraftMainCount && ui.simExportCraftMainCount.value || 0) || 0)));
+  const auxCount = Math.max(0, Math.min(9, Math.round(Number(ui.simExportCraftAuxCount && ui.simExportCraftAuxCount.value || 0) || 0)));
+  const rawWearMin = parseOptionalWear01(ui.simExportCraftWearMin && ui.simExportCraftWearMin.value);
+  const rawWearMax = parseOptionalWear01(ui.simExportCraftWearMax && ui.simExportCraftWearMax.value);
+  const wearMin = rawWearMin != null ? clampWear01(rawWearMin, 0) : 0;
+  const wearMax = rawWearMax != null ? clampWear01(rawWearMax, 1) : 1;
+  const finalWearMin = Math.min(wearMin, wearMax);
+  const finalWearMax = Math.max(wearMin, wearMax);
+  const mainNames = simExportCraftMaterials.filter((m) => m.role !== "aux").map((m) => m.markethashname);
+  const auxNames = simExportCraftMaterials.filter((m) => m.role === "aux").map((m) => m.markethashname);
+  const materials = [];
+  if (mainNames.length) {
+    materials.push({
+      id: makeCraftAssistUid("preset_material"),
+      role: "main",
+      count: mainCount,
+      direction: normalizeCraftAssistDirection("main"),
+      disable_direction_limit: false,
+      names: mainNames,
+      name: mainNames[0],
+      wear_min: finalWearMin,
+      wear_max: finalWearMax,
+      custom_range: true,
+      items: mainNames.map((n, idx) => ({
+        id: `preset_material_main_${idx + 1}`,
+        name: n,
+        wear_filter_mode: "relative",
+        wear_min: finalWearMin,
+        wear_max: finalWearMax,
+        custom_range: true
+      }))
+    });
+  }
+  if (auxNames.length && auxCount > 0) {
+    materials.push({
+      id: makeCraftAssistUid("preset_material"),
+      role: "aux",
+      count: auxCount,
+      direction: normalizeCraftAssistDirection("aux"),
+      disable_direction_limit: false,
+      names: auxNames,
+      name: auxNames[0],
+      wear_min: finalWearMin,
+      wear_max: finalWearMax,
+      custom_range: true,
+      items: auxNames.map((n, idx) => ({
+        id: `preset_material_aux_${idx + 1}`,
+        name: n,
+        wear_filter_mode: "relative",
+        wear_min: finalWearMin,
+        wear_max: finalWearMax,
+        custom_range: true
+      }))
+    });
+  }
+  if (!materials.length) {
+    showErrorToast("至少需要一个有效材料");
+    return;
+  }
+  const preset = sanitizeCraftAssistPresetPayload({
+    id: makeCraftAssistUid("preset"),
+    name,
+    target_wear: targetWear,
+    materials,
+    created_at: Date.now(),
+    updated_at: Date.now()
+  });
+  if (!preset) {
+    showErrorToast("配置验证失败，请检查输入");
+    return;
+  }
+  const list = Array.isArray(state.craftAssistPresets) ? [...state.craftAssistPresets] : [];
+  list.push(preset);
+  state.craftAssistPresets = normalizeCraftAssistPresetList(list);
+  saveCraftAssistPresetsToStorage();
+  setSummary(`已导出配置「${name}」到快速选材`);
+  closeSimExportCraftModal(true);
+}
+async function searchSimExportCraftItems(query) {
+  const searchText = String(query || "").trim();
+  if (!searchText) {
+    simExportCraftSearchResults = [];
+    simExportCraftSearchLoading = false;
+    renderSimExportCraftSearchResults();
+    return;
+  }
+  simExportCraftSearchLoading = true;
+  simExportCraftSearchSeq = Math.max(0, Number(simExportCraftSearchSeq || 0) || 0) + 1;
+  const seq = simExportCraftSearchSeq;
+  renderSimExportCraftSearchResults();
+  try {
+    const data = await api(`/api/simulation/tradeup/search-items?q=${encodeURIComponent(searchText)}`);
+    if (seq !== simExportCraftSearchSeq) return;
+    simExportCraftSearchLoading = false;
+    simExportCraftSearchResults = Array.isArray(data && data.items) ? data.items : [];
+    renderSimExportCraftSearchResults();
+  } catch (_) {
+    if (seq !== simExportCraftSearchSeq) return;
+    simExportCraftSearchLoading = false;
+    simExportCraftSearchResults = [];
+    renderSimExportCraftSearchResults();
+  }
+}
+function renderSimExportCraftSearchResults() {
+  if (!ui.simExportCraftSearchResults) return;
+  if (simExportCraftSearchLoading) {
+    ui.simExportCraftSearchResults.innerHTML = '<div class="sim-export-craft-search-empty">搜索中...</div>';
+    return;
+  }
+  if (!simExportCraftSearchResults.length) {
+    ui.simExportCraftSearchResults.innerHTML = '<div class="sim-export-craft-search-empty">无结果</div>';
+    return;
+  }
+  const existingKeys = new Set(simExportCraftMaterials.map((m) => m.markethashname));
+  ui.simExportCraftSearchResults.innerHTML = simExportCraftSearchResults.map((item, i) => {
+    const t = sanitizeTradeupSimulationTargetItem(item);
+    if (!t) return "";
+    const key = String(t.markethashname || "").trim();
+    const label = String(t.basename || t.basemarkethashname || key).trim();
+    const shortLabel = label.length > 40 ? label.slice(0, 38) + "…" : label;
+    const exists = existingKeys.has(key);
+    return `<button class="sim-export-craft-search-item${exists ? " is-disabled" : ""}" type="button" data-sim-export-search-idx="${i}"${exists ? ' disabled' : ''} title="${escapeHtmlAttribute(label)}">${escapeHtml(shortLabel)}${exists ? " (已添加)" : ""}</button>`;
+  }).join("");
+  for (const btn of ui.simExportCraftSearchResults.querySelectorAll("[data-sim-export-search-idx]:not([disabled])")) {
+    btn.onclick = (evt) => {
+      evt.preventDefault();
+      const idx = Number(btn.getAttribute("data-sim-export-search-idx"));
+      const item = simExportCraftSearchResults[idx];
+      const t = sanitizeTradeupSimulationTargetItem(item);
+      if (!t) return;
+      const key = String(t.markethashname || "").trim();
+      if (!key) return;
+      if (simExportCraftMaterials.some((m) => m.markethashname === key)) return;
+      simExportCraftMaterials.push({
+        markethashname: key,
+        basename: String(t.basename || t.basemarkethashname || key).trim(),
+        role: "main",
+        artUrl: String(t.goods_icon_url || t.goods_share_thumbnail_url || "").trim(),
+        collection: String(t.collection || "").trim()
+      });
+      renderSimExportCraftMaterialList();
+      syncSimExportCraftAuxVisibility();
+      renderSimExportCraftSearchResults();
+    };
   }
 }
 function getTradeupSimulationRoleMeta(slotName) {
@@ -13522,13 +13859,61 @@ function renderBatchCraftQueue() {
       globalIdx += 1;
       const itemIds = Array.isArray(recipe.item_ids) ? recipe.item_ids : [];
       const recipeRows = itemIds.map((id) => rowsById.get(id)).filter(Boolean);
+
+      /* ── done: 与炼金汰换页对齐，直接渲染产物卡片 ── */
+      if (recipe.status === "done") {
+        const doneRow = document.createElement("div");
+        doneRow.className = `craft-queue-item done${!state.batchCraftBusy ? " deletable" : ""}`;
+        const gainedIds = normalizeCraftRecipeItemIds(recipe.result && recipe.result.gained_ids);
+        const gainedRows = gainedIds.map((id) => rowsById.get(id)).filter(Boolean);
+        if (gainedRows.length) {
+          const cardGrid = document.createElement("div");
+          cardGrid.className = "craft-queue-result-card-grid";
+          for (const gr of gainedRows) {
+            cardGrid.append(makeCraftQueueResultCardNode(gr));
+          }
+          doneRow.append(cardGrid);
+        } else {
+          const resultWrap = document.createElement("div");
+          resultWrap.className = "craft-queue-result";
+          const resultTitle = document.createElement("div");
+          resultTitle.className = "craft-queue-result-title";
+          resultTitle.textContent = "产物：待确认";
+          resultWrap.append(resultTitle);
+          doneRow.append(resultWrap);
+        }
+        const accountLabel = document.createElement("div");
+        accountLabel.className = "batch-craft-account-label";
+        accountLabel.textContent = accountDisplayName;
+        doneRow.append(accountLabel);
+        if (!state.batchCraftBusy) {
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "craft-queue-card-delete craft-queue-card-delete-floating";
+          removeBtn.title = "删除该配方";
+          removeBtn.setAttribute("aria-label", "删除该配方");
+          removeBtn.textContent = "−";
+          removeBtn.onclick = () => {
+            entry.recipes = entry.recipes.filter((r) => r.id !== recipe.id);
+            if (!entry.recipes.length) {
+              state.batchCraftQueue = state.batchCraftQueue.filter((e) => e !== entry);
+            }
+            renderBatchCraftQueue();
+          };
+          doneRow.append(removeBtn);
+        }
+        ui.batchCraftQueueList.append(doneRow);
+        continue;
+      }
+
+      /* ── pending / failed: 保持原有 slot grid 渲染 ── */
       const title = buildPendingCraftQueueTitle({pendingIndex: globalIdx, recipeRows});
-      const statusClass = recipe.status === "done" ? " done" : recipe.status === "failed" ? " prepare-failed" : "";
+      const statusClass = recipe.status === "failed" ? " prepare-failed" : "";
       const card = renderCraftQueueSlots({
         title,
         itemIds,
         rowsById,
-        showDeleteAction: !state.batchCraftBusy && recipe.status !== "done",
+        showDeleteAction: !state.batchCraftBusy,
         onRemove: () => {
           entry.recipes = entry.recipes.filter((r) => r.id !== recipe.id);
           if (!entry.recipes.length) {
@@ -13544,18 +13929,6 @@ function renderBatchCraftQueue() {
       accountLabel.className = "batch-craft-account-label";
       accountLabel.textContent = accountDisplayName;
       card.append(accountLabel);
-      if (recipe.status === "done" && recipe.result) {
-        const gainedIds = normalizeCraftRecipeItemIds(recipe.result.gained_ids);
-        const gainedRows = gainedIds.map((id) => rowsById.get(id)).filter(Boolean);
-        if (gainedRows.length) {
-          const cardGrid = document.createElement("div");
-          cardGrid.className = "craft-queue-result-card-grid";
-          for (const gr of gainedRows) {
-            cardGrid.append(makeCraftQueueResultCardNode(gr));
-          }
-          card.append(cardGrid);
-        }
-      }
       ui.batchCraftQueueList.append(card);
     }
   }
@@ -14238,6 +14611,64 @@ function bindEvents() {
       }
     });
   }
+  // ── Simulation Export to Craft Assist modal events ──
+  if (ui.simExportCraftModalClose) {
+    ui.simExportCraftModalClose.onclick = () => closeSimExportCraftModal(null);
+  }
+  if (ui.simExportCraftCancelBtn) {
+    ui.simExportCraftCancelBtn.onclick = () => closeSimExportCraftModal(null);
+  }
+  if (ui.simExportCraftConfirmBtn) {
+    ui.simExportCraftConfirmBtn.onclick = () => confirmSimExportCraftModal();
+  }
+  if (ui.simExportCraftModal) {
+    ui.simExportCraftModal.addEventListener("click", (evt) => {
+      if (evt.target === ui.simExportCraftModal) closeSimExportCraftModal(null);
+    });
+    ui.simExportCraftModal.addEventListener("keydown", (evt) => {
+      if (evt.key === "Escape") closeSimExportCraftModal(null);
+    });
+  }
+  if (ui.simExportCraftAddBtn) {
+    ui.simExportCraftAddBtn.onclick = () => {
+      if (!ui.simExportCraftSearchPanel) return;
+      const isHidden = ui.simExportCraftSearchPanel.classList.contains("hidden");
+      ui.simExportCraftSearchPanel.classList.toggle("hidden", !isHidden);
+      if (isHidden && ui.simExportCraftSearchInput) {
+        ui.simExportCraftSearchInput.focus();
+      }
+    };
+  }
+  if (ui.simExportCraftSearchBtn) {
+    ui.simExportCraftSearchBtn.onclick = () => {
+      const query = ui.simExportCraftSearchInput ? ui.simExportCraftSearchInput.value : "";
+      void searchSimExportCraftItems(query);
+    };
+  }
+  if (ui.simExportCraftSearchInput) {
+    ui.simExportCraftSearchInput.onkeydown = (evt) => {
+      if (evt.key === "Enter") {
+        evt.preventDefault();
+        void searchSimExportCraftItems(ui.simExportCraftSearchInput.value);
+      }
+    };
+  }
+  if (ui.simExportCraftMainCount && ui.simExportCraftAuxCount) {
+    ui.simExportCraftMainCount.oninput = () => {
+      const mainVal = Math.max(1, Math.min(10, Number(ui.simExportCraftMainCount.value) || 1));
+      ui.simExportCraftMainCount.value = String(mainVal);
+      const hasAux = simExportCraftMaterials.some((m) => m.role === "aux");
+      if (hasAux) {
+        const auxVal = Math.max(0, 10 - mainVal);
+        ui.simExportCraftAuxCount.value = String(auxVal);
+      }
+    };
+    ui.simExportCraftAuxCount.oninput = () => {
+      const auxVal = Math.max(0, Math.min(9, Number(ui.simExportCraftAuxCount.value) || 0));
+      ui.simExportCraftAuxCount.value = String(auxVal);
+      ui.simExportCraftMainCount.value = String(Math.max(1, 10 - auxVal));
+    };
+  }
   if (ui.navShell) {
     ui.navShell.addEventListener("mouseenter", () => {
       setNavDrawerOpen(true);
@@ -14276,6 +14707,7 @@ function bindEvents() {
   ui.navCraft.onclick = () => showPage("craftPage");
   ui.navSimulation.onclick = () => showPage("simulationPage");
   if (ui.navBatchCraft) ui.navBatchCraft.onclick = () => showPage("batchCraftPage");
+  if (ui.navWebInventory) ui.navWebInventory.onclick = () => showPage("webInventoryPage");
   syncNavDrawerDom();
 
   if (ui.simulationModeSavedBtn) {
@@ -15356,7 +15788,621 @@ async function startBatchImport() {
   try { await loadAccounts(); } catch (_) {}
 }
 
-// ===== Web 库存查看 =====
+// ═══════════════════════════════════════════════════════════════════════════
+// Web 库存管理页
+// ═══════════════════════════════════════════════════════════════════════════
+
+const webInvState = {
+  selectedAccount: null,
+  inventoryCache: new Map(),
+  selectedAssetIds: new Set(),
+  cacheTtlMs: 5 * 60 * 1000,
+  splitDragging: false,
+  panelWidth: 220
+};
+
+function renderWebInvAccountList() {
+  if (!ui.webInvAccountList) return;
+  const wrap = ui.webInvAccountList;
+  wrap.replaceChildren();
+  const accounts = state.savedAccounts || [];
+  for (const acc of accounts) {
+    const item = document.createElement("div");
+    item.className = "web-inv-account-item" + (webInvState.selectedAccount === acc.username ? " selected" : "");
+    const avatar = document.createElement("div");
+    avatar.className = "web-inv-account-item-avatar";
+    if (acc.avatar_url) {
+      const img = document.createElement("img");
+      img.src = acc.avatar_url;
+      img.width = 28; img.height = 28;
+      avatar.append(img);
+    }
+    const name = document.createElement("span");
+    name.className = "web-inv-account-item-name";
+    name.textContent = acc.steam_name || acc.username;
+    item.append(avatar, name);
+    if (acc.ban_status) {
+      const badge = document.createElement("span");
+      badge.className = "web-inv-account-item-badge " + (acc.ban_status.includes("正常") ? "ban-ok" : acc.ban_status.includes("🟡") ? "ban-warn" : "ban-bad");
+      badge.textContent = acc.ban_status.includes("正常") ? "正常" : "封禁";
+      badge.title = acc.ban_status;
+      item.append(badge);
+    }
+    item.onclick = () => webInvSelectAccount(acc.username);
+    wrap.append(item);
+  }
+}
+
+function webInvSelectAccount(username) {
+  webInvState.selectedAccount = username;
+  webInvState.selectedAssetIds.clear();
+  renderWebInvAccountList();
+  renderWebInvAccountInfo();
+  renderWebInvItemGrid();
+  updateWebInvActionBar();
+}
+
+function renderWebInvAccountInfo() {
+  if (!ui.webInvAccountInfo) return;
+  const username = webInvState.selectedAccount;
+  if (!username) {
+    ui.webInvAccountInfo.classList.add("hidden");
+    return;
+  }
+  ui.webInvAccountInfo.classList.remove("hidden");
+  const acc = (state.savedAccounts || []).find(a => a.username === username);
+  if (!acc) return;
+  ui.webInvAccName.textContent = acc.steam_name || acc.username;
+  ui.webInvAccBalance.textContent = acc.balance || "-";
+  ui.webInvAccBanStatus.textContent = acc.ban_status || "-";
+  const tradeUrl = acc.trade_url || "";
+  ui.webInvAccTradeUrl.textContent = tradeUrl ? tradeUrl.slice(0, 50) + (tradeUrl.length > 50 ? "..." : "") : "-";
+  ui.webInvAccTradeUrl.title = tradeUrl || "无交易链接";
+  ui.webInvAccTradeUrl.onclick = () => {
+    if (tradeUrl) { navigator.clipboard.writeText(tradeUrl).catch(() => {}); }
+  };
+}
+
+function renderWebInvItemGrid() {
+  if (!ui.webInvItemGrid) return;
+  const grid = ui.webInvItemGrid;
+  grid.replaceChildren();
+  const username = webInvState.selectedAccount;
+  if (!username) return;
+  const cached = webInvState.inventoryCache.get(username);
+  if (!cached) {
+    const hint = document.createElement("div");
+    hint.className = "web-inv-grid-empty";
+    hint.textContent = "点击「拉取库存」获取物品";
+    grid.append(hint);
+    return;
+  }
+  let items = cached.items || [];
+  if (ui.webInvTradableOnly && ui.webInvTradableOnly.checked) {
+    items = items.filter(it => it.tradable);
+  }
+  if (items.length === 0) {
+    const hint = document.createElement("div");
+    hint.className = "web-inv-grid-empty";
+    hint.textContent = "库存为空";
+    grid.append(hint);
+    return;
+  }
+  for (const item of items) {
+    const card = document.createElement("div");
+    card.className = "web-inv-item-card" + (webInvState.selectedAssetIds.has(item.assetid) ? " selected" : "");
+    const img = document.createElement("img");
+    img.src = item.icon_url ? `https://community.akamai.steamstatic.com/economy/image/${item.icon_url}/96fx96f` : "";
+    img.alt = item.market_hash_name || item.name || "";
+    img.loading = "lazy";
+    const label = document.createElement("div");
+    label.className = "web-inv-item-label";
+    label.textContent = item.market_hash_name || item.name || "Unknown";
+    label.title = label.textContent;
+    card.append(img, label);
+    if (!item.tradable) {
+      card.classList.add("not-tradable");
+    }
+    card.onclick = () => {
+      if (webInvState.selectedAssetIds.has(item.assetid)) {
+        webInvState.selectedAssetIds.delete(item.assetid);
+        card.classList.remove("selected");
+      } else {
+        webInvState.selectedAssetIds.add(item.assetid);
+        card.classList.add("selected");
+      }
+      updateWebInvActionBar();
+    };
+    grid.append(card);
+  }
+}
+
+function updateWebInvActionBar() {
+  const count = webInvState.selectedAssetIds.size;
+  if (ui.webInvSelectedCount) ui.webInvSelectedCount.textContent = `已选 ${count} 件`;
+  if (ui.webInvActionBar) ui.webInvActionBar.classList.toggle("hidden", count === 0);
+  if (ui.webInvActionCount) ui.webInvActionCount.textContent = `${count} 件物品`;
+}
+
+async function webInvFetchInventory() {
+  const username = webInvState.selectedAccount;
+  if (!username) return;
+  if (ui.webInvFetchBtn) { ui.webInvFetchBtn.disabled = true; ui.webInvFetchBtn.textContent = "拉取中..."; }
+  try {
+    const resp = await fetch(`/api/steam/single-inventory`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username})
+    });
+    const data = await resp.json();
+    if (data.ok && data.items) {
+      webInvState.inventoryCache.set(username, {items: data.items, fetchedAt: Date.now()});
+      webInvState.selectedAssetIds.clear();
+      renderWebInvItemGrid();
+      updateWebInvActionBar();
+    } else {
+      alert("拉取失败: " + (data.message || "未知错误"));
+    }
+  } catch (err) {
+    alert("拉取失败: " + err.message);
+  } finally {
+    if (ui.webInvFetchBtn) { ui.webInvFetchBtn.disabled = false; ui.webInvFetchBtn.textContent = "拉取库存"; }
+  }
+}
+
+function webInvSelectAll() {
+  const username = webInvState.selectedAccount;
+  if (!username) return;
+  const cached = webInvState.inventoryCache.get(username);
+  if (!cached) return;
+  let items = cached.items || [];
+  if (ui.webInvTradableOnly && ui.webInvTradableOnly.checked) {
+    items = items.filter(it => it.tradable);
+  }
+  const allSelected = items.length > 0 && items.every(it => webInvState.selectedAssetIds.has(it.assetid));
+  if (allSelected) {
+    webInvState.selectedAssetIds.clear();
+  } else {
+    for (const it of items) webInvState.selectedAssetIds.add(it.assetid);
+  }
+  renderWebInvItemGrid();
+  updateWebInvActionBar();
+}
+
+async function webInvFetchBalance() {
+  const username = webInvState.selectedAccount;
+  if (!username) return;
+  if (ui.webInvBalanceBtn) { ui.webInvBalanceBtn.disabled = true; ui.webInvBalanceBtn.textContent = "查询中..."; }
+  try {
+    const resp = await fetch("/api/accounts/fetch-balance", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({usernames: [username]})
+    });
+    const data = await resp.json();
+    if (data.ok && data.results && data.results.length > 0) {
+      const r = data.results[0];
+      if (r.success) {
+        const acc = (state.savedAccounts || []).find(a => a.username === username);
+        if (acc) acc.balance = r.balance;
+        renderWebInvAccountInfo();
+      } else {
+        alert("余额查询失败: " + (r.message || "未知错误"));
+      }
+    }
+  } catch (err) {
+    alert("余额查询失败: " + err.message);
+  } finally {
+    if (ui.webInvBalanceBtn) { ui.webInvBalanceBtn.disabled = false; ui.webInvBalanceBtn.textContent = "查询余额"; }
+  }
+}
+
+async function webInvBatchBanCheck() {
+  if (ui.webInvBatchBanCheck) { ui.webInvBatchBanCheck.disabled = true; ui.webInvBatchBanCheck.textContent = "检测中..."; }
+  try {
+    const accounts = state.savedAccounts || [];
+    const usernames = accounts.map(a => a.username);
+    if (usernames.length === 0) return;
+    const resp = await fetch("/api/accounts/check-bans", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({usernames})
+    });
+    const ct = resp.headers.get("content-type") || "";
+    if (ct.includes("text/event-stream")) {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream: true});
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        let eventName = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) eventName = line.slice(7).trim();
+          else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventName === "ban-result" && data.username) {
+                const acc = accounts.find(a => a.username === data.username);
+                if (acc) acc.ban_status = data.banStatus || "";
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      renderWebInvAccountList();
+      renderWebInvAccountInfo();
+    } else {
+      const data = await resp.json();
+      if (data.ok && data.results) {
+        for (const r of data.results) {
+          const acc = accounts.find(a => a.username === r.username);
+          if (acc) acc.ban_status = r.banStatus || "";
+        }
+        renderWebInvAccountList();
+        renderWebInvAccountInfo();
+      }
+    }
+  } catch (err) {
+    alert("封禁检测失败: " + err.message);
+  } finally {
+    if (ui.webInvBatchBanCheck) { ui.webInvBatchBanCheck.disabled = false; ui.webInvBatchBanCheck.textContent = "封禁检测"; }
+  }
+}
+
+async function webInvBatchTradeUrl() {
+  if (ui.webInvBatchTradeUrl) { ui.webInvBatchTradeUrl.disabled = true; ui.webInvBatchTradeUrl.textContent = "刷新中..."; }
+  try {
+    const accounts = state.savedAccounts || [];
+    const usernames = accounts.map(a => a.username);
+    if (usernames.length === 0) return;
+    const resp = await fetch("/api/accounts/refresh-trade-url", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({usernames})
+    });
+    const ct = resp.headers.get("content-type") || "";
+    if (ct.includes("text/event-stream")) {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream: true});
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        let eventName = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) eventName = line.slice(7).trim();
+          else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventName === "trade-url-result" && data.username) {
+                const acc = accounts.find(a => a.username === data.username);
+                if (acc) acc.trade_url = data.tradeUrl || "";
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      renderWebInvAccountInfo();
+    } else {
+      const data = await resp.json();
+      if (data.ok && data.results) {
+        for (const r of data.results) {
+          const acc = accounts.find(a => a.username === r.username);
+          if (acc) acc.trade_url = r.tradeUrl || "";
+        }
+        renderWebInvAccountInfo();
+      }
+    }
+  } catch (err) {
+    alert("刷新交易链接失败: " + err.message);
+  } finally {
+    if (ui.webInvBatchTradeUrl) { ui.webInvBatchTradeUrl.disabled = false; ui.webInvBatchTradeUrl.textContent = "刷新链接"; }
+  }
+}
+
+// ═══ 市场上架 ═══
+
+function openMarketSellModal() {
+  const username = webInvState.selectedAccount;
+  if (!username || webInvState.selectedAssetIds.size === 0) return;
+  const cached = webInvState.inventoryCache.get(username);
+  if (!cached) return;
+  const selectedItems = (cached.items || []).filter(it => webInvState.selectedAssetIds.has(it.assetid));
+  if (selectedItems.length === 0) return;
+
+  if (ui.marketSellModal) ui.marketSellModal.classList.remove("hidden");
+  if (ui.marketSellProgress) ui.marketSellProgress.classList.add("hidden");
+  if (ui.marketSellStartBtn) ui.marketSellStartBtn.disabled = false;
+
+  const list = ui.marketSellItemList;
+  if (!list) return;
+  list.replaceChildren();
+
+  for (const item of selectedItems) {
+    const row = document.createElement("div");
+    row.className = "market-sell-item-row";
+    row.dataset.assetid = item.assetid;
+    row.dataset.marketHashName = item.market_hash_name || "";
+
+    const img = document.createElement("img");
+    img.src = item.icon_url ? `https://community.akamai.steamstatic.com/economy/image/${item.icon_url}/64fx64f` : "";
+    img.width = 48; img.height = 48;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "market-sell-item-name";
+    nameSpan.textContent = item.market_hash_name || item.name || "Unknown";
+
+    const refPrice = document.createElement("span");
+    refPrice.className = "market-sell-ref-price";
+    refPrice.textContent = "-";
+    refPrice.dataset.assetid = item.assetid;
+
+    const priceInput = document.createElement("input");
+    priceInput.type = "number";
+    priceInput.className = "market-sell-price-input";
+    priceInput.placeholder = "卖家到手(分)";
+    priceInput.min = "1";
+    priceInput.dataset.assetid = item.assetid;
+    priceInput.oninput = () => updateMarketSellSummary();
+
+    const buyerSpan = document.createElement("span");
+    buyerSpan.className = "market-sell-buyer-price";
+    buyerSpan.textContent = "-";
+    buyerSpan.dataset.assetid = item.assetid;
+
+    priceInput.addEventListener("input", () => {
+      const cents = parseInt(priceInput.value, 10);
+      if (cents > 0) {
+        const steamFee = Math.max(1, Math.floor(cents * 0.1));
+        const gameFee = Math.max(1, Math.floor(cents * 0.05));
+        buyerSpan.textContent = `买家付 ¥${((cents + steamFee + gameFee) / 100).toFixed(2)}`;
+      } else {
+        buyerSpan.textContent = "-";
+      }
+    });
+
+    row.append(img, nameSpan, refPrice, priceInput, buyerSpan);
+    list.append(row);
+  }
+  updateMarketSellSummary();
+}
+
+function updateMarketSellSummary() {
+  if (!ui.marketSellSummary) return;
+  const inputs = (ui.marketSellItemList || document).querySelectorAll(".market-sell-price-input");
+  let count = 0, totalCents = 0;
+  for (const inp of inputs) {
+    const v = parseInt(inp.value, 10);
+    if (v > 0) { count++; totalCents += v; }
+  }
+  ui.marketSellSummary.textContent = `${count} 件 · 预估收入 ¥${(totalCents / 100).toFixed(2)}`;
+}
+
+async function marketSellFetchPrices() {
+  const rows = (ui.marketSellItemList || document).querySelectorAll(".market-sell-item-row");
+  const items = [];
+  for (const row of rows) {
+    const name = row.dataset.marketHashName;
+    if (name) items.push({marketHashName: name, assetid: row.dataset.assetid});
+  }
+  if (items.length === 0) return;
+  if (ui.marketSellFetchPricesBtn) { ui.marketSellFetchPricesBtn.disabled = true; ui.marketSellFetchPricesBtn.textContent = "查询中..."; }
+  try {
+    const resp = await fetch("/api/market/batch-price", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({items, currency: 23})
+    });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      let eventName = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) eventName = line.slice(7).trim();
+        else if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (eventName === "price-result" && data.marketHashName) {
+              const refEls = (ui.marketSellItemList || document).querySelectorAll(`.market-sell-ref-price`);
+              for (const el of refEls) {
+                const row = el.closest(".market-sell-item-row");
+                if (row && row.dataset.marketHashName === data.marketHashName) {
+                  el.textContent = data.lowestPrice || "-";
+                  el.dataset.lowestPriceCents = data.lowestPriceCents || "";
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error("批量查价失败:", err);
+  } finally {
+    if (ui.marketSellFetchPricesBtn) { ui.marketSellFetchPricesBtn.disabled = false; ui.marketSellFetchPricesBtn.textContent = "查询市场价"; }
+  }
+}
+
+function marketSellApplyPct() {
+  const pct = parseInt((ui.marketSellPricePct || {}).value, 10) || 100;
+  const rows = (ui.marketSellItemList || document).querySelectorAll(".market-sell-item-row");
+  for (const row of rows) {
+    const refEl = row.querySelector(".market-sell-ref-price");
+    const input = row.querySelector(".market-sell-price-input");
+    if (!refEl || !input) continue;
+    const refText = refEl.textContent || "";
+    const match = refText.match(/([\d,.]+)/);
+    if (match) {
+      const refYuan = parseFloat(match[1].replace(",", ""));
+      if (refYuan > 0) {
+        const sellerCents = Math.max(1, Math.round(refYuan * 100 * pct / 100 / 1.15));
+        input.value = sellerCents;
+        input.dispatchEvent(new Event("input"));
+      }
+    }
+  }
+  updateMarketSellSummary();
+}
+
+async function marketSellStart() {
+  const username = webInvState.selectedAccount;
+  if (!username) return;
+  const rows = (ui.marketSellItemList || document).querySelectorAll(".market-sell-item-row");
+  const items = [];
+  for (const row of rows) {
+    const input = row.querySelector(".market-sell-price-input");
+    const cents = parseInt(input?.value, 10);
+    if (cents > 0) {
+      items.push({assetId: row.dataset.assetid, priceInCents: cents, currency: 23});
+    }
+  }
+  if (items.length === 0) { alert("请先设置价格"); return; }
+  if (ui.marketSellStartBtn) ui.marketSellStartBtn.disabled = true;
+  if (ui.marketSellProgress) ui.marketSellProgress.classList.remove("hidden");
+
+  try {
+    const resp = await fetch("/api/market/batch-sell", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username, items})
+    });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      let eventName = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) eventName = line.slice(7).trim();
+        else if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (eventName === "progress") {
+              const pct = Math.round(((data.index + 1) / data.total) * 100);
+              if (ui.marketSellProgressFill) ui.marketSellProgressFill.style.width = pct + "%";
+              if (ui.marketSellProgressText) ui.marketSellProgressText.textContent = `上架中 ${data.index + 1}/${data.total}`;
+            } else if (eventName === "done") {
+              if (ui.marketSellProgressText) ui.marketSellProgressText.textContent = `完成: 成功 ${data.successCount}, 失败 ${data.failCount}`;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err) {
+    alert("上架失败: " + err.message);
+  } finally {
+    if (ui.marketSellStartBtn) ui.marketSellStartBtn.disabled = false;
+  }
+}
+
+// ═══ Steam API Key 配置 ═══
+
+async function openSteamApiKeyModal() {
+  if (ui.steamApiKeyModal) ui.steamApiKeyModal.classList.remove("hidden");
+  try {
+    const resp = await fetch("/api/settings/steam-api-key");
+    const data = await resp.json();
+    if (ui.steamApiKeyInput) ui.steamApiKeyInput.value = data.hasKey ? "••••••••" : "";
+  } catch (_) {}
+}
+
+async function saveSteamApiKey() {
+  const key = (ui.steamApiKeyInput || {}).value || "";
+  if (key === "••••••••") { if (ui.steamApiKeyModal) ui.steamApiKeyModal.classList.add("hidden"); return; }
+  try {
+    await fetch("/api/settings/steam-api-key", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({key})
+    });
+    if (ui.steamApiKeyModal) ui.steamApiKeyModal.classList.add("hidden");
+  } catch (err) {
+    alert("保存失败: " + err.message);
+  }
+}
+
+// ═══ Web 库存管理页 — 分隔条拖拽 ═══
+
+function initWebInvSplitDrag() {
+  if (!ui.webInvSplitBar) return;
+  ui.webInvSplitBar.onmousedown = (evt) => {
+    evt.preventDefault();
+    webInvState.splitDragging = true;
+    document.body.classList.add("web-inv-split-dragging");
+    const layout = ui.webInvSplitBar.parentElement;
+    const onMove = (e) => {
+      if (!webInvState.splitDragging) return;
+      const rect = layout.getBoundingClientRect();
+      let w = e.clientX - rect.left;
+      w = Math.max(160, Math.min(w, rect.width - 200));
+      webInvState.panelWidth = w;
+      layout.style.gridTemplateColumns = `${w}px 6px 1fr`;
+    };
+    const onUp = () => {
+      webInvState.splitDragging = false;
+      document.body.classList.remove("web-inv-split-dragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+}
+
+// ═══ Web 库存管理页 — 事件绑定 ═══
+
+function bindWebInvEvents() {
+  if (ui.webInvFetchBtn) ui.webInvFetchBtn.onclick = () => webInvFetchInventory();
+  if (ui.webInvSelectAll) ui.webInvSelectAll.onclick = () => webInvSelectAll();
+  if (ui.webInvTradableOnly) ui.webInvTradableOnly.onchange = () => { renderWebInvItemGrid(); updateWebInvActionBar(); };
+  if (ui.webInvBalanceBtn) ui.webInvBalanceBtn.onclick = () => webInvFetchBalance();
+  if (ui.webInvBatchBanCheck) ui.webInvBatchBanCheck.onclick = () => webInvBatchBanCheck();
+  if (ui.webInvBatchTradeUrl) ui.webInvBatchTradeUrl.onclick = () => webInvBatchTradeUrl();
+  if (ui.webInvSellBtn) ui.webInvSellBtn.onclick = () => openMarketSellModal();
+  if (ui.webInvTransferBtn) ui.webInvTransferBtn.onclick = () => {
+    // Reuse existing trade transfer modal
+    const modal = document.getElementById("tradeTransferModal");
+    if (modal) modal.classList.remove("hidden");
+  };
+  // Market sell modal
+  if (ui.marketSellCloseBtn) ui.marketSellCloseBtn.onclick = () => { if (ui.marketSellModal) ui.marketSellModal.classList.add("hidden"); };
+  if (ui.marketSellFetchPricesBtn) ui.marketSellFetchPricesBtn.onclick = () => marketSellFetchPrices();
+  if (ui.marketSellApplyPctBtn) ui.marketSellApplyPctBtn.onclick = () => marketSellApplyPct();
+  if (ui.marketSellStartBtn) ui.marketSellStartBtn.onclick = () => marketSellStart();
+  // Steam API Key modal
+  if (ui.steamApiKeyCloseBtn) ui.steamApiKeyCloseBtn.onclick = () => { if (ui.steamApiKeyModal) ui.steamApiKeyModal.classList.add("hidden"); };
+  if (ui.steamApiKeySaveBtn) ui.steamApiKeySaveBtn.onclick = () => saveSteamApiKey();
+  // Split bar
+  initWebInvSplitDrag();
+}
+
+// 初始化调用（在 DOMContentLoaded 或 init 中）
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindWebInvEvents);
+  } else {
+    bindWebInvEvents();
+  }
+}
+
+// ===== Web 库存查看（旧弹窗，保留但不再从卡片触发） =====
 
 const webInventoryState = {
   username: "",
@@ -15633,6 +16679,7 @@ async function init() {
   initBatchImport();
   initWebInventoryModal();
   initTradeTransferModal();
+  initWebInvBindings();
   try {
     renderLicenseGate();
     await loadLicenseState({hydrateWorkspace: true});
