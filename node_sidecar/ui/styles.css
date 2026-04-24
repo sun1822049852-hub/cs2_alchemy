@@ -1958,7 +1958,7 @@ select.small {
   gap: 4px;
   white-space: nowrap;
   min-width: 0;
-  color: #334155;
+  color: #ffffff;
   font-size: 13px;
 }
 
@@ -1971,6 +1971,10 @@ select.small {
   min-width: 72px;
   padding: 4px 6px;
   text-align: right;
+}
+
+.craft-settings-panel .muted {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .craft-queue-header {
@@ -3976,7 +3980,7 @@ select.small {
   max-height: calc(100% - 16px);
   min-height: 180px;
   z-index: 12;
-  border: 1px solid #bfd0e6;
+  border: none;
   border-radius: 10px;
   background: rgba(245, 249, 255, 0.96);
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
@@ -3988,7 +3992,6 @@ select.small {
 .craft-assist-overlay.preset-edit-popup {
   right: calc(8px + var(--craft-assist-edit-cut-width, 0px));
   z-index: 14;
-  border-color: #9ab5d6;
   background: rgba(244, 249, 255, 0.88);
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.24);
 }
@@ -4018,11 +4021,14 @@ select.small {
 }
 
 .craft-assist-overlay-handle {
-  height: 18px;
+  width: 100%;
+  height: 6px;
   cursor: row-resize;
   background: transparent;
   border-bottom: 0;
   position: relative;
+  flex-shrink: 0;
+  margin: -4px 0 -2px;
 }
 
 .craft-assist-overlay-handle::before {
@@ -4030,13 +4036,17 @@ select.small {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 170px;
-  max-width: 42%;
-  height: 1px;
+  width: 48px;
+  height: 4px;
   background: #9bb2cf;
   transform: translate(-50%, -50%);
   border-radius: 999px;
-  opacity: 0.95;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.craft-assist-overlay-handle:hover::before {
+  opacity: 1;
 }
 
 .craft-assist-toggle-btn {
@@ -4417,9 +4427,8 @@ select.small {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-  border: 1px solid #d8dee7;
+  border: none;
   border-radius: 8px;
-  border-right: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
   background: #fff;
@@ -4573,9 +4582,8 @@ select.small {
 }
 
 .craft-assist-preset-panel {
-  border: 1px solid #d8dee7;
+  border: none;
   border-radius: 8px;
-  border-left: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   background: #ffffff;
@@ -7734,6 +7742,14 @@ body.theme-inkblue #craftPage .craft-assist-split-bar::before {
   background: rgba(255, 255, 255, 0.08);
 }
 
+body.theme-inkblue #craftPage .craft-assist-overlay-handle::before {
+  background: rgba(157, 180, 213, 0.45);
+}
+
+body.theme-inkblue #craftPage .craft-assist-overlay-handle:hover::before {
+  background: rgba(157, 180, 213, 0.8);
+}
+
 body.theme-inkblue #craftPage .craft-assist-preset-footer {
   border-color: rgba(255, 255, 255, 0.08);
   background: rgba(11, 14, 18, 0.78);
@@ -8210,7 +8226,7 @@ body.theme-inkblue #craftPage .group-child.locked {
 }
 
 body.theme-inkblue #craftPage .craft-assist-panel {
-  border: 1px solid var(--ops-border-soft);
+  border: none;
   border-radius: 18px;
   padding: 12px;
 }

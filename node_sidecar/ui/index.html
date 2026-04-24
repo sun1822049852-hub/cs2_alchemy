@@ -239,12 +239,11 @@
                     <span class="craft-gear-glyph" aria-hidden="true"></span>
                   </button>
                   <div id="componentCraftSettingsPanel" class="craft-settings-panel hidden">
-                    <label class="inline"><span>使用组件中物品</span><input id="componentCraftUseComponentItems" type="checkbox" /></label>
                     <label class="inline"><span>显示种子</span><input id="componentCraftShowSeed" type="checkbox" /></label>
                     <label class="inline"><span>显示完整磨损</span><input id="componentCraftShowFullWear" type="checkbox" /></label>
                     <label class="inline"><span>显示冷却时间</span><input id="componentCraftShowCoolingTime" type="checkbox" /></label>
-                    <label class="inline"><span>高速选材</span><input id="componentCraftAssistFastMode" type="checkbox" /></label>
-                    <label class="inline"><span>磨损偏移阈值(%)</span><input id="componentCraftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
+                    <label class="inline"><span>关闭收藏品名显示</span><input id="componentCraftHideCollection" type="checkbox" /></label>
+                    <label class="inline"><span>关闭数量显示</span><input id="componentCraftHideQuantity" type="checkbox" /></label>
                     <div id="componentCraftCoolingHint" class="muted">冷却中可选：无</div>
                   </div>
                 </div>
@@ -377,6 +376,8 @@
                     <label class="inline"><span>显示完整磨损</span><input id="craftShowFullWear" type="checkbox" /></label>
                     <label class="inline"><span>高速选材</span><input id="craftAssistFastMode" type="checkbox" /></label>
                     <label class="inline"><span>逼近磨损模式</span><input id="craftAssistApproachMode" type="checkbox" /></label>
+                    <label class="inline"><span>关闭收藏品名显示</span><input id="craftHideCollection" type="checkbox" /></label>
+                    <label class="inline"><span>关闭数量显示</span><input id="craftHideQuantity" type="checkbox" /></label>
                     <label class="inline"><span>磨损偏移阈值(%)</span><input id="craftAssistWearOffsetPct" class="craft-settings-number" type="number" min="0" max="100" step="0.1" /></label>
                     <div id="craftCoolingHint" class="muted">冷却中可选：无</div>
                   </div>
@@ -390,12 +391,12 @@
                 </div>
               </div>
               <div id="craftAssistOverlay" class="craft-assist-overlay hidden" aria-live="polite" aria-label="辅助选材覆盖层">
-                <div id="craftAssistOverlayHandle" class="craft-assist-overlay-handle" title="拖拽调整辅助选材覆盖范围" aria-hidden="true"></div>
                 <button id="craftAssistCloseBtn" type="button" class="craft-assist-close craft-assist-close-floating" aria-label="关闭辅助选材">×</button>
                 <div id="craftAssistPanel" class="craft-assist-panel" aria-label="辅助选材面板">
                   <div id="craftAssistContent" class="craft-assist-line craft-assist-content">
                     <div class="craft-assist-main-col">
                       <div class="craft-assist-main-tools">
+                        <div id="craftAssistOverlayHandle" class="craft-assist-overlay-handle" title="拖拽调整辅助选材覆盖范围" aria-hidden="true"></div>
                         <label id="craftAssistPresetNameField" class="craft-assist-field craft-assist-inline-field craft-assist-preset-name-field hidden">
                           <span>配置名称</span>
                           <input id="craftAssistPresetNameInput" type="text" maxlength="40" />
