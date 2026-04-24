@@ -46,6 +46,34 @@ node tools/initControlPlaneAdmin.js --username admin --password "你的控制台
 
 重复执行会重置同名管理员密码。
 
+## 远程连接
+
+控制台部署在远端 ECS，本地通过 SSH 隧道访问。
+
+双击连接（自动开浏览器，关浏览器自动断隧道）：
+
+```powershell
+tools\connectAdminConsole.cmd
+```
+
+仅建隧道不开浏览器：
+
+```powershell
+tools\connectAdminConsole.cmd -NoBrowser
+```
+
+自定义本地端口：
+
+```powershell
+tools\connectAdminConsole.cmd -LocalPort 9999
+```
+
+预检（不实际连接，打印参数）：
+
+```powershell
+tools\connectAdminConsole.cmd -DryRun
+```
+
 ## 测试
 
 ```powershell
