@@ -134,6 +134,56 @@ const CURRENCY_SYMBOLS = {
   HKD: "HK$",
 };
 
+function extractAccessTokenFromCookieString(cookieString) {
+  const raw = String(cookieString || "").trim();
+  if (!raw) return "";
+
+  for (const part of raw.split(";")) {
+    const cookie = part.trim();
+    if (!cookie.startsWith("steamLoginSecure=")) continue;
+    const value = cookie.slice("steamLoginSecure=".length);
+    try {
+      const decoded = decodeURIComponent(value);
+      if (!decoded.includes("||")) continue;
+      return decoded.split("||").slice(1).join("||").trim();
+    } catch (_) {
+      continue;
+    }
+  }
+
+  return "";
+}
+
+async function fetchTradeOfferAccessToken(accessToken) {
+  const token = String(accessToken || "").trim();
+  if (!token) return "";
+
+  const attempts = [
+    {
+      url: `https://api.steampowered.com/IEconService/GetTradeOfferAccessToken/v1/?access_token=${encodeURIComponent(token)}`,
+      headers: {}
+    },
+    {
+      url: "https://api.steampowered.com/IEconService/GetTradeOfferAccessToken/v1/",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const resp = await steamGet(attempt);
+      const tradeToken = String(resp && resp.json && resp.json.response && resp.json.response.trade_offer_access_token || "").trim();
+      if (tradeToken) return tradeToken;
+    } catch (_) {
+      // fall through to the next attempt
+    }
+  }
+
+  return "";
+}
+
 /**
  * Fetch Steam wallet balance.
  * Primary: GetClientWalletDetails API. Fallback: parse store HTML.
@@ -187,13 +237,32 @@ async function fetchBalance({ cookieString, accessToken, steamId64 }) {
 
 /**
  * Fetch trade offer URL from privacy settings page.
- * @param {{ cookieString: string, steamId64: string }} opts
+ * @param {{ cookieString: string, steamId64: string, accessToken?: string }} opts
  * @returns {Promise<{ success: boolean, tradeUrl: string|null }>}
  */
-async function fetchTradeUrl({ cookieString, steamId64 }) {
+async function fetchTradeUrl({ cookieString, steamId64, accessToken }) {
+  const sid = String(steamId64 || "").trim();
+  if (!sid) {
+    return { success: false, tradeUrl: null };
+  }
+
   try {
-    const enhanced = enhanceCookieString(cookieString, { steamId64, domain: "community" });    const url = `https://steamcommunity.com/profiles/${steamId64}/tradeoffers/privacy`;
-    const headers = buildSteamHeaders({ cookieString: enhanced, steamId64, referer: `https://steamcommunity.com/profiles/${steamId64}/` });
+    const partnerId = String(BigInt(sid) - 76561197960265728n);
+    const tokenFromApi = await fetchTradeOfferAccessToken(accessToken || extractAccessTokenFromCookieString(cookieString));
+    if (tokenFromApi) {
+      return {
+        success: true,
+        tradeUrl: `https://steamcommunity.com/tradeoffer/new/?partner=${partnerId}&token=${tokenFromApi}`
+      };
+    }
+  } catch (_) {
+    // fall through to HTML scraping
+  }
+
+  try {
+    const enhanced = enhanceCookieString(cookieString, { steamId64: sid, domain: "community" });
+    const url = `https://steamcommunity.com/profiles/${sid}/tradeoffers/privacy`;
+    const headers = buildSteamHeaders({ cookieString: enhanced, steamId64: sid, referer: `https://steamcommunity.com/profiles/${sid}/` });
     const resp = await steamGet({ url, headers });
     const body = resp.body || "";
 
@@ -202,7 +271,7 @@ async function fetchTradeUrl({ cookieString, steamId64 }) {
     );
 
     if (tokenMatch) {
-      const accountId32 = String(BigInt(steamId64) - 76561197960265728n);
+      const accountId32 = String(BigInt(sid) - 76561197960265728n);
       const tradeUrl = `https://steamcommunity.com/tradeoffer/new/?partner=${accountId32}&token=${tokenMatch[1]}`;
       return { success: true, tradeUrl };
     }

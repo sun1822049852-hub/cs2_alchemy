@@ -61,6 +61,7 @@ function enhanceCookieString(baseCookie, opts = {}) {
   if (!cookieMap.has("Steam_Language")) cookieMap.set("Steam_Language", "schinese");
   if (!cookieMap.has("timezoneOffset")) cookieMap.set("timezoneOffset", "28800,0");
   if (!cookieMap.has("browserid")) cookieMap.set("browserid", _getBrowserId(steamId64));
+  if (!cookieMap.has("sessionid")) cookieMap.set("sessionid", crypto.randomBytes(12).toString("hex"));
 
   // steamLoginSecure 多值：按 JWT aud 选择匹配 domain 的 token
   let targetSecure = secures[0] || "";

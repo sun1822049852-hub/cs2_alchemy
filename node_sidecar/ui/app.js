@@ -16107,11 +16107,7 @@ async function webInvFetchInventory() {
   if (!username) return;
   if (ui.webInvFetchBtn) { ui.webInvFetchBtn.disabled = true; ui.webInvFetchBtn.textContent = "拉取中..."; }
   try {
-    const resp = await fetch(`/api/steam/single-inventory`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({username})
-    });
+    const resp = await fetch(`/api/accounts/${encodeURIComponent(username)}/inventory`);
     const data = await resp.json();
     if (data.ok && data.items) {
       webInvState.inventoryCache.set(username, {items: data.items, fetchedAt: Date.now()});
