@@ -1,6 +1,25 @@
 # Session Log
 
 ## 2026-04-25
+- Task: 收口 Windows 打包对根目录运行态 `csgo_skins.db` 的错误依赖，避免在干净克隆、CI 或其他机器上漏包数据库种子。
+- Investigation:
+  - 核对 [node_sidecar/electron-builder.yml](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/electron-builder.yml) 后确认，安装包仍通过 `extraResources` 直接引用 `../csgo_skins.db`。
+  - 由于根目录 [csgo_skins.db](/C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db) 已降级为本机运行态并从 Git 索引摘除，继续保留这条 builder 依赖会让打包重新依赖“当前机器是否刚好存在这份本地 DB”，存在明显漏包风险。
+  - packaged 首启引导 [node_sidecar/src/packagedRuntimeBootstrap.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/packagedRuntimeBootstrap.js) 仍以安装包内 `csgo_skins.db` 为目标资源名，因此只需要替换 builder 源路径，不需要改 packaged 运行时目标文件名。
+- Changes:
+  - 新增稳定种子资源 [node_sidecar/build/csgo_skins.seed.db](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/build/csgo_skins.seed.db)，作为打包专用数据库种子。
+  - 更新 [node_sidecar/electron-builder.yml](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/electron-builder.yml)，将数据库资源来源从 `../csgo_skins.db` 改为 `build/csgo_skins.seed.db`，仍打包到安装包内的 `csgo_skins.db`。
+  - 更新 [node_sidecar/tests/windows-installer-entrypoint.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/windows-installer-entrypoint.test.js)，新增对 `build/csgo_skins.seed.db` 存在性的断言，并禁止 builder 再回退到 `../csgo_skins.db`。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)，把“打包必须使用稳定种子 DB”写成长期规则。
+- Verification:
+  - 红灯验证：`node node_sidecar/tests/windows-installer-entrypoint.test.js`，在新增断言后按预期失败，错误为缺少 `build/csgo_skins.seed.db`。
+  - 绿灯验证：`node node_sidecar/tests/windows-installer-entrypoint.test.js`，当前已通过。
+  - 兼容验证：`node node_sidecar/tests/packaged-runtime-bootstrap.test.js`，当前仍通过，说明 packaged 首启复制链未被带坏。
+- Follow-up:
+  - 当前打包链已不再直接依赖根目录运行态 DB。
+  - 若后续要更新数据库种子内容，应更新 `node_sidecar/build/csgo_skins.seed.db`，而不是重新把根目录 `csgo_skins.db` 纳回 builder 依赖。
+
+## 2026-04-25
 - Task: 把根目录运行态数据库 `csgo_skins.db` 改成真正的忽略文件，并记录这次 `run-dev` 断链与运行态 DB 的关键约束，避免后续再次把本机状态或启动崩溃误带回仓库。
 - Investigation:
   - 先核对 Git 状态，确认 [csgo_skins.db](/C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db) 虽然在项目约定中属于运行态文件，但实际上仍被 Git 跟踪，所以每次本地 Electron / sidecar 写库都会把工作树打脏。

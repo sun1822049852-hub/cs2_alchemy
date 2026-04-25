@@ -19,7 +19,7 @@ extraResources:
     to: app-icon.ico
   - from: ../schema_cache.json
     to: schema_cache.json
-  - from: ../csgo_skins.db
+  - from: build/csgo_skins.seed.db
     to: csgo_skins.db
   - from: ../shared
     to: shared

@@ -10,6 +10,7 @@ const INSTALLER_INCLUDE_PATH = path.resolve(__dirname, "../build/installer.nsh")
 const ICON_ICO_PATH = path.resolve(__dirname, "../build/icon.ico");
 const ICON_PNG_PATH = path.resolve(__dirname, "../build/icon.png");
 const RELEASE_CONFIG_PATH = path.resolve(__dirname, "../build/client_config.release.json");
+const SKIN_DB_SEED_PATH = path.resolve(__dirname, "../build/csgo_skins.seed.db");
 
 function test_nsis_installer_defaults_to_custom_install_dir_with_desktop_shortcut() {
   assert.match(CONFIG_TEXT, /productName:\s*CS Tools/, "用户可见产品名应统一改为 CS Tools");
@@ -49,6 +50,7 @@ function test_nsis_installer_defaults_to_custom_install_dir_with_desktop_shortcu
 function test_brand_icon_assets_exist() {
   assert.equal(fs.existsSync(ICON_ICO_PATH), true, "Windows 图标资源 icon.ico 必须存在");
   assert.equal(fs.existsSync(ICON_PNG_PATH), true, "品牌预览图标 icon.png 必须存在");
+  assert.equal(fs.existsSync(SKIN_DB_SEED_PATH), true, "打包专用皮肤数据库种子 csgo_skins.seed.db 必须存在");
 }
 
 function test_packaged_release_resources_are_included() {
@@ -65,8 +67,13 @@ function test_packaged_release_resources_are_included() {
   );
   assert.match(
     CONFIG_TEXT,
-    /from:\s*\.\.\/csgo_skins\.db[\s\S]*to:\s*csgo_skins\.db/,
+    /from:\s*build\/csgo_skins\.seed\.db[\s\S]*to:\s*csgo_skins\.db/,
     "安装包必须内置 csgo_skins.db 种子资源"
+  );
+  assert.doesNotMatch(
+    CONFIG_TEXT,
+    /from:\s*\.\.\/csgo_skins\.db[\s\S]*to:\s*csgo_skins\.db/,
+    "打包配置不应再直接引用根目录运行态 csgo_skins.db"
   );
   assert.match(
     CONFIG_TEXT,
