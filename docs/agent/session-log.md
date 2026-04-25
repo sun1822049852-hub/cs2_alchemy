@@ -1,6 +1,25 @@
 # Session Log
 
 ## 2026-04-25
+- Task: 修复 `run-dev` 进入后账号区仍显示空壳的问题，并把真实根因记录下来，避免后续再次把前端启动链截断。
+- Investigation:
+  - 先按真实 `run-dev` 环境起本地 UI 服务，直接抓 `/api/client-auth/state`、`/api/ui-state`、`/api/accounts`。结果显示 dev 授权有效、`last_selected_username=gb840489`，且 `/api/accounts` 返回 12 个账号，因此根因不在本地账号数据、授权快照或后端路由。
+  - 再用真实浏览器运行态复现，发现页面顶部仍停在“尚未保存账号”空壳，而不是 guest preview。继续抓浏览器控制台后，定位到 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 启动阶段抛出 `ReferenceError: initWebInvBindings is not defined`。
+  - 错误发生在 `init()` 内、`loadLicenseState()` 之前，所以账号加载链从未开始执行；服务端虽然已有 12 个账号，前端仍只能展示默认静态空壳。
+- Changes:
+  - 新增回归 [node_sidecar/tests/web-inventory-bootstrap.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-bootstrap.test.js)，锁定启动链不得再调用已删除的 `initWebInvBindings()`，并要求保留现存 `bindWebInvEvents()` 绑定。
+  - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，把 `init()` 中的坏引用 `initWebInvBindings()` 改为现存的 `bindWebInvEvents()`，仅修复启动断点，不改其他 Web Inventory 行为。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)，把这类“已删 helper 仍被启动链调用”的前端断链风险记为长期约束。
+- Verification:
+  - 红灯验证：`node node_sidecar/tests/web-inventory-bootstrap.test.js`，修前按预期失败，明确指出启动链仍调用 `initWebInvBindings();`。
+  - 绿灯验证：`node node_sidecar/tests/web-inventory-bootstrap.test.js`，当前已通过。
+  - 回归验证：`node tests/main-ui-node-desktop-launcher.test.js`，当前仍通过，说明此前 launcher 修复未被带坏。
+  - 真实运行态验证：使用真实浏览器通过 CDP 连到本地 dev 页面后，读取到 `summary = 已保存 12 个账号 · 当前：gb840489`、`savedAccountsChildren = 12`，且 `exceptions = []`，证明 `run-dev` 页面中的账号卡片已真实恢复渲染。
+- Follow-up:
+  - 当前问题的根因已证明是前端启动崩溃，不是服务端账号缺失。
+  - 若后续 `run-dev` 再出现“有数据但页面空壳”，优先先抓浏览器运行态异常，而不是先怀疑 `accounts.json` / SQLite 或授权模式。
+
+## 2026-04-25
 - Task: 修复“调试入口本地账号没有被读”的回归，并把入口约束记录下来，避免后续再次把调试链改坏。
 - Investigation:
   - 先沿 `run-dev.bat -> scripts/start-client-dev.ps1 -> main_ui_node_desktop.js -> node_sidecar/electron-main.js -> node_sidecar/src/constants.js` 追运行链，确认未打包 Electron 仍按仓库根目录作为 `WRITABLE_ROOT`，本地账号、token、授权快照与数据库都应读取根目录运行态文件。

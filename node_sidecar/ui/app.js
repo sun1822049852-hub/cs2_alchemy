@@ -17330,7 +17330,7 @@ async function init() {
   initTradeTransferModal();
   initSteamGuardEnroll();
   initTokenDetailModal();
-  initWebInvBindings();
+  bindWebInvEvents();
   try {
     renderLicenseGate();
     await loadLicenseState({hydrateWorkspace: true});
