@@ -901,7 +901,7 @@
             <div class="enroll-warning-box">
               <p><strong>⚠ 风险提示</strong></p>
               <ul>
-                <li>此操作将为选中账号注册新的 Steam Guard 令牌，可直接替换原有令牌</li>
+                <li>系统会在验证后判断是首次绑定还是替换旧令牌</li>
                 <li>完成绑定后 <strong>两天内无法交易</strong></li>
                 <li>如果您尚未绑定过 Steam 令牌，则会有 <strong>15 天的市场交易冷却期</strong></li>
                 <li>请确保已启用加速器</li>
@@ -913,7 +913,7 @@
           </div>
           <!-- Step 2: SMS 验证 -->
           <div id="enrollStep2" class="enroll-step hidden">
-            <div class="enroll-revocation-box">
+            <div id="enrollRevocationWrap" class="enroll-revocation-box">
               <p><strong>恢复码（请务必记录）</strong></p>
               <code id="enrollRevocationCode">-</code>
             </div>
@@ -924,7 +924,7 @@
           <!-- Step 3: 完成 -->
           <div id="enrollStep3" class="enroll-step hidden">
             <div class="enroll-success-box">
-              <p>✅ Steam Guard 令牌绑定成功</p>
+              <p id="enrollFinalModeText" class="enroll-mode-note">Steam Guard 令牌绑定成功</p>
               <p>恢复码：<code id="enrollFinalRevCode">-</code></p>
               <p class="enroll-success-hint">请妥善保管恢复码，丢失后将无法恢复令牌。</p>
             </div>

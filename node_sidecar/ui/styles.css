@@ -10660,6 +10660,10 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   padding: 16px 0;
 }
 .enroll-success-box p { margin: 6px 0; font-size: 14px; }
+.enroll-mode-note {
+  font-weight: 700;
+  color: var(--text);
+}
 .enroll-success-box code {
   font-size: 18px;
   font-weight: 700;

@@ -17070,14 +17070,14 @@ async function handleEnrollAction() {
     statusEl.textContent = "正在连接 Steam 服务器...";
     statusEl.className = "enroll-status";
     try {
-      const resp = await api("/api/accounts/enroll-steam-guard", {
+      const data = await api("/api/accounts/enroll-steam-guard", {
         method: "POST",
         body: JSON.stringify({ username })
       });
-      const data = await resp.json();
       if (!data.ok) {
         const reasons = {
           already_has_authenticator: "该账号已绑定 Steam Guard 令牌",
+          replace_start_failed: "旧令牌替换验证启动失败，请稍后重试",
           rate_limited: "操作过于频繁，请稍后再试",
           no_phone_number: "该账号未绑定手机号，请先在 Steam 客户端绑定手机",
           unknown_error: `未知错误 (status=${data.status || "?"})`
@@ -17088,10 +17088,15 @@ async function handleEnrollAction() {
         actionBtn.disabled = false;
         return;
       }
+      enrollState.mode = data.mode || "new_enroll";
       enrollState.revocationCode = data.revocation_code || "";
-      document.getElementById("enrollRevocationCode").textContent = enrollState.revocationCode;
+      const isReplace = isReplaceEnrollMode(enrollState.mode);
+      document.getElementById("enrollRevocationWrap").classList.toggle("hidden", isReplace);
+      document.getElementById("enrollRevocationCode").textContent = enrollState.revocationCode || "-";
       document.getElementById("enrollSmsInput").value = "";
-      statusEl.textContent = "验证码已发送到绑定手机";
+      statusEl.textContent = isReplace
+        ? "旧令牌替换验证已开始，请输入收到的验证码"
+        : "验证码已发送到绑定手机";
       statusEl.className = "enroll-status";
       enrollState.running = false;
       showEnrollStep(2);
@@ -17110,11 +17115,10 @@ async function handleEnrollAction() {
     statusEl.textContent = "正在验证...";
     statusEl.className = "enroll-status";
     try {
-      const resp = await api("/api/accounts/finalize-steam-guard", {
+      const data = await api("/api/accounts/finalize-steam-guard", {
         method: "POST",
         body: JSON.stringify({ username: enrollState.username, activationCode: code })
       });
-      const data = await resp.json();
       if (!data.ok) {
         statusEl.textContent = data.message || data.reason || "验证失败，请检查验证码";
         statusEl.className = "enroll-status error";
@@ -17123,6 +17127,9 @@ async function handleEnrollAction() {
         return;
       }
       document.getElementById("enrollFinalRevCode").textContent = data.revocation_code || enrollState.revocationCode;
+      document.getElementById("enrollFinalModeText").textContent = isReplaceEnrollMode(enrollState.mode)
+        ? "旧令牌已替换为新令牌"
+        : "Steam Guard 令牌绑定成功";
       statusEl.textContent = "";
       enrollState.running = false;
       showEnrollStep(3);
@@ -17172,6 +17179,70 @@ function getTotpRemaining(serverTimeDiff) {
   return 30 - Math.floor((Date.now() / 1000 + serverTimeDiff) % 30);
 }
 
+function parseTokenDetailSteamData(steamData) {
+  if (!steamData) {
+    return {};
+  }
+  if (typeof steamData === "string") {
+    try {
+      const parsed = JSON.parse(steamData);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+  return steamData && typeof steamData === "object" ? steamData : {};
+}
+
+function sanitizeTokenDetailSecret(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "[REDACTED]") {
+    return "";
+  }
+  return text;
+}
+
+function extractSharedSecretFromTokenDetailData(steamData) {
+  const raw = parseTokenDetailSteamData(steamData);
+  const response = raw && raw.response && typeof raw.response === "object" ? raw.response : {};
+  const responsePascal = raw && raw.Response && typeof raw.Response === "object" ? raw.Response : {};
+  const candidates = [
+    raw.shared_secret,
+    raw.SharedSecret,
+    response.shared_secret,
+    response.SharedSecret,
+    responsePascal.shared_secret,
+    responsePascal.SharedSecret
+  ];
+  for (const candidate of candidates) {
+    const secret = sanitizeTokenDetailSecret(candidate);
+    if (secret) {
+      return secret;
+    }
+  }
+  return "";
+}
+
+async function decryptTokenDetailSharedSecret(data) {
+  const encryptedSecret = String(data && data.encryptedSecret || "").trim();
+  const secretKeyHex = String(data && data.secretKeyHex || "").trim();
+  const ivHex = String(data && data.ivHex || "").trim();
+  if (!encryptedSecret || !secretKeyHex || !ivHex || !crypto || !crypto.subtle) {
+    return "";
+  }
+  const keyParts = secretKeyHex.match(/.{2}/g);
+  const ivParts = ivHex.match(/.{2}/g);
+  if (!Array.isArray(keyParts) || !Array.isArray(ivParts)) {
+    return "";
+  }
+  const keyBytes = new Uint8Array(keyParts.map((b) => parseInt(b, 16)));
+  const ivBytes = new Uint8Array(ivParts.map((b) => parseInt(b, 16)));
+  const encBytes = Uint8Array.from(atob(encryptedSecret), (c) => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, {name: "AES-CBC"}, false, ["decrypt"]);
+  const decrypted = await crypto.subtle.decrypt({name: "AES-CBC", iv: ivBytes}, cryptoKey, encBytes);
+  return new TextDecoder().decode(decrypted).trim();
+}
+
 async function openTokenDetailModal(username) {
   const modal = document.getElementById("tokenDetailModal");
   const nameEl = document.getElementById("tokenDetailAccountName");
@@ -17199,8 +17270,7 @@ async function openTokenDetailModal(username) {
   modal.classList.remove("hidden");
 
   try {
-    const resp = await api(`/api/accounts/token-detail?username=${encodeURIComponent(username)}`);
-    const data = await resp.json();
+    const data = await api(`/api/accounts/token-detail?username=${encodeURIComponent(username)}`);
     if (!data.ok) {
       codeEl.textContent = "ERROR";
       document.getElementById("tokenRawData").textContent = data.message || "加载失败";
@@ -17215,23 +17285,29 @@ async function openTokenDetailModal(username) {
     document.getElementById("tokenSteamId").dataset.real = data.steamId64 || "-";
 
     // Raw data
+    const rawSteamData = parseTokenDetailSteamData(data.steamData);
+    document.getElementById("tokenRawData").textContent = JSON.stringify(rawSteamData, null, 2);
+
+    codeEl.textContent = data.currentTotp || "-----";
+    tokenDetailState.serverTimeDiff = data.serverTimeDiff || 0;
+    const remaining = getTotpRemaining(tokenDetailState.serverTimeDiff);
+    barEl.style.setProperty("--totp-progress", Math.round((remaining / 30) * 100) + "%");
+    countdownEl.textContent = remaining + "s";
+
+    let sharedSecret = "";
     try {
-      const raw = typeof data.steamData === "string" ? JSON.parse(data.steamData) : data.steamData;
-      document.getElementById("tokenRawData").textContent = JSON.stringify(raw, null, 2);
+      sharedSecret = await decryptTokenDetailSharedSecret(data);
     } catch (_) {
-      document.getElementById("tokenRawData").textContent = String(data.steamData || "-");
+      sharedSecret = "";
+    }
+    if (!sharedSecret) {
+      sharedSecret = extractSharedSecretFromTokenDetailData(rawSteamData);
+    }
+    if (!sharedSecret) {
+      return;
     }
 
-    // Decrypt shared_secret
-    const keyBytes = new Uint8Array(data.secretKeyHex.match(/.{2}/g).map(b => parseInt(b, 16)));
-    const ivBytes = new Uint8Array(data.ivHex.match(/.{2}/g).map(b => parseInt(b, 16)));
-    const encBytes = Uint8Array.from(atob(data.encryptedSecret), c => c.charCodeAt(0));
-    const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, { name: "AES-CBC" }, false, ["decrypt"]);
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-CBC", iv: ivBytes }, cryptoKey, encBytes);
-    const sharedSecret = new TextDecoder().decode(decrypted);
-
     tokenDetailState.sharedSecret = sharedSecret;
-    tokenDetailState.serverTimeDiff = data.serverTimeDiff || 0;
 
     // Initial TOTP
     const totp = await computeSteamTotp(sharedSecret, tokenDetailState.serverTimeDiff);

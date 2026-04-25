@@ -162,8 +162,26 @@ async function resolveWebSessionForAccount(account) {
   // 优先 maFile
   if (account.mafile_content) {
     const maData = parseMaFile(account.mafile_content);
-    const webSession = await refreshWebCookie(maData);
-    return {webSession, hasMaFile: true, maData};
+    try {
+      const webSession = await refreshWebCookie(maData);
+      return {webSession, hasMaFile: true, maData};
+    } catch (err) {
+      let tokenStore = null;
+      try {
+        tokenStore = new TokenStore();
+        const refreshToken = tokenStore.get(username);
+        let steamId64 = asString(maData.steamId64 || account.steam_id64 || account.steam_id).trim();
+        if (!refreshToken || !steamId64) {
+          throw err;
+        }
+        const webSession = await refreshWebCookieFromToken(refreshToken, steamId64);
+        return {webSession, hasMaFile: true, maData};
+      } finally {
+        if (tokenStore && typeof tokenStore.close === "function") {
+          tokenStore.close();
+        }
+      }
+    }
   }
 
   // fallback: TokenStore refresh_token
@@ -4175,9 +4193,22 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const result = await finalizeSteamGuard({username, activationCode, logger});
       if (result.ok && result.maFileContent) {
         try {
-          const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
-          store.db.prepare("UPDATE steam_account SET mafile_content = ? WHERE username = ?").run(result.maFileContent, username);
-          store.close();
+          const accountStore = getViewerAccountStore(auth, deps);
+          const current = accountStore.get(username);
+          if (!current) {
+            writeJson(res, 404, {ok: false, message: "账号不存在"});
+            return true;
+          }
+          accountStore.upsert({
+            username: current.username,
+            password: current.password,
+            remark: current.remark,
+            steamName: current.steam_name,
+            steamId: current.steam_id,
+            steamId64: current.steam_id64,
+            avatarUrl: current.avatar_url,
+            mafileContent: result.maFileContent
+          });
         } catch (dbErr) {
           logger.warn("steam_guard", `mafile db write failed: ${asString(dbErr.message || dbErr)}`);
         }
@@ -4209,6 +4240,21 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const secretKey = crypto.randomBytes(32);
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
+      const rawData = typeof acc.mafile_content === "string"
+        ? JSON.parse(acc.mafile_content)
+        : (acc.mafile_content && typeof acc.mafile_content === "object" ? acc.mafile_content : {});
+      const redacted = {
+        ...rawData,
+        identity_secret: rawData.identity_secret ? "[REDACTED]" : "",
+        secret_1: rawData.secret_1 ? "[REDACTED]" : "",
+        access_token: rawData.access_token ? "[REDACTED]" : "",
+        Session: rawData.Session && typeof rawData.Session === "object"
+          ? {
+              ...rawData.Session,
+              SteamLoginSecure: rawData.Session.SteamLoginSecure ? "[REDACTED]" : ""
+            }
+          : {}
+      };
       let encrypted = cipher.update(parsed.sharedSecret, "utf8", "base64");
       encrypted += cipher.final("base64");
       const SteamTotp = require("steam-totp");
@@ -4227,7 +4273,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         encryptedSecret: encrypted,
         secretKeyHex: secretKey.toString("hex"),
         ivHex: iv.toString("hex"),
-        steamData: acc.mafile_content
+        steamData: redacted
       });
     } catch (err) {
       writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
