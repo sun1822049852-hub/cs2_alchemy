@@ -27,6 +27,7 @@ node_sidecar/.npm-cache/
 admin_console/node_modules/
 
 # local skin-db rebuild artifacts
+csgo_skins.db
 csgo_skins.backup_*.db
 csgo_skins.backup_trigger_*.db
 csgo_skins.backup_before_rebuild_*.db

@@ -1,6 +1,26 @@
 # Session Log
 
 ## 2026-04-25
+- Task: 把根目录运行态数据库 `csgo_skins.db` 改成真正的忽略文件，并记录这次 `run-dev` 断链与运行态 DB 的关键约束，避免后续再次把本机状态或启动崩溃误带回仓库。
+- Investigation:
+  - 先核对 Git 状态，确认 [csgo_skins.db](/C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db) 虽然在项目约定中属于运行态文件，但实际上仍被 Git 跟踪，所以每次本地 Electron / sidecar 写库都会把工作树打脏。
+  - 仅补 `.gitignore` 对已跟踪文件无效，因此若要真正“忽略”，还必须把该文件从 Git 索引中摘除，同时保留本地实体文件。
+  - 同时复盘本次 `run-dev` 故障，确认真正关键点不是数据库缺失，而是前端启动链在 `loadLicenseState()` 之前调用了已删除的 `initWebInvBindings()`，导致页面空壳；这部分也需要继续作为长期约束保存。
+- Changes:
+  - 更新 [.gitignore](/C:/Users/18220/Desktop/cs2_alchemy/.gitignore)，显式加入 `csgo_skins.db`。
+  - 将 [csgo_skins.db](/C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db) 从 Git 索引中摘除但保留本地文件，使其今后按运行态文件处理。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)，固化两条长期规则：
+    1. 根目录 `csgo_skins.db` 是本机运行态 DB，不得再作为仓库受控资产。
+    2. `run-dev` 若出现“服务有数据但页面空壳”，优先先抓浏览器运行态异常，特别是启动阶段是否误调已删除 helper。
+- Verification:
+  - `git check-ignore -v --no-index -- csgo_skins.db`，确认忽略规则命中根目录 `.gitignore`。
+  - `git ls-files --stage -- csgo_skins.db`，确认该文件已不再留在 Git 索引中。
+  - `git status --short`，确认后续不再把根目录 `csgo_skins.db` 作为普通工作树修改持续挂出。
+- Follow-up:
+  - 当前这份 `csgo_skins.db` 已明确降级为纯本地运行态文件。
+  - 若后续打包或首启引导仍需要“基础 DB”，必须单独准备稳定种子资源，不能再把这份本机运行态 DB 重新纳回版本控制。
+
+## 2026-04-25
 - Task: 修复 `run-dev` 进入后账号区仍显示空壳的问题，并把真实根因记录下来，避免后续再次把前端启动链截断。
 - Investigation:
   - 先按真实 `run-dev` 环境起本地 UI 服务，直接抓 `/api/client-auth/state`、`/api/ui-state`、`/api/accounts`。结果显示 dev 授权有效、`last_selected_username=gb840489`，且 `/api/accounts` 返回 12 个账号，因此根因不在本地账号数据、授权快照或后端路由。
