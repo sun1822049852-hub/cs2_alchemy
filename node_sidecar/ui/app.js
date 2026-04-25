@@ -14061,36 +14061,31 @@ function renderBatchCraftPage() {
 async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, existingItemIds) {
   const accountRows = getCraftRowsForAccount(username);
   if (!accountRows.length) return null;
-  const wearFilterMode = normalizeCraftAssistFilterMode(draftSnapshot.wear_filter_mode);
   const targetValue = parseOptionalWear01(draftSnapshot.target_wear);
   const materials = normalizeCraftAssistMaterialsForRun({
     materials: draftSnapshot.materials,
     targetWear: targetValue,
-    wearFilterMode
+    wearFilterMode: normalizeCraftAssistFilterMode(draftSnapshot.wear_filter_mode)
   });
   if (!materials.length || targetValue == null) return null;
   const mode = craftAssistTargetCountFromMaterials(materials);
   const payload = {
     username,
     target_wear: targetValue,
-    wear_filter_mode: wearFilterMode,
+    wear_approach_mode: state.batchCraftApproachMode ? "infinite" : "below",
     materials,
-    mode,
     use_component_items: !!state.batchCraftUseComponentItems,
     include_cooling: !!state.batchCraftIncludeCooling,
-    fast_mode: !!state.batchCraftFastMode,
-    approach_mode: !!state.batchCraftApproachMode,
     wear_offset_pct: state.batchCraftWearOffsetPct,
-    exclude_item_ids: existingItemIds
+    blocked_ids: normalizeCraftRecipeItemIds(existingItemIds),
+    enable_fast_craft_assist: !!state.batchCraftFastMode
   };
   try {
     const data = await api("/api/craft/assist-select", {
       method: "POST",
       body: JSON.stringify(payload)
     });
-    if (!data || !data.runs || !data.runs.length) return null;
-    const run = data.runs[0];
-    const itemIds = normalizeCraftRecipeItemIds(run && (run.item_ids || run.itemIds));
+    const itemIds = normalizeCraftRecipeItemIds(data && (data.item_ids || data.itemIds));
     if (itemIds.length !== mode) return null;
     return {
       id: `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
