@@ -1,5 +1,25 @@
 # Session Log
 
+## 2026-04-25
+- Task: 修复“调试入口本地账号没有被读”的回归，并把入口约束记录下来，避免后续再次把调试链改坏。
+- Investigation:
+  - 先沿 `run-dev.bat -> scripts/start-client-dev.ps1 -> main_ui_node_desktop.js -> node_sidecar/electron-main.js -> node_sidecar/src/constants.js` 追运行链，确认未打包 Electron 仍按仓库根目录作为 `WRITABLE_ROOT`，本地账号、token、授权快照与数据库都应读取根目录运行态文件。
+  - 现场只读核对发现：根目录 [csgo_skins.db](/C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db) 中 `steam_account` 已有 12 条账号，[accounts.json](/C:/Users/18220/Desktop/cs2_alchemy/accounts.json) 中仍有 10 条 legacy 账号，[client_license_state.json](/C:/Users/18220/Desktop/cs2_alchemy/client_license_state.json) 也已有 `dev_auto_bundle` 授权快照，因此“本地没有账号数据”并不成立。
+  - 回看提交历史后，确认回归源头是此前把 [main_ui_node_desktop.js](/C:/Users/18220/Desktop/cs2_alchemy/main_ui_node_desktop.js) 的默认模式从 `dev` 改成了 `release`。这符合“正式入口收口”目标，但会让直接用 Node inspector 调试该入口时落到 `prod_login` / guest gate，看起来像本地账号未加载。
+  - 账号读链本身仍正常：`/api/accounts` 最终读的是 SQLite `steam_account` 表；`accounts.json` 只在 `AppAuthStore` 非只读初始化时做 legacy import，因此这次不是存储层坏了，而是调试入口 auth mode 选错。
+- Changes:
+  - 更新 [tests/main-ui-node-desktop-launcher.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/main-ui-node-desktop-launcher.test.js)，新增“Node inspector 下 launcher 必须切到 `dev_auto_bundle`”的回归测试，并先执行红灯验证。
+  - 更新 [main_ui_node_desktop.js](/C:/Users/18220/Desktop/cs2_alchemy/main_ui_node_desktop.js)，新增 `resolveDesktopLauncherMode()`：普通启动仍保持 `release`，但若命中 `process.execArgv` 或 `NODE_OPTIONS` 中的 `--inspect` / `--inspect-brk`，则自动切回 `dev`，只影响调试态，不改正式入口语义。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)，把这条调试入口铁律固化，避免后续只记得“默认正式入口”而再次误伤本地调试链。
+- Verification:
+  - 红灯验证：`node tests/main-ui-node-desktop-launcher.test.js`，新增 inspector 断言后按预期失败，错误为实际 `prod_login`、期望 `dev_auto_bundle`。
+  - 绿灯验证：`node tests/main-ui-node-desktop-launcher.test.js`，当前已通过。
+  - 模式验证：`node -e "const {resolveDesktopLauncherMode}=require('./main_ui_node_desktop'); ..."`，结果确认普通启动=`release`、inspector=`dev`、`NODE_OPTIONS` 含 inspect=`dev`。
+  - 开发入口回归：`powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1 -NoLaunch`，确认显式开发入口仍输出 `CLIENT_AUTH_MODE=dev_auto_bundle`。
+- Follow-up:
+  - 当前修复覆盖的是“通过 Node inspector 调试 [main_ui_node_desktop.js](/C:/Users/18220/Desktop/cs2_alchemy/main_ui_node_desktop.js)”这条高频本地调试链。
+  - 更底层的 `npm run ui:desktop` 仍属于直接调 Electron 的底层入口；若后续也要统一成“调试时自动加载本地账号”，需单独收敛那条链的环境注入语义。
+
 ## 2026-04-20
 - Task: 按用户最新定案继续收敛根目录入口，彻底移除 `main_node.js` 这条 CLI 兼容旧链，让仓库根目录只保留用户桌面入口与开发桌面入口。
 - Investigation:

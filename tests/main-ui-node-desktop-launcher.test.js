@@ -49,6 +49,22 @@ function test_workspace_launcher_defaults_to_prod_login() {
   assert.equal(capturedOptions.env.CLIENT_AUTH_MODE, "prod_login");
 }
 
+function test_workspace_launcher_uses_dev_bundle_under_node_inspector() {
+  let capturedOptions = null;
+  startDesktopLauncher({
+    baseEnv: {},
+    execArgv: ["--inspect-brk=9229"],
+    spawnImpl(_command, _args, options) {
+      capturedOptions = options;
+      return {
+        on() {}
+      };
+    }
+  });
+  assert.ok(capturedOptions, "launcher should invoke spawn");
+  assert.equal(capturedOptions.env.CLIENT_AUTH_MODE, "dev_auto_bundle");
+}
+
 function test_run_dev_batch_delegates_to_explicit_dev_bootstrap() {
   const batchFile = path.resolve(__dirname, "..", "run-dev.bat");
   assert.equal(fs.existsSync(batchFile), true, "run-dev.bat should exist at repo root");
@@ -66,6 +82,7 @@ function main() {
   test_dev_launcher_defaults_to_dev_auto_bundle();
   test_preserves_explicit_auth_mode_from_environment();
   test_workspace_launcher_defaults_to_prod_login();
+  test_workspace_launcher_uses_dev_bundle_under_node_inspector();
   test_run_dev_batch_delegates_to_explicit_dev_bootstrap();
   test_repo_root_has_no_cli_entry();
   console.log("main-ui-node-desktop-launcher tests passed");

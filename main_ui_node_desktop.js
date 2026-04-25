@@ -9,6 +9,22 @@ const electronBinWin = path.join(sidecarDir, "node_modules", ".bin", "electron.c
 const electronBinPosix = path.join(sidecarDir, "node_modules", ".bin", "electron");
 const electronBin = process.platform === "win32" ? electronBinWin : electronBinPosix;
 
+function hasNodeInspectorFlag(value) {
+  return /^--inspect(?:-brk)?(?:=.*)?$/i.test(String(value || "").trim());
+}
+
+function resolveDesktopLauncherMode({baseEnv = process.env, execArgv = process.execArgv} = {}) {
+  const args = Array.isArray(execArgv) ? execArgv : [];
+  if (args.some(hasNodeInspectorFlag)) {
+    return "dev";
+  }
+  const nodeOptions = String(baseEnv && baseEnv.NODE_OPTIONS || "").trim();
+  if (nodeOptions && nodeOptions.split(/\s+/).some(hasNodeInspectorFlag)) {
+    return "dev";
+  }
+  return "release";
+}
+
 if (!fs.existsSync(electronMain)) {
   // eslint-disable-next-line no-console
   console.error("Missing file: node_sidecar/electron-main.js");
@@ -21,13 +37,16 @@ if (!fs.existsSync(electronBin)) {
   process.exit(1);
 }
 
-function startDesktopLauncher({baseEnv = process.env, spawnImpl = spawn} = {}) {
+function startDesktopLauncher({baseEnv = process.env, spawnImpl = spawn, execArgv = process.execArgv} = {}) {
   const isWin = process.platform === "win32";
   return spawnImpl(electronBin, [electronMain], {
     cwd: sidecarDir,
     stdio: "inherit",
     shell: isWin,
-    env: buildDesktopLauncherEnv(baseEnv, {projectRoot: __dirname, mode: "release"})
+    env: buildDesktopLauncherEnv(baseEnv, {
+      projectRoot: __dirname,
+      mode: resolveDesktopLauncherMode({baseEnv, execArgv})
+    })
   });
 }
 
@@ -39,5 +58,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  startDesktopLauncher
+  startDesktopLauncher,
+  resolveDesktopLauncherMode
 };
