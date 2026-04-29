@@ -31,6 +31,7 @@ node main_ui_node_desktop.js
 
 - 仓库根目录桌面入口默认走 `prod_login`，用于真实登录、远端控制台联调和后续打包链路
 - 如需开发直通 `dev_auto_bundle`，请使用根目录 `run-dev.bat`，或执行 `powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1`
+- 如需一键连后台，请直接双击根目录 `connect console.cmd`
 - 仓库根目录不再提供任何 CLI 入口；如需命令行能力，请直接执行 `node node_sidecar/src/main.js ...` 或 `cd node_sidecar` 后使用对应 `npm run ...`
 - packaged 客户端仍固定走 `prod_login`，不会继承本地开发直通态
 - 新注册用户默认开放账号、库存、刷新与汰换模拟
@@ -48,6 +49,12 @@ node main_ui_node_desktop.js
   "control_plane_base_url": "http://8.138.39.139"
 }
 ```
+
+说明：
+
+- 上面的公网地址只用于客户端业务认证接口（`/api/auth/*`）
+- 后台管理入口不应通过公网地址访问
+- 管理员请使用 `admin_console/tools/connectAdminConsole.cmd` 建立 SSH 隧道后，再访问本机 `http://127.0.0.1:8787/admin`
 
 ## 浏览器模式
 

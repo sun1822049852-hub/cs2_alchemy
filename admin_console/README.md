@@ -56,6 +56,12 @@ node tools/initControlPlaneAdmin.js --username admin --password "你的控制台
 tools\connectAdminConsole.cmd
 ```
 
+如果你想直接在仓库根目录双击，也可以用：
+
+```powershell
+..\connect console.cmd
+```
+
 仅建隧道不开浏览器：
 
 ```powershell
@@ -72,6 +78,55 @@ tools\connectAdminConsole.cmd -LocalPort 9999
 
 ```powershell
 tools\connectAdminConsole.cmd -DryRun
+```
+
+## 远端部署加固
+
+当前项目的安全口径是：
+
+- `cs2-admin` 源站只绑定服务器本机 `127.0.0.1:8787 -> 8787`
+- 公网 `:80` 只允许 `/api/auth/*` 和 `/api/health`
+- `/admin`、`/api/admin/*`、`/api/mail/config`、`/api/dev/mail/test` 不对公网开放
+- 管理员只通过 SSH 隧道访问 `http://127.0.0.1:8787/admin`
+
+仓库内已经提供远端加固脚本和网关配置：
+
+- `deploy/harden_remote_access.sh`
+- `deploy/cs2-auth-gateway.nginx.conf`
+
+脚本会按当前端口参数自动渲染网关配置到：
+
+- `tmp/cs2-auth-gateway.rendered.conf`
+
+在远端服务器同步当前仓库后执行：
+
+```bash
+cd /opt/cs2_alchemy/cs2_alchemy
+sudo bash admin_console/deploy/harden_remote_access.sh
+```
+
+执行后会：
+
+1. 重新创建 `cs2-admin`，改成仅宿主机本机可达
+2. 新建 `cs2-auth-gateway` 公网网关容器
+3. 先用候选本机端口做健康检查，再切换正式端口
+4. 自动安装 `admin_console` 运行依赖，并让公网只保留认证业务接口，不再直接暴露后台控制面
+
+可选环境变量：
+
+- `APP_ROOT`：远端仓库根目录，默认 `/opt/cs2_alchemy/cs2_alchemy`
+- `ENV_FILE`：控制台环境文件，默认 `$APP_ROOT/tmp/qq-mail.local.env`
+- `ADMIN_HOST_PORT`：后台源站本机端口，默认 `8787`
+- `PUBLIC_HOST_PORT`：公网认证网关端口，默认 `80`
+
+最小验证命令：
+
+```bash
+curl -i http://127.0.0.1:8787/admin
+curl -i http://127.0.0.1/api/health
+curl -i http://8.138.39.139/admin
+curl -i http://8.138.39.139/api/admin/session
+curl -i http://8.138.39.139/api/auth/register/readiness
 ```
 
 ## 测试
