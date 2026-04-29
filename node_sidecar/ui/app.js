@@ -14186,6 +14186,53 @@ async function runBatchCraftExecution() {
     setBatchCraftStatus("无待执行配方", true);
     return;
   }
+  function applyBatchCraftSuccessSnapshot(username, payload) {
+    const accountName = String(username || "").trim();
+    if (!accountName || !(payload && Array.isArray(payload.rows))) return;
+    const currentAccount = String(state.currentAccountUsername || "").trim();
+    const previousCached = state.snapshotCacheByAccount instanceof Map
+      ? state.snapshotCacheByAccount.get(accountName)
+      : null;
+    const component = payload.component && typeof payload.component === "object"
+      ? payload.component
+      : {summary_map: {}, item_map: {}};
+    const snapshotPath = String(
+      payload.snapshot_path
+      || (previousCached && previousCached.snapshotPath)
+      || (accountName === currentAccount ? state.snapshotPath : "")
+      || ""
+    ).trim();
+    const fetchTime = String(
+      payload.fetch_time
+      || (previousCached && previousCached.fetchTime)
+      || (accountName === currentAccount ? state.fetchTime : "")
+      || ""
+    ).trim();
+    if (accountName === currentAccount) {
+      const keepSelectedIds = state.selectedComponentItemIds instanceof Set
+        ? new Set(state.selectedComponentItemIds)
+        : null;
+      setRows(
+        payload.rows,
+        component,
+        snapshotPath,
+        keepSelectedIds && keepSelectedIds.size ? {keepSelectedIds} : {}
+      );
+      if (fetchTime) state.fetchTime = fetchTime;
+      syncInventoryTop();
+    }
+    cacheSnapshotForAccount(accountName, {
+      rows: payload.rows,
+      component,
+      snapshotPath,
+      fetchTime,
+      connected: accountName === currentAccount
+        ? true
+        : !!(previousCached && previousCached.connected),
+      authState: String(previousCached && previousCached.authState || "").trim() || "normal",
+      authReason: String(previousCached && previousCached.authReason || "").trim()
+    });
+  }
   const totalRecipes = pendingEntries.reduce((s, e) => s + e.recipes.filter((r) => r.status === "pending").length, 0);
   const ok = await openConfirmModal({
     title: "确认执行多账号汰换",
@@ -14274,6 +14321,7 @@ async function runBatchCraftExecution() {
             }]
           })
         });
+        applyBatchCraftSuccessSnapshot(entry.username, data);
         recipe.status = "done";
         recipe.result = data;
         completedCount++;
