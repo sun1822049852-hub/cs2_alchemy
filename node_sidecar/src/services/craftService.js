@@ -546,6 +546,19 @@ function createCraftService({sessionPool, logger}) {
               "craft_ops",
               `tradeup done: account=${accountName} step=${req.index}/${recipeRequests.length} recipe=${recipeInfo.recipe} gained=${step.gained_ids.join(",")} gained_present=${step.gained_present_ids.length}/${step.gained_ids.length} still_exists=${step.still_exists_ids.length} settled=${step.inventory_settled} attempts=${step.settle_attempts}`
             );
+            // Log gained item details with wear values
+            const rowMap = buildRowMap(rows);
+            for (const gainedId of step.gained_present_ids) {
+              const gainedRow = rowMap.get(gainedId);
+              if (gainedRow) {
+                const wearValue = gainedRow.float_value != null ? Number(gainedRow.float_value).toFixed(18) : 'N/A';
+                const itemName = gainedRow.alchemy_name || gainedRow.name || 'Unknown';
+                logger.info(
+                  "craft_ops",
+                  `  产物: id=${gainedId} wear=${wearValue} name=${itemName.substring(0, 40)}`
+                );
+              }
+            }
           }
           emitProgress({
             phase: "done",
