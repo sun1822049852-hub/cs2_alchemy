@@ -8,12 +8,12 @@ const {
   resolveCraftAssistRequiredCount
 } = require("../../ui/craftAssistItemWearShared");
 
-const WEAR_INPUT_DECIMALS = 6;
+const WEAR_INPUT_DECIMALS = 16;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
-const EPSILON = 1e-9;
+const EPSILON = 1e-14;
 // Leave a tiny guard band so live craft results do not cross the requested
 // relative-wear cap due to float jitter such as 0.2700000107.
-const CRAFT_ASSIST_OUTCOME_RELATIVE_GUARD = 2e-8;
+const CRAFT_ASSIST_OUTCOME_RELATIVE_GUARD = 1e-14;
 const RARITY_MAP = {
   1: "Consumer",
   2: "Industrial",
@@ -76,10 +76,11 @@ function validateCraftAssistFinalOverall({
     return {ok: true};
   }
   const numericOverall = Number(overall);
+  const numericTarget = Number(targetValue);
   const numericSafeTarget = Number(safeTargetValue);
   const normalizedItemIds = normalizeCraftRecipeItemIds(itemIds);
   const normalizedSelectedItems = Array.isArray(selectedItems) ? selectedItems : [];
-  if (!Number.isFinite(numericOverall) || !Number.isFinite(numericSafeTarget)) {
+  if (!Number.isFinite(numericOverall) || !Number.isFinite(numericTarget)) {
     return {
       ok: false,
       code: "final_result_invalid",
@@ -90,14 +91,18 @@ function validateCraftAssistFinalOverall({
       message: "终局校验失败：结果均值无效，请调整材料范围"
     };
   }
-  if (numericOverall < numericSafeTarget - EPSILON) {
+  // Validate against original targetValue, not safeTargetValue
+  // safeTargetValue is only used during search to give algorithm headroom
+  // below mode requires strictly less than target (not equal)
+  // Direct comparison without EPSILON to preserve 14-digit precision
+  if (numericOverall < numericTarget) {
     return {ok: true};
   }
   return {
     ok: false,
     code: "final_result_exceeds_target",
     overall: numericOverall,
-    target: Number(targetValue),
+    target: numericTarget,
     safe_target: numericSafeTarget,
     approach_mode: normalizeCraftAssistApproachMode(approachMode),
     item_ids: normalizedItemIds,
@@ -1744,7 +1749,10 @@ async function runCraftAssistSelectionForRecipe({
         if (overall == null) {
           return {ok: false, code: "offset_result_invalid", message: "偏移修正后结果无效，请调整材料范围"};
         }
-        if (!(overall < safeTargetValue - EPSILON)) {
+        // Validate against original targetValue after offset correction
+        // below mode requires strictly less than target
+        // Direct comparison without EPSILON to preserve 14-digit precision
+        if (overall >= Number(targetValue)) {
           return {
             ok: false,
             code: "offset_pullback_exceeds_target",

@@ -1,6 +1,6 @@
 const {projectCraftAssistTraceMaterial} = require("../../ui/craftAssistItemWearShared");
 
-const EPSILON = 1e-9;
+const EPSILON = 1e-14;
 const INITIAL_WINDOW_EXTRA_CAP = 24;
 const WINDOW_BOUNDARY_MARGIN = 4;
 

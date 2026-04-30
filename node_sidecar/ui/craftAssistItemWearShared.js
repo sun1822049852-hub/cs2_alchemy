@@ -5,7 +5,7 @@
 }(typeof globalThis !== "undefined" ? globalThis : this, function createCraftAssistItemWearShared() {
   "use strict";
 
-  const WEAR_INPUT_DECIMALS = 6;
+  const WEAR_INPUT_DECIMALS = 16;
   const REQUIRED_COUNT = 10;
   const WEAR_SUFFIX_RANGES = [
     {keys: ["崭新出厂", "崭新", "factory new", "factorynew"], min: 0, max: 0.07},

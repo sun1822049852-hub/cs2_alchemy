@@ -7,7 +7,7 @@ const RARITY_VALUES = Object.keys(RARITY_MAP)
 const STORAGE_UNIT_CAPACITY = 1000;
 const MAIN_INVENTORY_CAPACITY = 1000;
 const STORAGE_UNIT_DEF_INDEX = 1201;
-const WEAR_INPUT_DECIMALS = 6;
+const WEAR_INPUT_DECIMALS = 16;
 const TRADEUP_SIMULATION_WEAR_DECIMALS = 16;
 const TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS = 4;
 const TRADEUP_SIMULATION_RANGE_DECIMALS = 4;
@@ -16084,6 +16084,69 @@ function renderWebInvAccountInfo() {
   };
 }
 
+function webInvComponentName(component, componentId) {
+  const key = String(componentId || "").trim();
+  if (!key) return "";
+  const summaryMap = component && component.summary_map && typeof component.summary_map === "object"
+    ? component.summary_map
+    : {};
+  const summary = summaryMap[key];
+  const rawName = String(summary && summary.name || "").trim();
+  return compactComponentName(rawName || key);
+}
+
+function webInvAdaptSnapshotRow(row, component) {
+  if (!row || typeof row !== "object") return null;
+  const assetid = rowAssetId(row);
+  if (!assetid) return null;
+  if (Number(row.def_index || 0) === STORAGE_UNIT_DEF_INDEX) return null;
+  const componentId = String(row.casket_id || "").trim();
+  const hiddenReason = String(row.hidden_reason || "").trim();
+  const imageUrl = preferredRowSkinImageUrl(row);
+  const marketHashName = String(row.market_hash_name || "").trim();
+  const name = String(row.name || marketHashName || assetid).trim();
+  const tradable = !hiddenReason && coolingUnlockTs(row) <= 0;
+  return {
+    assetid,
+    asset_id: assetid,
+    market_hash_name: marketHashName || name,
+    name: name || marketHashName || assetid,
+    name_color: String(row.name_color || "").trim(),
+    image_url: imageUrl,
+    icon_url: String(row.icon_url || "").trim(),
+    tradable,
+    tradable_after: row.tradable_after,
+    source_scope: componentId ? "component" : "main",
+    source_component_id: componentId,
+    source_component_name: componentId ? webInvComponentName(component, componentId) : "",
+    is_component_item: !!componentId,
+    can_transfer: tradable && !componentId,
+    can_list: !hiddenReason && !!(marketHashName || name),
+    block_reason: hiddenReason,
+    raw_row: row
+  };
+}
+
+function webInvBuildSnapshotCacheEntry(data) {
+  const rows = Array.isArray(data && data.rows) ? data.rows : [];
+  const component = data && data.component ? data.component : {summary_map: {}, item_map: {}};
+  return {
+    rows,
+    component,
+    items: rows.map((row) => webInvAdaptSnapshotRow(row, component)).filter(Boolean),
+    fetchTime: String(data && data.fetch_time || "").trim(),
+    snapshotPath: data && data.snapshot && data.snapshot.path ? data.snapshot.path : "",
+    fetchedAt: Date.now()
+  };
+}
+
+function webInvResolveImageSrc(item, size = "96fx96f") {
+  const direct = String(item && item.image_url || "").trim();
+  if (direct) return direct;
+  const iconPath = String(item && item.icon_url || "").trim();
+  return iconPath ? `https://community.akamai.steamstatic.com/economy/image/${iconPath}/${size}` : "";
+}
+
 function renderWebInvItemGrid() {
   if (!ui.webInvItemGrid) return;
   const grid = ui.webInvItemGrid;
@@ -16113,13 +16176,14 @@ function renderWebInvItemGrid() {
     const card = document.createElement("div");
     card.className = "web-inv-item-card" + (webInvState.selectedAssetIds.has(item.assetid) ? " selected" : "");
     const img = document.createElement("img");
-    img.src = item.icon_url ? `https://community.akamai.steamstatic.com/economy/image/${item.icon_url}/96fx96f` : "";
+    img.src = webInvResolveImageSrc(item, "96fx96f");
     img.alt = item.market_hash_name || item.name || "";
     img.loading = "lazy";
     const label = document.createElement("div");
     label.className = "web-inv-item-label";
     label.textContent = item.market_hash_name || item.name || "Unknown";
-    label.title = label.textContent;
+    label.title = item.source_component_name ? `${label.textContent}\n来源：${item.source_component_name}` : label.textContent;
+    card.title = label.title;
     card.append(img, label);
     if (!item.tradable) {
       card.classList.add("not-tradable");
@@ -16153,7 +16217,14 @@ async function webInvFetchInventory() {
     const resp = await fetch(`/api/accounts/${encodeURIComponent(username)}/inventory`);
     const data = await resp.json();
     if (data.ok && data.items) {
-      webInvState.inventoryCache.set(username, {items: data.items, fetchedAt: Date.now()});
+      webInvState.inventoryCache.set(username, {
+        items: data.items,
+        rows: [],
+        component: {summary_map: {}, item_map: {}},
+        fetchTime: "",
+        snapshotPath: "",
+        fetchedAt: Date.now()
+      });
       webInvState.selectedAssetIds.clear();
       renderWebInvItemGrid();
       updateWebInvActionBar();
@@ -16349,7 +16420,7 @@ function openMarketSellModal() {
     row.dataset.marketHashName = item.market_hash_name || "";
 
     const img = document.createElement("img");
-    img.src = item.icon_url ? `https://community.akamai.steamstatic.com/economy/image/${item.icon_url}/64fx64f` : "";
+    img.src = webInvResolveImageSrc(item, "64fx64f");
     img.width = 48; img.height = 48;
 
     const nameSpan = document.createElement("span");
@@ -16781,17 +16852,10 @@ function openWebInventoryModal(username) {
 
 async function fetchWebInventory(username) {
   try {
-    const resp = await fetch(`/api/accounts/${encodeURIComponent(username)}/inventory`);
-    const data = await resp.json();
+    const data = await api(`/api/snapshot/account?username=${encodeURIComponent(username)}&source=web_inventory&save_stub=1`);
+    const cached = webInvBuildSnapshotCacheEntry(data);
     document.getElementById("webInventoryLoading").style.display = "none";
-
-    if (!data.ok) {
-      document.getElementById("webInventoryEmpty").textContent = data.message || "拉取失败";
-      document.getElementById("webInventoryEmpty").classList.remove("hidden");
-      return;
-    }
-
-    webInventoryState.items = data.items || [];
+    webInventoryState.items = cached.items || [];
     if (webInventoryState.items.length === 0) {
       document.getElementById("webInventoryEmpty").classList.remove("hidden");
       return;
@@ -16815,7 +16879,7 @@ function renderWebInventoryList() {
     if (webInventoryState.selectedAssetIds.has(item.assetid)) div.classList.add("selected");
 
     const img = document.createElement("img");
-    img.src = item.icon_url ? `https://community.akamai.steamstatic.com/economy/image/${item.icon_url}/96fx96f` : "";
+    img.src = webInvResolveImageSrc(item, "96fx96f");
     img.alt = item.name;
     img.loading = "lazy";
 
@@ -17029,7 +17093,32 @@ async function startTradeTransfer() {
 
 // ═══ Steam Guard 令牌绑定 ═══
 
-let enrollState = { step: 1, username: "", revocationCode: "", running: false };
+let enrollState = { step: 1, username: "", mode: "", revocationCode: "", running: false };
+
+function isReplaceEnrollMode(mode) {
+  const value = String(mode || "").trim();
+  return value === "replace_existing" || value === "replace";
+}
+
+function formatSteamGuardEnrollError(input, fallbackMessage) {
+  const payload = input && typeof input === "object" && input.data && typeof input.data === "object"
+    ? input.data
+    : (input && typeof input === "object" ? input : null);
+  const reason = String(payload && payload.reason || "").trim();
+  const message = String(payload && payload.message || "").trim();
+  const status = String(payload && payload.status || "").trim();
+  const reasonMessageMap = {
+    already_has_authenticator: "该账号已绑定 Steam Guard 令牌",
+    replace_start_failed: "旧令牌替换验证启动失败，请稍后重试",
+    rate_limited: "操作过于频繁，请稍后再试",
+    no_phone_number: "该账号未绑定手机号，请先在 Steam 客户端绑定手机",
+    unknown_error: `未知错误 (status=${status || "?"})`
+  };
+  if (reason && reasonMessageMap[reason]) {
+    return reasonMessageMap[reason];
+  }
+  return message || String(input && input.message || "").trim() || fallbackMessage;
+}
 
 function initSteamGuardEnroll() {
   const btn = document.getElementById("accountPageEnrollBtn");
@@ -17041,9 +17130,13 @@ function initSteamGuardEnroll() {
   if (!btn || !modal) return;
 
   btn.onclick = () => {
-    enrollState = { step: 1, username: "", revocationCode: "", running: false };
+    enrollState = { step: 1, username: "", mode: "", revocationCode: "", running: false };
     populateEnrollAccountSelect();
     showEnrollStep(1);
+    document.getElementById("enrollRevocationWrap").classList.remove("hidden");
+    document.getElementById("enrollRevocationCode").textContent = "-";
+    document.getElementById("enrollFinalRevCode").textContent = "-";
+    document.getElementById("enrollFinalModeText").textContent = "Steam Guard 令牌绑定成功";
     document.getElementById("enrollStatusText").textContent = "";
     document.getElementById("enrollStatusText").className = "enroll-status";
     modal.classList.remove("hidden");
@@ -17123,14 +17216,7 @@ async function handleEnrollAction() {
         body: JSON.stringify({ username })
       });
       if (!data.ok) {
-        const reasons = {
-          already_has_authenticator: "该账号已绑定 Steam Guard 令牌",
-          replace_start_failed: "旧令牌替换验证启动失败，请稍后重试",
-          rate_limited: "操作过于频繁，请稍后再试",
-          no_phone_number: "该账号未绑定手机号，请先在 Steam 客户端绑定手机",
-          unknown_error: `未知错误 (status=${data.status || "?"})`
-        };
-        statusEl.textContent = reasons[data.reason] || data.message || "绑定失败";
+        statusEl.textContent = formatSteamGuardEnrollError(data, "绑定失败");
         statusEl.className = "enroll-status error";
         enrollState.running = false;
         actionBtn.disabled = false;
@@ -17149,7 +17235,7 @@ async function handleEnrollAction() {
       enrollState.running = false;
       showEnrollStep(2);
     } catch (err) {
-      statusEl.textContent = `请求失败：${err.message}`;
+      statusEl.textContent = formatSteamGuardEnrollError(err, `请求失败：${err.message}`);
       statusEl.className = "enroll-status error";
       enrollState.running = false;
       actionBtn.disabled = false;
@@ -17168,7 +17254,7 @@ async function handleEnrollAction() {
         body: JSON.stringify({ username: enrollState.username, activationCode: code })
       });
       if (!data.ok) {
-        statusEl.textContent = data.message || data.reason || "验证失败，请检查验证码";
+        statusEl.textContent = formatSteamGuardEnrollError(data, "验证失败，请检查验证码");
         statusEl.className = "enroll-status error";
         enrollState.running = false;
         actionBtn.disabled = false;
@@ -17184,7 +17270,7 @@ async function handleEnrollAction() {
       // Refresh account list
       try { await loadAccounts(); } catch (_) {}
     } catch (err) {
-      statusEl.textContent = `请求失败：${err.message}`;
+      statusEl.textContent = formatSteamGuardEnrollError(err, `请求失败：${err.message}`);
       statusEl.className = "enroll-status error";
       enrollState.running = false;
       actionBtn.disabled = false;
