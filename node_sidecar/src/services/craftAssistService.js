@@ -1914,7 +1914,8 @@ async function selectCraftAssistForRecipe({
   // Apply Steam precision margin for below mode
   // This accounts for floating-point precision differences between our
   // calculation and Steam's server-side calculation
-  const STEAM_PRECISION_MARGIN = 1e-8; // 0.00000001
+  // Observed drift: up to 2.09e-8 in production logs
+  const STEAM_PRECISION_MARGIN = 3e-8; // 0.00000003 (conservative margin)
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
   const adjustedTargetValue = approachMode === "below"
     ? targetValue - STEAM_PRECISION_MARGIN
