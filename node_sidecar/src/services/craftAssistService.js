@@ -96,13 +96,15 @@ function validateCraftAssistFinalOverall({
   // Validate against original targetValue, not safeTargetValue
   // safeTargetValue is only used during search to give algorithm headroom
   // below mode requires strictly less than target (not equal)
-  // Direct comparison without EPSILON to preserve 14-digit precision
-  const passed = numericOverall < numericTarget;
+  // Add safety margin to account for floating-point precision differences
+  // between our calculation and Steam's server-side calculation
+  const STEAM_PRECISION_MARGIN = 1e-8; // 0.00000001
+  const passed = numericOverall < (numericTarget - STEAM_PRECISION_MARGIN);
 
   // Log validation result (always log, no dedup)
   craftAssistLogger.infoAlways(
     "craft_assist",
-    `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} passed=${passed} delta=${numberTextTrunc(numericOverall - numericTarget, WEAR_INPUT_DECIMALS)}`
+    `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} passed=${passed} delta=${numberTextTrunc(numericOverall - numericTarget, WEAR_INPUT_DECIMALS)} margin=${STEAM_PRECISION_MARGIN}`
   );
 
   if (passed) {
@@ -111,7 +113,7 @@ function validateCraftAssistFinalOverall({
 
   craftAssistLogger.warnAlways(
     "craft_assist",
-    `验证拒绝: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} > target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
+    `验证拒绝: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} >= target-margin=${numberTextTrunc(numericTarget - STEAM_PRECISION_MARGIN, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
   );
 
   return {
@@ -123,7 +125,7 @@ function validateCraftAssistFinalOverall({
     approach_mode: normalizeCraftAssistApproachMode(approachMode),
     item_ids: normalizedItemIds,
     selected_items: normalizedSelectedItems,
-    message: `终局校验拦截超过目标磨损：当前 ${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
+    message: `终局校验拦截超过目标磨损：当前 ${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}（含安全边界 ${STEAM_PRECISION_MARGIN}）`
   };
 }
 
