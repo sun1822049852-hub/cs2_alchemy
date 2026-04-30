@@ -7,6 +7,8 @@ const {
   projectCraftAssistTraceMaterial,
   resolveCraftAssistRequiredCount
 } = require("../../ui/craftAssistItemWearShared");
+const {DedupLogger} = require("../logger");
+const craftAssistLogger = new DedupLogger({windowMs: 800});
 
 const WEAR_INPUT_DECIMALS = 16;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
@@ -1782,6 +1784,22 @@ async function runCraftAssistSelectionForRecipe({
   }
   const finalItemIds = collectCraftAssistSelectedItemIds(materialResults);
   const finalSelectedItems = collectCraftAssistSelectedItemDiagnostics(materialResults);
+
+  // Log selected materials and predicted outcome
+  craftAssistLogger.info(
+    "craft_assist",
+    `选材完成: target=${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)} predicted_overall=${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)} approach_mode=${approachMode} rarity=${selectedRarity} item_count=${finalItemIds.length}`
+  );
+  for (let i = 0; i < finalSelectedItems.length; i++) {
+    const item = finalSelectedItems[i];
+    if (item && item.wear != null) {
+      craftAssistLogger.info(
+        "craft_assist",
+        `  材料[${i + 1}]: id=${item.id} wear=${numberTextTrunc(item.wear, WEAR_INPUT_DECIMALS)} name=${asString(item.name || '').substring(0, 30)}`
+      );
+    }
+  }
+
   const finalOverallCheck = validateCraftAssistFinalOverall({
     overall,
     targetValue,
