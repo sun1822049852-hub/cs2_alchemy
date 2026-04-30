@@ -41,10 +41,20 @@ class DedupLogger {
     }
   }
 
+  // Force log without deduplication
+  infoAlways(scope, text) {
+    this._write("INFO", scope, text);
+  }
+
   warn(scope, text) {
     if (this._allow("WARN", scope, text)) {
       this._write("WARN", scope, text);
     }
+  }
+
+  // Force log without deduplication
+  warnAlways(scope, text) {
+    this._write("WARN", scope, text);
   }
 
   error(scope, text) {

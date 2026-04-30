@@ -99,8 +99,8 @@ function validateCraftAssistFinalOverall({
   // Direct comparison without EPSILON to preserve 14-digit precision
   const passed = numericOverall < numericTarget;
 
-  // Log validation result
-  craftAssistLogger.info(
+  // Log validation result (always log, no dedup)
+  craftAssistLogger.infoAlways(
     "craft_assist",
     `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} passed=${passed} delta=${numberTextTrunc(numericOverall - numericTarget, WEAR_INPUT_DECIMALS)}`
   );
@@ -109,7 +109,7 @@ function validateCraftAssistFinalOverall({
     return {ok: true};
   }
 
-  craftAssistLogger.warn(
+  craftAssistLogger.warnAlways(
     "craft_assist",
     `验证拒绝: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} > target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
   );
@@ -1799,15 +1799,15 @@ async function runCraftAssistSelectionForRecipe({
   const finalItemIds = collectCraftAssistSelectedItemIds(materialResults);
   const finalSelectedItems = collectCraftAssistSelectedItemDiagnostics(materialResults);
 
-  // Log selected materials and predicted outcome
-  craftAssistLogger.info(
+  // Log selected materials and predicted outcome (always log, no dedup)
+  craftAssistLogger.infoAlways(
     "craft_assist",
     `选材完成: target=${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)} predicted_overall=${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)} approach_mode=${approachMode} rarity=${selectedRarity} item_count=${finalItemIds.length}`
   );
   for (let i = 0; i < finalSelectedItems.length; i++) {
     const item = finalSelectedItems[i];
     if (item && item.wear != null) {
-      craftAssistLogger.info(
+      craftAssistLogger.infoAlways(
         "craft_assist",
         `  材料[${i + 1}]: id=${item.id} wear=${numberTextTrunc(item.wear, WEAR_INPUT_DECIMALS)} name=${asString(item.name || '').substring(0, 30)}`
       );
