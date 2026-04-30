@@ -96,15 +96,15 @@ function validateCraftAssistFinalOverall({
   // Validate against original targetValue, not safeTargetValue
   // safeTargetValue is only used during search to give algorithm headroom
   // below mode requires strictly less than target (not equal)
-  // Add safety margin to account for floating-point precision differences
-  // between our calculation and Steam's server-side calculation
-  const STEAM_PRECISION_MARGIN = 1e-8; // 0.00000001
-  const passed = numericOverall < (numericTarget - STEAM_PRECISION_MARGIN);
+  // Note: For below mode, targetValue has already been adjusted by
+  // STEAM_PRECISION_MARGIN in selectCraftAssistForRecipe, so we don't
+  // need to subtract it again here
+  const passed = numericOverall < numericTarget;
 
   // Log validation result (always log, no dedup)
   craftAssistLogger.infoAlways(
     "craft_assist",
-    `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} passed=${passed} delta=${numberTextTrunc(numericOverall - numericTarget, WEAR_INPUT_DECIMALS)} margin=${STEAM_PRECISION_MARGIN}`
+    `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} passed=${passed} delta=${numberTextTrunc(numericOverall - numericTarget, WEAR_INPUT_DECIMALS)}`
   );
 
   if (passed) {
@@ -113,7 +113,7 @@ function validateCraftAssistFinalOverall({
 
   craftAssistLogger.warnAlways(
     "craft_assist",
-    `验证拒绝: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} >= target-margin=${numberTextTrunc(numericTarget - STEAM_PRECISION_MARGIN, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
+    `验证拒绝: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} >= target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
   );
 
   return {
@@ -125,7 +125,7 @@ function validateCraftAssistFinalOverall({
     approach_mode: normalizeCraftAssistApproachMode(approachMode),
     item_ids: normalizedItemIds,
     selected_items: normalizedSelectedItems,
-    message: `终局校验拦截超过目标磨损：当前 ${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}（含安全边界 ${STEAM_PRECISION_MARGIN}）`
+    message: `终局校验拦截超过目标磨损：当前 ${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
   };
 }
 
@@ -1910,6 +1910,23 @@ async function selectCraftAssistForRecipe({
   if (targetValue == null) {
     return {ok: false, message: "请先输入目标相对磨损"};
   }
+
+  // Apply Steam precision margin for below mode
+  // This accounts for floating-point precision differences between our
+  // calculation and Steam's server-side calculation
+  const STEAM_PRECISION_MARGIN = 1e-8; // 0.00000001
+  const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
+  const adjustedTargetValue = approachMode === "below"
+    ? targetValue - STEAM_PRECISION_MARGIN
+    : targetValue;
+
+  if (approachMode === "below") {
+    craftAssistLogger.info(
+      "craft_assist",
+      `below模式：目标调整 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)} → ${numberTextTrunc(adjustedTargetValue, WEAR_INPUT_DECIMALS)} (margin=${STEAM_PRECISION_MARGIN})`
+    );
+  }
+
   const context = resolveCraftAssistSelectionContext({
     selectionContext,
     rows,
@@ -1938,8 +1955,8 @@ async function selectCraftAssistForRecipe({
     materials: normalizedMaterials,
     rowsByName,
     blockedIds: blocked,
-    targetValue,
-    wearApproachMode: normalizeCraftAssistApproachMode(wearApproachMode),
+    targetValue: adjustedTargetValue,  // Use adjusted target
+    wearApproachMode: approachMode,
     useRelativeFilter: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
     wearOffsetPct: normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
     candidateCache: context.candidateCache instanceof Map ? context.candidateCache : null,
