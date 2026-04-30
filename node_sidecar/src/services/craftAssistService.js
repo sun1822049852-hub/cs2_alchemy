@@ -97,9 +97,23 @@ function validateCraftAssistFinalOverall({
   // safeTargetValue is only used during search to give algorithm headroom
   // below mode requires strictly less than target (not equal)
   // Direct comparison without EPSILON to preserve 14-digit precision
-  if (numericOverall < numericTarget) {
+  const passed = numericOverall < numericTarget;
+
+  // Log validation result
+  craftAssistLogger.info(
+    "craft_assist",
+    `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} passed=${passed} delta=${numberTextTrunc(numericOverall - numericTarget, WEAR_INPUT_DECIMALS)}`
+  );
+
+  if (passed) {
     return {ok: true};
   }
+
+  craftAssistLogger.warn(
+    "craft_assist",
+    `验证拒绝: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} > target=${numberTextTrunc(numericTarget, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
+  );
+
   return {
     ok: false,
     code: "final_result_exceeds_target",
