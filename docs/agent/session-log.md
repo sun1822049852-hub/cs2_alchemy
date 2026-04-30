@@ -1,5 +1,455 @@
 # Session Log
 
+## 2026-04-30
+- Task: 修复 craft assist below 模式下实际产物超出用户目标磨损的精度问题
+- Investigation:
+  - 用户报告在 MOON 账号（selenomorphology）使用 below 模式选材（目标 0.27，10 个配方），部分产物磨损值超出目标
+  - 分析日志发现：
+    - 案例 1：预测 `0.2699999988079071` < 目标 `0.27`，验证通过，但实际产物 `0.270000010728836060` 超出目标，漂移 `1.192e-8`
+    - 案例 2：预测 `0.2699999898672104` < 调整后目标 `0.26999999`（1e-8 边界），验证通过，但实际产物 `0.270000010728836060` 超出用户目标 `0.27`，漂移 `2.09e-8`
+  - 根本原因：浮点数精度差异导致吾的计算与 Steam 服务器端计算存在漂移
+  - 日志问题：
+    - `DedupLogger` 在 800ms 内过滤相同日志，导致 10 个配方只显示 9 个
+    - 材料磨损值未显示（检查了不存在的 `item.wear` 字段）
+- Changes:
+  - [node_sidecar/src/logger.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/logger.js): 添加 `infoAlways()` 和 `warnAlways()` 方法绕过去重
+  - [node_sidecar/src/services/craftAssistService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/craftAssistService.js):
+    - 选材和验证日志改用 `infoAlways()` / `warnAlways()`，确保每个配方都记录
+    - 修复材料日志：正确读取 `item.relative_wear` 和 `item.absolute_wear`
+    - **第一次尝试（失败）**：在验证阶段减去 1e-8 边界 → 导致验证过严，连基本材料都选不出来
+    - **第二次尝试（成功但不足）**：在入口调整目标（below: `target - 1e-8`，above: 不变）→ 1e-8 边界不足以覆盖 2.09e-8 漂移
+    - **最终方案**：增大安全边界到 3e-8，below 模式目标调整为 `target - 3e-8`
+  - [docs/agent/craft-assist-precision-fix.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/craft-assist-precision-fix.md): 完整记录问题分析、解决方案演进、测试验证和经验教训
+- Verification:
+  - 用户在 MOON 账号重新选材 10 个配方，所有产物磨损值 < 0.27
+  - 日志完整显示所有 10 个配方和材料详情
+  - 验证新边界能正确拦截之前超出的配方：
+    - 材料均值 `0.2699999898672104`
+    - 调整后目标（3e-8）`0.26999997`
+    - 验证 FAIL（正确拦截）
+- Follow-up:
+  - 持续监控生产日志中的漂移，如果发现超过 3e-8 需要进一步调整
+  - 考虑根据历史数据动态调整安全边界
+  - above 模式不受影响（目标不调整）
+  - 高速选材模式复用标准搜索，安全边界同样生效
+
+## 2026-04-29
+- Task: 继续收敛“库存总览接批量上架”这条产品口径，只确认现状与目标，不进入实现方案。
+- Investigation:
+  - 用户明确否定“完整复用库存总览页面”的说法：当前库存总览会显示黄盾物品，因此后续只能复用其 **部分底层能力**（GC 数据、选中态、组件取出、现有展示片段），不能把当前库存总览的全部显示/过滤规则原样搬到上架流里。
+  - 用户确认 `批量上架` 不是独立页面，而是放在库存总览现有 `取出选中` 右侧的一个按钮；点击后不是直接提交，而是弹出一个 **大窗口**。
+  - 用户确认当前前端里黄盾物品已经不可选；并补充要求：进入批量上架大窗口后，冷却中的物品也必须不可选。
+  - 用户确认不再额外做“组件物品显示开关”：因为当前前端在“查看全部库存”时已经能显示组件内物品，所以上架流应直接利用这一现状，而不是再增加单独的组件显示切换。
+  - 用户确认批量上架大窗口应“直接参考现在的显示内容”，并承担两类功能：1) 展示汇总物品；2) 批量填价与单件改价。执行层面保留两段式：先打开大窗口做最终勾选/改价，再对窗口内最终勾选的物品执行上架。
+  - 用户再次强调代理问题必须作为主线约束一起解决，不能把“库存总览接上架”与“Node 侧 Web 链路代理统一”拆成两件互不相关的小事。
+- Changes:
+  - 无业务代码改动。
+  - 更新 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md) 记录当前已定案的产品口径。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 固化稳定约束。
+- Verification:
+  - 现状核对：
+    - [node_sidecar/ui/index.html](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/index.html) 中库存总览现有按钮位于 `componentWithdrawBtn` 附近
+    - [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 中现有组件取出、组件内/主库存区分、以及 Web market 价格弹窗逻辑都仍在
+    - [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js#L3950) 现有批量上架链路仍保留“每件 2 秒延迟”
+- Follow-up:
+  - 当前已确认的实现方向不是“重做一套库存页”，而是：
+    1. 复用库存总览的部分能力
+    2. 新增/改造一个面向上架的大窗口
+    3. 复用现有价格查询/改单价/确认上架能力
+    4. 组件物品先走现成 `withdraw`，再接 Web 卖出
+    5. 同时统一 Node 侧 Web 链路代理
+  - 下个会话第一刀不该直接改 UI，而应先把“现有能力 / 真实缺口 / 代理统一问题”整理成一份清晰现状，再进入方案。
+
+## 2026-04-29
+- Task: 按魔尊最新定界，对 `LOVE (countsteam002)` 先做“主动刷新一次 GC，再与刚拉下来的真 Web inventory 做主库存对账”的第一轮实证，只看主库存，不把组件内物品直接纳入第一轮比较。
+- Investigation:
+  - 先按仓库现场与账号数据核对，确认用户口中的 `LOVE` 对应本地账号名是 `countsteam002`，并且当前可信前提只保留一条：组件物品在真实 `withdraw / 存回` 过程中 `asset_id` 不变。
+  - 直接运行 [node_sidecar/src/main.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/main.js) 的 `refresh` 链，成功得到新的 GC 快照 [inventory_processed_20260429_180408.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260429_180408.json)。该快照共有 `1149` 条，拆开后主库存 `877`（其中 `Storage Unit` 本体 `2`），组件内物品 `272`，主库存非组件本体 `875`。
+  - 随后尝试用当前本地 `inventoryService` 和直接 `https.get/fetch` 去拉真 Web inventory，先后命中 `库存拉取超时`、`UND_ERR_CONNECT_TIMEOUT` 与 `ETIMEDOUT 108.160.163.112:443`，说明问题不在“GC/WEB 字段映射”，而是到 `steamcommunity.com` 的连通链。
+  - 继续做本机代理现场核对后发现：当前机器没有 `HTTPS_PROXY/HTTP_PROXY` 环境变量，也没有 WinHTTP proxy；但 Windows Internet Settings 已开启系统代理 `127.0.0.1:15732`。这解释了为什么浏览器/Electron 可能能走代理，而 shell/Node 里的 `networkPrecheck.getProxyUrl()` 仍返回空字符串。
+  - 在 shell 命令里显式注入 `HTTPS_PROXY=http://127.0.0.1:15732` 后，真 Web inventory 首批请求恢复成功；继续用代理化翻页方式拉全量，得到 live Web inventory 共 `450` 条，并将原始结果落到 [love_web_inventory_20260429_180408.live.json](/C:/Users/18220/Desktop/cs2_alchemy/tmp/love_web_inventory_20260429_180408.live.json)。
+  - 最后将 live Web inventory 与 GC 快照主库存按 `assetid / asset_id` 对账，结果落到 [love_web_vs_gc_compare_20260429_180408.live.json](/C:/Users/18220/Desktop/cs2_alchemy/tmp/love_web_vs_gc_compare_20260429_180408.live.json)。
+- Changes:
+  - 无业务代码改动。
+  - 更新 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md) 记录本轮 live 对账结果。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 固化代理与字段比较约束。
+- Verification:
+  - `node node_sidecar/src/main.js refresh --account countsteam002`
+  - 显式代理探测：读取 `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings`，确认 `ProxyEnable=1`、`ProxyServer=127.0.0.1:15732`
+  - 显式代理后首批真 Web inventory 请求返回 `HTTP 200`
+  - live 对账结果：
+    - Web `450`
+    - GC 主库存总数 `877`
+    - GC 主库存非 `Storage Unit` 本体 `875`
+    - `450` 个 Web `assetid` 全部都能在 GC 主库存里找到
+    - 重叠项的 `market_hash_name` `450/450` 全匹配
+    - 重叠项的可交易状态代理判断 `450/450` 全匹配
+    - 直接比较 `name` 全部不相等，原因是 Web 返回本地化中文名，而 GC `name` 当前是英文完整名
+- Follow-up:
+  - 这轮已经证明：对 `LOVE` 来说，**Web 可见主库存是 GC 主库存的真子集**，而且 **Web 上架真正锚定的 `assetid` 在 GC 主库存里可直接对上**。
+  - 但这轮也同时证明：不能把整个 GC 主库存无差别当成“Web 可上架全集”，因为当前快照里还有 `425` 个 GC 主库存非组件本体条目不在这次 live Web inventory 结果里。
+  - 后续若要继续评估“能不能直接用 GC 做 Web 上架主数据源”，下一刀应聚焦：这些“只在 GC、不在 Web”的主库存条目到底缺了哪种 Web 可见性/可上架条件；而不是重新争论 `assetid` 是否稳定。
+
+## 2026-04-29
+- Task: 按魔尊最新要求，把 `Web Inventory` 页当前“拉取库存”按钮从本地 GC 快照读取链切回旧的 Web/Community inventory 拉取链。
+- Investigation:
+  - 先回看 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 现状，确认当前主页面按钮 `webInvFetchInventory()` 已经被切到 `/api/snapshot/account?username=...&source=web_inventory&save_stub=1`；这正是前一轮“按钮读的是本地快照，不等于实时连接 GC”的根源。
+  - 再核对 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 与 [node_sidecar/src/inventoryService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/inventoryService.js)，确认旧 Web/Community inventory 路由 `/api/accounts/:username/inventory` 仍然活着，底层仍会用账号 Web Session 去请求 `https://steamcommunity.com/inventory/{steamId64}/730/2?...`，所以切回这个按钮入口不需要补后端。
+- Changes:
+  - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，将主页面 `webInvFetchInventory()` 改回直接请求 `/api/accounts/${encodeURIComponent(username)}/inventory`，并把返回结果写入 `webInvState.inventoryCache` 的轻量结构，不再通过快照适配层读取 `rows + component`。
+  - 删除同文件中那段已经失效的 `LEGACY Community inventory fallback disabled` 注释块，避免后续阅读时再误判当前主入口。
+  - 更新 [node_sidecar/tests/web-inventory-bootstrap.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-bootstrap.test.js)，把回归口径改回“主页面按钮必须走 `/api/accounts/:username/inventory`”，不再要求该按钮命中 `/api/snapshot/account`。
+- Verification:
+  - `node node_sidecar/tests/web-inventory-bootstrap.test.js`
+  - `node -c node_sidecar/ui/app.js`
+- Follow-up:
+  - 这次只把 **主页面按钮** 切回旧 Web/Community inventory 链；并未改动隐藏旧弹窗 `fetchWebInventory()` 当前仍走的快照链，也未回退其他依赖 `/api/snapshot/account` 的页面逻辑。
+  - 切回后，这个按钮拿到的是 Community inventory 轻量字段，不再默认携带 `casket_id/float_value/paint_seed` 这类 GC 明细。后续若还要同时保留“看组件内物品”和“Web 链拉普通库存”两种入口，应另做显式区分，不要再混成一个按钮。
+
+## 2026-04-29
+- Task: 更正本轮 `Web Inventory` 调查中的一个关键前提错误，并把“哪些结论仍成立、哪些只是快照级证据”明确落盘。
+- Investigation:
+  - 回看 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 与 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 后确认：`Web Inventory` 页“拉取库存”按钮当前主链走的是 `/api/snapshot/account?username=...`，后端优先读取 `inventory_ui_state.json` 中已有的 `snapshot_path`，并不会因为页面点了按钮就自动实时连接 GC。
+  - 因此，本轮先前“通过浏览器/外部端拉取库存，所以拿到的是实时库存”的说法不严谨。正确说法应是：浏览器请求拿到的是**本地快照接口的返回值**；如果该账号此刻没有先做刷新，按钮读出来的可能只是旧快照。
+  - 这不会推翻两类已拿到的证据：
+    1. `/api/snapshot/account` 的响应结构里确实包含完整 GC `rows + component` 字段；
+    2. 真实 `withdraw` 之后，新的快照与新的 web route 返回可以共同证明样本物品 `asset_id` 稳定、`casket_id` 清空。
+- Changes:
+  - 更新 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)，补上这条前提更正。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)，固化“`Web Inventory` 拉取库存按钮默认读本地快照，不等于实时连接 GC”的长期约束。
+- Verification:
+  - 前端按钮链路核对：`[app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)` 中 `webInvFetchInventory()` 直接请求 `/api/snapshot/account?...`
+  - 后端读取语义核对：`[uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)` 中 `/api/snapshot/account` 会先检查 `accountCache.snapshot_path`，有快照就直接 `loadSnapshotSafe(...)`
+- Follow-up:
+  - 后续凡是基于 `Web Inventory` 页面做事实判断，都要先回答“这是旧快照还是刚刷新出的新快照”。
+  - 若要证明“当前时刻最新状态”，必须先触发一次真实刷新/连接 GC，再去看页面或 `/api/snapshot/account` 返回。
+
+## 2026-04-29
+- Task: 把 `Moon set (wy19174601720)` 这轮关于 `Web Inventory` 浏览器响应、组件可见性、以及单物品真实 `withdraw` 的调查结果全部落回仓库，避免后续继续凭口头记忆判断。
+- Investigation:
+  - 先沿 [accounts.json](/C:/Users/18220/Desktop/cs2_alchemy/accounts.json)、[inventory_ui_state.json](/C:/Users/18220/Desktop/cs2_alchemy/inventory_ui_state.json)、[web_inventory_fetches.jsonl](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_fetches.jsonl) 收敛 `Moon set` 身份与当前运行态：`Moon set -> wy19174601720`；其 `Web Inventory` 最新真实拉取已不是早先 `1130/165` 的旧快照，而是指向 [inventory_processed_20260429_162739.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260429_162739.json) 的新版拉取，`row_count=1825`、`component_item_count=860`、`main_item_count=962`、`storage_unit_count=3`。
+  - 再用真实浏览器运行态探针直接调用页面内 `showPage('webInventoryPage') / webInvSelectAccount('wy19174601720') / webInvFetchInventory()`，抓到 `Web Inventory` 实际缓存与 DOM 结果：`cachedItemCount=1822`、`cachedComponentItemCount=860`、`domComponentCardCount=860`，组件来源名同时包含 `市场出售 / 炼金材料1 / 炼金材料2`，卡片 title 也实际带有 `来源：...`。这证明“前端切到 Web Inventory 后能看到组件内物品”不仅是用户肉眼印象，而是 DOM 级事实。
+  - 继续核 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 与浏览器端缓存结构后确认：浏览器请求 `/api/snapshot/account` 返回的不是轻量 web 卡片数据，而是完整 GC `rows + component`。前端只是把它适配成 `items` 用于显示；原始响应字段依然保留在 `webInvState.inventoryCache.rows` 与 `items[*].raw_row` 里。
+  - 最后补做最小真实 `withdraw`：从 `Moon set / 炼金材料1 / asset_id=48704500932` 取出 1 件 `P90 | Straight Dimes (Field-Tested)`。验证结果说明：`asset_id` 是这件物品的稳定唯一标识；位置状态看 `casket_id`，在组件内时等于组件 ID，回主库存后变空；浏览器 route 与 GC 新快照都能对回到同一 `asset_id`。
+- Changes:
+  - 更新 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)，把本轮 `Web Inventory` 浏览器响应结构、组件可见性和 `withdraw` 实验一起归档。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)，固化后续实现 `asset_id_reconcile_failed` 保险丝时必须依赖的稳定规律。
+- Verification:
+  - 真实 `web` 拉取日志：查看 [web_inventory_fetches.jsonl](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_fetches.jsonl) 最新 `wy19174601720` 记录，确认当前活快照为 [inventory_processed_20260429_162739.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260429_162739.json)。
+  - 真实 `web` stub：查看 [web_inventory_stub_20260429_164007.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_20260429_164007.json) 与 [web_inventory_stub_20260429_170724.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_20260429_170724.json)，确认组件数量与取出后计数变化。
+  - 真实运行态 DOM 探针证据：
+    - `cachedItemCount=1822`
+    - `cachedComponentItemCount=860`
+    - `domComponentCardCount=860`
+    - `componentNames = [市场出售, 炼金材料1, 炼金材料2]`
+    - 样本卡片 title 包含 `来源：市场出售` 与 `来源：炼金材料1`
+  - 真实 `withdraw` 证据：见本文件下一节 `2026-04-29` 的单物品 `withdraw` 记录，以及 [inventory_processed_20260429_170724.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260429_170724.json) / [web_inventory_stub_20260429_170724.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_20260429_170724.json)。
+- Follow-up:
+  - 当前可以明确断言：`Web Inventory` 前端不仅能看见组件内物品，而且浏览器里持有的原始数据比页面展示更完整，包含 `asset_id / casket_id / float_value / paint_seed / paint_index / tradable_after / hidden_reason` 等字段。
+  - 这轮调查已经把“为什么可以只做 `withdraw` 验证、不需要真的上架”讲清：只要取出后同一 `asset_id` 还能在最新 `rows` 中找到，且 `casket_id` 已为空，就足以验证组件上架闭环所需的 ID 稳定性前提。
+
+## 2026-04-29
+- Task: 对 `Moon set (wy19174601720)` 做一次最小真实 `withdraw` 实验，只验证“组件物品取出后 asset_id 是否稳定、casket_id 是否清空”，不做实际上架。
+- Investigation:
+  - 先从最新 [inventory_processed_20260429_162739.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260429_162739.json) 中核出 `Moon set` 当前 3 个组件本体与组件内条目分布：`炼金材料1=100`、`炼金材料2=595`、`市场出售=165`。
+  - 为了降低风险，只选 `炼金材料1` 中 1 件样本做实验：`asset_id=48704500932`，物品名 `P90 | Straight Dimes (Field-Tested)`；实验前其 `casket_id=48954186281`、`hidden_reason=attr#272/273`、`float_value=0.1602420061826706`。
+  - 此次实验目标不是验证 `sellItem()`，而是验证“取出后同一物品在 GC / snapshot / web route 三条链上是否仍然是同一个 `asset_id`，以及它是否真的从组件回到了主库存”。
+- Changes:
+  - 未修改业务代码；只通过现有 [componentOpsService](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/componentOpsService.js) 对真实账号执行 1 件物品的 `withdraw`。
+  - 实验后生成新的库存快照 [inventory_processed_20260429_170724.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260429_170724.json)。
+  - 同步触发一次 `/api/snapshot/account?username=wy19174601720&source=web_inventory&save_stub=1`，生成新的 web fetch stub [web_inventory_stub_20260429_170724.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_20260429_170724.json)。
+- Verification:
+  - 真实 `withdraw` 返回成功：`component=48954186281 requested=1 success=1 failed=0`。
+  - 取出前（组件内）：
+    - `asset_id=48704500932`
+    - `casket_id=48954186281`
+    - `hidden_reason=attr#272/273`
+    - `float_value=0.1602420061826706`
+  - 取出后，在 `componentOpsService.runMove()` 返回的最新 `rows` 中再次定位同一物品：
+    - `asset_id=48704500932`，未变化
+    - `casket_id=""`，已清空
+    - `hidden_reason=""`，已清空
+    - `float_value=0.1602420061826706`，未变化
+  - 取出后，在新快照 [inventory_processed_20260429_170724.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260429_170724.json) 中再次定位：
+    - 仍是同一 `asset_id=48704500932`
+    - `casket_id=""`
+  - 取出后，在 web route `/api/snapshot/account` 返回中再次定位：
+    - 仍是同一 `asset_id=48704500932`
+    - `casket_id=""`
+  - 总量侧证：
+    - 取出前 `web` 计数：`component_item_count=860`、`main_item_count=962`
+    - 取出后最新 stub [web_inventory_stub_20260429_170724.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_20260429_170724.json) 变为：`component_item_count=859`、`main_item_count=963`
+    - 说明这不是复制了一份，而是 1 件物品真实从组件移回主库存
+- Follow-up:
+  - 这次最小样本已经证明：对 `Moon set / 炼金材料1 / asset_id=48704500932` 这条真实路径，`withdraw` 后 `asset_id` 稳定不变，且 `casket_id` 会清空。
+  - 当前这件样本物品仍停留在主库存，未自动存回原组件；若后续要恢复现场，需要显式 `deposit` 回 `48954186281`。
+  - 这条证据足以支撑后续把组件上架闭环的保险丝收敛为：`withdraw` 后必须重新在最新 `rows` 中定位原 `asset_id`，并要求 `casket_id` 已为空，否则返回 `asset_id_reconcile_failed`。
+
+## 2026-04-25
+- Task: 承接 `Steam Guard` 手工烟测主线，先复述 `ffe1060` 断点，再继续真实运行态验证 `token-detail`、`new_enroll / replace_existing` 与 Web Session fallback，并把结果回写记录。
+- Investigation:
+  - 先按 handoff / plan / memory / `git status` 复核现场，确认 `HEAD` 仍是 `ffe1060 Fix Steam Guard token flows and detail modal`；同时发现工作树里 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 还有一笔未提交的 `Steam Guard` modal 状态补丁，而 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 的当前脏 diff 主要是 `Web Inventory`，不是本主线。
+  - 再直接对现成 `127.0.0.1:8787` 跑真实页面 CDP 探针，确认 `token-detail` 仍能打开并显示有效 TOTP；但点“绑定令牌”后，`new_enroll` 与 `replace_existing` 的首步都在 UI 上稳定报 `tokenStore.close is not a function`。沿 [node_sidecar/src/tokenStore.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/tokenStore.js) 与 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 追调用链后确认，根因是 `/api/accounts/enroll-steam-guard` 把纯 JSON `TokenStore` 误当成有 `close()` 的资源对象。
+  - 修完 route 后，为避免把旧进程误认成新代码，又额外起了一条当前工作树的独立 `uiServer` 到 `127.0.0.1:8788`。在新实例上直接打真实 API 与真实页面后确认：`tokenStore.close` 异常已消失，但绑定弹窗仍把后端 `HTTP 200 + {ok:false, reason:no_phone_number}` 误显示成 `请求失败：http 200`。继续核对 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 的 `api()` helper 与 `handleEnrollAction()` 后确认，根因是 `api()` 会在 `body.ok === false` 时直接 `throw err.data`，而 `handleEnrollAction()` 还沿用“检查 `data.ok`”的旧契约。
+  - 在修正前端错误翻译后，重新对 `8788` 做真实 DOM 取证：`openTokenDetailModal('gb840489')` 仍能显示有效 TOTP、`rawData` 无 `加载失败`；而 `countsteam002` 与 `gb840489` 的绑定弹窗现在都能正确显示业务态 `该账号未绑定手机号，请先在 Steam 客户端绑定手机`，不再是底层 `http 200` 噪音。
+  - 进一步对当前 12 个带 refresh token 的真实账号逐个请求 `/api/accounts/enroll-steam-guard`，结果全部返回 `no_phone_number (status=2)`；当前账户集中只有 `gb840489` 存在健康 `maFile`，没有任何样本进入 `new_enroll` 或 `replace_existing` 的 Step 2，也没有现成破损 `maFile` 行可供 live fallback 手测。
+- Changes:
+  - 新增 [node_sidecar/tests/steam-guard-enroll-route.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/steam-guard-enroll-route.test.js)，锁定 `/api/accounts/enroll-steam-guard` 必须能读取 refresh token，而不能因为 `TokenStore.close()` 缺失先炸成 500。
+  - 更新 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)，把 enroll route 的 `TokenStore` 关闭动作收敛成“仅当存在 `close()` 时才调用”，与 fallback 支路保持一致。
+  - 新增 [tests/steamGuardEnrollErrorHandling.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/steamGuardEnrollErrorHandling.test.js)，锁定 `handleEnrollAction()` 在 `api()` 抛出 `err.data` 时，必须展示真实业务错误，而不是泛化成 `请求失败：http 200`。
+  - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，新增 `formatSteamGuardEnrollError()`，让 `enroll / finalize` 两步都能从 `err.data.reason/message/status` 还原真实业务文案。
+- Verification:
+  - `node node_sidecar/tests/steam-guard-enroll-route.test.js`
+  - `node tests/steamGuardEnrollErrorHandling.test.js`
+  - `node tests/steamGuardEnrollCopy.test.js`
+  - 真实运行态 DOM 取证：对 `http://127.0.0.1:8788` 执行 `openTokenDetailModal('gb840489')`，确认 `tokenTotpCode` 仍是有效 5 位 Steam TOTP，`tokenRawData` 不含 `加载失败`。
+  - 真实运行态 DOM 取证：在 `8788` 页面里对 `countsteam002`、`gb840489` 触发“绑定令牌”首步，确认前端现在显示 `该账号未绑定手机号，请先在 Steam 客户端绑定手机`，而不是 `tokenStore.close is not a function` 或 `请求失败：http 200`。
+  - 真实 API 取证：当前 12 个带 refresh token 的账号逐个请求 `/api/accounts/enroll-steam-guard`，全部返回 `no_phone_number (status=2)`，没有样本进入 `new_enroll / replace_existing` 的验证码阶段。
+- Follow-up:
+  - 当前 `token-detail` 真机链已恢复，`Steam Guard` 绑定弹窗的两处运行态阻塞也已收敛；但手工烟测仍未完成，因为现有真实账号样本都缺少“已绑定手机号”这个 Steam 前置条件。
+  - 下一轮若要继续验证 `new_enroll / replace_existing`，先准备至少一个“已绑定手机号”的真实账号；若要继续验证“破损 `maFile` -> TokenStore fallback”，先准备一个可丢弃的运行态副本或现成破损样本，不要直接破坏主运行态数据库。
+  - 继续手测时不要再复用旧的 `8787` 结果做裁决；后端代码改完后，必须确认当前探测实例确实重启到了新代码。
+
+## 2026-04-25
+- Task: 追杀 `gb840489` 在真实 Electron 窗口里打开令牌详情仍显示 `ERROR` 的运行态回归，并确认是否与后端生命周期有关。
+- Investigation:
+  - 先用真实进程与端口证据收敛现场，确认 Electron 桌面入口 [electron-main.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/electron-main.js) 每次启动都会内嵌 `createServer()` 并监听随机端口，关窗时也会 `uiServer.close()`；同时机器上还残留了一条手工启动的独立 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) `8787` 进程，所以“窗口里的后端”和“独立 8787 后端”本来就是两条并存链，不能混看。
+  - 再锁定魔尊重开的新窗口对应 PID `17340`、端口 `54441`，并直接请求 `http://127.0.0.1:54441/api/accounts/token-detail?username=gb840489`、`/app.js`、`/`。结果都返回新代码与正确 JSON，说明真实窗口已经吃到最新后端与前端资源，问题不在“新窗口没带新后端”。
+  - 最后用真实浏览器通过 CDP 连到同源 `http://127.0.0.1:54441`，直接执行 `openTokenDetailModal('gb840489')` 抓运行态 DOM。修前稳定复现：弹窗文本是 `加载失败：resp.json is not a function`。继续追 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 后确认，根因是 `api()` helper 本身已经返回解析后的 JSON，但 `handleEnrollAction()` 与 `openTokenDetailModal()` 还把返回值当 `fetch Response` 继续 `.json()`，属于前端 API 契约误用，不是令牌解析或后端生命周期问题。
+- Changes:
+  - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，把 `Steam Guard` 前端链上的三处 `const resp = await api(...); const data = await resp.json();` 改成直接 `const data = await api(...);`，覆盖：
+    1. `/api/accounts/enroll-steam-guard`
+    2. `/api/accounts/finalize-steam-guard`
+    3. `/api/accounts/token-detail`
+  - 更新 [tests/tokenDetailModalDisplay.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/tokenDetailModalDisplay.test.js)，新增断言锁死 `openTokenDetailModal()` 不得再对 `api()` 结果调用 `.json()`。
+  - 更新 [tests/steamGuardEnrollCopy.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/steamGuardEnrollCopy.test.js)，新增断言锁死 `handleEnrollAction()` 的 enroll/finalize 两步同样不得对 `api()` 结果二次 `.json()`。
+- Verification:
+  - `node tests/tokenDetailModalDisplay.test.js`
+  - `node tests/steamGuardEnrollCopy.test.js`
+  - 真实运行态验证：浏览器通过 CDP 打开 `http://127.0.0.1:54441`，执行 `openTokenDetailModal('gb840489')` 后读取 DOM，修后得到：
+    - `code = X576W`（运行时实测值，只在当时 30 秒窗口内有效）
+    - `tokenAccName = gb840489`
+    - `tokenSteamId = 76561198716518867`
+    - `rawData` 已显示脱敏后的令牌 JSON，不再是 `resp.json is not a function`
+- Follow-up:
+  - 当前 `Steam Guard` 令牌详情这条真实运行态链已证明恢复，根因是前端 `api()` 契约误用，不是 Electron 关窗/起窗没有带上新后端。
+  - 仓库里仍有其他主线的无关脏项；这次只修了 `Steam Guard` 前端 API 契约，不继续扩到其他模块里同类 `resp.json()` 误用，避免擅自扩大范围。
+
+## 2026-04-25
+- Task: 承接 `old-contract-cleanup-handoff-2026-04-25.md`，只做 `/api/craft/assist-select` 周边旧契约全仓分类，不重做 `c0fc29c` 已完成的 batch helper 修正，并把现场差异写回记录。
+- Investigation:
+  - 先按 handoff 顺序复核 [docs/agent/old-contract-cleanup-handoff-2026-04-25.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/old-contract-cleanup-handoff-2026-04-25.md)、[docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)、[docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 与当前 `git status`，确认主线仍是“旧契约收敛”，不是继续修 batch helper；同时确认当前脏树比 handoff 时更杂，除运行态 `backup/ui_state/*` 外，还混有 `Steam Guard`、`Web Inventory`、文档和测试改动，因此本轮只做只读审计与记录，不顺手清理无关改动。
+  - 再核对提交 `c0fc29c` 的真实内容，确认它只改了 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 中 `callBatchCraftAssistSelectForAccount()`，并新增 [node_sidecar/tests/batch-craft-assist-select.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/batch-craft-assist-select.test.js)；修正点与 handoff 主体一致：batch helper 已从旧字段 `wear_filter_mode / mode / fast_mode / approach_mode / exclude_item_ids` 切到当前调用字段 `wear_approach_mode / blocked_ids / enable_fast_craft_assist`，但现场源码对响应仍保留 `item_ids || itemIds` 回退，不是“只剩 `item_ids` 单一路径”。
+  - 全仓精确检索后确认，当前活的 `/api/craft/assist-select` 前端调用只剩两处，且都已走新字段：
+    - 单账号辅助选材 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L8593) 发送 `username / target_wear / wear_approach_mode / materials / use_component_items / blocked_ids / include_cooling / wear_offset_pct / enable_fast_craft_assist`
+    - batch helper [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L14084) 发送同一套字段
+    - 未再发现活调用继续向 `/api/craft/assist-select` 发送顶层 `wear_filter_mode / mode / fast_mode / approach_mode / exclude_item_ids`
+    - 但两处活调用的响应解析仍兼容 `item_ids || itemIds`，见 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L8620) 与 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L14088)
+  - 后端兼容层仍存在且与 handoff 基本一致： [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js#L804) 的 `buildCraftAssistSelectRoutePayload()` 仍兼容 `include_component_items/use_component_items`、`blocked_ids/selected_item_ids`、顶层 `wear_filter_mode`；其中 `selected_item_ids` 优先于 `blocked_ids`，为空时才回退成 `blocked_ids`，再把 `legacyWearFilterMode` 传给材料归一化。worker/direct parity 由 [node_sidecar/tests/craft-assist-route.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/craft-assist-route.test.js) 锁住。
+  - 本地存储与材料持久化层也与 handoff 结论一致，但现场多了一个值得记住的细节：
+    - [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L1936) 的 `batch_craft_ui_prefs_v1` 仍保存 `use_component_items / include_cooling / fast_mode / approach_mode / wear_offset_pct`，这是本地偏好，不是 assist-select 网络契约
+    - [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L1516)、[node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L5787)、[node_sidecar/ui/craftAssistItemWearShared.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/craftAssistItemWearShared.js#L352) 这条链说明 account-state / draft / preset / materials 持久化真源已是 `materials[].items[].wear_filter_mode`
+    - 旧顶层 `wear_filter_mode`、`use_absolute_wear`、`craftAssistUseAbsoluteWear`、`craftAssistMainCount`、`craftAssistAuxCount` 现在只剩 legacy restore / sanitize 入口；新写回会主动删除这些顶层字段，相关保护见 [node_sidecar/tests/craft-assist-account-state.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/craft-assist-account-state.test.js) 与 [node_sidecar/tests/craft-assist-autoselect-writeback.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/craft-assist-autoselect-writeback.test.js)
+    - batch preset 应用链里 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L14136) 仍会组一个本地 `draftSnapshot.wear_filter_mode` 槽位，但 `sanitizeCraftAssistPresetPayload()` 已不再产出该字段；这更像未清掉的本地草稿痕迹，不是新的网络旧契约
+  - 文档与现场存在一处明确冲突，需要以后收敛时以现场+新版 spec 为准：
+    - 旧设计文档 [docs/superpowers/specs/2026-03-18-craft-assist-frontend-single-source-design.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/specs/2026-03-18-craft-assist-frontend-single-source-design.md) 与 [docs/superpowers/specs/2026-03-18-craft-assist-role-aware-selection-design.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/specs/2026-03-18-craft-assist-role-aware-selection-design.md) 仍把顶层 `wear_filter_mode` 写成前端当前请求字段
+    - 现场代码与 [docs/superpowers/specs/2026-04-06-craft-assist-item-level-wear-design.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/specs/2026-04-06-craft-assist-item-level-wear-design.md) 一致：新前端不再新写顶层 `wear_filter_mode`，server 只把它当 legacy 兼容输入
+- Changes:
+  - 更新 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)，补齐本轮“网络调用字段 / 后端兼容层 / 本地存储键 / 材料持久化结构”的分类结论、现场差异与后续收敛顺序。
+- Verification:
+  - `git -C C:/Users/18220/Desktop/cs2_alchemy status --short --branch`
+  - `git -C C:/Users/18220/Desktop/cs2_alchemy show --stat --oneline c0fc29c`
+  - `rg -n "/api/craft/assist-select" .`
+  - `rg -n "\\b(selected_item_ids|blocked_ids|include_component_items|use_component_items|enable_fast_craft_assist|wear_approach_mode|wear_filter_mode|fast_mode|approach_mode|exclude_item_ids)\\b" node_sidecar/src/uiServer.js node_sidecar/ui/app.js node_sidecar/tests tests docs/superpowers/specs docs/superpowers/plans`
+  - `rg -n "BATCH_CRAFT_UI_PREFS_KEY|CRAFT_UI_PREFS_KEY|CRAFT_ASSIST_PRESETS_KEY|saveBatchCraftUiPrefs|loadBatchCraftUiPrefs|saveCraftUiPrefs|loadCraftUiPrefs" node_sidecar/ui/app.js`
+  - `rg -n "projectCraftAssistAccountScopedMaterials|buildCurrentCraftAccountScopedStateSnapshot|restoreCraftAssistDraftSnapshot|buildCraftAssistDraftSnapshotFromState|sanitizeCraftAssistPresetPayload|projectCraftAssistPersistedMaterialsFromState|normalizeCraftAssistMaterialListCanonical" node_sidecar/ui/app.js node_sidecar/ui/craftAssistItemWearShared.js`
+- Follow-up:
+  - 下一刀若要真正删旧契约，应先只处理“活网络调用”之外仍残留的本地草稿痕迹与文档口径，再决定是否删除 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js#L804) 兼容层。
+  - 若要动 `uiServer` 兼容层，先保留 route-level 回归并补一条“无活调用依赖 `selected_item_ids / include_component_items / 顶层 wear_filter_mode`”的红灯，再删；不要直接全仓替换字段名。
+
+## 2026-04-25
+- Task: 为“旧契约问题”生成可恢复 handoff，供新会话继续处理 `/api/craft/assist-select` 周边的旧字段清理与兼容层收敛。
+- Investigation:
+  - 先核对 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 与 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 后确认，`batch craft` 调用侧旧契约已经由提交 `c0fc29c` 修正，但后端入口 `buildCraftAssistSelectRoutePayload()` 仍保留 `include_component_items/use_component_items`、`blocked_ids/selected_item_ids`、顶层 `wear_filter_mode` 的兼容处理。
+  - 再结合全仓检索确认，当前“旧契约问题”不能粗暴一刀切，因为有几类同名字段并不属于同一层：网络请求字段、后端兼容层、本地 `batch_craft_ui_prefs_v1` 存储键、以及 `materials[*].wear_filter_mode` 这种材料持久化结构。
+  - 运行态层面已经验证：多账号 helper 本体存在成功样本，失败样本也已拿到真实后端报错（数量不足、偏移超阈值）；因此新会话不应再把“多账号偶发失败”默认判断成 batch helper 契约仍未修复。
+- Changes:
+  - 新增 handoff 文件 [old-contract-cleanup-handoff-2026-04-25.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/old-contract-cleanup-handoff-2026-04-25.md)，集中记录当前目标、进度断点、现场状态、不要重做的路径、验证证据与下个会话第一刀。
+- Verification:
+  - 交接依据核对：`git log -1 --oneline` 当前为 `c0fc29c Fix batch craft assist-select contract`
+  - 现场检索核对：`rg -n "buildCraftAssistSelectRoutePayload|include_component_items|use_component_items|selected_item_ids|blocked_ids|legacyWearFilterMode|wear_approach_mode|wear_filter_mode" node_sidecar/src/uiServer.js node_sidecar/ui/app.js node_sidecar/tests`
+- Follow-up:
+  - 下个会话应优先按 handoff 文件分类旧契约痕迹，再决定是否删除后端兼容层；不要跳过分类直接全仓替换字段名。
+
+## 2026-04-25
+- Task: 修复 `Steam Guard` 令牌详情弹窗显示 `ERROR` 的回归，并把前端兜底链与 parser 兼容写回记录。
+- Investigation:
+  - 先按 `systematic-debugging` 复核 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)、[node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)、[node_sidecar/src/maFileParser.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/maFileParser.js) 与本地参考 [docs/reference/steam-guard-enroll/BD_SteamTools_JoinSteamAuthenticatorPageViewModel.cs](/C:/Users/18220/Desktop/cs2_alchemy/docs/reference/steam-guard-enroll/BD_SteamTools_JoinSteamAuthenticatorPageViewModel.cs)，确认开源侧确实保留了解析 `shared_secret` 的本地令牌构造链。
+  - 再直接查询本机真实 [csgo_skins.db](/C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db) 中现存 `mafile_content` 结构，并临时起本地 `uiServer` 请求 `/api/accounts/token-detail?username=gb840489`，确认当前真实数据不是旧 `response` 包装，而是本仓库 `snake_case` 扁平结构；后端路由对这份真实数据返回 `200`，且 `currentTotp/encryptedSecret/secretKeyHex/ivHex` 都存在。
+  - 进一步用 Node WebCrypto 复算 `AES-CBC decrypt -> computeSteamTotp` 后确认，接口出数本身可用；因此真正薄弱点不在后端 parse，而在前端 [openTokenDetailModal()](C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 过度依赖本地重算，一旦 renderer 侧 decrypt/recompute 失败就把整个弹窗降成 `ERROR`，而且此前还把 `steamData.shared_secret` 一并打成 `[REDACTED]`，导致无法走 parser fallback。
+- Changes:
+  - 更新 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)，保留 `steamData.shared_secret`，继续只对 `access_token`、`identity_secret`、`secret_1` 与 `Session.SteamLoginSecure` 做最小必要脱敏，让令牌详情页仍能拿到 parser 兼容所需的 `shared_secret`。
+  - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，新增 `parseTokenDetailSteamData()`、`extractSharedSecretFromTokenDetailData()`、`decryptTokenDetailSharedSecret()` 三个 helper；现在弹窗会先显示服务端返回的 `currentTotp`，再尝试本地 decrypt，若 decrypt 失败则退回 `steamData` 中的 `shared_secret`，并兼容 `shared_secret / response.shared_secret / SharedSecret / Response.SharedSecret` 多种结构，不再因为本地重算失败而直接显示 `ERROR`。
+  - 新增回归 [tests/tokenDetailModalDisplay.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/tokenDetailModalDisplay.test.js)，锁死三件事：必须存在 token detail parser helper、必须能从多种 payload 结构提取 `shared_secret`、必须在本地重算前先渲染服务端 `currentTotp`。
+  - 更新 [node_sidecar/tests/token-detail-route.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/token-detail-route.test.js)，新增断言要求 `steamData.shared_secret` 继续保留，避免后续再次把 parser fallback 拆掉。
+- Verification:
+  - `node node_sidecar/tests/token-detail-route.test.js`
+  - `node tests/tokenDetailModalDisplay.test.js`
+  - `node node_sidecar/tests/account-card-render.test.js`
+  - `node tests/steamGuardEnrollCopy.test.js`
+- Follow-up:
+  - 当前修复已把“本地重算失败即整窗 ERROR”降为可显示状态，但仍未做真实桌面 UI 的人工点击验收；目前只能确认已到可手测状态。
+  - 若后续还存在某些旧导入令牌在后端 `parseMaFile()` 阶段就失败，再单独把 [maFileParser.js](C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/maFileParser.js) 扩成同时兼容 `response.*` / PascalCase 历史结构，不要和本轮前端 fallback 混成一刀。
+
+## 2026-04-25
+- Task: 为 `Web Inventory` 社区库存拉取链补充 CMD 级诊断日志，让请求动作、关键信息与结果直接打印到本地窗口，便于对比真实报错。
+- Investigation:
+  - 先核对 [node_sidecar/src/inventoryService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/inventoryService.js) 与 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 后确认，社区库存拉取链真正落在 `/api/accounts/:username/inventory` 与 `/api/accounts/batch-inventory`，底层只有成功/失败一句话，缺少每页请求、响应码和返回体摘要。
+  - 再对照 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js#L16178) 后确认，当前 `Web Inventory` 页面主按钮实际上优先读取 `/api/snapshot/account?...source=web_inventory&save_stub=1`，并不直接走社区库存路由。因此这次补日志的目标是“社区库存 fetch 链本身”，不是 GC snapshot 读取链。
+  - 按 TDD 先补红灯：新增 [node_sidecar/tests/inventory-service.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/inventory-service.test.js) 锁定 `inventoryService` 必须产出 request/response/error trace；实现前该测试按预期失败，因为当前没有任何 trace 输出。
+- Changes:
+  - 更新 [node_sidecar/src/inventoryService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/inventoryService.js)，新增 `onTrace` 机制：每页请求前吐 `phase=request`，成功响应吐 `phase=response`，超时/HTTP 非 200/JSON 解析失败/网络异常吐 `phase=error`；trace 包含 `url`、`pageIndex`、`startAssetId`、`statusCode`、`assetCount`、`descriptionCount`、`moreItems`、`lastAssetId`、`bodySnippet` 与脱敏后的 `cookieSummary`。
+  - 更新 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)，让单账号与批量社区库存路由统一输出 `web_inventory_fetch` 日志流：现在会把 `step=start/session/done/failed`、每页 `request/response/page`、以及脱敏 session 概况直接打印到 CMD。
+  - 新增回归 [node_sidecar/tests/web-inventory-route-logging.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-route-logging.test.js)，直接请求 `/api/accounts/:username/inventory`，确认 `web_inventory_fetch` 日志确实进入 CMD，而不是只停留在内部回调。
+- Verification:
+  - 红灯验证：`node node_sidecar/tests/inventory-service.test.js`
+  - 绿灯验证：`node node_sidecar/tests/inventory-service.test.js`
+  - 日志链验证：`node node_sidecar/tests/web-inventory-route-logging.test.js`
+  - 入口回归：`node node_sidecar/tests/web-inventory-bootstrap.test.js`
+- Follow-up:
+  - 现在只要社区库存链再报错，可直接在 CMD 中检索 `web_inventory_fetch`，按 `step=session -> phase=request -> phase=response/error -> step=done/failed` 逐段对比。
+  - 这次没有改动 `/api/snapshot/account?...source=web_inventory` 的 GC 快照主入口；若后续是页面主按钮报错，应另查 snapshot/refresh 链，不要把它和社区库存 fetch 链混为一谈。
+
+## 2026-04-25
+- Task: 给 `Web Inventory` 拉取链补日志留存，并在真实拉取后落一份可复用的 stub 数据，供后续手测与回归使用。
+- Investigation:
+  - 先核对 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 的 `/api/snapshot/account` 现状，确认此前只返回 `rows + component + snapshot`，没有任何针对 `Web Inventory` 拉取的专用落盘；现有 `logs/processed_inventory/*.json` 只能证明 GC 快照存在，不能留下“这次 Web Inventory fetch 实际看到了什么”的轻量证据。
+  - 再核对 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 两个 `Web Inventory` 读取点（主页面与旧弹窗），确认它们都已经切到 `/api/snapshot/account`，因此最稳的做法是：前端 fetch 显式带 `source=web_inventory&save_stub=1`，服务端只在这个标记下写日志与 stub，避免把其他快照读取路径一并打脏。
+  - 先按 TDD 补红灯：更新 [node_sidecar/tests/web-inventory-bootstrap.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-bootstrap.test.js) 要求主入口 URL 带 `save_stub=1`；更新 [node_sidecar/tests/refresh-auth-route.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/refresh-auth-route.test.js) 要求 `/api/snapshot/account?...&source=web_inventory&save_stub=1` 返回后必须留下 `stub_path/log_path`。两条在实现前都按预期失败。
+- Changes:
+  - 新增 [node_sidecar/src/services/webInventoryFetchArtifactStore.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/webInventoryFetchArtifactStore.js)，把 `Web Inventory` fetch 产物统一落到 `logs/web_inventory_fetch/`：
+    - `web_inventory_fetches.jsonl` 记录每次 fetch 的时间、账号、快照路径、行数与 stub 路径
+    - `web_inventory_stub_<timestamp>.json` 保留裁剪后的 stub
+    - `web_inventory_stub_latest.json` 指向最近一次 fetch 的最新 stub
+  - 更新 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)，让 `/api/snapshot/account` 在命中 `save_stub=1` 时，把当前返回的 `snapshot/rows/component/fetch_time/auth_state` 交给新落盘器，并在响应里附加 `stub_artifact.{stub_path,latest_stub_path,log_path}`。
+  - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，让 `webInvFetchInventory()` 与旧弹窗 `fetchWebInventory()` 都显式请求 `/api/snapshot/account?username=...&source=web_inventory&save_stub=1`。
+  - 修正新服务的路径绑定时机：初版在模块加载时就把 `PATHS.LOG_DIR` 固定死，导致测试进程误往仓库真目录写日志；现已改成每次写盘时动态读取当前 `PATHS.LOG_DIR`，测试隔离恢复正常。
+- Verification:
+  - 红灯验证：`node node_sidecar/tests/web-inventory-bootstrap.test.js`
+  - 红灯验证：`node node_sidecar/tests/refresh-auth-route.test.js`
+  - 绿灯验证：`node node_sidecar/tests/web-inventory-bootstrap.test.js`
+  - 绿灯验证：`node node_sidecar/tests/refresh-auth-route.test.js`
+  - 语法验证：`node -c node_sidecar/src/uiServer.js`
+  - 语法验证：`node -c node_sidecar/src/services/webInventoryFetchArtifactStore.js`
+  - 真实拉取验证：临时起当前工作区 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 到 `127.0.0.1:8788`，对 `username=19174601720` 发起 `/api/snapshot/account?source=web_inventory&save_stub=1` 请求，返回 `row_count=2020`，并真实落盘：
+    - stub: [web_inventory_stub_20260425_123524.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_20260425_123524.json)
+    - latest: [web_inventory_stub_latest.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_latest.json)
+    - log: [web_inventory_fetches.jsonl](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_fetches.jsonl)
+  - 实物摘要核对：最新 stub 当前记录 `row_count=2020`、`component_item_count=1320`、`main_item_count=698`、`storage_unit_count=2`、`component_count=2`，快照来源为 [inventory_processed_20260425_120839.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/processed_inventory/inventory_processed_20260425_120839.json)。
+- Follow-up:
+  - 当前 `Web Inventory` 拉取已经能留下“这次真实 fetch 的轻量证据”，后续若要补运行态 UI 手测或 route/adapter 回归，可直接用 [web_inventory_stub_latest.json](/C:/Users/18220/Desktop/cs2_alchemy/logs/web_inventory_fetch/web_inventory_stub_latest.json) 做对照。
+  - 本轮仍未进入 `withdraw -> verify -> sell` 与 `asset_id_reconcile_failed`；这份 stub 主要服务于 Chunk 1 的数据源与 UI 联调，不可误当成组件上架链已完成验收。
+
+## 2026-04-25
+- Task: 承接 `Web Market Listing Phase 2 / Chunk 1` 第一刀，把 `Web Inventory` 主入口切到 `/api/snapshot/account`，并将旧 Community inventory 拉取逻辑降级为注释禁用块。
+- Investigation:
+  - 先按最新 handoff 顺序复核 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)、[docs/agent/market-listing-confirm.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/market-listing-confirm.md)、[docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md)、[docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 与当前 `git status`，确认本轮主线已从旧 `steamWebSession` 对齐切到 Phase 2；同时发现计划里“仓库内还没有 `market-listing-confirm.md`”已被现场镜像修正，应以后续会话优先读仓库镜像为准。
+  - 现场 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 里仍有两条活的 Community inventory 拉取链：主页面 `webInvFetchInventory()` 和旧弹窗 `fetchWebInventory()` 都直接请求 `/api/accounts/:username/inventory`；而 `/api/snapshot/account` 的快照读取链与 `rows/component/fetch_time/snapshot.path` 结构已在同文件其他模块稳定使用。
+  - 先按 TDD 改写 [node_sidecar/tests/web-inventory-bootstrap.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-bootstrap.test.js)：要求 `webInvFetchInventory()` 主入口改用 `/api/snapshot/account`，并要求旧 `/api/accounts/:username/inventory` 只能留在 block comment 的 disabled legacy fallback 中。改完后先跑红灯，失败原因符合预期：源码仍在主入口里直接抓旧 Community inventory 路由。
+- Changes:
+  - 更新 [node_sidecar/tests/web-inventory-bootstrap.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-bootstrap.test.js)，将断言从 `/api/accounts/:username/inventory` 切换为 `/api/snapshot/account`，并新增“旧 Community inventory 路由只能存在于 block comment”的静态保护。
+  - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，新增 `webInvAdaptSnapshotRow()`、`webInvBuildSnapshotCacheEntry()`、`webInvResolveImageSrc()` 等最小适配层，把 `/api/snapshot/account` 返回的 GC `rows + component` 转成 `Web Inventory` 页面与旧弹窗都可复用的轻量条目，同时过滤掉 `Storage Unit` 本体。
+  - 将主页面 `webInvFetchInventory()` 与旧弹窗 `fetchWebInventory()` 一并改为读取 `/api/snapshot/account`；旧 Community inventory 代码不删除，只以 `LEGACY Community inventory fallback disabled` block comment 形式保留在同文件中，作为后续 fallback 参考。
+  - 同步让 `renderWebInvItemGrid()`、`openMarketSellModal()`、`renderWebInventoryList()` 使用新的 `image_url` 优先级渲染图片，并在卡片 `title` 上附带组件来源名，避免切到 GC 快照后直接丢失图片或来源上下文。
+- Verification:
+  - 红灯验证：`node node_sidecar/tests/web-inventory-bootstrap.test.js`，修改测试后按预期失败，错误为主入口仍未切到 `/api/snapshot/account`。
+  - 绿灯验证：`node node_sidecar/tests/web-inventory-bootstrap.test.js`
+  - 语法验证：`node -c node_sidecar/ui/app.js`
+- Follow-up:
+  - 当前只完成了 Chunk 1 的第一刀：主入口已切到 GC 快照，旧 Community inventory 拉取逻辑已降级为注释禁用块。
+  - 本轮尚未继续实现 Chunk 1 剩余子项，包括组件来源显式 UI、组件物品 `transfer` 阻断/提示，以及计划里的 `web-inventory-gc-source.test.js`。
+  - 当前工作区仍保持脏树；除本轮修改外，`backup/ui_state/*` 运行态噪音和 `Steam Guard` 主线相关改动仍在。后续继续本主线时不要擅自清理无关脏改。
+
+## 2026-04-25
+- Task: 承接 `Web Market Listing` Phase 2 的 Claude 冻结断点，把外部 `.claude` 记忆落回仓库，并为后续执行准备可恢复 handoff。
+- Investigation:
+  - 先按用户提示在 `C:/Users/18220/.claude` 中定位 `memory/market-listing-confirm.md`，确认实体文件存在于 [C:/Users/18220/.claude/projects/c--Users-18220-Desktop-cs2-alchemy/memory/market-listing-confirm.md](/C:/Users/18220/.claude/projects/c--Users-18220-Desktop-cs2-alchemy/memory/market-listing-confirm.md)，不是仓库根目录文件。
+  - 复核 [C:/Users/18220/.claude/projects/c--Users-18220-Desktop-cs2-alchemy/memory/market-listing-confirm.md](/C:/Users/18220/.claude/projects/c--Users-18220-Desktop-cs2-alchemy/memory/market-listing-confirm.md)、[docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)、[docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md) 与当前工作区状态后确认：Claude 断点描述的是“Phase 1 已完成、Phase 2 待执行”，但其中 `POST /api/steam/single-inventory` 已是历史表述，当前现场代码主路由已漂到 `/api/accounts/:username/inventory`。
+  - 只读勘察 `componentOpsService`、`state.rows`、`/api/snapshot/account`、真实 GC 快照样本与前端 `webInv*` 链路后确认：`state.rows` 已是 GC 快照完整行，组件物品通过 `casket_id` 与 `state.component.item_map` 表达；`componentOpsService.runMove("withdraw")` 会返回 `rows/snapshot_path/op.success_ids`；当前前后端实现默认“取出后只改 `casket_id`，不改 `asset_id`”，但仓库内缺少同账号前后快照实证，不能把它当成无条件事实。
+- Changes:
+  - 新增仓库内镜像 [docs/agent/market-listing-confirm.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/market-listing-confirm.md)，将 Claude 的冻结断点原文同步回项目，并在顶部补了来源路径、同步时间与“旧单账号 Web inventory 路由已漂移”的注记。
+  - 新增执行计划 [docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md)，明确 Phase 2 的三段切口：1) 前端 `Web Inventory` 改读 `/api/snapshot/account`；2) 组合服务封装 `withdraw -> verify -> sell`；3) `/api/market/batch-sell` 扩展输入契约并回接 SSE。
+  - 该计划同时把两条关键保护写死：一是旧 Community inventory 代码只允许“注释禁用保留”，不得删除；二是若组件取出后无法用原 `asset_id` 在返回 `rows` 中重新定位到主库存物品，必须返回 `asset_id_reconcile_failed` 并阻断该物品上架。
+- Verification:
+  - `rg --files C:/Users/18220/.claude | rg "market-listing-confirm\\.md$"`，确认 Claude 冻结文件存在。
+  - `Get-Content -Raw C:/Users/18220/.claude/projects/c--Users-18220-Desktop-cs2-alchemy/memory/market-listing-confirm.md`，确认原文读取成功。
+  - `Get-Content -Raw [docs/agent/market-listing-confirm.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/market-listing-confirm.md)`，确认仓库镜像写入成功。
+  - `Get-Content -Raw [docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md)`，确认计划包含 `/api/snapshot/account`、`componentOpsService.runMove`、`asset_id_reconcile_failed`、旧 fetch 注释保留等关键项。
+  - 本轮未执行任何行为变更测试；当前只完成了断点承接、风险勘察与落盘。
+- Follow-up:
+  - 当前总目标仍是执行 `Web Market Listing` Phase 2；当前方案文件为 [docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-web-market-listing-phase2-gc-inventory.md)。
+  - 当前 `chunk`/`task` 断点停在 Chunk 1 之前：尚未开始代码实现；下一会话第一刀应直接修改 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 与 [node_sidecar/tests/web-inventory-bootstrap.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-bootstrap.test.js)，把 `Web Inventory` 主数据源切到 `/api/snapshot/account`，并将旧 Community inventory 拉取逻辑改为注释禁用块。
+  - 当前工作目录为 `C:/Users/18220/Desktop/cs2_alchemy`，分支为 `main`，工作树仍是脏的：除本轮新增文档外，还混有 `backup/ui_state/*` 运行态噪音、`Steam Guard` 主线未提交改动以及既有 `Web Inventory` 审计文档。下轮不要试图“清理工作区”；只在当前脏树上继续按主线筛改动。
+
+## 2026-04-25
+- Task: 按既有纠正计划完成 `Steam Guard` 绑定令牌双分支实现，打通 `new_enroll / replace_existing`、统一 `maFile` 契约，并补齐 `token-detail` 脱敏与破损 `maFile` 的 Web Session fallback。
+- Investigation:
+  - 先按 `resume-from-handoff` 顺序复核最新 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)、[docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md)、[docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 与当前 `git status`，确认当前主线仍是 `Steam Guard` 令牌纠偏；同时注意到 [node_sidecar/src/steamWebSession.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamWebSession.js)、[node_sidecar/package.json](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/package.json)、[node_sidecar/tests/steam-web-session.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/steam-web-session.test.js) 已有另一条 `Web Inventory` 脏线，本轮未碰。
+  - 再读取本地 [node_sidecar/node_modules/steam-user/components/twofactor.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/node_modules/steam-user/components/twofactor.js) 与 [node_sidecar/node_modules/steam-user/protobufs/steammessages_twofactor.steamclient.proto](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/node_modules/steam-user/protobufs/steammessages_twofactor.steamclient.proto)，确认替换链就是 `TwoFactor.RemoveAuthenticatorViaChallengeStart/Continue`，且 `replacement_token` 字段集足以直接喂给项目统一 `maFile` builder。
+  - 只读复核 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 与 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 后确认，旧实现除了后端半链路之外，还存在三处配套缺口：`finalize` 仍绕过 `AccountStore` 直写 SQL、`token-detail` 直接把原始 `mafile_content` 回传前端、绑定弹窗文案仍宣称“可直接替换原有令牌”。
+- Changes:
+  - 更新 [node_sidecar/src/steamGuardEnrollService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamGuardEnrollService.js)，把 `status=29` 从终态错误改成 `replace_existing` 分支入口，新增 `RemoveAuthenticatorViaChallengeStart/Continue` 包装，并统一通过 `buildProjectCompatibleMaFile()` 生成包含 `Session.SteamID`、`Session.SteamLoginSecure`、顶层 `access_token`、`identity_secret`、`fully_enrolled` 的可消费 `maFile`。
+  - 更新 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)，让 `resolveWebSessionForAccount()` 在 `mafile_content` 可解析但刷新失败时回退 `TokenStore`；`/api/accounts/finalize-steam-guard` 改走 `AccountStore.upsert()` 持久化；`/api/accounts/token-detail` 改为返回脱敏后的对象，不再把原始 `access_token` / `shared_secret` / `identity_secret` / `secret_1` / `Session.SteamLoginSecure` 裸回前端。
+  - 更新 [node_sidecar/ui/index.html](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/index.html)、[node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)、[node_sidecar/ui/styles.css](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/styles.css)，把弹窗文案改为“验证后判断是首次绑定还是替换旧令牌”，前端 `enrollState` 新增 `mode`，并根据后端返回切换“首次绑定 / 替换旧令牌”的提示、恢复码显隐和完成态文案。
+  - 新增回归 [node_sidecar/tests/steam-guard-enroll-service.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/steam-guard-enroll-service.test.js)、[node_sidecar/tests/token-detail-route.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/token-detail-route.test.js)、[node_sidecar/tests/steam-guard-web-session-fallback.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/steam-guard-web-session-fallback.test.js)、[tests/steamGuardEnrollCopy.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/steamGuardEnrollCopy.test.js)，锁死双分支、`maFile` 契约、路由脱敏、fallback 与前端文案/mode 处理。
+- Verification:
+  - `node node_sidecar/tests/steam-guard-enroll-service.test.js`
+  - `node node_sidecar/tests/token-detail-route.test.js`
+  - `node node_sidecar/tests/steam-guard-web-session-fallback.test.js`
+  - `node tests/steamGuardEnrollCopy.test.js`
+  - `node node_sidecar/tests/account-card-render.test.js`
+  - `node node_sidecar/tests/account-store-sqlite.test.js`
+- Follow-up:
+  - 本轮自动回归已全绿，但尚未用真实 Steam 账号做手工烟测，因此当前只能宣称已到可手测状态，不能宣称真实绑定链路已线上验证。
+  - 当前工作树仍混有两类非本主线脏项：`backup/ui_state/*` 运行态噪音，以及上方已记录的 `Web Inventory` 脏线文件；若后续要提交 `Steam Guard` 修复，需先按主线筛改动，不要把无关 `steamWebSession` / `package.json` / 运行态备份一并卷入。
+
+## 2026-04-25
+- Task: 锁定 `Web Inventory` 主线，先把 [node_sidecar/src/steamWebSession.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamWebSession.js) 向上游 `steamRefreshSession` 收敛，并补上模块级回归测试。
+- Investigation:
+  - 先按交接顺序复核 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)、[docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)、[docs/agent/web-inventory-upstream-implementation-index.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/web-inventory-upstream-implementation-index.md)、[docs/superpowers/plans/2026-04-24-web-inventory-management-page.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-24-web-inventory-management-page.md) 与 `git status --short`，确认 `Web Inventory` 已完成的部分仍是库存页路由修回、`sessionid` 注入和 trade URL 官方 API fallback；当前第一优先级未对齐项仍是 `steamWebSession.js`。
+  - 再读取上游快照 `fetchers_clean.js` 与本机已安装的 `steam-session` 文档/源码后确认，上游 `steamRefreshSession` 的关键差异不是“只会手拼 cookie”，而是“刷新 access token 时带 `steamid`、优先走 `LoginSession(EAuthTokenPlatformType.MobileApp).getWebCookies()`、失败再退回手工 cookie”，并在最终 cookie 上补浏览器模拟字段。
+  - 核对本地旧实现后确认，[node_sidecar/src/steamWebSession.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamWebSession.js) 之前仅做 `GenerateAccessTokenForApp` + 手工拼 `steamLoginSecure/sessionid/steamCountry`，`getProxyUrl` 被引入但未使用，且仓库内没有它自己的专属回归测试。
+- Changes:
+  - 更新 [node_sidecar/src/steamWebSession.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamWebSession.js)，让 `refreshAccessToken()` 追加 `steamid` 参数并在检测到代理环境时挂 `https-proxy-agent`；主链改为优先使用 `steam-session` `LoginSession(MobileApp)` 获取 Web cookies，失败时再回退到手工 cookie。
+  - 同一文件现在统一通过 `finalizeCookiePayload()` 收口输出，返回 `cookieArray` / `isFallbackCookie`，并在最终 `cookieString` 上补齐 `Steam_Language=schinese`、`timezoneOffset=28800,0`、`browserid` 与 `steamCountry=CN%7C0`，避免继续让下游只能吃到过薄的 cookie。
+  - 新增回归 [node_sidecar/tests/steam-web-session.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/steam-web-session.test.js)，锁定三件事：token refresh 请求必须带 `steamid`；优先走 `steam-session` 分支；`steam-session` 失败时必须明确回落为兜底 cookie 且保留浏览器模拟字段。
+  - 更新 [node_sidecar/package.json](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/package.json)，把 `steam-session` 与 `https-proxy-agent` 提升为直接依赖，避免当前实现继续偷吃 transitive install。
+- Verification:
+  - 红灯验证：`node node_sidecar/tests/steam-web-session.test.js`，新增断言后先按预期失败，错误为没有任何 `steam-session` 实例被调用。
+  - 绿灯验证：`node node_sidecar/tests/steam-web-session.test.js`，当前已通过。
+  - 回归验证：`node node_sidecar/tests/steam-web-alignment.test.js`，当前仍通过。
+- Follow-up:
+  - 文档与现场目前已重新对齐：`backup/ui_state/*` 仍只是运行态噪音，[docs/agent/web-inventory-upstream-implementation-index.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/web-inventory-upstream-implementation-index.md) / [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md) / [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 仍未提交，而 [docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md) 依旧属于无关主线，提交 `Web Inventory` 时不要卷入。
+  - `Web Inventory` 主线下一刀可继续按既有优先级推进：先评估 [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 的 `resolveWebSessionForAccount()` 是否要在 `mafile_content` 破损时回退 `TokenStore`，随后再把 [node_sidecar/src/inventoryService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/inventoryService.js) 收到共享 `steamHttpClient` 上。
+
+## 2026-04-25
+- Task: 承接并校正 `Steam Guard` 绑定令牌方案，确认开源参考中的“新绑定 / 替换旧令牌”双分支真实链路，并为当前仓库写出纠正版实现计划。
+- Investigation:
+  - 先读取本机 Claude 会话落点，确认相关本地记录存在于 [C:/Users/18220/.claude/history.jsonl](/C:/Users/18220/.claude/history.jsonl) 与 [C:/Users/18220/.claude/projects/c--Users-18220-Desktop-cs2-alchemy/4f48279e-5233-42f3-b059-52199209844f.jsonl](/C:/Users/18220/.claude/projects/c--Users-18220-Desktop-cs2-alchemy/4f48279e-5233-42f3-b059-52199209844f.jsonl)，并在 [C:/Users/18220/.claude/plans/valiant-marinating-gizmo.md](/C:/Users/18220/.claude/plans/valiant-marinating-gizmo.md) 中找到当时的绑定令牌定稿方案。
+  - 对照 [node_sidecar/src/steamGuardEnrollService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamGuardEnrollService.js)、[node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js)、[node_sidecar/src/maFileParser.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/maFileParser.js)、[node_sidecar/src/steamWebSession.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamWebSession.js) 后确认，当前实现只有“首次绑定”半条链，`status=29` 直接终止，且生成的 `maFile` 不符合项目当前真实消费契约。
+  - 再核对开源参考镜像 [docs/reference/steam-guard-enroll/BD_WinAuth_SteamClient.cs](/C:/Users/18220/Desktop/cs2_alchemy/docs/reference/steam-guard-enroll/BD_WinAuth_SteamClient.cs)、[docs/reference/steam-guard-enroll/BD_WinAuth_SteamAuthenticator.cs](/C:/Users/18220/Desktop/cs2_alchemy/docs/reference/steam-guard-enroll/BD_WinAuth_SteamAuthenticator.cs)、[docs/reference/steam-guard-enroll/BD_SteamTools_JoinSteamAuthenticatorPageViewModel.cs](/C:/Users/18220/Desktop/cs2_alchemy/docs/reference/steam-guard-enroll/BD_SteamTools_JoinSteamAuthenticatorPageViewModel.cs) 后确认，SteamTools 的真实能力是“同一套登录态，根据账号状态分叉到新绑定或替换旧令牌”，替换链走 `RemoveAuthenticatorViaChallengeStart/Continue`，不是继续停在 `AddAuthenticator` 上。
+- Changes:
+  - 新增纠正版实现计划 [docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md)。
+  - 计划明确把后端拆成 `new_enroll` 与 `replace_existing` 两条分支，并要求统一走一个符合项目真实契约的 `maFile` builder：必须生成 `Session.SteamID`、`Session.SteamLoginSecure`、顶层 `access_token`、`identity_secret`、`fully_enrolled`，禁止再写 `Session: {}`。
+  - 计划新增三类回归：服务层双分支测试、`token-detail` 路由与脱敏测试、破损 `maFile` 回退到 `TokenStore` 的运行态兜底测试；同时要求 UI 文案从“可直接替换原有令牌”改为“验证后判断是首次绑定还是替换旧令牌”。
+- Verification:
+  - 读取验证：确认本地 Claude 计划与会话正文存在，且可定位“绑定令牌”方案的原始文本与用户补充要求。
+  - 结构验证：读取新计划文件 [docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md)，确认包含 header、file structure、chunk/task、verification 与手工烟测步骤。
+  - 现场验证：`git status --short`，确认本轮新增未提交变更为计划文档，工作树其余脏项仍主要是 `backup/ui_state/` 运行态产物。
+- Follow-up:
+  - 当前只完成了“纠正计划”，尚未开始执行代码改动。
+  - 下一步应直接按 [docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md) 的 Chunk 1 起手，先补红灯测试，再落双分支实现。
+
 ## 2026-04-25
 - Task: 收口 Windows 打包对根目录运行态 `csgo_skins.db` 的错误依赖，避免在干净克隆、CI 或其他机器上漏包数据库种子。
 - Investigation:
@@ -40,6 +490,42 @@
   - 若后续打包或首启引导仍需要“基础 DB”，必须单独准备稳定种子资源，不能再把这份本机运行态 DB 重新纳回版本控制。
 
 ## 2026-04-25
+- Task: 顺着 Claude Code 记录与参考开源仓库，校正 `Web Inventory` 实现，并把后续会话需要的索引与断点落盘。
+- Investigation:
+  - 先在本机 `C:/Users/18220/.claude/` 里追到 Claude 本地历史，确认 `Web Inventory` 相关方案来自 `.claude/plans/purring-cooking-kernighan.md`，其参考仓库为 `hjkkjh-hhh/steam-uu-c5-scratch-account_tool`。
+  - 再从 Claude 缓存的上游源码快照 `fetchers_clean.js`、`index_extracted2.js` 提取关键实现，核对本地 `steamHttpClient.js`、`steamWebSession.js`、`steamAccountTools.js`、`steamMarketService.js`、`inventoryService.js` 与 `uiServer.js` 的对应关系。
+  - 确认此前库存管理页 `not found` 的根因是前端已漂到已删除路由 `/api/steam/single-inventory`；该问题已在提交 `e6903f2` 中修回到 `/api/accounts/:username/inventory`。
+  - 审计后确认两处最值得立即按开源校正的偏差：一是 Cookie 增强层没保证 `sessionid`，二是 trade URL 刷新少了开源里的官方 `IEconService/GetTradeOfferAccessToken` fallback。
+- Changes:
+  - 已在提交 `e6903f2` 中完成并提交以下修正：
+    - 更新 [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js)，让 `Web Inventory` 页面重新走 `/api/accounts/${encodeURIComponent(username)}/inventory`。
+    - 更新 [node_sidecar/tests/web-inventory-bootstrap.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/web-inventory-bootstrap.test.js)，锁定不得回退到 `/api/steam/single-inventory`。
+    - 更新 [node_sidecar/src/steamHttpClient.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamHttpClient.js)，让 `enhanceCookieString()` 在源 Cookie 缺少时自动注入 `sessionid`。
+    - 更新 [node_sidecar/src/steamAccountTools.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamAccountTools.js)，让 `fetchTradeUrl()` 先尝试官方 `GetTradeOfferAccessToken`，再回落到 HTML 抓取。
+    - 新增 [node_sidecar/tests/steam-web-alignment.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/steam-web-alignment.test.js)，锁定上述两处开源对齐行为。
+    - 归档 Claude 本地计划到 [docs/superpowers/plans/2026-04-24-web-inventory-management-page.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-04-24-web-inventory-management-page.md)。
+  - 本轮尚未提交的新落点：
+    - 新增 [docs/agent/web-inventory-upstream-implementation-index.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/web-inventory-upstream-implementation-index.md)，整理“上游实现 -> 当前本地实现 -> 对齐状态 -> 剩余高风险未对齐项”的索引。
+- Verification:
+  - `node node_sidecar/tests/web-inventory-bootstrap.test.js`
+  - `node node_sidecar/tests/steam-web-alignment.test.js`
+  - 两项当前均通过。
+- Follow-up:
+  - 当前工作目录：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 当前分支：`main`
+  - 已有提交：`e6903f2` `fix(web-inventory): align steam web flows with upstream`
+  - 当前未提交改动：
+    - 本轮新增索引文档 [docs/agent/web-inventory-upstream-implementation-index.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/web-inventory-upstream-implementation-index.md)
+    - 本次 handoff 对 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md) 与 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 的更新
+    - 运行态噪音：`backup/ui_state/*` 持续删改，按项目约定忽略，不要卷入业务提交
+    - 另有与本主线无关的未跟踪文件 `docs/superpowers/plans/2026-04-25-steam-guard-token-binding-correction.md`，下个会话如非明确处理 `Steam Guard` 主线，不要误纳入本次 `Web Inventory` 提交
+  - 下一步第一刀：
+    - 先沿 [docs/agent/web-inventory-upstream-implementation-index.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/web-inventory-upstream-implementation-index.md) 的优先级，把 [node_sidecar/src/steamWebSession.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamWebSession.js) 向上游 `steamRefreshSession` 收敛，至少评估是否需要引入 `steam-session` `LoginSession` 获取 Web cookies，而不是继续只手工拼 `steamLoginSecure`。
+  - 做完第一刀后立刻验证：
+    - 与 `resolveWebSessionForAccount()` 相关的 `trade-url`、`balance`、`batch-inventory` 实际链路是否仍可工作
+    - 至少补一条新的 Node 级回归测试，避免再次只修表面路由、底层 session 却继续漂移
+
+## 2026-04-25
 - Task: 修复 `run-dev` 进入后账号区仍显示空壳的问题，并把真实根因记录下来，避免后续再次把前端启动链截断。
 - Investigation:
   - 先按真实 `run-dev` 环境起本地 UI 服务，直接抓 `/api/client-auth/state`、`/api/ui-state`、`/api/accounts`。结果显示 dev 授权有效、`last_selected_username=gb840489`，且 `/api/accounts` 返回 12 个账号，因此根因不在本地账号数据、授权快照或后端路由。
@@ -57,6 +543,25 @@
 - Follow-up:
   - 当前问题的根因已证明是前端启动崩溃，不是服务端账号缺失。
   - 若后续 `run-dev` 再出现“有数据但页面空壳”，优先先抓浏览器运行态异常，而不是先怀疑 `accounts.json` / SQLite 或授权模式。
+
+## 2026-04-25
+- Task: 接手 Claude Code 遗留的 Steam 上架 `id` / `itemid` 调查，并把真实映射关系落盘，避免后续继续把不同 ID 混叫。
+- Investigation:
+  - 先沿本机 Claude 会话 `d67bb87d-0c9a-4a60-8d5f-b4809a526953` 回看遗留结论，确认它只证明了“上架提交用 `assetid`”，尚未把“确认列表里的 `id` 与 `creator_id` 各是什么”钉死。
+  - 再核对本仓库 [node_sidecar/src/steamMarketService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/steamMarketService.js)，确认 `sellItem()` 对 `POST /market/sellitem/` 的请求体只使用 `assetid` 定位待上架库存物品。
+  - 最后直接下钻依赖源码 [node_sidecar/node_modules/steamcommunity/components/confirmations.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/node_modules/steamcommunity/components/confirmations.js) 与 [node_sidecar/node_modules/steamcommunity/classes/CConfirmation.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/node_modules/steamcommunity/classes/CConfirmation.js)，确认 `body.conf[].id` 是确认单 ID，而 `body.conf[].creator_id -> CConfirmation.creator` 才是被确认对象 ID；`acceptConfirmationForObject(objectID)` 内部就是按 `conf.creator == objectID` 匹配 trade offer / market listing。
+- Changes:
+  - 新增调查落点 [docs/agent/steam-market-listing-id-mapping.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/steam-market-listing-id-mapping.md)，把 `assetid`、`confirmation.id`、`creator_id` 的语义与当前代码缺口一次写清。
+  - 更新 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md)，记录这轮接手结果与后续第一刀。
+  - 更新 [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md)，固化这条稳定约束，避免下轮继续把 `creator_id` 误叫成 `itemid`。
+- Verification:
+  - 代码证据核对：`rg -n "assetid|requires_confirmation" node_sidecar/src/steamMarketService.js`
+  - 依赖证据核对：`rg -n "creator_id|acceptConfirmationForObject|conf.creator == objectID" node_sidecar/node_modules/steamcommunity/components/confirmations.js`
+  - 前端缺口核对：`rg -n "marketConfirmRefresh|marketConfirmStart|creator" node_sidecar/ui/app.js`
+  - 本轮未运行自动化测试；此次为调查落盘，不宣称行为已变更。
+- Follow-up:
+  - 当前项目可以用 `assetid` 提交上架，也可以用 `confirmation.id` 批量确认，但还没有建立 `assetid -> market listing object id -> confirmation.id` 的完整回指链。
+  - 若下一轮要让确认弹窗精确反查到原始库存物品，应先确认 `/market/sellitem/` 响应是否稳定带 `listingid`，再决定是落本地 `assetId -> listingId` 暂存，还是直接把确认列表中的 `creator` 暴露到前端并联表。
 
 ## 2026-04-25
 - Task: 修复“调试入口本地账号没有被读”的回归，并把入口约束记录下来，避免后续再次把调试链改坏。
