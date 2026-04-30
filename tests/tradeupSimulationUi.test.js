@@ -10,6 +10,20 @@ const html = fs.readFileSync(htmlPath, "utf8");
 const css = fs.readFileSync(cssPath, "utf8");
 const app = fs.readFileSync(appPath, "utf8");
 
+function sliceRequired(source, startToken, endToken) {
+  const start = source.indexOf(startToken);
+  assert.notEqual(start, -1, `expected source to include start token: ${startToken}`);
+  const end = source.indexOf(endToken, start);
+  assert.notEqual(end, -1, `expected source to include end token after ${startToken}: ${endToken}`);
+  return source.slice(start, end);
+}
+
+const simulationPageHtml = sliceRequired(
+  html,
+  '<section class="page hidden" id="simulationPage">',
+  '<div id="simulationPickerModal"'
+);
+
 const requiredHtmlFragments = [
   'id="navSimulation"',
   'data-page="simulationPage"',
@@ -108,7 +122,7 @@ assert.match(
 );
 
 assert.doesNotMatch(
-  html,
+  simulationPageHtml,
   /封面永远锁定主产物|可从材料先推导主产物封面|产物列表|材料列表|后续查看与调整直接在下方产物列表卡片中完成|右侧直接展示当前封面产物对应的联动材料列表/m,
   "tradeup simulation workspace should remove the crossed helper copy and redundant lane headings"
 );
@@ -301,8 +315,8 @@ assert.match(
 
 assert.match(
   app,
-  /function renderSimulationSavedPresets\(\)\s*\{[\s\S]*renderTradeupSimulationSelectionStyleCard\(\{[\s\S]*titleText:\s*summary\.presetName[\s\S]*summary\.collectionText[\s\S]*extraClasses:\s*`simulation-saved-card[\s\S]*extraArtHtml:\s*`<button class="simulation-saved-remove-btn"/m,
-  "tradeup simulation saved cards should reuse the shared selection-style renderer while only injecting preset-specific title, collection text, and delete action"
+  /function renderSimulationSavedPresets\(\)\s*\{[\s\S]*renderTradeupSimulationSelectionStyleCard\(\{[\s\S]*titleText:\s*summary\.presetName[\s\S]*summary\.collectionText[\s\S]*extraClasses:\s*`simulation-saved-card[\s\S]*extraArtHtml:\s*`[\s\S]*simulation-saved-export-btn[\s\S]*simulation-saved-remove-btn/m,
+  "tradeup simulation saved cards should reuse the shared selection-style renderer while only injecting preset-specific title, collection text, export action, and delete action"
 );
 
 assert.match(

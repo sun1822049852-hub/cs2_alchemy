@@ -263,6 +263,93 @@ async function test_accounts_and_snapshot_routes_include_default_auth_state() {
   }
 }
 
+async function test_snapshot_account_route_can_persist_web_inventory_stub_artifact() {
+  const ctx = await startServer({
+    uiStateData: {
+      accounts: {
+        countsteam01: {
+          snapshot_path: "",
+          fetch_time: "2026-04-25 18:30:00"
+        }
+      }
+    },
+    createServerOptionsFactory: ({tempDir}) => {
+      const snapshotPath = path.join(tempDir, "logs", "processed_inventory", "inventory_processed_20260425_183000.json");
+      writeJson(snapshotPath, {
+        items: [
+          {
+            asset_id: "asset-main-1",
+            def_index: 7,
+            market_hash_name: "AK-47 | Redline (Field-Tested)",
+            name: "AK-47 | Redline (Field-Tested)",
+            goods_icon_url: "https://example.com/redline.png",
+            casket_id: "",
+            is_craftable: true
+          },
+          {
+            asset_id: "asset-box-1",
+            def_index: 9,
+            market_hash_name: "AWP | Asiimov (Battle-Scarred)",
+            name: "AWP | Asiimov (Battle-Scarred)",
+            goods_icon_url: "https://example.com/asiimov.png",
+            casket_id: "component-1",
+            is_craftable: true
+          }
+        ]
+      });
+      return {
+        uiStateStoreFactory: ({viewerUsername} = {}) => {
+          writeJson(path.join(tempDir, "inventory_ui_state.json"), {
+            accounts: {
+              countsteam01: {
+                snapshot_path: snapshotPath,
+                fetch_time: "2026-04-25 18:30:00",
+                auth_state: "normal",
+                auth_reason: ""
+              }
+            }
+          });
+          return new UiStateStore(path.join(tempDir, "inventory_ui_state.json"), {viewerUsername});
+        }
+      };
+    }
+  });
+  try {
+    await authorize(ctx);
+
+    const response = await requestJson(
+      ctx,
+      "GET",
+      "/api/snapshot/account?username=countsteam01&source=web_inventory&save_stub=1"
+    );
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.ok, true);
+    assert.equal(typeof response.body.stub_artifact, "object");
+    assert.equal(typeof response.body.stub_artifact.stub_path, "string");
+    assert.equal(typeof response.body.stub_artifact.log_path, "string");
+    assert.equal(fs.existsSync(response.body.stub_artifact.stub_path), true, "stub file should be created");
+    assert.equal(fs.existsSync(response.body.stub_artifact.log_path), true, "fetch log should be created");
+
+    const stubPayload = JSON.parse(fs.readFileSync(response.body.stub_artifact.stub_path, "utf8"));
+    assert.equal(stubPayload.format, "web_inventory_fetch_stub_v1");
+    assert.equal(stubPayload.username, "countsteam01");
+    assert.equal(stubPayload.source, "web_inventory");
+    assert.equal(stubPayload.counts.row_count, 2);
+    assert.equal(stubPayload.counts.component_item_count, 1);
+    assert.equal(Array.isArray(stubPayload.sample_rows), true);
+    assert.equal(stubPayload.sample_rows[0].asset_id, "asset-main-1");
+
+    const logLines = fs.readFileSync(response.body.stub_artifact.log_path, "utf8").trim().split(/\r?\n/).filter(Boolean);
+    assert.equal(logLines.length, 1);
+    const logEntry = JSON.parse(logLines[0]);
+    assert.equal(logEntry.username, "countsteam01");
+    assert.equal(logEntry.source, "web_inventory");
+    assert.equal(logEntry.row_count, 2);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
 async function test_refresh_route_uses_injected_refresh_inventory_fn() {
   let refreshCall = null;
   const ctx = await startServer({
@@ -595,6 +682,7 @@ async function test_login_save_clears_persisted_auth_invalid_state() {
 
 async function main() {
   await test_accounts_and_snapshot_routes_include_default_auth_state();
+  await test_snapshot_account_route_can_persist_web_inventory_stub_artifact();
   await test_refresh_route_uses_injected_refresh_inventory_fn();
   await test_refresh_inventory_requires_saved_login_key_before_connecting();
   await test_refresh_inventory_classifies_invalid_saved_login_key();

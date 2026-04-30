@@ -1,29 +1,123 @@
 /**
  * Steam Web Session 管理
  * 从 maFile 的 access_token / refresh_token 刷新 Web Cookie
+ * 优先向 steam-session 的 LoginSession 对齐，失败再兜底手工 cookie。
  */
 const https = require("https");
+const crypto = require("crypto");
 const {URL} = require("url");
 const {asString, withTimeout} = require("./utils");
 const {getProxyUrl} = require("./networkPrecheck");
+const {enhanceCookieString} = require("./steamHttpClient");
 
 const TOKEN_REFRESH_TIMEOUT_MS = 15000;
+const STEAM_COUNTRY_COOKIE = "steamCountry=CN%7C0";
+
+function createProxyAgent() {
+  const proxyUrl = asString(getProxyUrl()).trim();
+  if (!proxyUrl) {
+    return null;
+  }
+  try {
+    const {HttpsProxyAgent} = require("https-proxy-agent");
+    return new HttpsProxyAgent(proxyUrl, {keepAlive: false});
+  } catch (_) {
+    return null;
+  }
+}
+
+function appendCookieIfMissing(cookieString, cookiePrefix, cookieValue) {
+  if (new RegExp(`(?:^|;\\s*)${cookiePrefix}=`).test(cookieString)) {
+    return cookieString;
+  }
+  return cookieString ? `${cookieString}; ${cookieValue}` : cookieValue;
+}
+
+function readCookieValue(cookieString, name) {
+  const parts = asString(cookieString).split(";").map((item) => item.trim()).filter(Boolean);
+  for (const part of parts) {
+    const eqIdx = part.indexOf("=");
+    if (eqIdx <= 0) {
+      continue;
+    }
+    if (part.slice(0, eqIdx) === name) {
+      return part.slice(eqIdx + 1);
+    }
+  }
+  return "";
+}
+
+function finalizeCookiePayload({cookieArray, steamId64, accessToken, isFallbackCookie}) {
+  const sid = asString(steamId64).trim();
+  const normalizedCookieArray = Array.isArray(cookieArray)
+    ? cookieArray.map((item) => asString(item).trim()).filter(Boolean)
+    : [];
+  let cookieString = normalizedCookieArray.join("; ");
+  cookieString = appendCookieIfMissing(cookieString, "steamCountry", STEAM_COUNTRY_COOKIE);
+  cookieString = enhanceCookieString(cookieString, {steamId64: sid, domain: "community"});
+
+  return {
+    cookieArray: normalizedCookieArray,
+    cookieString,
+    sessionid: readCookieValue(cookieString, "sessionid"),
+    steamLoginSecure: readCookieValue(cookieString, "steamLoginSecure"),
+    steamId64: sid,
+    accessToken: asString(accessToken).trim(),
+    isFallbackCookie: !!isFallbackCookie
+  };
+}
+
+function buildFallbackCookieArray({steamId64, accessToken}) {
+  const sid = asString(steamId64).trim();
+  const token = asString(accessToken).trim();
+  if (!sid || !token) {
+    throw new Error("steamId64 或 accessToken 为空");
+  }
+  const sessionid = crypto.randomBytes(12).toString("hex");
+  const steamLoginSecure = encodeURIComponent(`${sid}||${token}`);
+  return [
+    `steamLoginSecure=${steamLoginSecure}`,
+    `sessionid=${sessionid}`
+  ];
+}
+
+async function getWebCookiesViaSteamSession({refreshToken, accessToken}) {
+  const token = asString(refreshToken).trim();
+  if (!token) {
+    throw new Error("refresh_token 为空");
+  }
+  const {LoginSession, EAuthTokenPlatformType} = require("steam-session");
+  const session = new LoginSession(EAuthTokenPlatformType.MobileApp);
+  session.refreshToken = token;
+  if (asString(accessToken).trim()) {
+    session.accessToken = asString(accessToken).trim();
+  }
+  const cookieArray = await session.getWebCookies();
+  return {
+    cookieArray,
+    accessToken: asString(session.accessToken || accessToken).trim()
+  };
+}
 
 /**
  * 通过 refresh_token 换取新的 access_token
  * 使用 IAuthenticationService/GenerateAccessTokenForApp
  */
-async function refreshAccessToken(refreshToken) {
+async function refreshAccessToken(refreshToken, steamId64) {
   const token = asString(refreshToken).trim();
+  const sid = asString(steamId64).trim();
   if (!token) {
     throw new Error("refresh_token 为空");
   }
 
-  const postData = `refresh_token=${encodeURIComponent(token)}`;
+  const postData = sid
+    ? `refresh_token=${encodeURIComponent(token)}&steamid=${encodeURIComponent(sid)}`
+    : `refresh_token=${encodeURIComponent(token)}`;
   const url = new URL("https://api.steampowered.com/IAuthenticationService/GenerateAccessTokenForApp/v1/");
+  const proxyAgent = createProxyAgent();
 
   return withTimeout(new Promise((resolve, reject) => {
-    const req = https.request({
+    const reqOptions = {
       hostname: url.hostname,
       path: url.pathname,
       method: "POST",
@@ -31,7 +125,11 @@ async function refreshAccessToken(refreshToken) {
         "Content-Type": "application/x-www-form-urlencoded",
         "Content-Length": Buffer.byteLength(postData)
       }
-    }, (res) => {
+    };
+    if (proxyAgent) {
+      reqOptions.agent = proxyAgent;
+    }
+    const req = https.request(reqOptions, (res) => {
       let body = "";
       res.on("data", (chunk) => { body += chunk; });
       res.on("end", () => {
@@ -55,36 +153,19 @@ async function refreshAccessToken(refreshToken) {
 }
 
 /**
- * 用 access_token 组装 Steam Web Cookie
+ * 用 access_token 兜底组装 Steam Web Cookie
  * @param {object} opts
  * @param {string} opts.steamId64
  * @param {string} opts.accessToken — 有效的 JWT access_token
- * @returns {{ cookieString, sessionid, steamLoginSecure }}
+ * @returns {{ cookieArray, cookieString, sessionid, steamLoginSecure, steamId64, accessToken, isFallbackCookie }}
  */
 function buildWebCookies({steamId64, accessToken}) {
-  const sid = asString(steamId64).trim();
-  const token = asString(accessToken).trim();
-  if (!sid || !token) {
-    throw new Error("steamId64 或 accessToken 为空");
-  }
-
-  // sessionid 是随机 hex
-  const crypto = require("crypto");
-  const sessionid = crypto.randomBytes(12).toString("hex");
-  const steamLoginSecure = `${sid}%7C%7C${token}`;
-
-  const cookieString = [
-    `sessionid=${sessionid}`,
-    `steamLoginSecure=${steamLoginSecure}`,
-    `steamCountry=CN%7C0`
-  ].join("; ");
-
-  return {
-    cookieString,
-    sessionid,
-    steamLoginSecure,
-    steamId64: sid
-  };
+  return finalizeCookiePayload({
+    cookieArray: buildFallbackCookieArray({steamId64, accessToken}),
+    steamId64,
+    accessToken,
+    isFallbackCookie: true
+  });
 }
 
 /**
@@ -127,7 +208,7 @@ async function refreshWebCookie(maData) {
 
   let accessToken;
   try {
-    accessToken = await refreshAccessToken(refreshToken);
+    accessToken = await refreshAccessToken(refreshToken, maData.steamId64);
   } catch (err) {
     // 如果刷新失败，尝试直接用已有的 accessToken
     const fallback = asString(maData.accessToken).trim();
@@ -143,10 +224,23 @@ async function refreshWebCookie(maData) {
     throw new Error("steamId64 为空，无法组装 Cookie");
   }
 
+  try {
+    const sessionResult = await getWebCookiesViaSteamSession({refreshToken, accessToken});
+    return finalizeCookiePayload({
+      cookieArray: sessionResult.cookieArray,
+      steamId64,
+      accessToken: sessionResult.accessToken || accessToken,
+      isFallbackCookie: false
+    });
+  } catch (_) {
+    // ignore and fall back to manual cookie assembly below
+  }
+
   const cookies = buildWebCookies({steamId64, accessToken});
   return {
     ...cookies,
-    accessToken
+    accessToken,
+    isFallbackCookie: true
   };
 }
 
@@ -170,16 +264,29 @@ async function refreshWebCookieFromToken(refreshToken, steamId64) {
 
   let accessToken;
   try {
-    accessToken = await refreshAccessToken(token);
+    accessToken = await refreshAccessToken(token, sid);
   } catch (err) {
     // fallback: 直接用 refresh_token 当 access_token 试试
     accessToken = token;
   }
 
-  const cookies = buildWebCookies({steamId64, accessToken});
+  try {
+    const sessionResult = await getWebCookiesViaSteamSession({refreshToken: token, accessToken});
+    return finalizeCookiePayload({
+      cookieArray: sessionResult.cookieArray,
+      steamId64: sid,
+      accessToken: sessionResult.accessToken || accessToken,
+      isFallbackCookie: false
+    });
+  } catch (_) {
+    // ignore and fall back to manual cookie assembly below
+  }
+
+  const cookies = buildWebCookies({steamId64: sid, accessToken});
   return {
     ...cookies,
-    accessToken
+    accessToken,
+    isFallbackCookie: true
   };
 }
 

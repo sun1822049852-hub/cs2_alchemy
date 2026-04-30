@@ -25,8 +25,8 @@ function test_web_inventory_page_uses_account_inventory_route() {
   );
   assert.match(
     JS,
-    /fetch\(`\/api\/accounts\/\$\{encodeURIComponent\(username\)\}\/inventory`\)/,
-    "web inventory page should fetch inventory through /api/accounts/:username/inventory"
+    /async function webInvFetchInventory\(\)[\s\S]*?fetch\(`\/api\/accounts\/\$\{encodeURIComponent\(username\)\}\/inventory`\)/,
+    "web inventory main entry should fetch inventory through /api/accounts/:username/inventory"
   );
 }
 

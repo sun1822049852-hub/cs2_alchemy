@@ -10,6 +10,50 @@ const INVENTORY_TIMEOUT_MS = 15000;
 const INVENTORY_MAX_PAGES = 20;
 const INVENTORY_PAGE_DELAY_MS = 500;
 
+function summarizeCookieString(cookieString) {
+  const text = asString(cookieString).trim();
+  if (!text) {
+    return "cookie=empty";
+  }
+  const parts = text.split(";").map((item) => item.trim()).filter(Boolean);
+  let sessionid = "";
+  let hasSteamLoginSecure = false;
+  for (const part of parts) {
+    const eqIdx = part.indexOf("=");
+    if (eqIdx <= 0) {
+      continue;
+    }
+    const name = part.slice(0, eqIdx);
+    const value = part.slice(eqIdx + 1);
+    if (name === "sessionid") {
+      sessionid = value;
+    }
+    if (name === "steamLoginSecure") {
+      hasSteamLoginSecure = true;
+    }
+  }
+  const maskedSessionid = sessionid ? `${sessionid.slice(0, 8)}...` : "missing";
+  return `sessionid=${maskedSessionid}; steamLoginSecure=${hasSteamLoginSecure ? "yes" : "no"}; length=${text.length}`;
+}
+
+function buildBodySnippet(body) {
+  return asString(body).replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+function emitTrace(onTrace, payload) {
+  if (typeof onTrace !== "function" || !payload || typeof payload !== "object") {
+    return;
+  }
+  try {
+    onTrace({
+      ...payload,
+      ts: Date.now()
+    });
+  } catch (_) {
+    // ignore trace sink errors
+  }
+}
+
 /**
  * 拉取单页库存
  * @param {object} opts
@@ -17,21 +61,77 @@ const INVENTORY_PAGE_DELAY_MS = 500;
  * @param {string} opts.cookieString
  * @param {string} [opts.startAssetId] — 翻页起始 assetid
  * @param {string} [opts.language] — 语言，默认 schinese
+ * @param {number} [opts.pageIndex]
+ * @param {function} [opts.onTrace]
  * @returns {Promise<object>} Steam 库存 API 原始响应
  */
-function fetchInventoryPage({steamId64, cookieString, startAssetId, language}) {
+function fetchInventoryPage({steamId64, cookieString, startAssetId, language, pageIndex = 0, onTrace}) {
   const lang = asString(language).trim() || "schinese";
   const sid = asString(steamId64).trim();
   let url = `https://steamcommunity.com/inventory/${sid}/730/2?l=${lang}&count=${INVENTORY_PAGE_SIZE}`;
   if (startAssetId) {
     url += `&start_assetid=${asString(startAssetId).trim()}`;
   }
+  const traceBase = {
+    pageIndex: Number(pageIndex) || 0,
+    url,
+    steamId64: sid,
+    startAssetId: asString(startAssetId).trim(),
+    language: lang,
+    cookieSummary: summarizeCookieString(cookieString)
+  };
 
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("库存拉取超时")), INVENTORY_TIMEOUT_MS);
+    let settled = false;
+    let req = null;
+    const finishReject = (error, tracePayload = {}) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      emitTrace(onTrace, {
+        phase: "error",
+        ...traceBase,
+        ...tracePayload,
+        message: asString(error && error.message ? error.message : error).trim() || "unknown_error"
+      });
+      reject(error);
+    };
+    const finishResolve = (data, tracePayload = {}) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      emitTrace(onTrace, {
+        phase: "response",
+        ...traceBase,
+        ...tracePayload
+      });
+      resolve(data);
+    };
+    const timer = setTimeout(() => {
+      const error = new Error("库存拉取超时");
+      try {
+        if (req && typeof req.destroy === "function") {
+          req.destroy(error);
+        }
+      } catch (_) {
+        // ignore destroy errors
+      }
+      finishReject(error, {
+        statusCode: 0,
+        bodySnippet: ""
+      });
+    }, INVENTORY_TIMEOUT_MS);
 
     const parsedUrl = new URL(url);
-    const req = https.get({
+    emitTrace(onTrace, {
+      phase: "request",
+      ...traceBase
+    });
+    req = https.get({
       hostname: parsedUrl.hostname,
       path: parsedUrl.pathname + parsedUrl.search,
       headers: {
@@ -44,21 +144,36 @@ function fetchInventoryPage({steamId64, cookieString, startAssetId, language}) {
       let body = "";
       res.on("data", (chunk) => { body += chunk; });
       res.on("end", () => {
-        clearTimeout(timer);
         if (res.statusCode !== 200) {
-          reject(new Error(`库存 API 返回 ${res.statusCode}: ${body.slice(0, 200)}`));
+          finishReject(new Error(`库存 API 返回 ${res.statusCode}: ${body.slice(0, 200)}`), {
+            statusCode: Number(res.statusCode) || 0,
+            bodySnippet: buildBodySnippet(body)
+          });
           return;
         }
         try {
-          resolve(JSON.parse(body));
+          const parsed = JSON.parse(body);
+          finishResolve(parsed, {
+            statusCode: Number(res.statusCode) || 200,
+            bodySnippet: buildBodySnippet(body),
+            assetCount: Array.isArray(parsed.assets) ? parsed.assets.length : 0,
+            descriptionCount: Array.isArray(parsed.descriptions) ? parsed.descriptions.length : 0,
+            moreItems: Number(parsed.more_items) || 0,
+            lastAssetId: asString(parsed.last_assetid).trim()
+          });
         } catch (err) {
-          reject(new Error(`库存 JSON 解析失败: ${err.message}`));
+          finishReject(new Error(`库存 JSON 解析失败: ${err.message}`), {
+            statusCode: Number(res.statusCode) || 200,
+            bodySnippet: buildBodySnippet(body)
+          });
         }
       });
     });
     req.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
+      finishReject(err, {
+        statusCode: 0,
+        bodySnippet: ""
+      });
     });
   });
 }
@@ -115,9 +230,10 @@ function mergeAssetsWithDescriptions(pageData) {
  * @param {string} opts.cookieString
  * @param {string} [opts.language]
  * @param {function} [opts.onPage] — 每页回调 (pageIndex, items, totalSoFar)
+ * @param {function} [opts.onTrace]
  * @returns {Promise<Array<object>>} 全部物品
  */
-async function fetchFullInventory({steamId64, cookieString, language, onPage}) {
+async function fetchFullInventory({steamId64, cookieString, language, onPage, onTrace}) {
   const allItems = [];
   let startAssetId = "";
   let pageIndex = 0;
@@ -127,7 +243,9 @@ async function fetchFullInventory({steamId64, cookieString, language, onPage}) {
       steamId64,
       cookieString,
       startAssetId,
-      language
+      language,
+      pageIndex,
+      onTrace
     });
 
     const items = mergeAssetsWithDescriptions(pageData);

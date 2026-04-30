@@ -33,6 +33,7 @@ const {createTradeupSimulationCatalog} = require("./services/tradeupSimulationCa
 const {createTradeupSimulationService} = require("./services/tradeupSimulationService");
 const {createSnapshotRowsLoader} = require("./services/snapshotRowsLoader");
 const {buildComponentSummary: buildSharedComponentSummary} = require("./services/componentSummary");
+const {saveWebInventoryFetchArtifact} = require("./services/webInventoryFetchArtifactStore");
 const {
   enrichInventoryDisplayOnlyImages
 } = require("./services/inventoryDisplayImageEnrichment");
@@ -202,6 +203,59 @@ async function resolveWebSessionForAccount(account) {
 
   const webSession = await refreshWebCookieFromToken(refreshToken, steamId64);
   return {webSession, hasMaFile: false, maData: null};
+}
+
+function sanitizeLogValue(value) {
+  return asString(value).replace(/\s+/g, " ").trim();
+}
+
+function maskLogValue(value, keep = 8) {
+  const text = sanitizeLogValue(value);
+  if (!text) {
+    return "-";
+  }
+  if (text.length <= keep) {
+    return text;
+  }
+  return `${text.slice(0, keep)}...`;
+}
+
+function summarizeWebSessionForLog(webSession) {
+  const session = webSession && typeof webSession === "object" ? webSession : {};
+  return [
+    `steam_id=${sanitizeLogValue(session.steamId64) || "-"}`,
+    `fallback=${session.isFallbackCookie ? "yes" : "no"}`,
+    `sessionid=${maskLogValue(session.sessionid)}`,
+    `cookie_len=${sanitizeLogValue(String((session.cookieString || "").length)) || "0"}`
+  ].join(" ");
+}
+
+function logWebInventoryFetchTrace({username, mode, trace}) {
+  const account = sanitizeLogValue(username) || "-";
+  const fetchMode = sanitizeLogValue(mode) || "single";
+  const payload = trace && typeof trace === "object" ? trace : {};
+  const page = Number.isFinite(Number(payload.pageIndex)) ? Number(payload.pageIndex) + 1 : 1;
+  const scope = "web_inventory_fetch";
+  if (payload.phase === "request") {
+    logger.info(
+      scope,
+      `account=${account} mode=${fetchMode} phase=request page=${page} start_assetid=${sanitizeLogValue(payload.startAssetId) || "-"} url=${sanitizeLogValue(payload.url) || "-"} cookie=${sanitizeLogValue(payload.cookieSummary) || "-"}`
+    );
+    return;
+  }
+  if (payload.phase === "response") {
+    logger.info(
+      scope,
+      `account=${account} mode=${fetchMode} phase=response page=${page} status=${Number(payload.statusCode) || 0} assets=${Number(payload.assetCount) || 0} descriptions=${Number(payload.descriptionCount) || 0} more=${Number(payload.moreItems) || 0} last_assetid=${sanitizeLogValue(payload.lastAssetId) || "-"} body=${sanitizeLogValue(payload.bodySnippet) || "-"}`
+    );
+    return;
+  }
+  if (payload.phase === "error") {
+    logger.warn(
+      scope,
+      `account=${account} mode=${fetchMode} phase=error page=${page} status=${Number(payload.statusCode) || 0} message=${sanitizeLogValue(payload.message) || "-"} body=${sanitizeLogValue(payload.bodySnippet) || "-"}`
+    );
+  }
 }
 
 function getLicenseRuntime(deps = {}) {
@@ -439,6 +493,42 @@ function writeJson(res, status, payload, extraHeaders = {}) {
     ...extraHeaders
   });
   res.end(body);
+}
+
+function isTruthyQueryFlag(value) {
+  const text = asString(value).trim().toLowerCase();
+  return text === "1" || text === "true" || text === "yes" || text === "on";
+}
+
+function attachWebInventoryStubArtifact(payload, {urlObj, pathname, username, snapshot, rows, component, fetchTime, connected, authState, authReason} = {}) {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+  if (!urlObj || !isTruthyQueryFlag(urlObj.searchParams.get("save_stub"))) {
+    return payload;
+  }
+  try {
+    const artifact = saveWebInventoryFetchArtifact({
+      username,
+      source: asString(urlObj.searchParams.get("source") || "").trim() || "unknown",
+      route: pathname,
+      snapshot,
+      rows,
+      component,
+      fetchTime,
+      connected,
+      authState,
+      authReason
+    });
+    payload.stub_artifact = {
+      stub_path: artifact.stubPath,
+      latest_stub_path: artifact.latestStubPath,
+      log_path: artifact.logPath
+    };
+  } catch (err) {
+    logger.warn("web_inventory_stub", `save failed: ${asString(err && err.message ? err.message : err)}`);
+  }
+  return payload;
 }
 
 function parseCookies(headerValue) {
@@ -3134,44 +3224,80 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
     const uiState = getUiStateStore(deps, viewerUsername);
     const accountCache = uiState.getAccount(username);
+    const connected = refreshRuntime.isConnected(username);
+    const authState = asString(accountCache && accountCache.auth_state || "").trim() || "normal";
+    const authReason = asString(accountCache && accountCache.auth_reason || "").trim();
     if (!accountCache || !accountCache.snapshot_path) {
-      writeJson(res, 200, {
+      writeJson(res, 200, attachWebInventoryStubArtifact({
         ok: true,
         snapshot: null,
         rows: [],
         component: {summary_map: {}, item_map: {}},
         fetch_time: "",
-        connected: refreshRuntime.isConnected(username),
-        auth_state: asString(accountCache && accountCache.auth_state || "").trim() || "normal",
-        auth_reason: asString(accountCache && accountCache.auth_reason || "").trim()
-      });
+        connected,
+        auth_state: authState,
+        auth_reason: authReason
+      }, {
+        urlObj,
+        pathname,
+        username,
+        snapshot: null,
+        rows: [],
+        component: {summary_map: {}, item_map: {}},
+        fetchTime: "",
+        connected,
+        authState,
+        authReason
+      }));
       return true;
     }
     const loaded = loadSnapshotSafe(accountCache.snapshot_path);
     if (!loaded.snapshot) {
-      writeJson(res, 200, {
+      writeJson(res, 200, attachWebInventoryStubArtifact({
         ok: true,
         snapshot: null,
         rows: [],
         component: {summary_map: {}, item_map: {}},
         fetch_time: asString(accountCache.fetch_time || ""),
-        connected: refreshRuntime.isConnected(username),
-        auth_state: asString(accountCache.auth_state || "").trim() || "normal",
-        auth_reason: asString(accountCache.auth_reason || "").trim()
-      });
+        connected,
+        auth_state: authState,
+        auth_reason: authReason
+      }, {
+        urlObj,
+        pathname,
+        username,
+        snapshot: null,
+        rows: [],
+        component: {summary_map: {}, item_map: {}},
+        fetchTime: asString(accountCache.fetch_time || ""),
+        connected,
+        authState,
+        authReason
+      }));
       return true;
     }
     const component = buildComponentSummary(loaded.rows);
-    writeJson(res, 200, {
+    writeJson(res, 200, attachWebInventoryStubArtifact({
       ok: true,
       snapshot: loaded.snapshot,
       rows: loaded.rows,
       component,
       fetch_time: asString(accountCache.fetch_time || ""),
-      connected: refreshRuntime.isConnected(username),
-      auth_state: asString(accountCache.auth_state || "").trim() || "normal",
-      auth_reason: asString(accountCache.auth_reason || "").trim()
-    });
+      connected,
+      auth_state: authState,
+      auth_reason: authReason
+    }, {
+      urlObj,
+      pathname,
+      username,
+      snapshot: loaded.snapshot,
+      rows: loaded.rows,
+      component,
+      fetchTime: asString(accountCache.fetch_time || ""),
+      connected,
+      authState,
+      authReason
+    }));
     return true;
   }
 
@@ -3430,18 +3556,24 @@ async function handleApi(req, res, urlObj, deps = {}) {
         if (!account) {
           throw new Error("账号不存在");
         }
+        logger.info("web_inventory_fetch", `account=${username} mode=batch step=start`);
 
         sendSse("inventory_progress", {username, step: "cookie", message: `${username} 刷新 Cookie...`});
 
         const {webSession} = await resolveWebSessionForAccount(account);
+        logger.info("web_inventory_fetch", `account=${username} mode=batch step=session ${summarizeWebSessionForLog(webSession)}`);
 
         sendSse("inventory_progress", {username, step: "fetch", message: `${username} 拉取库存...`});
 
         const items = await fetchFullInventory({
           steamId64: webSession.steamId64,
           cookieString: webSession.cookieString,
+          onTrace: (trace) => {
+            logWebInventoryFetchTrace({username, mode: "batch", trace});
+          },
           onPage: (pageIdx, pageItems, totalSoFar) => {
             sendSse("inventory_page", {username, page: pageIdx, page_count: pageItems.length, total: totalSoFar});
+            logger.info("web_inventory_fetch", `account=${username} mode=batch phase=page page=${pageIdx + 1} page_count=${pageItems.length} total=${totalSoFar}`);
           }
         });
 
@@ -3455,6 +3587,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
           total: usernames.length
         });
         logger.info("ui_server", `batch-inventory success: account=${username} items=${items.length}`);
+        logger.info("web_inventory_fetch", `account=${username} mode=batch step=done items=${items.length}`);
       } catch (err) {
         doneCount++;
         const msg = asString(err && err.message ? err.message : err).trim() || "未知错误";
@@ -3467,6 +3600,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
           total: usernames.length
         });
         logger.warn("ui_server", `batch-inventory failed: account=${username} error=${msg}`);
+        logger.warn("web_inventory_fetch", `account=${username} mode=batch step=failed error=${sanitizeLogValue(msg) || "-"}`);
       }
     }
 
@@ -3496,16 +3630,27 @@ async function handleApi(req, res, urlObj, deps = {}) {
         writeJson(res, 400, {ok: false, message: "账号不存在"});
         return true;
       }
+      logger.info("web_inventory_fetch", `account=${username} mode=single step=start`);
 
       const {webSession} = await resolveWebSessionForAccount(account);
+      logger.info("web_inventory_fetch", `account=${username} mode=single step=session ${summarizeWebSessionForLog(webSession)}`);
       const items = await fetchFullInventory({
         steamId64: webSession.steamId64,
-        cookieString: webSession.cookieString
+        cookieString: webSession.cookieString,
+        onTrace: (trace) => {
+          logWebInventoryFetchTrace({username, mode: "single", trace});
+        },
+        onPage: (pageIdx, pageItems, totalSoFar) => {
+          logger.info("web_inventory_fetch", `account=${username} mode=single phase=page page=${pageIdx + 1} page_count=${pageItems.length} total=${totalSoFar}`);
+        }
       });
 
+      logger.info("web_inventory_fetch", `account=${username} mode=single step=done items=${items.length}`);
       writeJson(res, 200, {ok: true, username, item_count: items.length, items});
     } catch (err) {
-      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      const message = asString(err && err.message ? err.message : err).trim();
+      logger.warn("web_inventory_fetch", `account=${username} mode=single step=failed error=${sanitizeLogValue(message) || "-"}`);
+      writeJson(res, 500, {ok: false, message});
     }
     return true;
   }
@@ -4167,7 +4312,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
       const tokenStore = new TokenStore();
       const refreshToken = tokenStore.get(username);
-      tokenStore.close();
+      if (typeof tokenStore.close === "function") {
+        tokenStore.close();
+      }
       if (!refreshToken) {
         writeJson(res, 400, {ok: false, message: "该账号未登录或 refresh_token 不存在，请先登录"});
         return true;
@@ -4240,6 +4387,12 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const secretKey = crypto.randomBytes(32);
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
+      let encrypted = cipher.update(parsed.sharedSecret, "utf8", "base64");
+      encrypted += cipher.final("base64");
+      const SteamTotp = require("steam-totp");
+      const serverTime = SteamTotp.time();
+      const localTime = Math.floor(Date.now() / 1000);
+      const serverTimeDiff = serverTime - localTime;
       const rawData = typeof acc.mafile_content === "string"
         ? JSON.parse(acc.mafile_content)
         : (acc.mafile_content && typeof acc.mafile_content === "object" ? acc.mafile_content : {});
@@ -4255,12 +4408,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
             }
           : {}
       };
-      let encrypted = cipher.update(parsed.sharedSecret, "utf8", "base64");
-      encrypted += cipher.final("base64");
-      const SteamTotp = require("steam-totp");
-      const serverTime = SteamTotp.time();
-      const localTime = Math.floor(Date.now() / 1000);
-      const serverTimeDiff = serverTime - localTime;
       writeJson(res, 200, {
         ok: true,
         deviceId: parsed.deviceId || "",

@@ -22,6 +22,8 @@
   "dependencies": {
     "@lowly1337/vpk": "^0.2.6",
     "globaloffensive": "^3.2.0",
+    "https-proxy-agent": "^7.0.6",
+    "steam-session": "^1.9.4",
     "steam-totp": "^2.1.2",
     "steam-user": "^4.29.0",
     "steamcommunity": "^3.50.0"
