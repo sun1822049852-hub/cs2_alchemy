@@ -1806,10 +1806,14 @@ async function runCraftAssistSelectionForRecipe({
   );
   for (let i = 0; i < finalSelectedItems.length; i++) {
     const item = finalSelectedItems[i];
-    if (item && item.wear != null) {
+    if (item) {
+      const relWear = item.relative_wear != null ? item.relative_wear : '-';
+      const absWear = item.absolute_wear != null ? item.absolute_wear : '-';
+      const itemId = item.asset_id || '-';
+      const itemName = asString(item.name || '').substring(0, 30);
       craftAssistLogger.infoAlways(
         "craft_assist",
-        `  材料[${i + 1}]: id=${item.id} wear=${numberTextTrunc(item.wear, WEAR_INPUT_DECIMALS)} name=${asString(item.name || '').substring(0, 30)}`
+        `  材料[${i + 1}]: id=${itemId} rel_wear=${relWear} abs_wear=${absWear} name=${itemName}`
       );
     }
   }
