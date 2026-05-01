@@ -4,6 +4,9 @@ const os = require("node:os");
 const path = require("node:path");
 const {Worker} = require("node:worker_threads");
 const {projectCraftAssistTraceMaterial} = require("../../ui/craftAssistItemWearShared");
+const {
+  distanceFromMeanToTargetRange
+} = require("./craftAssistFloat32Step");
 
 const DEFAULT_WORKER_PATH = path.resolve(__dirname, "craftAssistShardWorker.js");
 
@@ -195,13 +198,33 @@ function resolveCenterOverlapSize(totalCount, options) {
   return Math.max(1, Math.min(totalCount, clamped));
 }
 
-function buildCenterWindow(orderedCandidates, targetValue, options) {
+function hasTargetStepSpec(targetStepSpec) {
+  return !!(
+    targetStepSpec
+    && typeof targetStepSpec === "object"
+    && Number.isFinite(Number(targetStepSpec.targetStep))
+  );
+}
+
+function resolveStepTargetValue(targetValue, targetStepSpec) {
+  return hasTargetStepSpec(targetStepSpec) ? Number(targetStepSpec.targetStep) : asFiniteFloat(targetValue, 0);
+}
+
+function candidateTargetDistance(candidate, targetValue, targetStepSpec = null) {
+  const value = asFiniteFloat(candidate && candidate.value, 0);
+  if (hasTargetStepSpec(targetStepSpec)) {
+    return distanceFromMeanToTargetRange(value, targetStepSpec);
+  }
+  return Math.abs(value - asFiniteFloat(targetValue, 0));
+}
+
+function buildCenterWindow(orderedCandidates, targetValue, options, targetStepSpec = null) {
   const list = Array.isArray(orderedCandidates) ? orderedCandidates : [];
   if (!list.length) return {centerOverlapSize: 0, candidates: []};
   let centerIndex = 0;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (let index = 0; index < list.length; index += 1) {
-    const distance = Math.abs(asFiniteFloat(list[index] && list[index].value, 0) - asFiniteFloat(targetValue, 0));
+    const distance = candidateTargetDistance(list[index], targetValue, targetStepSpec);
     if (distance < bestDistance - 1e-12) {
       bestDistance = distance;
       centerIndex = index;
@@ -225,7 +248,7 @@ function buildCenterWindow(orderedCandidates, targetValue, options) {
   };
 }
 
-function buildStrideShardsWithCenterOverlap({orderedCandidates, shardCount, targetValue, options = DEFAULT_OPTIONS}) {
+function buildStrideShardsWithCenterOverlap({orderedCandidates, shardCount, targetValue, targetStepSpec = null, options = DEFAULT_OPTIONS}) {
   const list = Array.isArray(orderedCandidates) ? orderedCandidates : [];
   const count = Math.max(1, asPositiveInt(shardCount, 1));
   if (!list.length) return Array.from({length: count}, (_, shardIndex) => ({
@@ -233,7 +256,7 @@ function buildStrideShardsWithCenterOverlap({orderedCandidates, shardCount, targ
     candidates: [],
     centerOverlapSize: 0
   }));
-  const centerWindow = buildCenterWindow(list, targetValue, options);
+  const centerWindow = buildCenterWindow(list, targetValue, options, targetStepSpec);
   const centerCandidates = centerWindow.candidates;
   const centerOverlapSize = centerWindow.centerOverlapSize;
   return Array.from({length: count}, (_, shardIndex) => {
@@ -331,12 +354,15 @@ function mergeShardSelections({group, selectedIds, options = DEFAULT_OPTIONS}) {
   };
 }
 
-function buildPhaseTrace({phaseName, options, targetValue}) {
+function buildPhaseTrace({phaseName, options, targetValue, targetStepSpec = null}) {
+  const stepAware = hasTargetStepSpec(targetStepSpec);
   return {
     enabled: !!options.enableOversizedPrefilter,
     phaseName: asString(phaseName).trim() || "prefilter/base",
     retryMode: phaseName === "prefilter/expand" ? "expand" : "none",
     targetValue: asFiniteFloat(targetValue, 0),
+    inputStep: stepAware ? Number(targetStepSpec.inputStep) : null,
+    targetStep: stepAware ? Number(targetStepSpec.targetStep) : null,
     prefilteredIndexes: [],
     groupFallbackIndexes: [],
     groups: [],
@@ -503,6 +529,7 @@ async function processOversizedGroup({
   group,
   groupIndex,
   targetValue,
+  targetStepSpec = null,
   modeHint,
   phaseName,
   options,
@@ -541,6 +568,7 @@ async function processOversizedGroup({
     orderedCandidates,
     shardCount,
     targetValue,
+    targetStepSpec,
     options
   });
   groupTrace.shardCount = shardCount;
@@ -558,6 +586,7 @@ async function processOversizedGroup({
         materialRole: group && group.material && group.material.role
       }),
       targetValue,
+      targetStepSpec,
       topK: isExpandPhase ? options.expandTopK : options.topK,
       edgeKeepPerSide: isExpandPhase ? options.expandEdgeKeepPerSide : options.edgeKeepPerSide,
       candidates: shard.candidates
@@ -613,6 +642,7 @@ async function processOversizedGroup({
 async function runPrefilterPhase({
   groups,
   targetValue,
+  targetStepSpec = null,
   recipeContext = {},
   phaseName = "prefilter/base",
   options = {}
@@ -623,7 +653,8 @@ async function runPrefilterPhase({
   const prefilterTrace = buildPhaseTrace({
     phaseName,
     options: resolvedOptions,
-    targetValue
+    targetValue,
+    targetStepSpec
   });
   if (!resolvedOptions.enableOversizedPrefilter) {
     prefilterTrace.prefilterMs = Date.now() - startMs;
@@ -666,6 +697,7 @@ async function runPrefilterPhase({
         group,
         groupIndex,
         targetValue,
+        targetStepSpec,
         modeHint,
         phaseName,
         options: resolvedOptions,

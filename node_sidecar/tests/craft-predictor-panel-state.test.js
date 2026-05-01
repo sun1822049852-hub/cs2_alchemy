@@ -56,6 +56,9 @@ function loadPredictorPanelFns(initialState = {}) {
       craftPredictorRequestSeq: 0,
       craftPredictorPreferredRowsContextKey: "",
       craftPredictorPreferredRowsById: null,
+      currentPage: "craftPage",
+      craftAssistApproachMode: false,
+      batchCraftApproachMode: false,
       craftAssistTargetWear: null,
       craftAssistMaterials: [],
       ...initialState
@@ -321,6 +324,51 @@ function testBuildCraftPredictorRequestFromDraftAggregatesCollections() {
   ]);
 }
 
+function testBuildCraftPredictorRequestFromDraftPassesCurrentApproachMode() {
+  const app = loadPredictorPanelFns({
+    currentPage: "craftPage",
+    craftAssistApproachMode: true
+  });
+
+  const result = app.buildCraftPredictorRequestFromDraft({
+    targetWear: 0.18,
+    requiredCount: 10,
+    materials: [
+      {names: ["AK-47 | Slate"], count: 3}
+    ],
+    parentGroups: [
+      {name: "AK-47 | Slate", collection: "Fracture Case", rarity: "军规级", stattrak: false}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.payload.wear_approach_mode, "infinite");
+}
+
+function testBuildCraftPredictorRequestFromRecipePassesCurrentApproachMode() {
+  const app = loadPredictorPanelFns({
+    currentPage: "craftPage",
+    craftAssistApproachMode: true
+  });
+  const rowsById = new Map([[
+    "a",
+    {
+      asset_id: "a",
+      collection: "Fracture Case",
+      alchemy_rarity: "军规级",
+      stattrak: false
+    }
+  ]]);
+
+  const result = app.buildCraftPredictorRequestFromRecipeEntry(
+    {id: "recipe-1", item_ids: ["a"], status: "pending"},
+    rowsById
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.payload.wear_approach_mode, "infinite");
+}
+
 function testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools() {
   const app = loadPredictorPanelFns();
 
@@ -391,6 +439,8 @@ async function main() {
   testDifferentDraftAlsoStaysMutedAfterManualCollapse();
   await testFocusCraftPredictorOnActiveDraftKeepsImmediatePredictionAcrossFollowupRefresh();
   testBuildCraftPredictorRequestFromDraftAggregatesCollections();
+  testBuildCraftPredictorRequestFromDraftPassesCurrentApproachMode();
+  testBuildCraftPredictorRequestFromRecipePassesCurrentApproachMode();
   testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools();
   testBuildCraftPredictorRequestFromDraftSupportsItemLevelMaterialsAndSharedRequiredCount();
   console.log("craft-predictor-panel-state tests passed");

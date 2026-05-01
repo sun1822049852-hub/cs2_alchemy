@@ -4,6 +4,7 @@ const {
   normalizeRarityRank,
   rarityLabelFromRank
 } = require("./skinAlchemyRules");
+const {resolveCraftAssistTargetStepSpec} = require("./craftAssistFloat32Step");
 
 const ALLOWED_REQUIRED_COUNTS = new Set([5, 10]);
 const FLOAT_PRECISION = 12;
@@ -42,6 +43,17 @@ function predictedWearLevel(value) {
   if (numeric < 0.38) return "Field-Tested";
   if (numeric < 0.45) return "Well-Worn";
   return "Battle-Scarred";
+}
+
+function normalizeWearApproachMode(value) {
+  return String(value || "").trim() === "infinite" ? "infinite" : "below";
+}
+
+function resolvePredictionTargetRelativeWear(targetRelativeWear, approachMode) {
+  return resolveCraftAssistTargetStepSpec({
+    inputStep: Math.fround(targetRelativeWear),
+    approachMode: normalizeWearApproachMode(approachMode)
+  }).targetStep;
 }
 
 function normalizeGroups(groups) {
@@ -88,6 +100,20 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
       if (!Number.isFinite(targetRelativeWear) || targetRelativeWear < 0 || targetRelativeWear > 1) {
         return invalidResult({
           invalid_reason: "invalid_target_relative_wear",
+          message: "配方无效：目标相对磨损非法",
+          required_count: requiredCount,
+          current_count: currentCount
+        });
+      }
+      let quantizedRelativeWear = null;
+      try {
+        quantizedRelativeWear = resolvePredictionTargetRelativeWear(
+          targetRelativeWear,
+          payload && payload.wear_approach_mode
+        );
+      } catch (err) {
+        return invalidResult({
+          invalid_reason: String(err && err.code || "invalid_target_relative_wear"),
           message: "配方无效：目标相对磨损非法",
           required_count: requiredCount,
           current_count: currentCount
@@ -164,7 +190,7 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
             continue;
           }
           const predictedFloat = roundNumber(
-            Number(targetRelativeWear) * Number(candidate.wear_range) + Number(candidate.minfloat)
+            quantizedRelativeWear * Number(candidate.wear_range) + Number(candidate.minfloat)
           );
           const wearlevel = predictedWearLevel(predictedFloat);
           const concrete = snapshot.wearMap.get(candidate.basemarkethashname)?.get(wearlevel) || null;

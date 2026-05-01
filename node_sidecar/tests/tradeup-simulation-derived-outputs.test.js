@@ -234,6 +234,11 @@ function test_build_tradeup_simulation_derived_output_payload_tracks_primary_and
 
   assert.ok(payload, "adding an auxiliary material beside an existing primary output should still produce a predictor payload");
   assert.equal(payload.required_count, 10);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(payload, "wear_approach_mode"),
+    false,
+    "tradeup simulation has no approach-mode switch and should rely on predictor default below semantics"
+  );
   assert.deepEqual(
     JSON.parse(JSON.stringify(payload.groups)),
     [

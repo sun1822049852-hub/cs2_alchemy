@@ -8801,6 +8801,13 @@ function normalizeCraftPredictorTargetWear(value) {
   if (!Number.isFinite(numeric)) return null;
   return Math.max(0, Math.min(1, numeric));
 }
+function resolveCraftPredictorApproachMode() {
+  const pageId = String(state.currentPage || "").trim();
+  const infinite = pageId === "batchCraftPage"
+    ? !!state.batchCraftApproachMode
+    : !!state.craftAssistApproachMode;
+  return infinite ? "infinite" : "below";
+}
 function clearCraftPredictorPreviewState() {
   state.craftPredictorLoading = false;
   state.craftPredictorError = "";
@@ -9019,6 +9026,7 @@ function buildCraftPredictorRequestFromDraft({targetWear = null, requiredCount =
     payload: {
       required_count: normalizedRequiredCount,
       target_relative_wear: normalizedTargetWear,
+      wear_approach_mode: resolveCraftPredictorApproachMode(),
       input_rarity: inputRarity,
       stattrak: !!stattrak,
       groups: payloadGroups
@@ -9076,6 +9084,7 @@ function buildCraftPredictorRequestFromRecipeEntry(entry, rowsById) {
     payload: {
       required_count: requiredCount,
       target_relative_wear: targetWear,
+      wear_approach_mode: resolveCraftPredictorApproachMode(),
       input_rarity: inputRarity,
       stattrak: !!stattrak,
       groups: payloadGroups

@@ -1,6 +1,10 @@
 "use strict";
 
 const {parentPort} = require("node:worker_threads");
+const {
+  compareMeanToTargetRange,
+  distanceFromMeanToTargetRange
+} = require("./craftAssistFloat32Step");
 
 const EPSILON = 1e-9;
 
@@ -39,16 +43,35 @@ function candidateSide(value, targetValue) {
   return "equal";
 }
 
-function buildScoreTuple(candidate, {role, targetValue}) {
+function resolveCandidateSide(value, targetValue, targetStepSpec = null) {
+  if (!hasTargetStepSpec(targetStepSpec)) return candidateSide(value, targetValue);
+  const side = compareMeanToTargetRange(value, targetStepSpec);
+  if (side < 0) return "below";
+  if (side > 0) return "above";
+  return "equal";
+}
+
+function hasTargetStepSpec(targetStepSpec) {
+  return !!(
+    targetStepSpec
+    && typeof targetStepSpec === "object"
+    && Number.isFinite(Number(targetStepSpec.targetStep))
+  );
+}
+
+function buildScoreTuple(candidate, {role, targetValue, targetStepSpec = null}) {
   const value = asFiniteNumber(candidate && candidate.value, 0);
   const orderedIndex = asNonNegativeInt(candidate && candidate.orderedIndex, 0);
-  const distance = Math.abs(value - targetValue);
+  const distance = hasTargetStepSpec(targetStepSpec)
+    ? distanceFromMeanToTargetRange(value, targetStepSpec)
+    : Math.abs(value - targetValue);
   if (role === "neutral") {
     return [distance, orderedIndex];
   }
+  const side = resolveCandidateSide(value, targetValue, targetStepSpec);
   const wrongSidePenalty = role === "main"
-    ? (value < targetValue - EPSILON ? 1 : 0)
-    : (value > targetValue + EPSILON ? 1 : 0);
+    ? (side === "below" ? 1 : 0)
+    : (side === "above" ? 1 : 0);
   if (role === "main") {
     return [wrongSidePenalty, distance, -value, orderedIndex];
   }
@@ -81,6 +104,7 @@ function buildQuantileEdgeKeep(sideCandidates, edgeKeepPerSide) {
 function selectShardCandidates(payload = {}) {
   const role = normalizeRole(payload.role);
   const targetValue = asFiniteNumber(payload.targetValue, 0);
+  const targetStepSpec = hasTargetStepSpec(payload.targetStepSpec) ? payload.targetStepSpec : null;
   const topK = Math.max(1, asNonNegativeInt(payload.topK, 40));
   const edgeKeepPerSide = asNonNegativeInt(payload.edgeKeepPerSide, 4);
   const candidates = (Array.isArray(payload.candidates) ? payload.candidates : [])
@@ -100,11 +124,11 @@ function selectShardCandidates(payload = {}) {
   const below = [];
   const above = [];
   const ranked = [...list].sort((left, right) => compareTuple(
-    buildScoreTuple(left, {role, targetValue}),
-    buildScoreTuple(right, {role, targetValue})
+    buildScoreTuple(left, {role, targetValue, targetStepSpec}),
+    buildScoreTuple(right, {role, targetValue, targetStepSpec})
   ));
   for (const candidate of list) {
-    const side = candidateSide(candidate.value, targetValue);
+    const side = resolveCandidateSide(candidate.value, targetValue, targetStepSpec);
     if (side === "below") {
       below.push(candidate);
     } else if (side === "above") {
@@ -145,7 +169,7 @@ function selectShardCandidates(payload = {}) {
   let preferredSideCount = 0;
   let oppositeSideCount = 0;
   for (const candidate of selectedList) {
-    const side = candidateSide(candidate.value, targetValue);
+    const side = resolveCandidateSide(candidate.value, targetValue, targetStepSpec);
     if (role === "neutral" || side === "equal") continue;
     const preferred = role === "main" ? side === "above" : side === "below";
     if (preferred) preferredSideCount += 1;

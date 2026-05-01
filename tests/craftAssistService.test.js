@@ -7,6 +7,11 @@ const {
   buildCraftAssistSelectionContextFromCandidateRows,
   __test
 } = require("../node_sidecar/src/services/craftAssistService");
+const {
+  prevFloat32,
+  nextFloat32,
+  resolveCraftAssistTargetStepSpec
+} = require("../node_sidecar/src/services/craftAssistFloat32Step");
 
 function makeRow({
   id,
@@ -31,6 +36,10 @@ function makeRow({
     casket_id: "",
     tradable_after: 0
   };
+}
+
+function inputStepForBelowTargetStep(targetStep) {
+  return nextFloat32(Math.fround(targetStep));
 }
 
 function runSelect({rows, targetWear, materials, ...extraArgs}) {
@@ -198,7 +207,7 @@ async function test_over_target_prefers_squeezing_aux_before_main() {
   ];
   const result = await runSelect({
     rows,
-    targetWear: 0.52,
+    targetWear: inputStepForBelowTargetStep(0.52),
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 5, wear_min: 0, wear_max: 1},
       {name: "Aux", names: ["Aux"], role: "aux", count: 5, wear_min: 0, wear_max: 1}
@@ -206,7 +215,7 @@ async function test_over_target_prefers_squeezing_aux_before_main() {
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.52, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.52));
   assert.equal(result.item_ids.includes("m6"), false);
   assert.equal(result.item_ids.includes("a6") || result.item_ids.includes("a7"), true);
 }
@@ -222,7 +231,7 @@ async function test_under_target_prioritizes_closer_overall_before_aux_low_bias(
 
   const result = await runSelect({
     rows,
-    targetWear: 0.169,
+    targetWear: inputStepForBelowTargetStep(0.126),
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 9, wear_min: 0, wear_max: 1},
       {name: "Aux", names: ["Aux"], role: "aux", count: 1, wear_min: 0, wear_max: 1}
@@ -230,7 +239,7 @@ async function test_under_target_prioritizes_closer_overall_before_aux_low_bias(
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.169, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.126));
   assert.equal(result.item_ids.includes("a3"), true);
   assert.equal(result.item_ids.includes("a2"), false);
 }
@@ -245,7 +254,7 @@ async function test_under_target_allows_above_slot_target_when_it_is_the_only_le
 
   const result = await runSelect({
     rows,
-    targetWear: 0.169,
+    targetWear: inputStepForBelowTargetStep(0.126),
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 9, wear_min: 0, wear_max: 1},
       {name: "Aux", names: ["Aux"], role: "aux", count: 1, wear_min: 0, wear_max: 1}
@@ -253,7 +262,7 @@ async function test_under_target_allows_above_slot_target_when_it_is_the_only_le
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.169, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.126));
   assert.equal(result.item_ids.includes("a3"), true);
 }
 
@@ -266,14 +275,14 @@ async function test_all_main_items_use_single_side_branch() {
 
   const result = await runSelect({
     rows,
-    targetWear: 0.20,
+    targetWear: inputStepForBelowTargetStep(0.018),
     materials: [
       {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
     ]
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.20, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.018));
   assert.equal(result.item_ids.includes("s11"), true);
 }
 
@@ -287,7 +296,7 @@ async function test_under_target_never_uses_candidate_that_pushes_overall_across
 
   const result = await runSelect({
     rows,
-    targetWear: 0.169,
+    targetWear: inputStepForBelowTargetStep(0.146),
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 9, wear_min: 0, wear_max: 1},
       {name: "Aux", names: ["Aux"], role: "aux", count: 1, wear_min: 0, wear_max: 1}
@@ -295,7 +304,7 @@ async function test_under_target_never_uses_candidate_that_pushes_overall_across
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.169, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.146));
   assert.equal(result.item_ids.includes("a1"), true);
   assert.equal(result.item_ids.includes("a2"), false);
 }
@@ -318,16 +327,14 @@ async function test_single_material_falls_back_when_balanced_split_side_is_short
 
   const result = await runSelect({
     rows,
-    targetWear: 0.2142,
+    targetWear: inputStepForBelowTargetStep(0.2036091),
     materials: [
       {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
     ]
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.2142, true);
-  assert.equal(result.selection_trace.steps[0].belowCount, 7);
-  assert.equal(result.selection_trace.steps[0].aboveCount, 3);
+  assert.equal(Math.fround(result.overall), Math.fround(0.2036091));
   assert.equal(pickedIds(result).includes("x9"), true);
   assert.equal(pickedIds(result).includes("x0"), false);
 }
@@ -349,19 +356,19 @@ async function test_single_material_non_unit_interval_still_uses_relative_center
 
   const result = await runSelect({
     rows,
-    targetWear: 0.29,
+    targetWear: inputStepForBelowTargetStep(0.249),
     materials: [
       {name: "Shifted", names: ["Shifted"], role: "main", count: 10, wear_min: 0, wear_max: 1}
     ]
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.29, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.249));
   assert.equal(pickedIds(result).includes("r11"), true);
   assert.equal(pickedIds(result).includes("r1"), false);
 }
 
-async function test_single_material_returns_selection_trace() {
+async function test_single_material_returns_step_target_selection() {
   const rows = [
     makeRow({id: "x0", name: "Solo", relative: 0.160173}),
     makeRow({id: "x1", name: "Solo", relative: 0.184536}),
@@ -379,20 +386,15 @@ async function test_single_material_returns_selection_trace() {
 
   const result = await runSelect({
     rows,
-    targetWear: 0.2142,
+    targetWear: inputStepForBelowTargetStep(0.2036091),
     materials: [
       {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
     ]
   });
 
   assert.equal(result.ok, true);
-  assert.equal(Array.isArray(result.selection_trace && result.selection_trace.steps), true);
-  assert.equal(result.selection_trace.steps[0].stage, "initial");
-  assert.equal(result.selection_trace.steps[result.selection_trace.steps.length - 1].stage, "final");
-  assert.deepEqual(
-    result.selection_trace.steps[result.selection_trace.steps.length - 1].selectedIds,
-    pickedIds(result)
-  );
+  assert.equal(Math.fround(result.overall), Math.fround(0.2036091));
+  assert.equal(pickedIds(result).length, 10);
 }
 
 async function test_infinite_mode_allows_cross_target_when_it_is_closer() {
@@ -415,25 +417,24 @@ async function test_infinite_mode_allows_cross_target_when_it_is_closer() {
 
   const belowOnly = await runSelect({
     rows,
-    targetWear: 0.50,
+    targetWear: inputStepForBelowTargetStep(0.498),
     materials
   });
   const infinite = await runSelect({
     rows,
-    targetWear: 0.50,
+    targetWear: Math.fround(0.5041),
     materials,
     wearApproachMode: "infinite"
   });
 
   assert.equal(belowOnly.ok, true);
   assert.equal(infinite.ok, true);
-  assert.equal(belowOnly.overall < 0.50, true);
-  assert.equal(infinite.overall > 0.50, true);
-  assert.equal(belowOnly.item_ids.includes("u5"), true);
-  assert.equal(belowOnly.item_ids.includes("u1"), false);
-  assert.equal(infinite.item_ids.includes("u5"), false);
+  assert.equal(Math.fround(belowOnly.overall), Math.fround(0.498));
+  assert.equal(Math.fround(infinite.overall), Math.fround(0.5041));
+  assert.equal(belowOnly.item_ids.includes("b5"), true);
+  assert.equal(belowOnly.item_ids.includes("u6"), false);
+  assert.equal(infinite.item_ids.includes("u6"), true);
   assert.equal(infinite.item_ids.includes("u1"), true);
-  assert.equal(Math.abs(infinite.overall - 0.50) < Math.abs(belowOnly.overall - 0.50), true);
 }
 
 async function test_single_material_starts_with_balanced_split_then_pushes_upward() {
@@ -455,18 +456,16 @@ async function test_single_material_starts_with_balanced_split_then_pushes_upwar
 
   const result = await runSelect({
     rows,
-    targetWear: 0.2142,
+    targetWear: inputStepForBelowTargetStep(0.2148097),
     materials: [
       {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
     ]
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.2142, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.2148097));
   assert.equal(result.item_ids.includes("a7"), true);
-  assert.equal(result.item_ids.includes("a1"), false);
-  assert.equal(result.selection_trace.steps[0].belowCount, 5);
-  assert.equal(result.selection_trace.steps[0].aboveCount, 5);
+  assert.equal(result.item_ids.includes("b6"), true);
 }
 
 async function test_single_material_applies_compensation_refinement_after_push_limit() {
@@ -488,26 +487,19 @@ async function test_single_material_applies_compensation_refinement_after_push_l
 
   const result = await runSelect({
     rows,
-    targetWear: 0.2142,
+    targetWear: inputStepForBelowTargetStep(0.2135797),
     materials: [
       {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
     ]
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.2142, true);
-  assert.equal(Math.abs(result.overall - 0.2141963) < 1e-6, true);
-  assert.equal(result.item_ids.includes("a1"), true);
-  assert.equal(result.item_ids.includes("b6"), true);
-  assert.equal(result.item_ids.includes("b1"), false);
-  assert.equal(result.selection_trace.steps.some((step) => step.stage === "refine_compensate"), true);
-  const refineStep = result.selection_trace.steps.find((step) => step.stage === "refine_compensate");
-  assert.equal(!!(refineStep && refineStep.debug), true);
-  assert.equal(Array.isArray(refineStep.debug.firstSwapAttempts), true);
-  assert.equal(refineStep.debug.firstSwapAttempts.length > 0, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.2135797));
+  assert.equal(result.item_ids.includes("a7"), true);
+  assert.equal(result.item_ids.includes("b1"), true);
 }
 
-async function test_single_material_keeps_hard_relative_cap_margin_near_target_edge() {
+async function test_single_material_accepts_step_target_near_target_edge_without_margin() {
   const rows = [];
   for (let i = 1; i <= 9; i += 1) {
     rows.push(makeRow({id: `e${i}`, name: "Solo", relative: 0.27}));
@@ -517,16 +509,16 @@ async function test_single_material_keeps_hard_relative_cap_margin_near_target_e
 
   const result = await runSelect({
     rows,
-    targetWear: 0.27,
+    targetWear: inputStepForBelowTargetStep(0.26999996),
     materials: [
       {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
     ]
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.26999998, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.26999996));
   assert.equal(result.item_ids.includes("safe"), true);
-  assert.equal(result.item_ids.includes("tight"), false);
+  assert.equal(result.item_ids.includes("tight"), true);
 }
 
 async function test_multi_material_allows_cross_side_compensation_for_closer_overall() {
@@ -547,7 +539,7 @@ async function test_multi_material_allows_cross_side_compensation_for_closer_ove
 
   const result = await runSelect({
     rows,
-    targetWear: 0.2142,
+    targetWear: inputStepForBelowTargetStep(0.2140266),
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 5, wear_min: 0, wear_max: 1},
       {name: "Aux", names: ["Aux"], role: "aux", count: 5, wear_min: 0, wear_max: 1}
@@ -555,8 +547,7 @@ async function test_multi_material_allows_cross_side_compensation_for_closer_ove
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.2142, true);
-  assert.equal(0.2142 - result.overall < 0.002, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.2140266));
   assert.equal(pickedIds(result).includes("m1"), true);
   assert.equal(pickedIds(result).includes("a3"), true);
 }
@@ -577,7 +568,7 @@ async function test_multi_material_allows_cross_side_fill_when_preferred_side_is
 
   const result = await runSelect({
     rows,
-    targetWear: 0.2142,
+    targetWear: inputStepForBelowTargetStep(0.2006),
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 3, wear_min: 0, wear_max: 1},
       {name: "Aux", names: ["Aux"], role: "aux", count: 7, wear_min: 0, wear_max: 1}
@@ -585,12 +576,12 @@ async function test_multi_material_allows_cross_side_fill_when_preferred_side_is
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.overall < 0.2142, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.2006));
   assert.equal(pickedIds(result).includes("a6"), true);
   assert.equal(pickedIds(result).includes("a7"), true);
 }
 
-async function test_multi_material_returns_selection_trace() {
+async function test_multi_material_returns_step_target_selection_without_legacy_trace() {
   const rows = [
     makeRow({id: "m1", name: "Main", relative: 0.24}),
     makeRow({id: "m2", name: "Main", relative: 0.245}),
@@ -610,7 +601,7 @@ async function test_multi_material_returns_selection_trace() {
 
   const result = await runSelect({
     rows,
-    targetWear: 0.21,
+    targetWear: inputStepForBelowTargetStep(0.21),
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
       {name: "Aux", names: ["Aux"], role: "aux", count: 8, wear_min: 0, wear_max: 1}
@@ -618,13 +609,12 @@ async function test_multi_material_returns_selection_trace() {
   });
 
   assert.equal(result.ok, true);
-  assert.equal(Array.isArray(result.selection_trace && result.selection_trace.steps), true);
-  assert.equal(result.selection_trace.steps[0].stage, "initial");
-  assert.equal(result.selection_trace.steps[result.selection_trace.steps.length - 1].stage, "final");
   assert.deepEqual(
-    result.selection_trace.steps[result.selection_trace.steps.length - 1].selectedIds,
-    pickedIds(result)
+    pickedIds(result),
+    ["a10", "a11", "a12", "a2", "a6", "a7", "a8", "a9", "m1", "m2"]
   );
+  assert.equal(Math.fround(result.overall), Math.fround(0.21));
+  assert.equal(result.selection_trace, null);
 }
 
 async function test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids() {
@@ -652,7 +642,7 @@ async function test_prebuilt_selection_context_matches_direct_selection_even_wit
   const blockedIds = ["m3"];
   const direct = await selectCraftAssistForRecipe({
     rows,
-    targetWear: 0.21,
+    targetWear: inputStepForBelowTargetStep(0.21),
     wearFilterMode: "relative",
     materials,
     blockedIds,
@@ -662,7 +652,7 @@ async function test_prebuilt_selection_context_matches_direct_selection_even_wit
   const selectionContext = buildCraftAssistSelectionContext({rows, includeCooling: false});
   const cached = await runSelectWithContext({
     selectionContext,
-    targetWear: 0.21,
+    targetWear: inputStepForBelowTargetStep(0.21),
     materials,
     blockedIds
   });
@@ -710,7 +700,7 @@ async function test_candidate_rows_sibling_rebuilds_stale_selection_context_even
     includeCooling: false
   });
   const request = {
-    targetWear: 0.22,
+    targetWear: inputStepForBelowTargetStep(0.2135),
     wearFilterMode: "relative",
     materials: [
       {role: "main", count: 2, items: [{name: "Main", wear_filter_mode: "relative", wear_min: 0, wear_max: 1}]},
@@ -733,6 +723,7 @@ async function test_candidate_rows_sibling_rebuilds_stale_selection_context_even
 
   assert.equal(expected.ok, true);
   assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.2135));
   assert.deepEqual(rawPickedIds(result), rawPickedIds(expected));
   assert.deepEqual(traceParitySummary(result), traceParitySummary(expected));
 }
@@ -748,9 +739,8 @@ async function test_service_rebuilds_cached_context_when_rows_mutate_in_place() 
     }));
   }
   rows.push(makeRow({id: "s11", name: "Solo", relative: 0.4}));
-  const args = {
+  const baseArgs = {
     rows,
-    targetWear: 0.20,
     wearFilterMode: "relative",
     materials: [
       {role: "main", count: 10, items: [{name: "Solo", wear_filter_mode: "relative", wear_min: 0, wear_max: 1}]}
@@ -760,23 +750,32 @@ async function test_service_rebuilds_cached_context_when_rows_mutate_in_place() 
     wearOffsetPct: 100
   };
 
-  const first = await service.selectForRecipe(args);
+  const first = await service.selectForRecipe({
+    ...baseArgs,
+    targetWear: inputStepForBelowTargetStep(0.13)
+  });
   assert.equal(first.ok, true);
+  assert.equal(Math.fround(first.overall), Math.fround(0.13));
 
   rows[0].float_value = 0.95;
   rows[10].float_value = 0.199;
 
+  const args = {
+    ...baseArgs,
+    targetWear: inputStepForBelowTargetStep(0.1099)
+  };
   const expected = await selectCraftAssistForRecipe(args);
   const actual = await service.selectForRecipe(args);
 
   assert.equal(expected.ok, true);
   assert.equal(actual.ok, true);
+  assert.equal(Math.fround(actual.overall), Math.fround(0.1099));
   assert.notDeepEqual(rawPickedIds(expected), rawPickedIds(first));
   assert.deepEqual(rawPickedIds(actual), rawPickedIds(expected));
   assert.deepEqual(traceParitySummary(actual), traceParitySummary(expected));
 }
 
-async function test_fast_flag_true_runs_expand_correction_before_returning() {
+async function test_fast_flag_true_returns_after_base_step_hit() {
   const rows = makeOversizedPrefilterRows();
   await withEnv({
     ENABLE_OVERSIZED_PREFILTER: "0",
@@ -796,39 +795,34 @@ async function test_fast_flag_true_runs_expand_correction_before_returning() {
     ];
     const slow = await runSelect({
       rows,
-      targetWear: 0.21,
+      targetWear: inputStepForBelowTargetStep(0.21),
       enableFastCraftAssist: false,
       materials
     });
     const fast = await runSelect({
       rows,
-      targetWear: 0.21,
+      targetWear: inputStepForBelowTargetStep(0.21),
       enableFastCraftAssist: true,
       materials
     });
 
     assert.equal(slow.ok, true);
     assert.equal(fast.ok, true);
-    assert.equal(slow.overall < 0.21, true);
-    assert.equal(fast.overall, slow.overall);
-    assert.deepEqual(pickedIds(fast), pickedIds(slow));
+    assert.equal(Math.fround(slow.overall), Math.fround(0.21));
+    assert.equal(Math.fround(fast.overall), Math.fround(0.21));
+    assert.equal(Math.fround(fast.overall), Math.fround(slow.overall));
     assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
-    assert.equal(fast.selection_trace.prefilter.retryMode, "expand");
+    assert.equal(fast.selection_trace.prefilter.retryMode, "base");
     assert.equal(Array.isArray(fast.selection_trace.prefilter.phases), true);
-    assert.equal(fast.selection_trace.prefilter.phases.length, 2);
+    assert.equal(fast.selection_trace.prefilter.phases.length, 1);
     assert.deepEqual(
       fast.selection_trace.prefilter.phases.map((phase) => phase.phaseName),
-      ["prefilter/base", "prefilter/expand"]
+      ["prefilter/base"]
     );
     assert.deepEqual(fast.selection_trace.prefilter.phases[0].prefilteredIndexes, [1]);
-    assert.deepEqual(fast.selection_trace.prefilter.phases[1].prefilteredIndexes, [1]);
     assert.equal(fast.selection_trace.prefilter.phases[0].groups[0].candidateCountBefore, 60);
     assert.equal(fast.selection_trace.prefilter.phases[0].groups[0].candidateCountAfter <= 80, true);
-    assert.equal(
-      fast.selection_trace.prefilter.phases[1].groups[0].candidateCountAfter
-      > fast.selection_trace.prefilter.phases[0].groups[0].candidateCountAfter,
-      true
-    );
+    assert.equal(fast.selection_trace.prefilter.contextRefine, null);
   });
 }
 
@@ -848,7 +842,7 @@ async function test_fast_flag_false_forces_old_logic_even_when_env_enabled() {
   }, async () => {
     const result = await runSelect({
       rows,
-      targetWear: 0.21,
+      targetWear: inputStepForBelowTargetStep(0.21),
       enableFastCraftAssist: false,
       materials: [
         {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
@@ -857,12 +851,12 @@ async function test_fast_flag_false_forces_old_logic_even_when_env_enabled() {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.overall < 0.21, true);
+    assert.equal(Math.fround(result.overall), Math.fround(0.21));
     assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), false);
   });
 }
 
-async function test_fast_flag_runs_context_refine_after_expand_improves_multi_oversized_groups() {
+async function test_step_target_prefilter_miss_falls_back_without_context_refine() {
   const rows = makeContextRefineRows();
   await withEnv({
     ENABLE_OVERSIZED_PREFILTER: "1",
@@ -883,13 +877,13 @@ async function test_fast_flag_runs_context_refine_after_expand_improves_multi_ov
     ];
     const slow = await runSelect({
       rows,
-      targetWear: 0.2142,
+      targetWear: inputStepForBelowTargetStep(0.2142),
       enableFastCraftAssist: false,
       materials
     });
     const fast = await runSelect({
       rows,
-      targetWear: 0.2142,
+      targetWear: inputStepForBelowTargetStep(0.2142),
       enableFastCraftAssist: true,
       materials
     });
@@ -898,12 +892,100 @@ async function test_fast_flag_runs_context_refine_after_expand_improves_multi_ov
     assert.equal(fast.ok, true);
     assert.equal(slow.overall > fast.overall, false);
     assert.equal(Math.abs(fast.overall - slow.overall) < 1e-12, true);
+    assert.equal(Math.fround(fast.overall), Math.fround(0.2142));
     assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
-    assert.equal(!!(fast.selection_trace.prefilter && fast.selection_trace.prefilter.contextRefine), true);
-    assert.equal(fast.selection_trace.prefilter.contextRefine.entered, true);
-    assert.equal(fast.selection_trace.prefilter.contextRefine.rounds.length, 1);
-    assert.equal(fast.selection_trace.prefilter.contextRefine.rounds[0].attempts.length, 2);
-    assert.equal(fast.selection_trace.prefilter.contextRefine.acceptedCount >= 1, true);
+    assert.equal(fast.selection_trace.prefilter.retryMode, "rarity_full");
+    assert.deepEqual(
+      fast.selection_trace.prefilter.phases.map((phase) => phase.phaseName),
+      ["prefilter/base", "prefilter/expand"]
+    );
+    assert.deepEqual(fast.selection_trace.prefilter.phases[0].prefilteredIndexes, [1, 2]);
+    assert.deepEqual(fast.selection_trace.prefilter.phases[1].prefilteredIndexes, [1, 2]);
+    assert.equal(
+      fast.selection_trace.prefilter.phases[1].groups[0].candidateCountAfter
+      > fast.selection_trace.prefilter.phases[0].groups[0].candidateCountAfter,
+      true
+    );
+    assert.equal(
+      fast.selection_trace.prefilter.phases[1].groups[1].candidateCountAfter
+      > fast.selection_trace.prefilter.phases[0].groups[1].candidateCountAfter,
+      true
+    );
+    assert.equal(fast.selection_trace.prefilter.contextRefine, null);
+  });
+}
+
+async function test_step_target_solved_candidate_requires_exact_target_step_even_in_infinite_mode() {
+  const inputStep = Math.fround(0.30000001192092896);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below"
+  });
+  const wrongStepSolved = {
+    overall: nextFloat32(targetStepSpec.targetStep),
+    materialResults: [{selected: []}]
+  };
+  const legacyInfiniteSolved = {
+    overall: 0.9,
+    materialResults: [{selected: []}]
+  };
+
+  assert.equal(
+    __test.isCraftAssistSolvedCandidate(
+      wrongStepSolved,
+      targetStepSpec.targetStep,
+      "infinite",
+      targetStepSpec
+    ),
+    false
+  );
+  assert.equal(
+    __test.isCraftAssistSolvedCandidate(
+      legacyInfiniteSolved,
+      0.3,
+      "infinite"
+    ),
+    true
+  );
+}
+
+async function test_step_target_fast_base_hit_returns_before_expand_and_context_refine() {
+  const targetStep = Math.fround(0.2142);
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    rows.push(makeRow({id: `base-hit-${index}`, name: "Base Hit", relative: targetStep}));
+  }
+
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "5",
+    OVERSIZED_4_SHARDS_THRESHOLD: "999",
+    SHARD_TOP_K: "10",
+    SHARD_EDGE_KEEP_PER_SIDE: "1",
+    EXPAND_SHARD_TOP_K: "10",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "1",
+    SHORTLIST_MIN: "10",
+    SHORTLIST_PER_REQUIRED: "1",
+    SHORTLIST_HARD_MAX: "16"
+  }, async () => {
+    const fast = await runSelect({
+      rows,
+      targetWear: inputStepForBelowTargetStep(targetStep),
+      enableFastCraftAssist: true,
+      materials: [
+        {name: "Base Hit", names: ["Base Hit"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+      ]
+    });
+
+    assert.equal(fast.ok, true);
+    assert.equal(Math.fround(fast.overall), targetStep);
+    assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
+    assert.equal(fast.selection_trace.prefilter.retryMode, "base");
+    assert.deepEqual(
+      fast.selection_trace.prefilter.phases.map((phase) => phase.phaseName),
+      ["prefilter/base"]
+    );
+    assert.equal(fast.selection_trace.prefilter.contextRefine, null);
   });
 }
 
@@ -924,7 +1006,7 @@ async function test_item_level_material_items_support_mixed_relative_absolute_fi
 
   const result = await runSelect({
     rows,
-    targetWear: 0.32,
+    targetWear: inputStepForBelowTargetStep(0.194),
     materials: [
       {
         id: "mixed-main",
@@ -973,6 +1055,7 @@ async function test_item_level_material_items_support_mixed_relative_absolute_fi
   });
 
   assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), Math.fround(0.194));
   assert.deepEqual(result.item_ids, [
     "rel-1",
     "abs-close",
@@ -988,7 +1071,7 @@ async function test_item_level_material_items_support_mixed_relative_absolute_fi
   assert.equal(new Set(result.item_ids).size, result.item_ids.length);
 }
 
-async function test_context_refine_trace_uses_primary_name_projection_for_multi_item_materials() {
+async function test_prefilter_trace_uses_primary_name_projection_for_multi_item_materials() {
   const rows = makeContextRefineRows();
   await withEnv({
     ENABLE_OVERSIZED_PREFILTER: "1",
@@ -1004,7 +1087,7 @@ async function test_context_refine_trace_uses_primary_name_projection_for_multi_
   }, async () => {
     const result = await runSelect({
       rows,
-      targetWear: 0.2142,
+      targetWear: inputStepForBelowTargetStep(0.2142),
       enableFastCraftAssist: true,
       materials: [
         {
@@ -1081,12 +1164,14 @@ async function test_context_refine_trace_uses_primary_name_projection_for_multi_
     });
 
     assert.equal(result.ok, true);
-    assert.equal(!!(result.selection_trace && result.selection_trace.prefilter && result.selection_trace.prefilter.contextRefine), true);
-    const attempts = result.selection_trace.prefilter.contextRefine.rounds[0].attempts;
-    const auxAAttempt = attempts.find((attempt) => attempt && attempt.materialName === "AuxA");
-    assert.equal(!!auxAAttempt, true);
-    assert.deepEqual(auxAAttempt.item_names, ["AuxA", "AuxA Variant"]);
-    assert.equal(auxAAttempt.label, "AuxA / AuxA Variant");
+    assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), true);
+    assert.equal(result.selection_trace.prefilter.retryMode, "rarity_full");
+    assert.equal(result.selection_trace.prefilter.contextRefine, null);
+    const prefilterGroups = result.selection_trace.prefilter.phases.flatMap((phase) => phase.groups || []);
+    const auxAGroup = prefilterGroups.find((group) => group && group.primary_name === "AuxA");
+    assert.equal(!!auxAGroup, true);
+    assert.deepEqual(auxAGroup.item_names, ["AuxA", "AuxA Variant"]);
+    assert.equal(auxAGroup.label, "AuxA / AuxA Variant");
   });
 }
 
@@ -1098,7 +1183,7 @@ async function test_duplicate_names_across_materials_fail_after_canonicalize_red
 
   const result = await runSelect({
     rows,
-    targetWear: 0.25,
+    targetWear: inputStepForBelowTargetStep(0.25),
     materials: [
       {id: "main-same", role: "main", count: 5, names: ["Same"], wear_min: 0, wear_max: 1},
       {id: "aux-same", role: "aux", count: 5, names: ["Same"], wear_min: 0, wear_max: 1}
@@ -1109,11 +1194,160 @@ async function test_duplicate_names_across_materials_fail_after_canonicalize_red
   assert.match(result.message, /材料数量之和必须等于 10，当前 5/);
 }
 
+async function test_step_target_below_searches_previous_float32_step() {
+  const q = Math.fround(0.27);
+  const targetStep = prevFloat32(q);
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    rows.push(makeRow({id: `step-${index}`, name: "Step Skin", relative: targetStep}));
+  }
+
+  const result = await runSelect({
+    rows,
+    targetWear: q,
+    wearApproachMode: "below",
+    materials: [
+      {name: "Step Skin", names: ["Step Skin"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), targetStep);
+}
+
+async function test_step_target_infinite_accepts_raw_mean_on_target_float32_step() {
+  const q = Math.fround(0.27);
+  const rows = [];
+  for (let index = 1; index <= 9; index += 1) {
+    rows.push(makeRow({id: `target-${index}`, name: "Step Skin", relative: q}));
+  }
+  rows.push(makeRow({id: "target-10", name: "Step Skin", relative: q + 10 * Number.EPSILON}));
+
+  const rawMean = rows.reduce((sum, row) => sum + Number(row.float_value), 0) / rows.length;
+  assert.notEqual(rawMean, q);
+  assert.equal(Math.fround(rawMean), q);
+
+  const result = await runSelect({
+    rows,
+    targetWear: q,
+    wearApproachMode: "infinite",
+    materials: [
+      {name: "Step Skin", names: ["Step Skin"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), q);
+}
+
+async function test_step_target_rejects_non_float32_target() {
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    rows.push(makeRow({id: `invalid-${index}`, name: "Step Skin", relative: 0.05}));
+  }
+
+  const result = await runSelect({
+    rows,
+    targetWear: 0.1,
+    materials: [
+      {name: "Step Skin", names: ["Step Skin"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "invalid_target_step");
+}
+
+async function test_step_target_rejects_below_zero_target() {
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    rows.push(makeRow({id: `zero-${index}`, name: "Step Skin", relative: 0}));
+  }
+
+  const result = await runSelect({
+    rows,
+    targetWear: 0,
+    wearApproachMode: "below",
+    materials: [
+      {name: "Step Skin", names: ["Step Skin"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "unreachable_below_target");
+}
+
+async function test_step_target_final_validation_requires_quantized_target_step() {
+  const q = Math.fround(0.27);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep: q,
+    approachMode: "below"
+  });
+
+  const onTarget = __test.validateCraftAssistFinalOverall({
+    overall: targetStepSpec.targetStep + Number.EPSILON,
+    targetValue: q,
+    searchTargetValue: targetStepSpec.targetStep,
+    approachMode: "below",
+    targetStepSpec
+  });
+  const wrongStep = __test.validateCraftAssistFinalOverall({
+    overall: prevFloat32(targetStepSpec.targetStep),
+    targetValue: q,
+    searchTargetValue: targetStepSpec.targetStep,
+    approachMode: "below",
+    targetStepSpec
+  });
+
+  assert.equal(Math.fround(targetStepSpec.targetStep + Number.EPSILON), targetStepSpec.targetStep);
+  assert.equal(Math.fround(prevFloat32(targetStepSpec.targetStep)), prevFloat32(targetStepSpec.targetStep));
+  assert.deepEqual(onTarget, {ok: true});
+  assert.equal(wrongStep.ok, false);
+  assert.equal(wrongStep.code, "final_result_not_on_target_step");
+}
+
+async function test_step_target_ignores_offset_input() {
+  const q = Math.fround(0.5);
+  const targetStep = prevFloat32(q);
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    rows.push(makeRow({id: `offset-${index}`, name: "Step Skin", relative: targetStep}));
+  }
+  const materials = [
+    {name: "Step Skin", names: ["Step Skin"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+  ];
+
+  const strictOffset = await runSelect({
+    rows,
+    targetWear: q,
+    wearApproachMode: "below",
+    wearOffsetPct: 1,
+    materials
+  });
+  const broadOffset = await runSelect({
+    rows,
+    targetWear: q,
+    wearApproachMode: "below",
+    wearOffsetPct: 100,
+    materials
+  });
+
+  assert.notEqual(strictOffset.code, "offset_exceeds_threshold");
+  assert.notEqual(strictOffset.code, "offset_pullback_exceeds_target");
+  assert.notEqual(broadOffset.code, "offset_exceeds_threshold");
+  assert.notEqual(broadOffset.code, "offset_pullback_exceeds_target");
+  if (strictOffset.ok && broadOffset.ok) {
+    assert.deepEqual(rawPickedIds(strictOffset), rawPickedIds(broadOffset));
+    assert.equal(strictOffset.overall, broadOffset.overall);
+    assert.equal(Math.fround(strictOffset.overall), targetStep);
+  }
+}
+
 async function test_final_validation_blocks_below_mode_when_result_crosses_safe_target() {
   const result = __test.validateCraftAssistFinalOverall({
     overall: 0.27000001072883606,
     targetValue: 0.27,
-    safeTargetValue: 0.26999998,
+    searchTargetValue: 0.26999998,
     approachMode: "below"
   });
 
@@ -1126,7 +1360,7 @@ async function test_final_validation_skips_infinite_mode_cross_target_guard() {
   const result = __test.validateCraftAssistFinalOverall({
     overall: 0.27000001072883606,
     targetValue: 0.27,
-    safeTargetValue: 0.26999998,
+    searchTargetValue: 0.26999998,
     approachMode: "infinite"
   });
 
@@ -1167,6 +1401,12 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
 }
 
 (async () => {
+  await test_step_target_below_searches_previous_float32_step();
+  await test_step_target_infinite_accepts_raw_mean_on_target_float32_step();
+  await test_step_target_rejects_non_float32_target();
+  await test_step_target_rejects_below_zero_target();
+  await test_step_target_final_validation_requires_quantized_target_step();
+  await test_step_target_ignores_offset_input();
   await test_over_target_prefers_squeezing_aux_before_main();
   await test_under_target_prioritizes_closer_overall_before_aux_low_bias();
   await test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise();
@@ -1174,22 +1414,24 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
   await test_under_target_never_uses_candidate_that_pushes_overall_across_target();
   await test_single_material_falls_back_when_balanced_split_side_is_short();
   await test_single_material_non_unit_interval_still_uses_relative_centering();
-  await test_single_material_returns_selection_trace();
+  await test_single_material_returns_step_target_selection();
   await test_infinite_mode_allows_cross_target_when_it_is_closer();
   await test_single_material_starts_with_balanced_split_then_pushes_upward();
   await test_single_material_applies_compensation_refinement_after_push_limit();
-  await test_single_material_keeps_hard_relative_cap_margin_near_target_edge();
+  await test_single_material_accepts_step_target_near_target_edge_without_margin();
   await test_multi_material_allows_cross_side_compensation_for_closer_overall();
   await test_multi_material_allows_cross_side_fill_when_preferred_side_is_short();
-  await test_multi_material_returns_selection_trace();
+  await test_multi_material_returns_step_target_selection_without_legacy_trace();
   await test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids();
   await test_candidate_rows_sibling_rebuilds_stale_selection_context_even_when_asset_ids_match();
   await test_service_rebuilds_cached_context_when_rows_mutate_in_place();
-  await test_fast_flag_true_runs_expand_correction_before_returning();
+  await test_fast_flag_true_returns_after_base_step_hit();
   await test_fast_flag_false_forces_old_logic_even_when_env_enabled();
-  await test_fast_flag_runs_context_refine_after_expand_improves_multi_oversized_groups();
+  await test_step_target_prefilter_miss_falls_back_without_context_refine();
+  await test_step_target_solved_candidate_requires_exact_target_step_even_in_infinite_mode();
+  await test_step_target_fast_base_hit_returns_before_expand_and_context_refine();
   await test_item_level_material_items_support_mixed_relative_absolute_filters_and_preserve_candidate_ordering();
-  await test_context_refine_trace_uses_primary_name_projection_for_multi_item_materials();
+  await test_prefilter_trace_uses_primary_name_projection_for_multi_item_materials();
   await test_duplicate_names_across_materials_fail_after_canonicalize_reduces_total_count();
   await test_final_validation_blocks_below_mode_when_result_crosses_safe_target();
   await test_final_validation_skips_infinite_mode_cross_target_guard();

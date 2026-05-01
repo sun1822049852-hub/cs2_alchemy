@@ -11,6 +11,7 @@ const {
 } = require("../node_sidecar/src/services/skinAlchemyRules");
 const {createCraftOutcomeCatalog} = require("../node_sidecar/src/services/craftOutcomeCatalog");
 const {createCraftOutcomePredictor} = require("../node_sidecar/src/services/craftOutcomePredictor");
+const {prevFloat32} = require("../node_sidecar/src/services/craftAssistFloat32Step");
 
 function test_shared_collection_and_rarity_helpers() {
   assert.equal(normalizeCollectionKey("裂空武器箱"), "Fracture Case");
@@ -254,6 +255,7 @@ function test_predictor_isolates_stattrak_pools_and_maps_wear() {
   const result = predictor.predict({
     required_count: 10,
     target_relative_wear: 0.07,
+    wear_approach_mode: "infinite",
     input_rarity: "军规级",
     stattrak: true,
     groups: [{collection: "裂空武器箱", count: 3}]
@@ -262,7 +264,56 @@ function test_predictor_isolates_stattrak_pools_and_maps_wear() {
   assert.equal(result.outcomes.length, 1);
   assert.equal(result.outcomes[0].name, "StatTrak™ AK-47 | Ice Coaled (Minimal Wear)");
   assert.equal(result.outcomes[0].predicted_wearlevel, "Minimal Wear");
-  assert.equal(result.outcomes[0].predicted_float, 0.07);
+  assert.equal(result.outcomes[0].predicted_float, 0.070000000298);
+}
+
+function test_predictor_uses_infinite_mode_input_float32_step_for_output_float() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const rawRelativeWear = 0.069999999;
+  assert.notEqual(Math.fround(rawRelativeWear), rawRelativeWear);
+
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: rawRelativeWear,
+    wear_approach_mode: "infinite",
+    input_rarity: "军规级",
+    stattrak: true,
+    groups: [{collection: "裂空武器箱", count: 3}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.target_relative_wear, 0.069999999);
+  assert.equal(result.outcomes[0].predicted_float, 0.070000000298);
+  assert.equal(result.outcomes[0].predicted_wearlevel, "Minimal Wear");
+  assert.equal(result.outcomes[0].name, "StatTrak™ AK-47 | Ice Coaled (Minimal Wear)");
+}
+
+function test_predictor_defaults_to_below_previous_float32_step_for_output_float() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const rawRelativeWear = 0.069999999;
+  const inputStep = Math.fround(rawRelativeWear);
+  const expectedBelowStep = Number(prevFloat32(inputStep).toFixed(12));
+  assert.equal(expectedBelowStep, 0.069999992847);
+
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: rawRelativeWear,
+    input_rarity: "军规级",
+    stattrak: true,
+    groups: [{collection: "裂空武器箱", count: 3}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.target_relative_wear, 0.069999999);
+  assert.equal(result.outcomes[0].predicted_float, expectedBelowStep);
+  assert.equal(result.outcomes[0].predicted_wearlevel, "Factory New");
+  assert.equal(result.outcomes[0].name, "StatTrak™ AK-47 | Ice Coaled (Factory New)");
 }
 
 function test_predictor_keeps_missing_wear_bounds_and_missing_concrete_rows() {
@@ -335,6 +386,8 @@ function runTests() {
   test_predictor_invalidates_top_rarity_and_missing_collections();
   test_predictor_returns_realtime_probabilities_for_partial_recipe();
   test_predictor_isolates_stattrak_pools_and_maps_wear();
+  test_predictor_uses_infinite_mode_input_float32_step_for_output_float();
+  test_predictor_defaults_to_below_previous_float32_step_for_output_float();
   test_predictor_keeps_missing_wear_bounds_and_missing_concrete_rows();
   console.log("craftOutcomePredictor tests passed");
 }

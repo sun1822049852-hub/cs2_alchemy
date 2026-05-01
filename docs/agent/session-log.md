@@ -686,3 +686,284 @@
   - 终局拦截结果现在还会附带 `selected_items`，其中包含每件材料的 `asset_id`、`name`、`absolute_wear`、`relative_wear`。
   - 统一失败日志会把 `selected_items` 作为 JSON 明细写入同一条 `craft_assist select failed` 日志，避免再依赖快照反查。
   - 回归验证：`node tests/craftAssistService.test.js`
+
+## 2026-05-01
+- Task: 为炼金辅助选材重写目标模型设计，从“原始平均值 + 安全边界”切到“float32 台阶命中”语义，并生成可承接实现的 spec handoff。
+- Investigation:
+  - 用户先确认：输入目标值本身就是一个 `float32` 台阶值，不需要再从十进制点去找最近台阶。
+  - 通过 `C:/Users/18220/Desktop/problem/磨损计算错误.txt` 与另外 3 份 `产物*.txt` 的只读分析，确认当前偏差核心不在“材料先做 float32”，而在“算法一直在追 raw mean，而 Steam 最终按 float32 台阶结算”。
+  - 用户随后逐步确认目标语义：
+    - `below` 模式命中输入台阶的前一个台阶；
+    - 当前后端 `infinite` 模式命中输入台阶本身；
+    - 一旦命中目标台阶，对当前请求立即停止，不再在同台阶里找更优多解；
+    - 当前 phase 不讨论全量磨损区间修正；
+    - 当前 phase 不处理 offset 模式，若请求里带 offset 参数，则直接忽略该参数。
+- Changes:
+  - 新增设计文档 [docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md)。
+  - spec 明确将目标模型改为：
+    - 选材仍然完全在材料相对磨损空间内进行；
+    - 权威 solved 判定为 `f32(raw_mean) === targetStep`；
+    - `below` 取 `prevFloat32(inputStep)`；
+    - 不再使用 `STEAM_PRECISION_MARGIN` / `safeTargetValue`；
+    - `first hit wins` 跨整个请求执行顺序传播；
+    - prefilter 仍可保留，但未命中时必须回退 full unfiltered search；
+    - offset 输入在本 phase 被忽略，不参与 widening / ranking / correction / mutation。
+  - 按用户要求，拉起多个 `gpt-5.5` 审查 agent 对 spec 进行了独立 review；根据 review 修正了：
+    - `first hit` 在外层 phase 的停止传播；
+    - `craftAssistShardPrefilter.js` / `craftAssistShardWorker.js` 的纳入范围；
+    - 当前代码中的 `infinite` 模式命名；
+    - 区间只做 guidance envelope、`f32(raw_mean) === q_target` 才是权威判定；
+    - prefilter 与 staged execution order 的关系；
+    - offset 章节的范围边界。
+- Verification:
+  - 对 spec 做了三轮 `gpt-5.5` 独立审查。
+  - 最终审查结论：Approve with minor wording cleanup；核心设计可进入 implementation plan。
+  - 本轮未改实现代码，未运行测试命令；仅完成文档设计与审查闭环。
+- Follow-up:
+  - 下一会话第一刀：读取本条 handoff 与 spec，然后进入 implementation plan，明确分阶段改动：
+    1. 新增 `craftAssistFloat32Step` helper；
+    2. service 层去掉 `safeTargetValue` / `STEAM_PRECISION_MARGIN`；
+    3. search 层把 solved / scoring / correction 从点目标改成 step-target；
+    4. prefilter 层改成 step-aware；
+    5. 最后补回归测试。
+  - 关键约束不要丢：
+    - 不能把每件材料先统一做 float32 预处理；
+    - 不能再在同一台阶内继续挑“更优”解；
+    - 当前 phase 不讨论区间数据库修正；
+    - offset 参数当前直接忽略。
+  - 当前工作目录是主工作区 `C:/Users/18220/Desktop/cs2_alchemy`；本轮只检查了当前 root worktree，未检查其他 sibling worktrees。
+  - 当前未提交改动除了 spec 外，还存在运行态 `backup/ui_state/` 脏文件，这些默认视为运行产物，不属于本轮业务改动。
+
+### 2026-05-01 handoff update
+- Task: 承接 float32 台阶选材 spec，只写 implementation plan，不进入实现。
+- Current goal:
+  - 将炼金辅助从“raw mean 追十进制目标 + 安全边界”迁移为“raw mean 最终 `float32` 量化后命中指定台阶”。
+  - 当前方案文档是 [docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md)。
+  - 当前实现计划是 [docs/superpowers/plans/2026-05-01-craft-assist-float32-step-selection-implementation.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-05-01-craft-assist-float32-step-selection-implementation.md)。
+- Progress checkpoint:
+  - Current chunk: `P1 Implementation Plan And Baseline` 已完成。
+  - Current task: `P2.M1.T1.S1` 尚未开始；下一刀应先写 `craftAssistFloat32Step` helper 的失败测试。
+  - 已完成：
+    - 读取最新 spec、上一条 handoff、AGENTS.md、当前主工作区 git status。
+    - 核对现场代码，确认 spec 尚未落地。
+    - 新增 implementation plan，拆成 helper、service、search、prefilter、测试与 session-log 更新阶段。
+  - 未完成：
+    - 未新增 `node_sidecar/src/services/craftAssistFloat32Step.js`。
+    - 未修改 `craftAssistService.js`、`craftAssistSearch.js`、`craftAssistShardPrefilter.js`、`craftAssistShardWorker.js`。
+    - 未新增或修改测试。
+- Current code/spec conflict:
+  - `craftAssistService.js` 仍有 `STEAM_PRECISION_MARGIN`、`getCraftAssistOutcomeSafeTarget(...)`、`safeTargetValue` 和 raw `< target` 终局校验。
+  - `craftAssistSearch.js` 仍用 scalar `targetValue` 做 solved、scoring、beam pruning、role-aware correction。
+  - `craftAssistShardPrefilter.js` / `craftAssistShardWorker.js` 仍用 scalar distance 和 side 判断做 center overlap 与 shard ranking。
+  - 因此下个会话不能假设 spec 已实现，必须从 RED 测试开始收敛。
+- Hard constraints for next session:
+  - 当前 phase 不讨论磨损区间数据库修正。
+  - 当前 phase offset 输入当没传，不能做 offset window correction。
+  - 不要把每件材料候选先统一做 `float32` 预处理。
+  - solved 权威判定只能是 `Math.fround(raw_mean) === targetStep`。
+  - `below` 命中输入台阶的前一个 `float32` 台阶；`infinite` 命中输入台阶本身。
+  - 命中目标台阶后立即停止搜索，不再做同台阶优选。
+  - 不改前端 UI、API route 形状或磨损区间数据库。
+- Workspace state:
+  - 当前工作目录：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 当前分支：`main`，HEAD `2231e005ef87bc650e33bbc71225919ca43be426`。
+  - 本轮只检查并使用主工作区；同时通过 `git worktree list --porcelain` 确认另有：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+  - 未提交业务文档改动：
+    - `docs/agent/session-log.md`
+    - `docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md`
+    - `docs/superpowers/plans/2026-05-01-craft-assist-float32-step-selection-implementation.md`
+  - `backup/ui_state/` 仍有删除/新增运行态文件，按 AGENTS.md 默认视为本地运行产物，不属于本轮业务改动。
+- Verification:
+  - 本轮只做只读代码定位与 plan 写入。
+  - 未运行 Node 测试，因为用户中止实现并明确要求“只写计划，不做实现”。
+- Next first cut:
+  - 先读最新 handoff、spec、implementation plan、当前 `git status`。
+  - 复述目标、已完成 spec 结论、下一步第一刀。
+  - 从 `P2.M1.T1.S1` 开始：新增 `tests/craftAssistFloat32Step.test.js`，先运行并确认因 helper 不存在而失败。
+  - 然后再实现 `node_sidecar/src/services/craftAssistFloat32Step.js`，跑 `node tests/craftAssistFloat32Step.test.js` 到通过。
+
+### 2026-05-01 handoff update - float32 implementation interrupted after focused verification
+- Task: 承接 `2026-05-01T02-30-31` 炸掉会话，继续实现炼金辅助 float32 台阶选材。
+- Crash source:
+  - 已定位原始炸掉会话：`C:/Users/18220/.codex/sessions/2026/05/01/rollout-2026-05-01T02-30-31-019ddfa8-24f2-7dd0-b847-74824be87c22.jsonl`。
+  - 该会话最后失败点是 remote compact 503：`No available channel for model gpt-5.5-openai-compact`，最后 agent 消息为空。
+  - 原会话断点在 P3 service 层最终审查前；当前这轮已经继续推进到 P6 聚焦验证完成。
+- Current goal:
+  - 将炼金辅助目标判定从 raw scalar target / `safeTargetValue` 迁移到 float32 target step。
+  - `below` 目标是输入 float32 台阶的前一个 float32 台阶。
+  - `infinite` 目标是输入 float32 台阶本身。
+  - 成功判定只看 `Math.fround(raw_mean)` 是否命中目标台阶。
+  - 当前 phase 忽略 offset 输入，不做 offset window correction，也不改磨损区间数据库。
+- Completed in this continuation:
+  - 新增 helper：`node_sidecar/src/services/craftAssistFloat32Step.js`。
+  - 新增 helper 测试：`tests/craftAssistFloat32Step.test.js`。
+  - `craftAssistService.js` 已改为解析 target step spec，并用 step-aware final guard 代替旧 safe target 语义。
+  - `craftAssistSearch.js` 已改为 step-aware solved / scoring / beam / role-aware refine；命中目标台阶后直接返回，不再同台阶优选。
+  - `craftAssistShardPrefilter.js` 与 `craftAssistShardWorker.js` 已传递并使用 `targetStepSpec`，center overlap / shard ranking 改为按目标台阶区间距离判断。
+  - 聚焦测试已覆盖 helper、service、search、prefilter/worker。
+- Current files with business changes:
+  - Modified tracked files:
+    - `docs/agent/session-log.md`
+    - `docs/agent/memory.md`
+    - `node_sidecar/src/services/craftAssistSearch.js`
+    - `node_sidecar/src/services/craftAssistService.js`
+    - `node_sidecar/src/services/craftAssistShardPrefilter.js`
+    - `node_sidecar/src/services/craftAssistShardWorker.js`
+    - `tests/craftAssistSearch.test.js`
+    - `tests/craftAssistService.test.js`
+    - `tests/craftAssistShardPrefilter.test.js`
+  - Untracked business files:
+    - `docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md`
+    - `docs/superpowers/plans/2026-05-01-craft-assist-float32-step-selection-implementation.md`
+    - `node_sidecar/src/services/craftAssistFloat32Step.js`
+    - `tests/craftAssistFloat32Step.test.js`
+  - `backup/ui_state/` 仍有运行态脏文件；按 AGENTS.md 默认视为本地运行产物，本轮不处理。
+- Verification completed:
+  - `node tests/craftAssistFloat32Step.test.js` passed.
+  - `node tests/craftAssistSearch.test.js` passed.
+  - `node tests/craftAssistService.test.js` passed. 该命令输出大量既有 `craft_assist` INFO/WARN 日志，但退出码为 0。
+  - `node tests/craftAssistShardPrefilter.test.js` passed.
+  - 四组聚焦测试串联命令退出码为 0。
+  - Safety grep completed:
+    - Command: `rg -n "STEAM_PRECISION_MARGIN|getCraftAssistOutcomeSafeTarget|safeTargetValue" node_sidecar/src/services tests`
+    - Result: exit code 1 with no output, meaning these旧 safe-target identifiers were not found in the checked source/test paths.
+- Verification not completed:
+  - 未运行完整 `npm test` 或更大范围测试。
+  - 未启动 Electron / browser 真实运行态验证；本轮是后端选材逻辑，未改 UI。
+  - 未做最终 diff review。
+- Workspace:
+  - 当前工作目录：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 当前分支：`main`。
+  - 当前 HEAD：`2231e005ef87bc650e33bbc71225919ca43be426`。
+  - 本轮只在主工作区实现与验证；未检查 sibling worktree 的改动。
+  - 已知其他 worktree：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- Remaining / next first cut:
+  - 先读本条 handoff、implementation plan、`docs/agent/memory.md` 最新 float32 语义，以及当前 `git status --short`。
+  - 不要重做 helper/service/search/prefilter 已完成实现；先核对现场是否仍与本条一致。
+  - 立刻重跑四个聚焦测试和 safety grep，确认 handoff 后状态未被改动。
+  - 做最终 diff review，重点看是否误改 API shape、UI、offset 语义或磨损区间数据库。
+  - 可选：更新 implementation plan checkbox 反映 P2-P6 已完成。
+  - 若用户要求继续收尾，再决定是否跑更大范围测试；除非用户明确要求，不提交。
+
+### 2026-05-01 handoff update - float32 selection reviewed and predictor quantized
+- Task: 承接 float32 台阶选材实现，按用户要求由子 agent 重跑聚焦验证、做最终 diff review，并补齐产物预测链的 float32 计算口径。
+- Current goal:
+  - 炼金辅助选材成功判定从 raw scalar target / `safeTargetValue` 迁移到 float32 target step。
+  - `below` 目标是输入 float32 台阶的前一个 float32 台阶。
+  - `infinite` 目标是输入 float32 台阶本身。
+  - 成功判定只看 `Math.fround(raw_mean) === targetStep`。
+  - 产物预测 UI 仍只展示最终 `predicted_float`，但后端计算该最终值时必须先用 `Math.fround(target_relative_wear)` 量化平均相对磨损。
+  - 当前 phase 仍忽略 offset 输入，不做 offset window correction，也不改磨损区间数据库。
+- Completed in this continuation:
+  - 主 agent 先读最新 handoff、`docs/agent/memory.md`、implementation plan 和 `git status --short`，确认现场与上条 handoff 基本一致。
+  - 子 agent 重跑四个聚焦测试与 safety grep：
+    - `node tests/craftAssistFloat32Step.test.js` exit code `0`
+    - `node tests/craftAssistSearch.test.js` exit code `0`
+    - `node tests/craftAssistService.test.js` exit code `0`，输出大量既有 `craft_assist` INFO/WARN 日志但测试通过
+    - `node tests/craftAssistShardPrefilter.test.js` exit code `0`
+    - `rg -n "STEAM_PRECISION_MARGIN|getCraftAssistOutcomeSafeTarget|safeTargetValue" node_sidecar/src/services tests` exit code `1` 且无输出
+  - `gpt-5.4` review agent 做最终 diff review，未发现 Critical，发现 1 个 Important：
+    - `craftAssistShardWorker.js` 的 edge-keep 分桶与 `preferredSideCount/oppositeSideCount` 统计仍按旧点目标 side 判断，和 step-aware 排序语义不一致。
+  - 子 agent 用 TDD 修复该 Important：
+    - RED：新增 worker 直连测试后 `node tests/craftAssistShardPrefilter.test.js` exit code `1`，`oppositeSideCount` 实际 `1`、期望 `0`。
+    - GREEN：`craftAssistShardWorker.js` 新增 `resolveCandidateSide(...)`，step-aware 时用 `compareMeanToTargetRange(...)`，非 step-aware 回退旧 `candidateSide(...)`。
+    - 修复后四个聚焦测试 exit code 均为 `0`，safety grep 仍 exit code `1` 无输出。
+    - 另一个 `gpt-5.4` 窄范围复审确认该修复可接受，未发现 Critical/Important。
+  - 用户指出产物预测链仍展示最终结果但应同步使用 float32 语义；子 agent 用 TDD 修改：
+    - `node_sidecar/src/services/craftOutcomePredictor.js` 内部新增 `quantizedRelativeWear = Math.fround(targetRelativeWear)`。
+    - `predicted_float` 改为 `roundNumber(quantizedRelativeWear * wear_range + minfloat)`。
+    - 返回给 UI 的 `target_relative_wear` 保持 raw rounded 输入，UI 和 route API shape 不变。
+    - `tests/craftOutcomePredictor.test.js` 新增 raw 输入与 float32 量化输出分离的用例。
+    - RED：`node tests/craftOutcomePredictor.test.js` exit code `1`，实际 `predicted_float=0.069999999`，期望 `0.070000000298`。
+    - GREEN：`node tests/craftOutcomePredictor.test.js` exit code `0`。
+    - 产物预测修复后再次运行四个 craft assist 聚焦测试均 exit code `0`；safety grep exit code `1` 无输出。
+    - `gpt-5.4` 窄范围复审确认预测链修复可接受，未发现 Critical/Important。
+- Current files with business changes:
+  - Modified tracked files:
+    - `docs/agent/session-log.md`
+    - `docs/agent/memory.md`
+    - `node_sidecar/src/services/craftAssistSearch.js`
+    - `node_sidecar/src/services/craftAssistService.js`
+    - `node_sidecar/src/services/craftAssistShardPrefilter.js`
+    - `node_sidecar/src/services/craftAssistShardWorker.js`
+    - `node_sidecar/src/services/craftOutcomePredictor.js`
+    - `tests/craftAssistSearch.test.js`
+    - `tests/craftAssistService.test.js`
+    - `tests/craftAssistShardPrefilter.test.js`
+    - `tests/craftOutcomePredictor.test.js`
+  - Untracked business files:
+    - `docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md`
+    - `docs/superpowers/plans/2026-05-01-craft-assist-float32-step-selection-implementation.md`
+    - `node_sidecar/src/services/craftAssistFloat32Step.js`
+    - `tests/craftAssistFloat32Step.test.js`
+  - `backup/ui_state/` 仍有删除/新增运行态文件；按 AGENTS.md 默认视为本地运行产物，本轮不处理。
+- Verification completed:
+  - `node tests/craftOutcomePredictor.test.js` exit code `0`
+  - `node tests/craftAssistFloat32Step.test.js` exit code `0`
+  - `node tests/craftAssistSearch.test.js` exit code `0`
+  - `node tests/craftAssistService.test.js` exit code `0`
+  - `node tests/craftAssistShardPrefilter.test.js` exit code `0`
+  - `rg -n "STEAM_PRECISION_MARGIN|getCraftAssistOutcomeSafeTarget|safeTargetValue" node_sidecar/src/services tests` exit code `1` with no output
+  - `git diff --check -- node_sidecar/src/services/craftOutcomePredictor.js tests/craftOutcomePredictor.test.js` exit code `0`，仅有 LF/CRLF 提示
+  - 两轮 `gpt-5.4` 窄范围复审分别确认 shard worker 修复和 predictor 修复可接受。
+- Verification not completed:
+  - 未运行完整 `npm test` 或更大范围测试。
+  - 未启动 Electron / browser 真实运行态验证。
+  - 用户需要完全重启程序 / sidecar 后再验证，不能复用旧进程。
+  - 未提交。
+- Known residual risk:
+  - 最终 diff review 曾提出一个 Minor：`craftAssistService.js` 中材料候选初始排序与 `pickCraftAssistClosest` 仍按 `abs(value - targetStep)` 做启发式排序；最终 solved 判定和 search/prefilter 主体已经 step-aware，且有 full fallback，因此不阻塞当前验证，但后续若继续打磨启发式可考虑改为 raw range distance。
+  - `selection_trace.prefilter` 结构有调整，仓内测试已同步，但未审查仓外消费者。
+- Workspace:
+  - 当前工作目录：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 当前分支：`main`。
+  - 当前 HEAD：`2231e005ef87bc650e33bbc71225919ca43be426`。
+  - 本轮只在主工作区实现、验证与审查；未检查 sibling worktree 的改动。
+  - 已知其他 worktree：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- Next first cut:
+  - 先读本条 handoff、implementation plan、`docs/agent/memory.md` 最新 float32 语义，以及当前 `git status --short`。
+  - 不要重做 helper/service/search/prefilter/predictor 已完成实现；先核对现场是否仍与本条一致。
+  - 如果继续收尾，优先完全重启程序 / sidecar，让用户用真实 UI 验证：
+    - `below` 模式命中输入台阶前一个 float32 台阶。
+    - `infinite` 模式命中输入台阶本身。
+    - 辅助选材成功后预测面板最终 `predicted_float` 使用量化后的平均相对磨损计算。
+  - 若用户要求自动化扩大验证，再跑更大范围测试；除非用户明确要求，不提交。
+
+### 2026-05-01 handoff update - predictor approach mode step aligned
+- Task: 按用户补充要求继续收尾产物预测链：反推材料/预测前序产物时，`below` 必须使用用户输入的前一个 `float32` 台阶给材料磨损赋值；`infinite` 使用输入台阶本身；汰换模拟页没有切换开关，不能新增 UI。
+- Scope held:
+  - 不重做 helper/service/search/prefilter 已完成实现。
+  - 不改 UI 展示字段、路由形状、数据库或汰换模拟页面交互。
+  - 汰换模拟预测请求继续不传 `wear_approach_mode`，由后端默认 `below`。
+- Changes:
+  - [node_sidecar/src/services/craftOutcomePredictor.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/craftOutcomePredictor.js) 复用 `craftAssistFloat32Step`：先将 `target_relative_wear` 量化为输入 `float32` 台阶，再按 `wear_approach_mode` 解析预测用台阶；缺省/`below` 用前一个台阶，`infinite` 用输入台阶。
+  - [node_sidecar/ui/app.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/ui/app.js) 的 craft/batch 预测 payload 补传 `wear_approach_mode`；`craftPage` 使用 `state.craftAssistApproachMode`，`batchCraftPage` 使用 `state.batchCraftApproachMode`。
+  - [tests/craftOutcomePredictor.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/craftOutcomePredictor.test.js) 增加 RED/GREEN 覆盖：默认 `below` 必须预测到前一个 `float32` 台阶，`infinite` 仍使用输入台阶。
+  - [node_sidecar/tests/craft-predictor-panel-state.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/craft-predictor-panel-state.test.js) 增加前端请求 payload 模式字段覆盖。
+  - [node_sidecar/tests/tradeup-simulation-derived-outputs.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/tradeup-simulation-derived-outputs.test.js) 锁定汰换模拟 payload 不携带 `wear_approach_mode`。
+  - [docs/agent/memory.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/memory.md) 新增稳定记忆。
+- RED evidence:
+  - `node tests/craftOutcomePredictor.test.js` exit code `1`：默认 `below` 实际仍返回 `0.070000000298`，期望前一台阶 `0.069999992847`。
+  - `node node_sidecar/tests/craft-predictor-panel-state.test.js` exit code `1`：`wear_approach_mode` 实际 `undefined`，期望 `infinite`。
+  - `node node_sidecar/tests/tradeup-simulation-derived-outputs.test.js` exit code `0`：汰换模拟默认 below 保护测试通过。
+- Verification completed:
+  - `node tests/craftOutcomePredictor.test.js` exit code `0`，有既有 Node SQLite experimental warning。
+  - `node node_sidecar/tests/craft-predictor-panel-state.test.js` exit code `0`。
+  - `node node_sidecar/tests/tradeup-simulation-derived-outputs.test.js` exit code `0`。
+  - `node node_sidecar/tests/craft-outcome-predictor-route.test.js` exit code `0`，有既有 heartbeat log 和 Node SQLite experimental warning。
+  - `node tests/craftAssistApproachModeUi.test.js` exit code `0`。
+- Verification not completed:
+  - 未完全重启 Electron / sidecar 做真实 UI 验证。
+  - 未运行完整 `npm test` 或更大范围测试。
+  - 未提交。
+- Next first cut:
+  - 完全重启程序 / sidecar 后做真实 UI 验证：`below` 预测面板最终磨损应使用输入前一个 `float32` 台阶；切到 `infinite` 后应使用输入台阶本身；汰换模拟页无切换开关且继续走默认 `below`。

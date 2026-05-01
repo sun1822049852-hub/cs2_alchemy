@@ -6,6 +6,10 @@ const {
   searchCraftAssistBestSolution,
   searchRoleAwarePushSolution
 } = require("../node_sidecar/src/services/craftAssistSearch");
+const {
+  prevFloat32,
+  resolveCraftAssistTargetStepSpec
+} = require("../node_sidecar/src/services/craftAssistFloat32Step");
 
 function makeCandidate(id, value, groupIndex, role) {
   return {
@@ -396,6 +400,93 @@ function test_search_best_solution_infinite_mode_can_cross_target_for_closer_sin
   assert.equal(Math.abs(infinite.overall - 0.50) < Math.abs(belowOnly.overall - 0.50), true);
 }
 
+function test_search_step_target_below_uses_previous_float32_step() {
+  const inputStep = Math.fround(0.27);
+  const targetStep = prevFloat32(inputStep);
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Solo", role: "main", count: 10},
+      candidates: [
+        ...Array.from({length: 10}, (_, index) => makeCandidate(`input-${index + 1}`, inputStep, 0, "main")),
+        ...Array.from({length: 10}, (_, index) => makeCandidate(`target-${index + 1}`, targetStep, 0, "main"))
+      ]
+    }
+  ];
+
+  const result = searchCraftAssistBestSolution({
+    groups,
+    targetValue: inputStep,
+    targetStepSpec: resolveCraftAssistTargetStepSpec({
+      inputStep,
+      approachMode: "below"
+    })
+  });
+
+  assert.equal(!!result, true);
+  assert.equal(Math.fround(result.overall), targetStep);
+  assert.equal(pickedIds(result).every((id) => id.startsWith("target-")), true);
+}
+
+function test_refine_role_aware_stops_when_current_mean_is_on_target_step() {
+  const targetStep = Math.fround(0.5);
+  const onStepButRawHigh = targetStep + 1e-8;
+  const materialResults = [
+    {
+      material: {name: "Main", role: "main", count: 2},
+      available: [
+        makeCandidate("m1", onStepButRawHigh, 0, "main"),
+        makeCandidate("m2", onStepButRawHigh, 0, "main")
+      ],
+      selected: [
+        makeCandidate("m1", onStepButRawHigh, 0, "main"),
+        makeCandidate("m2", onStepButRawHigh, 0, "main")
+      ]
+    },
+    {
+      material: {name: "Aux", role: "aux", count: 8},
+      available: [
+        makeCandidate("a1", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a2", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a3", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a4", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a5", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a6", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a7", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a8", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a_exact", targetStep - 9e-8, 1, "aux")
+      ],
+      selected: [
+        makeCandidate("a1", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a2", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a3", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a4", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a5", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a6", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a7", onStepButRawHigh, 1, "aux"),
+        makeCandidate("a8", onStepButRawHigh, 1, "aux")
+      ]
+    }
+  ];
+
+  assert.equal(Math.fround(onStepButRawHigh), targetStep);
+
+  const result = refineRoleAwareMaterialResults({
+    materialResults,
+    targetValue: targetStep,
+    approachMode: "infinite",
+    targetStepSpec: resolveCraftAssistTargetStepSpec({
+      inputStep: targetStep,
+      approachMode: "infinite"
+    })
+  });
+
+  assert.equal(!!result, true);
+  assert.equal(Math.fround(result.overall), targetStep);
+  assert.equal(pickedIds(result).includes("a_exact"), false);
+  assert.equal(Array.isArray(result.traceSteps) && result.traceSteps.length, 0);
+}
+
 function test_role_aware_push_trace_uses_shared_material_projection() {
   const groups = [
     {
@@ -583,6 +674,8 @@ test_role_aware_push_applies_aux_compensation_refinement();
 test_single_material_compensation_chooses_closest_global_second_swap();
 test_single_material_compensation_exposes_second_swap_pruning_trace();
 test_search_best_solution_infinite_mode_can_cross_target_for_closer_single_material_match();
+test_search_step_target_below_uses_previous_float32_step();
+test_refine_role_aware_stops_when_current_mean_is_on_target_step();
 test_role_aware_push_trace_uses_shared_material_projection();
 test_refine_individual_slots_below_mode_improves_main_up();
 test_refine_individual_slots_infinite_mode_approaches_target();

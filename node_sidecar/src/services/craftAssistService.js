@@ -2,6 +2,11 @@ const {asString} = require("../utils");
 const {compareScoreTuples, searchCraftAssistBestSolution} = require("./craftAssistSearch");
 const {resolvePrefilterOptions, resolveShardCount, runPrefilterPhase} = require("./craftAssistShardPrefilter");
 const {
+  resolveCraftAssistTargetStepSpec,
+  isMeanOnTargetStep,
+  quantizeMeanToTargetDomain
+} = require("./craftAssistFloat32Step");
+const {
   buildCraftAssistCandidateCacheKeyTuple,
   normalizeCraftAssistMaterialListCanonical,
   projectCraftAssistTraceMaterial,
@@ -13,9 +18,6 @@ const craftAssistLogger = new DedupLogger({windowMs: 800});
 const WEAR_INPUT_DECIMALS = 16;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
 const EPSILON = 1e-14;
-// Leave a tiny guard band so live craft results do not cross the requested
-// relative-wear cap due to float jitter such as 0.2700000107.
-const CRAFT_ASSIST_OUTCOME_RELATIVE_GUARD = 1e-14;
 const RARITY_MAP = {
   1: "Consumer",
   2: "Industrial",
@@ -56,49 +58,73 @@ function parseOptionalWear01(value) {
   if (!raw) return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
-  const clamped = Math.max(0, Math.min(1, n));
-  return truncateNumber(clamped, WEAR_INPUT_DECIMALS);
-}
-
-function getCraftAssistOutcomeSafeTarget(targetValue) {
-  const target = Number(targetValue);
-  if (!Number.isFinite(target)) return targetValue;
-  return Math.max(0, target - CRAFT_ASSIST_OUTCOME_RELATIVE_GUARD);
+  return n;
 }
 
 function validateCraftAssistFinalOverall({
   overall,
   targetValue,
-  safeTargetValue,
+  searchTargetValue,
+  targetStepSpec = null,
   approachMode = "below",
   itemIds = [],
   selectedItems = []
 } = {}) {
-  if (normalizeCraftAssistApproachMode(approachMode) !== "below") {
-    return {ok: true};
-  }
   const numericOverall = Number(overall);
   const numericTarget = Number(targetValue);
-  const numericSafeTarget = Number(safeTargetValue);
+  const numericSearchTarget = Number(searchTargetValue);
   const normalizedItemIds = normalizeCraftRecipeItemIds(itemIds);
   const normalizedSelectedItems = Array.isArray(selectedItems) ? selectedItems : [];
+  const normalizedApproachMode = normalizeCraftAssistApproachMode(approachMode);
   if (!Number.isFinite(numericOverall) || !Number.isFinite(numericTarget)) {
     return {
       ok: false,
       code: "final_result_invalid",
-      safe_target: numericSafeTarget,
-      approach_mode: normalizeCraftAssistApproachMode(approachMode),
+      safe_target: numericSearchTarget,
+      approach_mode: normalizedApproachMode,
       item_ids: normalizedItemIds,
       selected_items: normalizedSelectedItems,
       message: "终局校验失败：结果均值无效，请调整材料范围"
     };
   }
-  // Validate against original targetValue, not safeTargetValue
-  // safeTargetValue is only used during search to give algorithm headroom
-  // below mode requires strictly less than target (not equal)
-  // Note: For below mode, targetValue has already been adjusted by
-  // STEAM_PRECISION_MARGIN in selectCraftAssistForRecipe, so we don't
-  // need to subtract it again here
+  if (targetStepSpec && typeof targetStepSpec === "object") {
+    const targetStep = Number(targetStepSpec.targetStep);
+    const quantizedOverall = quantizeMeanToTargetDomain(numericOverall);
+    const passed = isMeanOnTargetStep(numericOverall, targetStepSpec);
+
+    craftAssistLogger.infoAlways(
+      "craft_assist",
+      `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} quantized=${numberTextTrunc(quantizedOverall, WEAR_INPUT_DECIMALS)} input_step=${numberTextTrunc(targetStepSpec.inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStep, WEAR_INPUT_DECIMALS)} passed=${passed}`
+    );
+
+    if (passed) {
+      return {ok: true};
+    }
+
+    craftAssistLogger.warnAlways(
+      "craft_assist",
+      `验证拒绝: quantized=${numberTextTrunc(quantizedOverall, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStep, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
+    );
+
+    return {
+      ok: false,
+      code: "final_result_not_on_target_step",
+      overall: numericOverall,
+      quantized_overall: quantizedOverall,
+      target: numericTarget,
+      target_step: targetStep,
+      safe_target: numericSearchTarget,
+      approach_mode: normalizedApproachMode,
+      item_ids: normalizedItemIds,
+      selected_items: normalizedSelectedItems,
+      message: `终局校验拦截非目标 float32 台阶：当前 ${numberTextTrunc(quantizedOverall, WEAR_INPUT_DECIMALS)}，目标台阶 ${numberTextTrunc(targetStep, WEAR_INPUT_DECIMALS)}`
+    };
+  }
+
+  if (normalizedApproachMode !== "below") {
+    return {ok: true};
+  }
+
   const passed = numericOverall < numericTarget;
 
   // Log validation result (always log, no dedup)
@@ -121,7 +147,7 @@ function validateCraftAssistFinalOverall({
     code: "final_result_exceeds_target",
     overall: numericOverall,
     target: numericTarget,
-    safe_target: numericSafeTarget,
+    safe_target: numericSearchTarget,
     approach_mode: normalizeCraftAssistApproachMode(approachMode),
     item_ids: normalizedItemIds,
     selected_items: normalizedSelectedItems,
@@ -1272,17 +1298,19 @@ function hasOversizedCraftAssistGroup(groups, options) {
   ) > 0);
 }
 
-function isCraftAssistSolvedCandidate(solved, targetValue, approachMode = "below") {
-  const normalizedApproachMode = normalizeCraftAssistApproachMode(approachMode);
-  return !!(
+function isCraftAssistSolvedCandidate(solved, targetValue, approachMode = "below", targetStepSpec = null) {
+  const hasValidCandidate = !!(
     solved
     && Array.isArray(solved.materialResults)
     && Number.isFinite(Number(solved.overall))
-    && (
-      normalizedApproachMode === "infinite"
-      || Number(solved.overall) < Number(targetValue) - EPSILON
-    )
   );
+  if (!hasValidCandidate) return false;
+  if (targetStepSpec && typeof targetStepSpec === "object") {
+    return isMeanOnTargetStep(solved.overall, targetStepSpec);
+  }
+  const normalizedApproachMode = normalizeCraftAssistApproachMode(approachMode);
+  return normalizedApproachMode === "infinite"
+    || Number(solved.overall) < Number(targetValue) - EPSILON;
 }
 
 function pickBetterCraftAssistSolvedCandidate(currentBest, nextCandidate) {
@@ -1338,9 +1366,11 @@ function runCraftAssistContextRefine({
   targetValue,
   initialSolved,
   approachMode = "below",
+  targetStepSpec = null,
   prefilterOptions,
   maxRounds = 1
 }) {
+  const searchApproachMode = targetStepSpec ? "infinite" : approachMode;
   const sourceGroups = Array.isArray(groups) ? groups : [];
   const oversizedGroupIndexes = sourceGroups.reduce((list, group, groupIndex) => {
     const candidateCount = Array.isArray(group && group.candidates) ? group.candidates.length : 0;
@@ -1373,9 +1403,10 @@ function runCraftAssistContextRefine({
       const refinedCandidate = searchCraftAssistBestSolution({
         groups: refineGroups,
         targetValue,
-        approachMode
+        targetStepSpec,
+        approachMode: searchApproachMode
       });
-      const refinedSolved = isCraftAssistSolvedCandidate(refinedCandidate, targetValue, approachMode)
+      const refinedSolved = isCraftAssistSolvedCandidate(refinedCandidate, targetValue, approachMode, targetStepSpec)
         ? refinedCandidate
         : null;
       const accepted = didCraftAssistSolvedCandidateImprove(beforeSolved, refinedSolved);
@@ -1412,9 +1443,10 @@ function runCraftAssistContextRefine({
     const jointSolvedCandidate = searchCraftAssistBestSolution({
       groups: sourceGroups,
       targetValue,
-      approachMode
+      targetStepSpec,
+      approachMode: searchApproachMode
     });
-    const jointSolved = isCraftAssistSolvedCandidate(jointSolvedCandidate, targetValue, approachMode)
+    const jointSolved = isCraftAssistSolvedCandidate(jointSolvedCandidate, targetValue, approachMode, targetStepSpec)
       ? jointSolvedCandidate
       : null;
     const jointAccepted = didCraftAssistSolvedCandidateImprove(currentSolved, jointSolved);
@@ -1506,9 +1538,11 @@ async function solveCraftAssistGroupsForRarity({
   groups,
   targetValue,
   approachMode = "below",
+  targetStepSpec = null,
   recipeContext,
   prefilterOptionsOverride = null
 }) {
+  const searchApproachMode = targetStepSpec ? "infinite" : approachMode;
   const prefilterOptions = resolvePrefilterOptions(
     prefilterOptionsOverride && typeof prefilterOptionsOverride === "object"
       ? prefilterOptionsOverride
@@ -1519,7 +1553,8 @@ async function solveCraftAssistGroupsForRarity({
       solved: searchCraftAssistBestSolution({
         groups,
         targetValue,
-        approachMode
+        targetStepSpec,
+        approachMode: searchApproachMode
       }),
       prefilterSummary: null
     };
@@ -1529,6 +1564,7 @@ async function solveCraftAssistGroupsForRarity({
   const basePhase = await runPrefilterPhase({
     groups,
     targetValue,
+    targetStepSpec,
     recipeContext,
     phaseName: "prefilter/base",
     options: prefilterOptions
@@ -1539,7 +1575,8 @@ async function solveCraftAssistGroupsForRarity({
       solved: searchCraftAssistBestSolution({
         groups,
         targetValue,
-        approachMode
+        targetStepSpec,
+        approachMode: searchApproachMode
       }),
       prefilterSummary: buildCraftAssistPrefilterSummary({
         phaseTraces,
@@ -1551,15 +1588,27 @@ async function solveCraftAssistGroupsForRarity({
   const baseSolvedCandidate = searchCraftAssistBestSolution({
     groups: basePhase.groups,
     targetValue,
-    approachMode
+    targetStepSpec,
+    approachMode: searchApproachMode
   });
-  const baseSolved = isCraftAssistSolvedCandidate(baseSolvedCandidate, targetValue, approachMode)
+  const baseSolved = isCraftAssistSolvedCandidate(baseSolvedCandidate, targetValue, approachMode, targetStepSpec)
     ? baseSolvedCandidate
     : null;
+  if (targetStepSpec && baseSolved) {
+    return {
+      solved: baseSolved,
+      prefilterSummary: buildCraftAssistPrefilterSummary({
+        phaseTraces,
+        retryMode: "base",
+        usedRarityFullFallback: false
+      })
+    };
+  }
 
   const expandPhase = await runPrefilterPhase({
     groups,
     targetValue,
+    targetStepSpec,
     recipeContext,
     phaseName: "prefilter/expand",
     options: prefilterOptions
@@ -1569,11 +1618,22 @@ async function solveCraftAssistGroupsForRarity({
     const expandSolvedCandidate = searchCraftAssistBestSolution({
       groups: expandPhase.groups,
       targetValue,
-      approachMode
+      targetStepSpec,
+      approachMode: searchApproachMode
     });
-    const expandSolved = isCraftAssistSolvedCandidate(expandSolvedCandidate, targetValue, approachMode)
+    const expandSolved = isCraftAssistSolvedCandidate(expandSolvedCandidate, targetValue, approachMode, targetStepSpec)
       ? expandSolvedCandidate
       : null;
+    if (targetStepSpec && expandSolved) {
+      return {
+        solved: expandSolved,
+        prefilterSummary: buildCraftAssistPrefilterSummary({
+          phaseTraces,
+          retryMode: "expand",
+          usedRarityFullFallback: false
+        })
+      };
+    }
     let bestPrefilterSolved = pickBetterCraftAssistSolvedCandidate(baseSolved, expandSolved);
     if (bestPrefilterSolved) {
       let contextRefineSummary = null;
@@ -1583,6 +1643,7 @@ async function solveCraftAssistGroupsForRarity({
           targetValue,
           initialSolved: bestPrefilterSolved,
           approachMode,
+          targetStepSpec,
           prefilterOptions
         });
         bestPrefilterSolved = pickBetterCraftAssistSolvedCandidate(bestPrefilterSolved, contextRefined.solved);
@@ -1604,7 +1665,8 @@ async function solveCraftAssistGroupsForRarity({
     solved: searchCraftAssistBestSolution({
       groups,
       targetValue,
-      approachMode
+      targetStepSpec,
+      approachMode: searchApproachMode
     }),
     prefilterSummary: buildCraftAssistPrefilterSummary({
       phaseTraces,
@@ -1619,6 +1681,7 @@ async function runCraftAssistSelectionForRecipe({
   rowsByName,
   blockedIds,
   targetValue,
+  targetStepSpec = null,
   wearApproachMode = "below",
   useRelativeFilter = true,
   wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
@@ -1628,17 +1691,17 @@ async function runCraftAssistSelectionForRecipe({
   const blocked = blockedIds instanceof Set ? blockedIds : new Set();
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
   const offsetHintText = getCraftAssistOffsetSettingHintText(wearOffsetPct);
-  const safeTargetValue = approachMode === "below"
-    ? getCraftAssistOutcomeSafeTarget(targetValue)
+  const searchTargetValue = targetStepSpec && Number.isFinite(Number(targetStepSpec.targetStep))
+    ? Number(targetStepSpec.targetStep)
     : Number(targetValue);
   const prepared = materials.map((material) => {
-    const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, safeTargetValue, {
+    const cands = collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, searchTargetValue, {
       useRelativeFilter,
       candidateCache
     });
-    const estimate = pickCraftAssistClosest(cands, material.count, safeTargetValue);
+    const estimate = pickCraftAssistClosest(cands, material.count, searchTargetValue);
     const estimateDiff = estimate.length
-      ? Math.abs(estimate.reduce((sum, item) => sum + Number(item.value), 0) / estimate.length - safeTargetValue)
+      ? Math.abs(estimate.reduce((sum, item) => sum + Number(item.value), 0) / estimate.length - searchTargetValue)
       : Number.POSITIVE_INFINITY;
     return {material, candidates: cands, estimateDiff};
   });
@@ -1693,8 +1756,9 @@ async function runCraftAssistSelectionForRecipe({
     if (groups.some((group) => group.candidates.length < Number(group.material && group.material.count || 0))) continue;
     const {solved, prefilterSummary} = await solveCraftAssistGroupsForRarity({
       groups,
-      targetValue: safeTargetValue,
+      targetValue: searchTargetValue,
       approachMode,
+      targetStepSpec,
       recipeContext: {
         recipeNo: 1,
         rarity,
@@ -1704,6 +1768,39 @@ async function runCraftAssistSelectionForRecipe({
       prefilterOptionsOverride: prefilterOptions
     });
     if (!solved || !Array.isArray(solved.materialResults) || solved.overall == null) continue;
+    if (targetStepSpec) {
+      if (isMeanOnTargetStep(solved.overall, targetStepSpec)) {
+        bestSolved = {
+          rarity: Number(rarity),
+          materialResults: solved.materialResults,
+          overall: Number(solved.overall),
+          scoreTuple: solved.scoreTuple,
+          trace: attachCraftAssistPrefilterTrace(solved.trace || null, prefilterSummary)
+        };
+        break;
+      }
+      const fallbackSolved = searchCraftAssistBestSolution({
+        groups,
+        targetValue: searchTargetValue,
+        targetStepSpec,
+        approachMode: "infinite"
+      });
+      if (
+        fallbackSolved
+        && Array.isArray(fallbackSolved.materialResults)
+        && isMeanOnTargetStep(fallbackSolved.overall, targetStepSpec)
+      ) {
+        bestSolved = {
+          rarity: Number(rarity),
+          materialResults: fallbackSolved.materialResults,
+          overall: Number(fallbackSolved.overall),
+          scoreTuple: fallbackSolved.scoreTuple,
+          trace: attachCraftAssistPrefilterTrace(fallbackSolved.trace || null, prefilterSummary)
+        };
+        break;
+      }
+      continue;
+    }
     if (!bestSolved
       || compareScoreTuples(solved.scoreTuple, bestSolved.scoreTuple) < 0
       || (
@@ -1725,8 +1822,8 @@ async function runCraftAssistSelectionForRecipe({
         ok: false,
         code: "overall_not_close_to_target",
         overall: null,
-        target: Number(targetValue),
-        message: `当前条件下无法找到可用逼近结果：目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
+        target: Number(searchTargetValue),
+        message: `当前条件下无法找到可用逼近结果：目标 ${numberTextTrunc(searchTargetValue, WEAR_INPUT_DECIMALS)}`
       };
     }
     const lowerBound = findCraftAssistBestFeasibleSolution({
@@ -1740,59 +1837,16 @@ async function runCraftAssistSelectionForRecipe({
       ok: false,
       code: "overall_not_below_target",
       overall: null,
-      target: Number(targetValue),
+      target: Number(searchTargetValue),
       lower_bound_overall: lowerBound && Number.isFinite(Number(lowerBound.overall)) ? Number(lowerBound.overall) : null,
       lower_bound_rarity: lowerBound && Number.isFinite(Number(lowerBound.rarity)) ? Number(lowerBound.rarity) : null,
-      message: `结果均值需小于目标磨损：目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}${lowerBoundText || `，${offsetHintText}`}`
+      message: `结果均值需小于目标磨损：目标 ${numberTextTrunc(searchTargetValue, WEAR_INPUT_DECIMALS)}${lowerBoundText || `，${offsetHintText}`}`
     };
   }
   let selectedRarity = Number(bestSolved.rarity || 0);
   let materialResults = Array.isArray(bestSolved.materialResults) ? bestSolved.materialResults : [];
   let overall = Number(bestSolved.overall);
   const selectionTrace = bestSolved.trace || null;
-
-  const outputOffset = getCraftAssistWearOffsetByTarget(safeTargetValue, wearOffsetPct);
-  if (outputOffset > 0) {
-    let needOffsetRetry = false;
-    if (approachMode === "below") {
-      const offsetLowerBound = Number(safeTargetValue) - Number(outputOffset);
-      needOffsetRetry = overall < offsetLowerBound - EPSILON;
-      if (needOffsetRetry) {
-        applyCraftAssistOffsetWindowCorrection({
-          materialResults,
-          targetValue: safeTargetValue,
-          maxOffset: outputOffset
-        });
-        overall = calcCraftAssistOverallMean(materialResults);
-        if (overall == null) {
-          return {ok: false, code: "offset_result_invalid", message: "偏移修正后结果无效，请调整材料范围"};
-        }
-        // Validate against original targetValue after offset correction
-        // below mode requires strictly less than target
-        // Direct comparison without EPSILON to preserve 14-digit precision
-        if (overall >= Number(targetValue)) {
-          return {
-            ok: false,
-            code: "offset_pullback_exceeds_target",
-            overall: Number(overall),
-            target: Number(targetValue),
-            message: `偏移回拉后超过目标磨损：当前 ${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`
-          };
-        }
-      }
-    }
-    const delta = Math.abs(Number(overall) - Number(safeTargetValue));
-    if (delta > outputOffset + EPSILON) {
-      const retryPrefix = needOffsetRetry ? "已执行偏移回拉重试，" : "";
-      return {
-        ok: false,
-        code: "offset_exceeds_threshold",
-        delta: Number(delta),
-        threshold: Number(outputOffset),
-        message: `${retryPrefix}产物相对磨损偏移超阈值：当前偏移 ${numberTextTrunc(delta, WEAR_INPUT_DECIMALS)}，阈值 ${numberTextTrunc(outputOffset, WEAR_INPUT_DECIMALS)}`
-      };
-    }
-  }
 
   overall = calcCraftAssistOverallMean(materialResults);
   if (overall == null) {
@@ -1804,7 +1858,7 @@ async function runCraftAssistSelectionForRecipe({
   // Log selected materials and predicted outcome (always log, no dedup)
   craftAssistLogger.infoAlways(
     "craft_assist",
-    `选材完成: target=${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)} predicted_overall=${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)} approach_mode=${approachMode} rarity=${selectedRarity} item_count=${finalItemIds.length}`
+    `选材完成: target=${numberTextTrunc(searchTargetValue, WEAR_INPUT_DECIMALS)} predicted_overall=${numberTextTrunc(overall, WEAR_INPUT_DECIMALS)} quantized_overall=${numberTextTrunc(quantizeMeanToTargetDomain(overall), WEAR_INPUT_DECIMALS)} approach_mode=${approachMode} rarity=${selectedRarity} item_count=${finalItemIds.length}`
   );
   for (let i = 0; i < finalSelectedItems.length; i++) {
     const item = finalSelectedItems[i];
@@ -1823,7 +1877,8 @@ async function runCraftAssistSelectionForRecipe({
   const finalOverallCheck = validateCraftAssistFinalOverall({
     overall,
     targetValue,
-    safeTargetValue,
+    searchTargetValue,
+    targetStepSpec,
     approachMode,
     itemIds: finalItemIds,
     selectedItems: finalSelectedItems
@@ -1835,7 +1890,7 @@ async function runCraftAssistSelectionForRecipe({
   const resultIds = [];
   for (const entry of materialResults) {
     const orderedSelected = [...(Array.isArray(entry.selected) ? entry.selected : [])]
-      .sort((a, b) => craftAssistCandidateComparator(a, b, safeTargetValue));
+      .sort((a, b) => craftAssistCandidateComparator(a, b, searchTargetValue));
     for (const choice of orderedSelected) {
       resultIds.push(choice.id);
     }
@@ -1911,22 +1966,24 @@ async function selectCraftAssistForRecipe({
     return {ok: false, message: "请先输入目标相对磨损"};
   }
 
-  // Apply Steam precision margin for below mode
-  // This accounts for floating-point precision differences between our
-  // calculation and Steam's server-side calculation
-  // Observed drift: up to 2.98e-7 in production logs
-  const STEAM_PRECISION_MARGIN = 1e-7; // 0.0000001 (conservative margin)
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
-  const adjustedTargetValue = approachMode === "below"
-    ? targetValue - STEAM_PRECISION_MARGIN
-    : targetValue;
-
-  if (approachMode === "below") {
-    craftAssistLogger.info(
-      "craft_assist",
-      `below模式：目标调整 ${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)} → ${numberTextTrunc(adjustedTargetValue, WEAR_INPUT_DECIMALS)} (margin=${STEAM_PRECISION_MARGIN})`
-    );
+  let targetStepSpec = null;
+  try {
+    targetStepSpec = resolveCraftAssistTargetStepSpec({
+      inputStep: targetValue,
+      approachMode
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "invalid_target_step",
+      message: err && err.message ? err.message : "目标磨损必须是 [0,1] 内的 exact float32 台阶"
+    };
   }
+  craftAssistLogger.info(
+    "craft_assist",
+    `目标台阶: raw=${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)} input_step=${numberTextTrunc(targetStepSpec.inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStepSpec.targetStep, WEAR_INPUT_DECIMALS)} approach_mode=${approachMode}`
+  );
 
   const context = resolveCraftAssistSelectionContext({
     selectionContext,
@@ -1956,7 +2013,8 @@ async function selectCraftAssistForRecipe({
     materials: normalizedMaterials,
     rowsByName,
     blockedIds: blocked,
-    targetValue: adjustedTargetValue,  // Use adjusted target
+    targetValue,
+    targetStepSpec,
     wearApproachMode: approachMode,
     useRelativeFilter: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
     wearOffsetPct: normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
@@ -2042,6 +2100,7 @@ module.exports = {
   buildCraftAssistSelectionContext,
   buildCraftAssistSelectionContextFromCandidateRows,
   __test: {
+    isCraftAssistSolvedCandidate,
     validateCraftAssistFinalOverall,
     buildCraftAssistFailureLogText
   }

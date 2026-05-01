@@ -1,4 +1,10 @@
 const {projectCraftAssistTraceMaterial} = require("../../ui/craftAssistItemWearShared");
+const {
+  isMeanOnTargetStep,
+  compareMeanToTargetRange,
+  distanceFromMeanToTargetRange,
+  quantizeMeanToTargetDomain
+} = require("./craftAssistFloat32Step");
 
 const EPSILON = 1e-14;
 const INITIAL_WINDOW_EXTRA_CAP = 24;
@@ -16,7 +22,29 @@ function isBelowTarget(overall, targetValue) {
   return Number(overall) < Number(targetValue) - EPSILON;
 }
 
-function buildApproachTuplePrefix(overall, targetValue, approachMode) {
+function hasTargetStepSpec(targetStepSpec) {
+  return !!(
+    targetStepSpec
+    && typeof targetStepSpec === "object"
+    && Number.isFinite(Number(targetStepSpec.targetStep))
+  );
+}
+
+function resolveSearchTargetValue(targetValue, targetStepSpec) {
+  return hasTargetStepSpec(targetStepSpec) ? Number(targetStepSpec.targetStep) : Number(targetValue);
+}
+
+function buildApproachTuplePrefix(overall, targetValue, approachMode, targetStepSpec = null) {
+  if (hasTargetStepSpec(targetStepSpec)) {
+    const hit = isMeanOnTargetStep(overall, targetStepSpec);
+    const side = compareMeanToTargetRange(overall, targetStepSpec);
+    return [
+      hit ? 0 : 1,
+      distanceFromMeanToTargetRange(overall, targetStepSpec),
+      side > 0 ? 1 : 0,
+      Math.abs(side)
+    ];
+  }
   const normalizedMode = normalizeApproachMode(approachMode);
   const numericOverall = Number(overall);
   if (!Number.isFinite(numericOverall)) return null;
@@ -56,17 +84,23 @@ function resolveSearchMode(groups) {
   return roles.size >= 2 ? "multi_material_role" : "multi_material_neutral";
 }
 
-function makeSearchCandidate({candidate, groupIndex, role, targetValue}) {
+function makeSearchCandidate({candidate, groupIndex, role, targetValue, targetStepSpec = null}) {
   const value = Number(candidate && candidate.value);
+  const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
+  const side = hasTargetStepSpec(targetStepSpec)
+    ? compareMeanToTargetRange(value, targetStepSpec)
+    : (value > searchTarget + EPSILON ? 1 : (value < searchTarget - EPSILON ? -1 : 0));
   return {
     ...candidate,
     groupIndex,
     role,
     value,
-    distance: Math.abs(value - Number(targetValue)),
-    side: value > Number(targetValue) + EPSILON
+    distance: hasTargetStepSpec(targetStepSpec)
+      ? distanceFromMeanToTargetRange(value, targetStepSpec)
+      : Math.abs(value - searchTarget),
+    side: side > 0
       ? "above"
-      : (value < Number(targetValue) - EPSILON ? "below" : "equal")
+      : (side < 0 ? "below" : "equal")
   };
 }
 
@@ -90,14 +124,16 @@ function compareByDistanceThenRoleBias(role, a, b) {
   return String(a && a.id || "").localeCompare(String(b && b.id || ""));
 }
 
-function buildOrderedCandidates(group, targetValue, mode) {
+function buildOrderedCandidates(group, targetValue, mode, targetStepSpec = null) {
   const role = normalizeRole(group && group.material && group.material.role);
+  const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
   const base = (Array.isArray(group && group.candidates) ? group.candidates : [])
     .map((candidate) => makeSearchCandidate({
       candidate,
       groupIndex: Number(group && group.index || 0),
       role,
-      targetValue
+      targetValue: searchTarget,
+      targetStepSpec
     }))
     .filter((candidate) => Number.isFinite(candidate.value));
   if (mode === "single_material" || mode === "multi_material_neutral") {
@@ -107,8 +143,8 @@ function buildOrderedCandidates(group, targetValue, mode) {
   const fallback = [];
   for (const candidate of base) {
     const isPreferred = role === "aux"
-      ? candidate.value <= Number(targetValue) + EPSILON
-      : candidate.value >= Number(targetValue) - EPSILON;
+      ? candidate.side !== "above"
+      : candidate.side !== "below";
     (isPreferred ? preferred : fallback).push(candidate);
   }
   preferred.sort((a, b) => compareByDistanceThenRoleBias(role, a, b));
@@ -119,14 +155,29 @@ function buildOrderedCandidates(group, targetValue, mode) {
   }));
 }
 
-function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode = "below"}) {
+function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode = "below", targetStepSpec = null}) {
   const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
-  const above = values.filter((value) => value > Number(targetValue) + EPSILON).length;
-  const below = values.filter((value) => value < Number(targetValue) - EPSILON).length;
-  const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - Number(targetValue)), 0) / values.length;
+  const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
+  const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
+  const above = values.filter((value) => value > searchTarget + EPSILON).length;
+  const below = values.filter((value) => value < searchTarget - EPSILON).length;
+  const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length;
+  if (hasTargetStepSpec(targetStepSpec)) {
+    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    return {
+      overall,
+      predictedStepMean: quantizeMeanToTargetDomain(overall),
+      tuple: [
+        ...prefix,
+        radius,
+        Math.abs(above - below),
+        calcVariance(values),
+        meanDistance
+      ]
+    };
+  }
   if (normalizeApproachMode(approachMode) === "below") {
     if (!isBelowTarget(overall, targetValue)) return null;
     return {
@@ -154,12 +205,26 @@ function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approach
   };
 }
 
-function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = "below"}) {
+function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = "below", targetStepSpec = null}) {
   const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
-  const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - Number(targetValue)), 0) / values.length;
+  const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
+  const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
+  const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length;
+  if (hasTargetStepSpec(targetStepSpec)) {
+    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    return {
+      overall,
+      predictedStepMean: quantizeMeanToTargetDomain(overall),
+      tuple: [
+        ...prefix,
+        radius,
+        calcVariance(values),
+        meanDistance
+      ]
+    };
+  }
   if (normalizeApproachMode(approachMode) === "below") {
     if (!isBelowTarget(overall, targetValue)) return null;
     return {
@@ -185,22 +250,37 @@ function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = 
   };
 }
 
-function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode = "below"}) {
+function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode = "below", targetStepSpec = null}) {
   const list = Array.isArray(selected) ? selected : [];
   const values = list.map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
   const mains = list
     .filter((item) => normalizeRole(item && item.role) === "main")
     .map((item) => Number(item.value || 0));
   const auxes = list
     .filter((item) => normalizeRole(item && item.role) === "aux")
     .map((item) => Number(item.value || 0));
-  const wrongSidePenalty = mains.filter((value) => value < Number(targetValue) - EPSILON).length
-    + auxes.filter((value) => value > Number(targetValue) + EPSILON).length;
+  const wrongSidePenalty = mains.filter((value) => value < searchTarget - EPSILON).length
+    + auxes.filter((value) => value > searchTarget + EPSILON).length;
   const mainMean = mains.length ? mains.reduce((sum, value) => sum + value, 0) / mains.length : 0;
   const auxMean = auxes.length ? auxes.reduce((sum, value) => sum + value, 0) / auxes.length : 0;
-  const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
+  const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
+  if (hasTargetStepSpec(targetStepSpec)) {
+    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    return {
+      overall,
+      predictedStepMean: quantizeMeanToTargetDomain(overall),
+      tuple: [
+        ...prefix,
+        wrongSidePenalty,
+        -mainMean,
+        auxMean,
+        radius
+      ]
+    };
+  }
   if (normalizeApproachMode(approachMode) === "below") {
     if (!isBelowTarget(overall, targetValue)) return null;
     return {
@@ -228,10 +308,10 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachM
   };
 }
 
-function scoreCompleteSelection(selected, targetValue, mode, approachMode = "below") {
-  if (mode === "single_material") return scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode});
-  if (mode === "multi_material_role") return scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode});
-  return scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode});
+function scoreCompleteSelection(selected, targetValue, mode, approachMode = "below", targetStepSpec = null) {
+  if (mode === "single_material") return scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode, targetStepSpec});
+  if (mode === "multi_material_role") return scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode, targetStepSpec});
+  return scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode, targetStepSpec});
 }
 
 function compareByValueDesc(a, b) {
@@ -1196,10 +1276,17 @@ function searchRoleAwarePushSolution({groups, targetValue} = {}) {
   };
 }
 
-function scorePartialState(state, totalSlots, targetValue, mode, approachMode = "below") {
+function scorePartialState(state, totalSlots, targetValue, mode, approachMode = "below", targetStepSpec = null) {
   const selected = Array.isArray(state && state.selected) ? state.selected : [];
   const count = selected.length;
+  const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
   if (count <= 0) {
+    if (hasTargetStepSpec(targetStepSpec)) {
+      const emptyGap = distanceFromMeanToTargetRange(0, targetStepSpec);
+      if (mode === "multi_material_role") return [emptyGap, 0, 0, 0, 0, 0];
+      if (mode === "single_material") return [emptyGap, 0, 0, 0, 0, 0];
+      return [emptyGap, 0, 0, 0, 0];
+    }
     if (normalizeApproachMode(approachMode) === "infinite") {
       const emptyGap = Math.abs(Number(targetValue));
       if (mode === "single_material") return [emptyGap, 0, 0, 0, 0, 0];
@@ -1212,9 +1299,52 @@ function scorePartialState(state, totalSlots, targetValue, mode, approachMode = 
   const values = selected.map((item) => Number(item && item.value || 0));
   const projectedOverall = (
     values.reduce((sum, value) => sum + value, 0)
-    + Number(targetValue) * Math.max(0, totalSlots - count)
+    + searchTarget * Math.max(0, totalSlots - count)
   ) / totalSlots;
-  const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
+  const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
+  if (hasTargetStepSpec(targetStepSpec)) {
+    const projectedGap = distanceFromMeanToTargetRange(projectedOverall, targetStepSpec);
+    const projectedSide = compareMeanToTargetRange(projectedOverall, targetStepSpec);
+    if (mode === "single_material") {
+      const above = values.filter((value) => value > searchTarget + EPSILON).length;
+      const below = values.filter((value) => value < searchTarget - EPSILON).length;
+      return [
+        projectedGap,
+        projectedSide > 0 ? 1 : 0,
+        radius,
+        Math.abs(above - below),
+        calcVariance(values),
+        values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length
+      ];
+    }
+    if (mode === "multi_material_role") {
+      const mains = selected
+        .filter((item) => normalizeRole(item && item.role) === "main")
+        .map((item) => Number(item.value || 0));
+      const auxes = selected
+        .filter((item) => normalizeRole(item && item.role) === "aux")
+        .map((item) => Number(item.value || 0));
+      const wrongSidePenalty = mains.filter((value) => value < searchTarget - EPSILON).length
+        + auxes.filter((value) => value > searchTarget + EPSILON).length;
+      const mainMean = mains.length ? mains.reduce((sum, value) => sum + value, 0) / mains.length : 0;
+      const auxMean = auxes.length ? auxes.reduce((sum, value) => sum + value, 0) / auxes.length : 0;
+      return [
+        projectedGap,
+        projectedSide > 0 ? 1 : 0,
+        wrongSidePenalty,
+        -mainMean,
+        auxMean,
+        radius
+      ];
+    }
+    return [
+      projectedGap,
+      projectedSide > 0 ? 1 : 0,
+      radius,
+      calcVariance(values),
+      values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length
+    ];
+  }
   if (normalizeApproachMode(approachMode) === "infinite") {
     const projectedGap = Math.abs(Number(targetValue) - projectedOverall);
     const projectedAbovePenalty = projectedOverall > Number(targetValue) + EPSILON ? 1 : 0;
@@ -1320,10 +1450,10 @@ function buildCanonicalStateKey(state) {
   return `${slotIndex}|${groupKey}`;
 }
 
-function pruneBeam(states, beamWidth, totalSlots, targetValue, mode, approachMode = "below") {
+function pruneBeam(states, beamWidth, totalSlots, targetValue, mode, approachMode = "below", targetStepSpec = null) {
   const bestByKey = new Map();
   for (const state of Array.isArray(states) ? states : []) {
-    const score = scorePartialState(state, totalSlots, targetValue, mode, approachMode);
+    const score = scorePartialState(state, totalSlots, targetValue, mode, approachMode, targetStepSpec);
     const key = buildCanonicalStateKey(state);
     const existing = bestByKey.get(key);
     if (!existing || compareScoreTuples(score, existing.score) < 0) {
@@ -1335,17 +1465,22 @@ function pruneBeam(states, beamWidth, totalSlots, targetValue, mode, approachMod
   return scored.slice(0, Math.max(1, Number(beamWidth) || 1)).map((entry) => entry.state);
 }
 
-function pickBestCompleteSolution(states, targetValue, mode, approachMode = "below") {
+function pickBestCompleteSolution(states, targetValue, mode, approachMode = "below", targetStepSpec = null) {
   let best = null;
   for (const state of Array.isArray(states) ? states : []) {
-    const scored = scoreCompleteSelection(state.selected, targetValue, mode, approachMode);
+    const scored = scoreCompleteSelection(state.selected, targetValue, mode, approachMode, targetStepSpec);
     if (!scored) continue;
+    const candidate = {
+      selected: state.selected,
+      overall: scored.overall,
+      predictedStepMean: scored.predictedStepMean,
+      scoreTuple: scored.tuple
+    };
+    if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(scored.overall, targetStepSpec)) {
+      return candidate;
+    }
     if (!best || compareScoreTuples(scored.tuple, best.scoreTuple) < 0) {
-      best = {
-        selected: state.selected,
-        overall: scored.overall,
-        scoreTuple: scored.tuple
-      };
+      best = candidate;
     }
   }
   return best;
@@ -1367,7 +1502,7 @@ function candidateTouchesCapBoundary(selected, groupsWithOrdered, capExtra) {
   return false;
 }
 
-function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below"}) {
+function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below", targetStepSpec = null}) {
   let best = null;
   for (let extra = 0; extra <= capExtra; extra += 1) {
     const windows = groupsWithOrdered.map((group) => {
@@ -1411,11 +1546,17 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
           });
         }
       }
-      beam = pruneBeam(nextStates, beamWidth, totalSlots, targetValue, mode, approachMode);
+      beam = pruneBeam(nextStates, beamWidth, totalSlots, targetValue, mode, approachMode, targetStepSpec);
       if (!beam.length) break;
     }
     if (!beam.length) continue;
-    const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode);
+    const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode, targetStepSpec);
+    if (hasTargetStepSpec(targetStepSpec) && solved && isMeanOnTargetStep(solved.overall, targetStepSpec)) {
+      return {
+        ...solved,
+        windowExtra: extra
+      };
+    }
     if (solved && (!best || compareScoreTuples(solved.scoreTuple, best.scoreTuple) < 0)) {
       best = {
         ...solved,
@@ -1495,7 +1636,7 @@ function findClosestCandidate(sortedAvailable, idealValue, selectedIds, constrai
   return bestCandidate;
 }
 
-function refineIndividualSlots({currentResults, currentScore, targetValue, totalCount, approachMode, traceSteps}) {
+function refineIndividualSlots({currentResults, currentScore, targetValue, totalCount, approachMode, targetStepSpec = null, traceSteps}) {
   let results = currentResults;
   let score = currentScore;
   let improved = false;
@@ -1542,7 +1683,7 @@ function refineIndividualSlots({currentResults, currentScore, targetValue, total
           oldId: String(currentItem.id || ""),
           nextCandidate: candidate
         }]);
-        const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, approachMode);
+        const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, approachMode, targetStepSpec);
         if (!nextScore) continue;
         if (compareScoreTuples(nextScore.scoreTuple, score.scoreTuple) >= 0) continue;
 
@@ -1574,28 +1715,43 @@ function refineIndividualSlots({currentResults, currentScore, targetValue, total
   return {currentResults: results, currentScore: score, improved};
 }
 
-function scoreRoleAwareMaterialResults(materialResults, targetValue, approachMode = "below") {
+function scoreRoleAwareMaterialResults(materialResults, targetValue, approachMode = "below", targetStepSpec = null) {
   const selected = [];
   for (const entry of Array.isArray(materialResults) ? materialResults : []) {
     selected.push(...(Array.isArray(entry && entry.selected) ? entry.selected : []));
   }
-  const scored = scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode: normalizeApproachMode(approachMode)});
+  const scored = scoreCraftAssistSolutionMultiMaterial({
+    selected,
+    targetValue,
+    approachMode: normalizeApproachMode(approachMode),
+    targetStepSpec
+  });
   if (!scored) return null;
   return {
     selected,
     overall: scored.overall,
+    predictedStepMean: scored.predictedStepMean,
     scoreTuple: scored.tuple
   };
 }
 
-function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterations = 4, approachMode = "below"}) {
+function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterations = 4, approachMode = "below", targetStepSpec = null}) {
   const normalizedMode = normalizeApproachMode(approachMode);
   let currentResults = Array.isArray(materialResults) ? materialResults : [];
-  let currentScore = scoreRoleAwareMaterialResults(currentResults, targetValue, normalizedMode);
+  let currentScore = scoreRoleAwareMaterialResults(currentResults, targetValue, normalizedMode, targetStepSpec);
   if (!currentScore) return null;
   const totalSelected = currentScore.selected.length;
   if (totalSelected <= 0) return null;
   const traceSteps = [];
+  if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(currentScore.overall, targetStepSpec)) {
+    return {
+      materialResults: currentResults,
+      overall: Number(currentScore.overall),
+      predictedStepMean: currentScore.predictedStepMean,
+      scoreTuple: currentScore.scoreTuple,
+      traceSteps
+    };
+  }
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     let iterationImproved = false;
@@ -1629,7 +1785,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
             oldId: String(oldMain && oldMain.id || ""),
             nextCandidate: newMain
           }]);
-          const singleMainScore = scoreRoleAwareMaterialResults(singleMainResults, targetValue, normalizedMode);
+          const singleMainScore = scoreRoleAwareMaterialResults(singleMainResults, targetValue, normalizedMode, targetStepSpec);
           if (
             singleMainScore
             && compareScoreTuples(singleMainScore.scoreTuple, currentScore.scoreTuple) < 0
@@ -1704,7 +1860,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     nextCandidate: newAux
                   }
                 ]);
-                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode);
+                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode, targetStepSpec);
                 if (!nextScore) continue;
                 if (compareScoreTuples(nextScore.scoreTuple, currentScore.scoreTuple) >= 0) continue;
                 if (
@@ -1801,7 +1957,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     nextCandidate: newAux
                   }
                 ]);
-                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode);
+                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode, targetStepSpec);
                 if (!nextScore) continue;
                 if (compareScoreTuples(nextScore.scoreTuple, currentScore.scoreTuple) >= 0) continue;
                 if (
@@ -1922,7 +2078,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
                     nextCandidate: newAuxDown
                   }
                 ]);
-                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode);
+                const nextScore = scoreRoleAwareMaterialResults(nextResults, targetValue, normalizedMode, targetStepSpec);
                 if (!nextScore) continue;
                 if (compareScoreTuples(nextScore.scoreTuple, currentScore.scoreTuple) >= 0) continue;
                 if (
@@ -1974,6 +2130,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
         scoreTuple: bestImprovement.scoreTuple
       };
       iterationImproved = true;
+      if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(currentScore.overall, targetStepSpec)) break;
     }
 
     // === Step 2: Individual slot refinement ===
@@ -1983,6 +2140,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
       targetValue,
       totalCount: totalSelected,
       approachMode: normalizedMode,
+      targetStepSpec,
       traceSteps
     });
     if (individualResult.improved) {
@@ -2002,31 +2160,32 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
   };
 }
 
-function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200, approachMode = "below"} = {}) {
+function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = null, beamWidth = 200, approachMode = "below"} = {}) {
   const sourceGroups = Array.isArray(groups) ? groups : [];
   const mode = resolveSearchMode(sourceGroups);
-  const normalizedApproachMode = normalizeApproachMode(approachMode);
-  if (mode === "multi_material_role" && normalizedApproachMode === "below") {
+  const searchTargetValue = resolveSearchTargetValue(targetValue, targetStepSpec);
+  const normalizedApproachMode = hasTargetStepSpec(targetStepSpec) ? "infinite" : normalizeApproachMode(approachMode);
+  if (mode === "multi_material_role" && normalizedApproachMode === "below" && !hasTargetStepSpec(targetStepSpec)) {
     return searchRoleAwarePushSolution({
       groups: sourceGroups,
-      targetValue
+      targetValue: searchTargetValue
     });
   }
   const preparedGroups = sourceGroups.map((group, index) => ({
     index,
     material: group && group.material ? group.material : {},
-    candidates: buildOrderedCandidates({...group, index}, targetValue, mode)
+    candidates: buildOrderedCandidates({...group, index}, searchTargetValue, mode, targetStepSpec)
   }));
   if (!preparedGroups.length) return null;
-  if (mode === "single_material" && preparedGroups.length === 1 && normalizedApproachMode === "below") {
+  if (mode === "single_material" && preparedGroups.length === 1 && normalizedApproachMode === "below" && !hasTargetStepSpec(targetStepSpec)) {
     return searchSingleMaterialExact({
       group: preparedGroups[0],
-      targetValue
+      targetValue: searchTargetValue
     });
   }
   const groupsWithOrdered = preparedGroups.map((group) => ({
     ...group,
-    ordered: buildOrderedCandidates(group, targetValue, mode)
+    ordered: buildOrderedCandidates(group, searchTargetValue, mode, targetStepSpec)
   }));
   const totalSlots = groupsWithOrdered.reduce((sum, group) => sum + Math.max(0, Number(group && group.material && group.material.count || 0)), 0);
   const maxExtra = groupsWithOrdered.reduce((acc, group) => {
@@ -2039,13 +2198,18 @@ function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200, ap
   while (true) {
     const solved = runBeamSearchWithinCap({
       groupsWithOrdered,
-      targetValue,
+      targetValue: searchTargetValue,
       beamWidth,
       mode,
       totalSlots,
       capExtra,
-      approachMode: normalizedApproachMode
+      approachMode: normalizedApproachMode,
+      targetStepSpec
     });
+    if (hasTargetStepSpec(targetStepSpec) && solved && isMeanOnTargetStep(solved.overall, targetStepSpec)) {
+      best = solved;
+      break;
+    }
     if (solved && (!best || compareScoreTuples(solved.scoreTuple, best.scoreTuple) < 0)) {
       best = solved;
     }
@@ -2072,11 +2236,21 @@ function searchCraftAssistBestSolution({groups, targetValue, beamWidth = 200, ap
     available: group.candidates,
     selected: selectedByGroup[index]
   }));
+  if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(best.overall, targetStepSpec)) {
+    return {
+      materialResults,
+      overall: Number(best.overall),
+      predictedStepMean: best.predictedStepMean,
+      scoreTuple: best.scoreTuple,
+      windowExtra: Number(best.windowExtra || 0)
+    };
+  }
   if (mode === "multi_material_role") {
     const refined = refineRoleAwareMaterialResults({
       materialResults,
-      targetValue,
-      approachMode: normalizedApproachMode
+      targetValue: searchTargetValue,
+      approachMode: normalizedApproachMode,
+      targetStepSpec
     });
     if (refined && compareScoreTuples(refined.scoreTuple, best.scoreTuple) < 0) {
       return {

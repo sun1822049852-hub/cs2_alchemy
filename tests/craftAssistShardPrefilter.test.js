@@ -1,8 +1,10 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const {Worker} = require("node:worker_threads");
 
 const TIMEOUT_FIXTURE_PATH = path.join(__dirname, "fixtures", "craftAssistShardTimeoutWorker.js");
 const CRASH_FIXTURE_PATH = path.join(__dirname, "fixtures", "craftAssistShardCrashWorker.js");
+const SHARD_WORKER_PATH = path.join(__dirname, "..", "node_sidecar", "src", "services", "craftAssistShardWorker.js");
 
 const {
   buildStrideShardsWithCenterOverlap,
@@ -12,6 +14,10 @@ const {
   resolveShardCount,
   runPrefilterPhase
 } = require("../node_sidecar/src/services/craftAssistShardPrefilter");
+const {
+  prevFloat32,
+  resolveCraftAssistTargetStepSpec
+} = require("../node_sidecar/src/services/craftAssistFloat32Step");
 
 function makeCandidate(id, value, {rarity = 4, name = "Aux"} = {}) {
   return {
@@ -86,6 +92,36 @@ function assertCandidateIds(group, expectedIds) {
   assert.deepEqual(group.candidates.map((candidate) => candidate.id), expectedIds);
 }
 
+function runShardWorkerPayload(payload) {
+  return new Promise((resolve, reject) => {
+    const requestId = `test_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const worker = new Worker(SHARD_WORKER_PATH);
+    const timer = setTimeout(() => {
+      void worker.terminate();
+      reject(new Error("worker test timed out"));
+    }, 2000);
+    worker.on("message", (message) => {
+      clearTimeout(timer);
+      void worker.terminate();
+      if (!message || message.ok === false) {
+        reject(new Error("worker returned failure"));
+        return;
+      }
+      resolve(message.result);
+    });
+    worker.on("error", (err) => {
+      clearTimeout(timer);
+      void worker.terminate();
+      reject(err);
+    });
+    worker.postMessage({
+      type: "prefilter",
+      requestId,
+      payload
+    });
+  });
+}
+
 function test_resolve_shard_count_and_role_mapping() {
   const defaults = resolvePrefilterOptions({enableOversizedPrefilter: true});
   assert.equal(resolveShardCount(500, defaults), 0);
@@ -115,6 +151,35 @@ function test_build_stride_shards_with_center_overlap_preserves_center_and_size(
   assert.equal(shards[1].centerOverlapSize, 60);
   assert.equal(shards[0].candidates.some((item) => item.orderedIndex === 420), true);
   assert.equal(shards[1].candidates.some((item) => item.orderedIndex === 420), true);
+}
+
+function test_center_overlap_uses_target_step_range_not_input_scalar() {
+  const inputStep = Math.fround(0.27);
+  const targetStep = prevFloat32(inputStep);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below"
+  });
+  const orderedCandidates = [
+    {id: "low", value: 0.1, orderedIndex: 0},
+    {id: "target-step", value: targetStep, orderedIndex: 1},
+    {id: "input-step", value: inputStep, orderedIndex: 2},
+    {id: "middle", value: 0.5, orderedIndex: 3},
+    {id: "high", value: 0.9, orderedIndex: 4}
+  ];
+  const shards = buildStrideShardsWithCenterOverlap({
+    orderedCandidates,
+    shardCount: 2,
+    targetValue: inputStep,
+    targetStepSpec,
+    options: makeBaseOptions({
+      centerOverlapRatio: 0,
+      centerOverlapMin: 1,
+      centerOverlapMax: 1
+    })
+  });
+
+  assert.equal(shards[0].candidates.some((candidate) => candidate.id === "target-step"), true);
 }
 
 function test_merge_shard_selections_clips_to_shortlist_max_in_original_order() {
@@ -306,9 +371,83 @@ async function test_prefilter_trace_uses_shared_material_projection() {
   assert.equal(result.prefilterTrace.groups[0].label, "Aux Alpha / Aux Beta");
 }
 
+async function test_shard_worker_uses_target_step_spec_for_ranking() {
+  const inputStep = Math.fround(0.27);
+  const targetStep = prevFloat32(inputStep);
+  const result = await runShardWorkerPayload({
+    groupIndex: 0,
+    shardIndex: 0,
+    role: "neutral",
+    targetValue: inputStep,
+    targetStepSpec: resolveCraftAssistTargetStepSpec({
+      inputStep,
+      approachMode: "below"
+    }),
+    topK: 1,
+    edgeKeepPerSide: 0,
+    candidates: [
+      {id: "input-step", value: inputStep, orderedIndex: 0},
+      {id: "target-step", value: targetStep, orderedIndex: 1}
+    ]
+  });
+
+  assert.deepEqual(result.selectedIds, ["target-step"]);
+}
+
+async function test_shard_worker_treats_raw_values_inside_target_step_as_equal_side() {
+  const inputStep = Math.fround(0.27);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below"
+  });
+  const insideTargetStepRange = (Number(targetStepSpec.targetStep) + Number(targetStepSpec.upperBound)) / 2;
+  assert.equal(Math.fround(insideTargetStepRange), targetStepSpec.targetStep);
+  assert.equal(insideTargetStepRange > targetStepSpec.targetStep, true);
+
+  const result = await runShardWorkerPayload({
+    groupIndex: 0,
+    shardIndex: 0,
+    role: "aux",
+    targetValue: targetStepSpec.targetStep,
+    targetStepSpec,
+    topK: 3,
+    edgeKeepPerSide: 1,
+    candidates: [
+      {id: "target-step", value: targetStepSpec.targetStep, orderedIndex: 0},
+      {id: "inside-target-step-range", value: insideTargetStepRange, orderedIndex: 1},
+      {id: "preferred-below", value: targetStepSpec.lowerBound - 0.0001, orderedIndex: 2}
+    ]
+  });
+
+  assert.deepEqual(result.selectedIds, ["target-step", "inside-target-step-range", "preferred-below"]);
+  assert.equal(result.stats.preferredSideCount, 1);
+  assert.equal(result.stats.oppositeSideCount, 0);
+}
+
+async function test_prefilter_trace_includes_step_target() {
+  const inputStep = Math.fround(0.42);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below"
+  });
+  const group = makeGroup(makeRangeCandidates(12), {count: 4, role: "neutral"});
+  const result = await runPrefilterPhase({
+    groups: [group],
+    targetValue: inputStep,
+    targetStepSpec,
+    recipeContext: {recipeNo: 1},
+    phaseName: "prefilter/base",
+    options: makeBaseOptions()
+  });
+
+  assert.equal(result.prefilterTrace.inputStep, inputStep);
+  assert.equal(result.prefilterTrace.targetStep, targetStepSpec.targetStep);
+}
+
 (async () => {
   test_resolve_shard_count_and_role_mapping();
   test_build_stride_shards_with_center_overlap_preserves_center_and_size();
+  test_center_overlap_uses_target_step_range_not_input_scalar();
   test_merge_shard_selections_clips_to_shortlist_max_in_original_order();
   test_merge_shard_selections_rejects_duplicate_ids();
   await test_phase_group_fallback_when_shortlist_hard_max_too_small();
@@ -319,6 +458,9 @@ async function test_prefilter_trace_uses_shared_material_projection() {
   await test_group_full_fallback_on_group_timeout();
   await test_call_timeout_discards_partial_prefilter_results();
   await test_prefilter_trace_uses_shared_material_projection();
+  await test_shard_worker_uses_target_step_spec_for_ranking();
+  await test_shard_worker_treats_raw_values_inside_target_step_as_equal_side();
+  await test_prefilter_trace_includes_step_target();
   console.log("craftAssistShardPrefilter tests passed");
 })().catch((err) => {
   console.error(err);
