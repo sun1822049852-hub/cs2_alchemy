@@ -967,3 +967,67 @@
   - 未提交。
 - Next first cut:
   - 完全重启程序 / sidecar 后做真实 UI 验证：`below` 预测面板最终磨损应使用输入前一个 `float32` 台阶；切到 `infinite` 后应使用输入台阶本身；汰换模拟页无切换开关且继续走默认 `below`。
+
+### 2026-05-01 handoff update - offset step window spec only
+- Task: 用户指出上一版 float32 spec 中“当前 phase 忽略 offset 输入”不再满足实际需求；本会话只写 offset 参与选材的 spec 和 implementation plan，不进入实现。
+- Current goal:
+  - 在已有 float32 台阶选材语义上，补齐用户输入 `wear_offset_pct` 后的目标台阶窗口规则。
+  - offset 本身始终是正数；方向由模式决定：
+    - `below`: 从 `prevFloat32(inputStep)` 开始，向更低磨损台阶扩展，直到覆盖 `inputStep - offsetValue`。
+    - `infinite`: 从 `inputStep` 开始，向正负两侧扩展，覆盖 `[inputStep - offsetValue, inputStep + offsetValue]`；同距离时优先低磨损侧。
+  - 成功判定仍然不能回到 raw `< target` 或安全边界；必须是 `Math.fround(raw_mean)` 命中允许窗口内的某个目标台阶。
+- Completed:
+  - 新增 spec: [docs/superpowers/specs/2026-05-01-craft-assist-offset-step-window-design.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/specs/2026-05-01-craft-assist-offset-step-window-design.md)。
+  - 新增 implementation plan: [docs/superpowers/plans/2026-05-01-craft-assist-offset-step-window-implementation.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-05-01-craft-assist-offset-step-window-implementation.md)。
+  - 更新原 float32 spec 的 `Wear Offset Path` 小节，标注该部分已被 offset follow-up spec 取代。
+  - 用户中途明确“无需实现，写 spec 和计划即可”；因此未继续实现。
+  - 本轮曾短暂按 TDD 准备 offset 失败测试，但收到用户收缩范围后已撤回本轮新增 offset 测试片段。
+- Verification / checks:
+  - 只做文档与现场核对，未运行业务测试。
+  - 已执行清理检查：
+    - `rg -n "offsetValue|lowerAllowedStep|higher-offset|lower-offset|test_below_offset|test_infinite_offset|targetStepPriorityTuple|isMeanOnPrimaryTargetStep" tests/craftAssistFloat32Step.test.js tests/craftAssistSearch.test.js tests/craftAssistService.test.js tests/craftAssistShardPrefilter.test.js`
+    - 结果：exit code `1` 且无输出，表示本轮新增 offset 测试片段未残留。
+  - 之前误启动的主工作区 dev 运行态已停止；当前不依赖旧 sidecar。
+- Current files from this task:
+  - New untracked docs:
+    - `docs/superpowers/specs/2026-05-01-craft-assist-offset-step-window-design.md`
+    - `docs/superpowers/plans/2026-05-01-craft-assist-offset-step-window-implementation.md`
+  - Modified doc:
+    - `docs/superpowers/specs/2026-05-01-craft-assist-float32-step-selection-design.md`
+  - No intended implementation/test changes for the offset-window task.
+- Workspace state:
+  - 当前工作目录：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 当前分支：`main`。
+  - 当前 HEAD：`d362ea4ddec69f4aa9f46e0e31121fedc341a360`。
+  - 本轮只检查并使用主工作区；未检查 sibling worktree 的改动。
+  - 已知其他 worktree：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+  - 当前工作区已有大量上一任务遗留业务改动、UI 相关改动和 `backup/ui_state/` 运行态脏文件；本 handoff 的结论只覆盖主工作区中 offset spec/plan 文档，不代表全仓最终状态。
+- Next first cut:
+  - 若继续只做文档：先读本条 handoff、offset spec、offset implementation plan，检查 wording 是否符合用户口径，必要时只改文档。
+  - 若用户批准进入实现：从 plan 的 `P1.M1.T1.S1` 开始，先写 helper RED 测试，再实现；不要直接改生产代码。
+  - 实现时必须保护：
+    - 不改 UI 字段、API route shape、磨损区间数据库。
+    - 不恢复 `STEAM_PRECISION_MARGIN` / `safeTargetValue`。
+    - 不把每件材料候选预先统一转成 `float32`。
+    - offset 是正数；`below` 只往低磨损侧扩展，`infinite` 往两侧扩展。
+    - 命中允许窗口内更高优先级台阶后立即停止；不在同台阶里继续优选。
+
+### 2026-05-01 handoff update - offset spec memory wording review
+- Task: 继续 offset step window spec-only 断点的下一步第一刀；本轮只审查和修正文档，不实现 offset window。
+- Scope held:
+  - 只允许触碰 `docs/agent/memory.md`、offset spec、offset implementation plan、`docs/agent/session-log.md`。
+  - 未修改代码、测试、配置、UI/API/db 或运行态文件。
+  - 未重做已完成 float32 实现，也未进入 offset window implementation。
+- Review:
+  - 已读取最新 handoff、offset spec、offset implementation plan、`docs/agent/memory.md` 和当前 `git status --short --branch`。
+  - offset spec/plan 继续保持用户口径：offset 为正数；`below` 从 `prevFloat32(inputStep)` 开始只向更低磨损台阶扩展；`infinite` 从 `inputStep` 开始向两侧扩展且同距离优先低磨损侧；最终命中规则仍是 `Math.fround(raw_mean)` 命中允许窗口内台阶，不回退 raw `< target`、`safeTargetValue` 或 `STEAM_PRECISION_MARGIN`。
+- Changes:
+  - 更新 `docs/agent/memory.md`：保留原 no-offset float32 语义，但明确旧的“当前 phase 忽略 offset 输入”只适用于原 no-offset phase，已被 2026-05-01 offset follow-up spec 对 active `wear_offset_pct` 的规则取代。
+  - offset spec 和 implementation plan 未发现必须修改的冲突，因此未改动。
+- Verification:
+  - `git diff --check -- docs/agent/memory.md docs/superpowers/specs/2026-05-01-craft-assist-offset-step-window-design.md docs/superpowers/plans/2026-05-01-craft-assist-offset-step-window-implementation.md docs/agent/session-log.md` exit code `0`；仅提示 `docs/agent/memory.md` 与 `docs/agent/session-log.md` 下次 Git 触碰时 LF 会替换为 CRLF。
+  - `rg -n "offsetValue|lowerAllowedStep|higher-offset|lower-offset|test_below_offset|test_infinite_offset|targetStepPriorityTuple|isMeanOnPrimaryTargetStep" node_sidecar/src tests` exit code `1` 且无输出，表示 `node_sidecar/src` 与 `tests` 中未发现本轮 offset 实现/测试残留。
+  - `git status --short --branch` exit code `0`；当前在 `main`，本轮相关变更只有 `docs/agent/memory.md` 与 `docs/agent/session-log.md`，offset spec/plan 仍为未跟踪文档；`backup/ui_state/` 仍有运行态脏文件，本轮未处理。
