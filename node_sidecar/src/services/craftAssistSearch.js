@@ -396,6 +396,32 @@ function compareByValueAsc(a, b) {
   return String(a && a.id || "").localeCompare(String(b && b.id || ""));
 }
 
+function bumpRoleAwareDebugStat(debugStats, key, amount = 1) {
+  if (!debugStats || typeof debugStats !== "object") return;
+  debugStats[key] = Number(debugStats[key] || 0) + Number(amount || 0);
+}
+
+function buildRoleAwareRefinementContext(currentResults, debugStats = null) {
+  return (Array.isArray(currentResults) ? currentResults : []).map((entry) => {
+    const available = Array.isArray(entry && entry.available) ? entry.available : [];
+    const availableAsc = available.slice().sort(compareByValueAsc);
+    const availableDesc = available.slice().sort(compareByValueDesc);
+    bumpRoleAwareDebugStat(debugStats, "roleAwareAvailableSorts", 2);
+    return {
+      availableAsc,
+      availableDesc
+    };
+  });
+}
+
+function getRoleAwareAvailableList(refinementContext, entryIndex, direction) {
+  const entryState = Array.isArray(refinementContext) ? refinementContext[entryIndex] : null;
+  if (!entryState) return [];
+  return direction === "desc"
+    ? (Array.isArray(entryState.availableDesc) ? entryState.availableDesc : [])
+    : (Array.isArray(entryState.availableAsc) ? entryState.availableAsc : []);
+}
+
 function buildSingleMaterialSelection({below, upper, state}) {
   const nextState = state || {};
   return [
@@ -1569,6 +1595,30 @@ function refineSingleMaterialTargetStepFallback({selected, candidates, targetVal
   let bestScore = buildTargetStepFallbackRefinementScore(currentSelected, targetValue, targetStepSpec);
   if (!bestScore) return null;
   let bestSelected = currentSelected;
+  let scoredAttempts = 0;
+  let skippedByWindow = 0;
+  let skippedByRawGap = 0;
+  const selectedValues = currentSelected.map((candidate) => Number(candidate && candidate.value || 0));
+  const selectedSum = selectedValues.reduce((sum, value) => sum + value, 0);
+  const selectedCount = currentSelected.length;
+  const rawTarget = Number(targetStepSpec && (targetStepSpec.inputRaw ?? targetStepSpec.targetWearRaw));
+  const canPrefilterByRawGap = (
+    Number.isFinite(rawTarget)
+    && normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode) === "below"
+  );
+  const lowerBound = Number(targetStepSpec && targetStepSpec.lowerBound);
+  const upperBound = Number(targetStepSpec && targetStepSpec.upperBound);
+  const cannotImproveBestRawGap = (nextMean) => (
+    canPrefilterByRawGap
+    && Number(nextMean) < Number(bestScore.overall) - 1e-12
+  );
+  const cannotReachFallbackTargetStep = (nextMean) => {
+    if (!Number.isFinite(nextMean)) return true;
+    if (canPrefilterByRawGap && !isBelowTarget(nextMean, rawTarget)) return true;
+    if (Number.isFinite(lowerBound) && nextMean < lowerBound - EPSILON) return true;
+    if (Number.isFinite(upperBound) && nextMean > upperBound + EPSILON) return true;
+    return false;
+  };
   const selectedIdSet = new Set(
     currentSelected.map((candidate) => String(candidate && candidate.id || "")).filter(Boolean)
   );
@@ -1579,8 +1629,18 @@ function refineSingleMaterialTargetStepFallback({selected, candidates, targetVal
 
   for (let removeIndex = 0; removeIndex < currentSelected.length; removeIndex += 1) {
     for (const addCandidate of unused) {
+      const nextMean = (selectedSum - selectedValues[removeIndex] + Number(addCandidate && addCandidate.value || 0)) / selectedCount;
+      if (cannotReachFallbackTargetStep(nextMean)) {
+        skippedByWindow += 1;
+        continue;
+      }
+      if (cannotImproveBestRawGap(nextMean)) {
+        skippedByRawGap += 1;
+        continue;
+      }
       const nextSelected = currentSelected.slice();
       nextSelected[removeIndex] = addCandidate;
+      scoredAttempts += 1;
       const nextScore = buildTargetStepFallbackRefinementScore(nextSelected, targetValue, targetStepSpec);
       if (nextScore && compareScoreTuples(nextScore.tuple, bestScore.tuple) < 0) {
         bestScore = nextScore;
@@ -1593,9 +1653,25 @@ function refineSingleMaterialTargetStepFallback({selected, candidates, targetVal
     for (let secondRemove = firstRemove + 1; secondRemove < currentSelected.length; secondRemove += 1) {
       for (let firstAdd = 0; firstAdd < unused.length; firstAdd += 1) {
         for (let secondAdd = firstAdd + 1; secondAdd < unused.length; secondAdd += 1) {
+          const nextMean = (
+            selectedSum
+            - selectedValues[firstRemove]
+            - selectedValues[secondRemove]
+            + Number(unused[firstAdd] && unused[firstAdd].value || 0)
+            + Number(unused[secondAdd] && unused[secondAdd].value || 0)
+          ) / selectedCount;
+          if (cannotReachFallbackTargetStep(nextMean)) {
+            skippedByWindow += 1;
+            continue;
+          }
+          if (cannotImproveBestRawGap(nextMean)) {
+            skippedByRawGap += 1;
+            continue;
+          }
           const nextSelected = currentSelected.slice();
           nextSelected[firstRemove] = unused[firstAdd];
           nextSelected[secondRemove] = unused[secondAdd];
+          scoredAttempts += 1;
           const nextScore = buildTargetStepFallbackRefinementScore(nextSelected, targetValue, targetStepSpec);
           if (nextScore && compareScoreTuples(nextScore.tuple, bestScore.tuple) < 0) {
             bestScore = nextScore;
@@ -1610,8 +1686,35 @@ function refineSingleMaterialTargetStepFallback({selected, candidates, targetVal
     selected: bestSelected,
     overall: bestScore.overall,
     predictedStepMean: bestScore.predictedStepMean,
-    scoreTuple: bestScore.tuple
+    scoreTuple: bestScore.tuple,
+    refinementStats: {
+      scoredAttempts,
+      skippedByWindow,
+      skippedByRawGap,
+      skippedAttempts: skippedByWindow + skippedByRawGap
+    }
   };
+}
+
+function buildSingleMaterialTargetStepFallbackRefinementCacheKey({selected, candidates, targetValue, targetStepSpec} = {}) {
+  const encodeCandidate = (candidate) => [
+    String(candidate && candidate.id || ""),
+    Number(candidate && candidate.value || 0)
+  ].join(":");
+  const selectedKey = (Array.isArray(selected) ? selected : []).map(encodeCandidate).join(",");
+  const candidatesKey = (Array.isArray(candidates) ? candidates : []).map(encodeCandidate).join(",");
+  const specKey = [
+    Number(targetValue),
+    Number(targetStepSpec && targetStepSpec.inputStep),
+    Number(targetStepSpec && (targetStepSpec.inputRaw ?? targetStepSpec.targetWearRaw)),
+    Number(targetStepSpec && targetStepSpec.targetStep),
+    Number(targetStepSpec && targetStepSpec.lowerTargetStep),
+    Number(targetStepSpec && targetStepSpec.upperTargetStep),
+    Number(targetStepSpec && targetStepSpec.lowerBound),
+    Number(targetStepSpec && targetStepSpec.upperBound),
+    String(targetStepSpec && targetStepSpec.approachMode || "")
+  ].join("|");
+  return `${specKey}|${selectedKey}|${candidatesKey}`;
 }
 
 function candidateTouchesCapBoundary(selected, groupsWithOrdered, capExtra) {
@@ -1792,7 +1895,7 @@ function findClosestCandidate(sortedAvailable, idealValue, selectedIds, constrai
   return bestCandidate;
 }
 
-function refineIndividualSlots({currentResults, currentScore, targetValue, totalCount, approachMode, targetStepSpec = null, traceSteps}) {
+function refineIndividualSlots({currentResults, currentScore, targetValue, totalCount, approachMode, targetStepSpec = null, traceSteps, refinementContext = null}) {
   let results = currentResults;
   let score = currentScore;
   let improved = false;
@@ -1808,9 +1911,7 @@ function refineIndividualSlots({currentResults, currentScore, targetValue, total
       const role = normalizeRole(entry && entry.material && entry.material.role);
       if (!phase.roles.includes(role)) continue;
       const selectedItems = Array.isArray(entry && entry.selected) ? entry.selected : [];
-      const sortedAvailable = (Array.isArray(entry && entry.available) ? entry.available : [])
-        .slice()
-        .sort(compareByValueAsc);
+      const sortedAvailable = getRoleAwareAvailableList(refinementContext, entryIndex, "asc");
 
       for (let slotIndex = 0; slotIndex < selectedItems.length; slotIndex += 1) {
         const currentItem = selectedItems[slotIndex];
@@ -1891,7 +1992,8 @@ function scoreRoleAwareMaterialResults(materialResults, targetValue, approachMod
   };
 }
 
-function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterations = 4, approachMode = "below", targetStepSpec = null}) {
+function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterations = 4, approachMode = "below", targetStepSpec = null, debugStats = null}) {
+  bumpRoleAwareDebugStat(debugStats, "roleAwareFilteredSorts", 0);
   const normalizedMode = normalizeApproachMode(approachMode);
   let currentResults = Array.isArray(materialResults) ? materialResults : [];
   let currentScore = scoreRoleAwareMaterialResults(currentResults, targetValue, normalizedMode, targetStepSpec);
@@ -1911,6 +2013,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     let iterationImproved = false;
+    const refinementContext = buildRoleAwareRefinementContext(currentResults, debugStats);
 
     // === Step 1: Pair swap (preserved from original) ===
     const selectedIds = makeSelectedIdSet(currentResults);
@@ -1922,18 +2025,19 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
       const mainRole = normalizeRole(mainEntry && mainEntry.material && mainEntry.material.role);
       if (mainRole !== "main") continue;
       const selectedMains = Array.isArray(mainEntry && mainEntry.selected) ? mainEntry.selected : [];
+      const mainAvailableDesc = getRoleAwareAvailableList(refinementContext, mainEntryIndex, "desc");
+      const mainAvailableAsc = getRoleAwareAvailableList(refinementContext, mainEntryIndex, "asc");
 
       for (const oldMain of selectedMains) {
         const usedWithoutMain = new Set(selectedIds);
         usedWithoutMain.delete(String(oldMain && oldMain.id || ""));
-        const higherMains = (Array.isArray(mainEntry && mainEntry.available) ? mainEntry.available : [])
+        const higherMains = mainAvailableDesc
           .filter((candidate) => {
             const id = String(candidate && candidate.id || "");
             return id
               && !usedWithoutMain.has(id)
               && Number(candidate && candidate.value || 0) > Number(oldMain && oldMain.value || 0) + EPSILON;
-          })
-          .sort(compareByValueDesc);
+          });
 
         for (const newMain of higherMains) {
           const singleMainResults = cloneMaterialResultsWithSwaps(currentResults, [{
@@ -1971,6 +2075,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
             const auxRole = normalizeRole(auxEntry && auxEntry.material && auxEntry.material.role);
             if (auxRole !== "aux") continue;
             const selectedAuxes = Array.isArray(auxEntry && auxEntry.selected) ? auxEntry.selected : [];
+            const auxAvailableAsc = getRoleAwareAvailableList(refinementContext, auxEntryIndex, "asc");
 
             for (const oldAux of selectedAuxes) {
               const usedWithoutPair = new Set(selectedIds);
@@ -1978,14 +2083,13 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
               usedWithoutPair.delete(String(oldAux && oldAux.id || ""));
               usedWithoutPair.add(String(newMain && newMain.id || ""));
 
-              const lowerAuxes = (Array.isArray(auxEntry && auxEntry.available) ? auxEntry.available : [])
+              const lowerAuxes = auxAvailableAsc
                 .filter((candidate) => {
                   const id = String(candidate && candidate.id || "");
                   return id
                     && !usedWithoutPair.has(id)
                     && Number(candidate && candidate.value || 0) < Number(oldAux && oldAux.value || 0) - EPSILON;
-                })
-                .sort(compareByValueAsc);
+                });
               if (!lowerAuxes.length) continue;
 
               const mainRaise = Number(newMain && newMain.value || 0) - Number(oldMain && oldMain.value || 0);
@@ -2052,14 +2156,13 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
           }
         }
 
-        const lowerMains = (Array.isArray(mainEntry && mainEntry.available) ? mainEntry.available : [])
+        const lowerMains = mainAvailableDesc
           .filter((candidate) => {
             const id = String(candidate && candidate.id || "");
             return id
               && !usedWithoutMain.has(id)
               && Number(candidate && candidate.value || 0) < Number(oldMain && oldMain.value || 0) - EPSILON;
           })
-          .sort(compareByValueDesc)
           .slice(0, 4);
 
         for (const newMain of lowerMains) {
@@ -2068,6 +2171,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
             const auxRole = normalizeRole(auxEntry && auxEntry.material && auxEntry.material.role);
             if (auxRole !== "aux") continue;
             const selectedAuxes = Array.isArray(auxEntry && auxEntry.selected) ? auxEntry.selected : [];
+            const auxAvailableAsc = getRoleAwareAvailableList(refinementContext, auxEntryIndex, "asc");
 
             for (const oldAux of selectedAuxes) {
               const usedWithoutPair = new Set(selectedIds);
@@ -2075,14 +2179,13 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
               usedWithoutPair.delete(String(oldAux && oldAux.id || ""));
               usedWithoutPair.add(String(newMain && newMain.id || ""));
 
-              const higherAuxes = (Array.isArray(auxEntry && auxEntry.available) ? auxEntry.available : [])
+              const higherAuxes = auxAvailableAsc
                 .filter((candidate) => {
                   const id = String(candidate && candidate.id || "");
                   return id
                     && !usedWithoutPair.has(id)
                     && Number(candidate && candidate.value || 0) > Number(oldAux && oldAux.value || 0) + EPSILON;
-                })
-                .sort(compareByValueAsc);
+                });
               if (!higherAuxes.length) continue;
 
               const mainDelta = Number(newMain && newMain.value || 0) - Number(oldMain && oldMain.value || 0);
@@ -2156,6 +2259,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
       const auxUpRole = normalizeRole(auxUpEntry && auxUpEntry.material && auxUpEntry.material.role);
       if (auxUpRole !== "aux") continue;
       const selectedAuxUp = Array.isArray(auxUpEntry && auxUpEntry.selected) ? auxUpEntry.selected : [];
+      const auxUpAvailableAsc = getRoleAwareAvailableList(refinementContext, auxUpEntryIndex, "asc");
 
       for (const oldAuxUp of selectedAuxUp) {
         const oldAuxUpId = String(oldAuxUp && oldAuxUp.id || "");
@@ -2163,14 +2267,13 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
         const usedWithoutUp = new Set(selectedIds);
         usedWithoutUp.delete(oldAuxUpId);
 
-        const higherAuxes = (Array.isArray(auxUpEntry && auxUpEntry.available) ? auxUpEntry.available : [])
+        const higherAuxes = auxUpAvailableAsc
           .filter((candidate) => {
             const id = String(candidate && candidate.id || "");
             return id
               && !usedWithoutUp.has(id)
               && Number(candidate && candidate.value || 0) > Number(oldAuxUp && oldAuxUp.value || 0) + EPSILON;
-          })
-          .sort(compareByValueAsc);
+          });
         if (!higherAuxes.length) continue;
 
         for (const newAuxUp of higherAuxes) {
@@ -2183,6 +2286,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
             const auxDownRole = normalizeRole(auxDownEntry && auxDownEntry.material && auxDownEntry.material.role);
             if (auxDownRole !== "aux") continue;
             const selectedAuxDown = Array.isArray(auxDownEntry && auxDownEntry.selected) ? auxDownEntry.selected : [];
+            const auxDownAvailableAsc = getRoleAwareAvailableList(refinementContext, auxDownEntryIndex, "asc");
 
             for (const oldAuxDown of selectedAuxDown) {
               const oldAuxDownId = String(oldAuxDown && oldAuxDown.id || "");
@@ -2193,14 +2297,13 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
               usedWithoutPair.delete(oldAuxDownId);
               usedWithoutPair.add(String(newAuxUp && newAuxUp.id || ""));
 
-              const lowerAuxes = (Array.isArray(auxDownEntry && auxDownEntry.available) ? auxDownEntry.available : [])
+              const lowerAuxes = auxDownAvailableAsc
                 .filter((candidate) => {
                   const id = String(candidate && candidate.id || "");
                   return id
                     && !usedWithoutPair.has(id)
                     && Number(candidate && candidate.value || 0) < Number(oldAuxDown && oldAuxDown.value || 0) - EPSILON;
-                })
-                .sort(compareByValueAsc);
+                });
               if (!lowerAuxes.length) continue;
 
               const maxLowerValue = Math.min(
@@ -2297,7 +2400,8 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
       totalCount: totalSelected,
       approachMode: normalizedMode,
       targetStepSpec,
-      traceSteps
+      traceSteps,
+      refinementContext
     });
     if (individualResult.improved) {
       currentResults = individualResult.currentResults;
@@ -2341,13 +2445,31 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
   }
   const groupsWithOrdered = preparedGroups.map((group) => ({
     ...group,
-    ordered: buildOrderedCandidates(group, searchTargetValue, mode, targetStepSpec)
+    ordered: group.candidates
   }));
   const totalSlots = groupsWithOrdered.reduce((sum, group) => sum + Math.max(0, Number(group && group.material && group.material.count || 0)), 0);
   const maxExtra = groupsWithOrdered.reduce((acc, group) => {
     const need = Math.max(0, Number(group && group.material && group.material.count || 0));
     return Math.max(acc, Math.max(0, group.ordered.length - need));
   }, 0);
+  const fallbackRefinementCache = new Map();
+  const refineSingleMaterialTargetStepFallbackOnce = (args) => {
+    const key = buildSingleMaterialTargetStepFallbackRefinementCacheKey(args);
+    if (fallbackRefinementCache.has(key)) return fallbackRefinementCache.get(key);
+    const refined = refineSingleMaterialTargetStepFallback(args);
+    fallbackRefinementCache.set(key, refined || null);
+    if (refined && typeof onSearchProgress === "function") {
+      const stats = refined.refinementStats || {};
+      onSearchProgress({
+        phase: "target_step_fallback_refinement",
+        scoredAttempts: Number(stats.scoredAttempts || 0),
+        skippedAttempts: Number(stats.skippedAttempts || 0),
+        skippedByWindow: Number(stats.skippedByWindow || 0),
+        skippedByRawGap: Number(stats.skippedByRawGap || 0)
+      });
+    }
+    return refined;
+  };
 
   let best = null;
   let capExtra = Math.min(maxExtra, INITIAL_WINDOW_EXTRA_CAP);
@@ -2387,7 +2509,7 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
       && !isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec)
       && Number(capExtra) >= INITIAL_WINDOW_EXTRA_CAP
     ) {
-      const refinedFallback = refineSingleMaterialTargetStepFallback({
+      const refinedFallback = refineSingleMaterialTargetStepFallbackOnce({
         selected: solved.selected,
         candidates: groupsWithOrdered[0].ordered,
         targetValue: searchTargetValue,
@@ -2440,7 +2562,7 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
     && isMeanOnTargetStep(best.overall, targetStepSpec)
     && groupsWithOrdered.length === 1
   ) {
-    const refinedFallback = refineSingleMaterialTargetStepFallback({
+    const refinedFallback = refineSingleMaterialTargetStepFallbackOnce({
       selected: best.selected,
       candidates: groupsWithOrdered[0].ordered,
       targetValue: searchTargetValue,

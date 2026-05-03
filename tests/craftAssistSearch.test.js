@@ -488,6 +488,48 @@ function test_search_offset_window_returns_lower_allowed_step_when_primary_unava
   assert.equal(result.windowExtra, 0);
 }
 
+function test_search_target_step_prepares_candidates_once_per_group() {
+  const inputStep = Math.fround(0.27);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below",
+    offsetValue: 0.01
+  });
+  let valueReadCount = 0;
+  const candidates = Array.from({length: 10}, (_, index) => {
+    const candidate = makeCandidate(`target-${index + 1}`, targetStepSpec.targetStep, 0, "main");
+    Object.defineProperty(candidate, "value", {
+      enumerable: true,
+      get() {
+        valueReadCount += 1;
+        return targetStepSpec.targetStep;
+      }
+    });
+    return candidate;
+  });
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Solo", role: "main", count: 10},
+      candidates
+    }
+  ];
+
+  const result = searchCraftAssistBestSolution({
+    groups,
+    targetValue: inputStep,
+    targetStepSpec
+  });
+
+  assert.equal(!!result, true);
+  assert.equal(Math.fround(result.overall), targetStepSpec.targetStep);
+  const available = result.materialResults[0].available;
+  const selected = result.materialResults[0].selected;
+  const availableIds = new Set(available.map((candidate) => String(candidate && candidate.id || "")));
+  assert.equal(selected.every((candidate) => availableIds.has(String(candidate && candidate.id || ""))), true);
+  assert.equal(valueReadCount, candidates.length * 2);
+}
+
 function test_search_raw_aware_below_prefers_primary_target_step_from_target_step_spec() {
   const raw = 0.21;
   const inputStep = Math.fround(raw);
@@ -678,6 +720,52 @@ function test_search_raw_aware_below_offset_single_material_keeps_searching_for_
   assert.equal(Math.abs(result.overall - closerFallback) < 1e-12, true);
   assert.equal(result.overall < Number(raw), true);
   assert.equal(Number(raw) - result.overall < Number(raw) - lowerFallback, true);
+}
+
+function test_search_raw_aware_below_single_material_fallback_refinement_stays_within_budget() {
+  const raw = "0.214285";
+  const inputStep = Math.fround(Number(raw));
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    inputRaw: raw,
+    approachMode: "below",
+    offsetValue: Number(raw) * 0.01
+  });
+  const fallbackValue = targetStepSpec.lowerTargetStep;
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Solo", role: "main", count: 10},
+      candidates: [
+        ...Array.from({length: 10}, (_, index) => makeCandidate(`fallback-${index + 1}`, fallbackValue, 0, "main")),
+        ...Array.from({length: 25}, (_, index) => makeCandidate(
+          `distant-${index + 1}`,
+          Math.fround(fallbackValue - 0.01 - index * 0.0001),
+          0,
+          "main"
+        ))
+      ]
+    }
+  ];
+  const refinementEvents = [];
+  const result = searchCraftAssistBestSolution({
+    groups,
+    targetValue: inputStep,
+    targetStepSpec,
+    beamWidth: 64,
+    onSearchProgress(event) {
+      if (event && event.phase === "target_step_fallback_refinement") {
+        refinementEvents.push(event);
+      }
+    }
+  });
+
+  assert.equal(!!result, true);
+  assert.equal(Math.fround(result.overall), fallbackValue);
+  assert.equal(result.overall < Number(raw), true);
+  assert.equal(refinementEvents.length > 0, true);
+  const scoredAttempts = refinementEvents.reduce((sum, event) => sum + Number(event.scoredAttempts || 0), 0);
+  assert.equal(scoredAttempts <= 250, true, `expected fallback refinement scored attempts within budget, got ${scoredAttempts}`);
 }
 
 function test_search_raw_aware_below_rejects_closer_above_raw_outside_window() {
@@ -920,6 +1008,91 @@ function test_refine_role_aware_stops_when_current_mean_is_on_target_step() {
   assert.equal(Array.isArray(result.traceSteps) && result.traceSteps.length, 0);
 }
 
+function test_refine_role_aware_caches_available_sorts_per_iteration() {
+  const materialResults = [
+    {
+      material: {name: "Main", role: "main", count: 1},
+      available: [
+        makeCandidate("m1", 0.40, 0, "main"),
+        makeCandidate("m2", 0.50, 0, "main"),
+        makeCandidate("m3", 0.60, 0, "main")
+      ],
+      selected: [makeCandidate("m1", 0.40, 0, "main")]
+    },
+    {
+      material: {name: "Aux", role: "aux", count: 1},
+      available: [
+        makeCandidate("a1", 0.30, 1, "aux"),
+        makeCandidate("a2", 0.20, 1, "aux"),
+        makeCandidate("a3", 0.10, 1, "aux")
+      ],
+      selected: [makeCandidate("a1", 0.30, 1, "aux")]
+    }
+  ];
+  const debugStats = {roleAwareAvailableSorts: 0, roleAwareFilteredSorts: 0};
+
+  const result = refineRoleAwareMaterialResults({
+    materialResults,
+    targetValue: 0.40,
+    maxIterations: 1,
+    approachMode: "below",
+    debugStats
+  });
+
+  assert.ok(result);
+  assert.equal(debugStats.roleAwareAvailableSorts, 4);
+  assert.equal(debugStats.roleAwareFilteredSorts, 0);
+}
+
+function test_refine_role_aware_uses_sorted_cached_available_for_lower_bound_probe() {
+  const materialResults = [
+    {
+      material: {name: "Unused", role: "aux", count: 0},
+      available: [],
+      selected: []
+    },
+    {
+      material: {name: "Aux", role: "aux", count: 1},
+      available: [
+        makeCandidate("a_high_endpoint", 0.60, 1, "aux"),
+        makeCandidate("a_low_endpoint", 0.10, 1, "aux"),
+        makeCandidate("a_decoy_low", 0.20, 1, "aux"),
+        makeCandidate("a_selected", 0.70, 1, "aux"),
+        makeCandidate("a_near_ideal", 0.39, 1, "aux"),
+        makeCandidate("a_above_target", 0.41, 1, "aux")
+      ],
+      selected: [makeCandidate("a_selected", 0.70, 1, "aux")]
+    },
+    {
+      material: {name: "Main", role: "main", count: 1},
+      available: [
+        makeCandidate("m_old", 0.20, 2, "main"),
+        makeCandidate("m_raise", 0.60, 2, "main")
+      ],
+      selected: [makeCandidate("m_old", 0.20, 2, "main")]
+    }
+  ];
+  const debugStats = {roleAwareAvailableSorts: 0, roleAwareFilteredSorts: 0};
+
+  const result = refineRoleAwareMaterialResults({
+    materialResults,
+    targetValue: 0.50,
+    maxIterations: 1,
+    approachMode: "below",
+    debugStats
+  });
+
+  assert.ok(result);
+  assert.equal(result.overall, 0.495);
+  assert.deepEqual(pickedIds(result), ["a_near_ideal", "m_raise"]);
+  assert.equal(result.traceSteps[0].pattern, "main_up_aux_down");
+  assert.deepEqual(result.traceSteps[0].changes.map((change) => change.addedIds), [
+    ["m_raise"],
+    ["a_near_ideal"]
+  ]);
+  assert.equal(debugStats.roleAwareFilteredSorts, 0);
+}
+
 function test_role_aware_push_trace_uses_shared_material_projection() {
   const groups = [
     {
@@ -1110,16 +1283,20 @@ test_search_best_solution_infinite_mode_can_cross_target_for_closer_single_mater
 test_search_step_target_below_uses_previous_float32_step();
 test_search_offset_window_prefers_primary_below_step_over_lower_allowed_step();
 test_search_offset_window_returns_lower_allowed_step_when_primary_unavailable();
+test_search_target_step_prepares_candidates_once_per_group();
 test_search_raw_aware_below_prefers_primary_target_step_from_target_step_spec();
 test_search_raw_aware_offset_window_uses_target_step_spec_without_raw_parsing();
 test_search_raw_aware_below_offset_expands_past_lower_window_hit_for_primary_step();
 test_search_raw_aware_below_offset_stops_after_stable_fallback_without_primary();
 test_search_raw_aware_below_offset_single_material_keeps_searching_for_closer_fallback_after_initial_cap();
+test_search_raw_aware_below_single_material_fallback_refinement_stays_within_budget();
 test_search_raw_aware_below_rejects_closer_above_raw_outside_window();
 test_search_raw_aware_below_multi_group_does_not_stop_on_window_fallback();
 test_search_role_aware_below_offset_refines_lower_window_hit_to_primary_step();
 test_search_role_aware_step_spec_orders_outside_window_by_target_priority_before_side_bias();
 test_refine_role_aware_stops_when_current_mean_is_on_target_step();
+test_refine_role_aware_caches_available_sorts_per_iteration();
+test_refine_role_aware_uses_sorted_cached_available_for_lower_bound_probe();
 test_role_aware_push_trace_uses_shared_material_projection();
 test_refine_individual_slots_below_mode_improves_main_up();
 test_refine_individual_slots_infinite_mode_approaches_target();

@@ -1769,3 +1769,296 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
 - 当前进程状态：当前 sidecar URL `http://127.0.0.1:57701/` 仍运行；Rawls 重启后 launcher PID 52892，Electron PID 31988（若未来会话需核对请以实时进程为准）。
 - 限制：未跑全量仓库测试；未审计其他 worktree；runtime/artifact churn 预期存在；不要处理 AGENTS.md/backup_ui_state。
 - 下一步：用户在真实 UI 手动验证；若仍追求全局最优，需要单独设计超过 bounded 1换1/2换2 的全局/更强优化策略。
+
+## 2026-05-03 handoff - craft assist search efficiency first cut
+
+- 当前目标：在已提交的 `ce988b6 fix: correct craft assist below target selection` 基础上，优化 raw-aware `below` 辅助选材效率，重点是 `Sun set` / `狩猎0.2142` / `use_component_items=true` / `target_wear_raw="0.214285"` 的单材料大候选场景。
+- 当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`；其他 worktree 未审计。
+- 本轮开始现场：`ce988b6` 已是 HEAD；未提交项仍包括 `AGENTS.md`、`backup/ui_state/`、`.playwright-cli/`、`output/` runtime/artifact churn，本轮未触碰 `AGENTS.md`、`backup/ui_state/` 或其他 worktree。
+- 子 agent 审查结论：
+  - 耗时大头在 `node_sidecar/src/services/craftAssistSearch.js` 的 `refineSingleMaterialTargetStepFallback()`，单材料 `765` candidates、`count=10` 时 2换2 约 `C(10,2) * C(755,2) = 12,808,575` 次组合评分，且优化前同一次 search 中可能重复 refinement。
+  - 正确性必须继续依赖 raw ceiling、`targetStepPriorityTuple(...)`、primary-first、closest-below fallback；不能用 window 任意 hit 提前结束。
+- 已实现第一刀优化：
+  - `refineSingleMaterialTargetStepFallback(...)` 增加基于 next mean 的安全预筛：不可能落入 target window、below 下不严格低于 raw、或 raw gap 已不可能优于当前 best 的组合，不再调用完整 scorer。
+  - 最终接受仍走 `buildTargetStepFallbackRefinementScore(...)`，没有绕过 raw ceiling / `scoreCraftAssistSolutionSingleMaterial(...)` / `targetStepPriorityTuple(...)`。
+  - `searchCraftAssistBestSolution(...)` 增加单次调用内 fallback refinement cache，避免窗口循环和收尾阶段对同一 selected/candidates/spec 重复 refinement。
+  - `onSearchProgress` 增加 `phase: "target_step_fallback_refinement"` 事件，报告 `scoredAttempts`、`skippedByWindow`、`skippedByRawGap`、`skippedAttempts`，用于轻量预算测试和后续 trace。
+  - cache key 已包含 `lowerBound` / `upperBound`，避免隐式依赖 step window 推导。
+- 改动文件：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+  - `tests/craftAssistSearch.test.js`
+  - `docs/agent/session-log.md`
+- 新增测试：
+  - `test_search_raw_aware_below_single_material_fallback_refinement_stays_within_budget`
+  - 该测试不再 monkey-patch 全局 `Math.fround`；改为收集 `target_step_fallback_refinement` progress event，并断言真实 scored refinement attempts 在小样本预算内，同时保留 below/raw 语义断言。
+- gpt-5.4 review：
+  - 未发现 blocking issue。
+  - 非阻塞建议已收敛：cache key 补边界字段；预算测试改成局部 refinement event，不再统计全局 `Math.fround`。
+- Fresh verification:
+  - `node --test .\tests\craftAssistSearch.test.js` PASS，约 `3.1s`
+  - `node --test .\tests\craftAssistFloat32Step.test.js` PASS，约 `0.1s`
+  - `node --test .\tests\craftAssistService.test.js` PASS，约 `68.0s`
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js` PASS；仅 Git LF/CRLF warning。
+  - 离线 route-equivalent 真实大样本复测：`node .\output\playwright\sunset-hunting-02142-offline-final-verify.js` PASS，duration `13498.947ms`，service duration `13464.301ms`，结果仍为 `overall=0.21428497433662413`、`Math.fround=0.2142849713563919`、below raw true，item ids 与前序正确结果一致；新 artifact：`output/playwright/sunset-hunting-02142-offline-final-20260503T032151Z.json/.md`。
+- 对比基线：
+  - 前序离线 route-equivalent：约 `44.3s`。
+  - 本轮同脚本 / 同 snapshot / 同 payload：约 `13.5s`。
+  - 语义未退回旧坏值 `0.21328119486570357` 或 `0.21318830996751786`。
+- 限制：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 后做 HTTP UI runtime 复测；本轮性能证据是离线 route-equivalent service 路径。
+  - 未审计其他 worktree。
+  - 当前优化仍是 bounded 1换1/2换2 refinement 的局部加速，不是全局 `C(765,10)` 最优证明。
+- 下一步：
+  - 若要验证真实 UI 体感，重启当前主工作区 sidecar/Electron 后，用同一 `Sun set` / `狩猎0.2142` payload 做 HTTP 复测，期望仍返回 `0.21428497433662413` 附近且耗时接近十几秒量级。
+  - 若还要继续压性能，下一刀考虑减少 cache key 大候选串序列化成本或更强的 add-pair 生成策略，但必须保留 raw ceiling、primary-first、closest-below fallback 和 progress budget 测试。
+
+## 2026-05-03 final handoff - craft assist efficiency optimization paused before commit
+
+- 当前目标：
+  - 已按用户要求完成“上个选材结果提交”后的下一步：围绕 handoff 对 raw-aware `below` 辅助选材做第一刀效率优化。
+  - 当前不再处理正确性修复；正确性基线来自已提交 `ce988b6 fix: correct craft assist below target selection`。
+- 当前 root worktree：
+  - 已检查：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 分支：`main`
+  - HEAD：`ce988b6 fix: correct craft assist below target selection`
+  - 其他 worktree：未审计，不能把本结论扩展到其他 worktree。
+- 本轮业务改动文件：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+  - `tests/craftAssistSearch.test.js`
+  - `docs/agent/session-log.md`
+- 本轮未触碰 / 不要处理：
+  - `AGENTS.md`
+  - `backup/ui_state/`
+  - 其他 worktree
+  - `.playwright-cli/`、`output/` 只作为运行态 / verification artifact；不要当业务 diff 清理。
+- 实现内容：
+  - `refineSingleMaterialTargetStepFallback(...)` 增加 mean 预筛，跳过不可能落入 target window、不严格低于 raw、或 raw gap 已不可能优于当前 best 的 1换1/2换2组合。
+  - 最终接受仍走 `buildTargetStepFallbackRefinementScore(...)`，未绕过 raw ceiling、`scoreCraftAssistSolutionSingleMaterial(...)`、`targetStepPriorityTuple(...)`。
+  - `searchCraftAssistBestSolution(...)` 增加单次 search 内 fallback refinement cache，避免重复跑同一 selected/candidates/spec refinement。
+  - `onSearchProgress` 新增 `phase: "target_step_fallback_refinement"`，报告 `scoredAttempts` / `skippedAttempts` / `skippedByWindow` / `skippedByRawGap`。
+  - cache key 已补 `lowerBound` / `upperBound`。
+- 新增测试：
+  - `test_search_raw_aware_below_single_material_fallback_refinement_stays_within_budget`
+  - 测试通过 progress event 统计局部 scored refinement attempts，不 monkey-patch 全局 `Math.fround`。
+- Review：
+  - gpt-5.4 只读 review：无 blocking。
+  - review 提出的两点低风险建议已收敛：cache key 补边界字段；测试改为局部 progress event 计数。
+- Fresh verification：
+  - `node --test .\tests\craftAssistSearch.test.js` PASS，约 `3.1s`
+  - `node --test .\tests\craftAssistFloat32Step.test.js` PASS，约 `0.1s`
+  - `node --test .\tests\craftAssistService.test.js` PASS，约 `68.0s`
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js` PASS，仅 LF/CRLF warning。
+  - `node .\output\playwright\sunset-hunting-02142-offline-final-verify.js` PASS，duration `13498.947ms`，service duration `13464.301ms`，结果 `overall=0.21428497433662413`、`Math.fround=0.2142849713563919`、below raw true，item ids 与前序正确结果一致；artifact `output/playwright/sunset-hunting-02142-offline-final-20260503T032151Z.json/.md`。
+- 性能参考：
+  - 优化前同离线 route-equivalent artifact：总 `44274.172ms`，service `44240.37ms`，两次 search 分别约 `22305.814ms` / `21917.726ms`。
+  - 本轮优化后：总 `13498.947ms`，service `13464.301ms`，两次 search 分别约 `6597.628ms` / `6850.733ms`。
+  - 目前 artifact 粒度只能证明 search 大阶段耗时；尚未细分 beam、1换1、2换2 的 wall-clock。新增 progress event 可支持后续抓 refinement 计数。
+- 当前未提交状态：
+  - 业务 diff：上述 3 个文件。
+  - 既有/运行态 diff 仍包括 `AGENTS.md`、`backup/ui_state/` deletions/new snapshots、`.playwright-cli/`、`output/`。
+  - 本轮没有 stage / commit；若用户要提交，只应精确 stage 本轮业务文件，除非用户另有指示。
+- 仍未覆盖：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 做 HTTP UI runtime 复测。
+  - 未检查其他 worktree。
+  - 该优化仍是 bounded 1换1/2换2 的局部加速，不是全局 `C(765,10)` 最优证明。
+- 下一步第一刀：
+  - 若用户要确认体感：重启当前主工作区 sidecar/Electron，用同一 `Sun set` / `狩猎0.2142` / `target_wear_raw="0.214285"` / `use_component_items=true` payload 做真实 HTTP 复测，确认仍返回 `0.21428497433662413` 附近且耗时接近十几秒量级。
+  - 若用户要提交：先 `git status --short --branch`，只 stage `node_sidecar/src/services/craftAssistSearch.js`、`tests/craftAssistSearch.test.js`、`docs/agent/session-log.md`，不要 stage `AGENTS.md`、`backup/ui_state/`、`.playwright-cli/`、`output/`。
+- 下个会话启动指令：
+  - `不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md 顶部 craft assist 记忆，再看 git status --short --branch。先复述：当前目标是承接 craft assist raw-aware below 选材效率优化；真实进度是 ce988b6 已提交正确性修复，本轮未提交搜索层第一刀优化已完成并通过 search/float32/service tests 和离线大样本 13.5s verification；最后落盘动作是 2026-05-03 final handoff - craft assist efficiency optimization paused before commit；可能未落盘动作未知；下一步第一刀按用户意图选择真实 HTTP UI 复测或精确 stage/commit 本轮 3 个业务文件。只声明已检查当前 root worktree C:/Users/18220/Desktop/cs2_alchemy，其他 worktree 未审计；不要触碰 AGENTS.md、backup/ui_state 或其他 worktree；若文档与现场冲突，先指出差异再收敛。`
+
+## 2026-05-03 update - craft assist duplicate candidate preparation removed
+
+- 用户指令：
+  - 先修性能优化第 1 项：去掉 `searchCraftAssistBestSolution(...)` 中重复候选准备 / 排序。
+  - 第 2 / 第 3 类优化暂不实现，只解释详细选材逻辑，方便用户继续拆分。
+- 本次实现：
+  - `preparedGroups` 已经通过 `buildOrderedCandidates(...)` 生成排序后的候选。
+  - `groupsWithOrdered` 现在直接复用 `group.candidates` 作为 `ordered`，不再对同一 group 再跑一遍 `buildOrderedCandidates(...)`。
+  - 未改变 raw ceiling、closest-below、primary-first、fallback / beam / refine 策略。
+- 测试补强：
+  - `test_search_target_step_prepares_candidates_once_per_group`
+  - 测试通过原始候选 `value` getter 计数，证明同一批候选只被准备一次。
+  - 子 agent 做过 RED/GREEN：临时恢复重复 build 后失败 `40 !== 20`；恢复当前实现后 `node --test tests/craftAssistSearch.test.js` 通过。
+- Fresh verification：
+  - `node --test tests/craftAssistSearch.test.js` PASS，duration `3417.4415ms`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js` PASS；仅 Git LF/CRLF warning。
+- Review：
+  - gpt-5.4 只读 review 无 blocking issue。
+  - 非阻塞建议：该 getter 计数测试偏实现细节；后续若内部合法增加 value 读取，可能需要调整测试。另建议提交时把 fallback refinement 优化与本次 duplicate preparation 优化拆清楚。
+- 当前未提交状态：
+  - 业务相关仍是 `node_sidecar/src/services/craftAssistSearch.js`、`tests/craftAssistSearch.test.js`、`docs/agent/session-log.md`。
+  - 运行态 / 无关项仍不要混入：`AGENTS.md`、`backup/ui_state/`、`.playwright-cli/`、`output/`。
+- 仍未覆盖：
+  - 未重启真实 Electron / sidecar 做 HTTP UI runtime 复测。
+  - 未跑完整仓库测试。
+  - 未审计其他 worktree。
+
+## 2026-05-03 update - craft assist role-aware sort cache first layer
+
+- 用户指令：
+  - 继续做第二项优化。
+  - 本轮只做低风险第一层：role-aware refinement 中缓存每轮 `availableAsc` / `availableDesc` 排序，去掉过滤后的二次排序。
+  - 暂不实现 clone 延迟、增量 scoring、beam 增量扩窗。
+- 本次实现：
+  - 新增 role-aware refinement context，每轮对每个 material result 的 `available` 预先生成升序 / 降序列表。
+  - `refineRoleAwareMaterialResults(...)` 的 pair swap 路径改为从正确方向的缓存列表过滤：
+    - 需要降序探测的 main 候选用 `availableDesc`。
+    - 需要 `lowerBoundByValueAsc(...)` 的 aux 候选用 `availableAsc`。
+  - `refineIndividualSlots(...)` 改为复用同一轮的升序缓存列表。
+  - 增加内部测试统计 `debugStats.roleAwareAvailableSorts` / `debugStats.roleAwareFilteredSorts`；默认不影响返回结果。
+  - 未改变 raw ceiling、closest-below、primary-first、fallback / beam / refine 策略；未实现 clone / score 增量化。
+- 测试补强：
+  - `test_refine_role_aware_caches_available_sorts_per_iteration`
+    - 断言每轮只做 entry 级基础排序，并且过滤后不再额外 sort。
+  - `test_refine_role_aware_uses_sorted_cached_available_for_lower_bound_probe`
+    - 构造打乱输入顺序的 role-aware 场景。
+    - 验证 `main_up_aux_down` 仍通过升序缓存 + `lowerBoundByValueAsc(...)` 邻域探测选中 `a_near_ideal`。
+- RED/GREEN 记录：
+  - 修正子 agent 临时在 filter 后 sort 路径 bump `roleAwareFilteredSorts`，新测试失败 `5 !== 0`，证明能抓住旧问题。
+  - 测试补强子 agent 临时把缓存方向改错为 `availableAsc: availableDesc`，新增行为测试失败，期望 `0.495`、实际 `0.44999999999999996`，证明能抓住方向错误。
+- Review：
+  - gpt-5.4 只读 review 无 blocking issue。
+  - review 建议已收敛：补行为级 lowerBound/probe 测试，不只依赖计数测试。
+- 风险处置：
+  - 测试补强子 agent 报告中途误用 `git checkout --` 恢复临时代码；主 agent 随后重新核对现场 diff / rg，确认 fallback 第一刀、第 1 项 duplicate candidate preparation、第 2 项 sort cache 与新增测试均仍存在。
+- Fresh verification：
+  - `node --test tests/craftAssistSearch.test.js` PASS，duration `3278.0461ms`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js docs/agent/session-log.md` PASS；仅 Git LF/CRLF warning。
+- 当前未提交状态：
+  - 业务相关仍是 `node_sidecar/src/services/craftAssistSearch.js`、`tests/craftAssistSearch.test.js`、`docs/agent/session-log.md`。
+  - 不要混入：`AGENTS.md`、`backup/ui_state/`、`.playwright-cli/`、`output/`。
+- 仍未覆盖：
+  - 未重启真实 Electron / sidecar 做 HTTP UI runtime 复测。
+  - 未跑完整仓库测试。
+  - 未审计其他 worktree。
+
+## 2026-05-03 update - train hunting 37 0.27 offline multi-material benchmark
+
+- 用户要求：
+  - 用配置中的 `狩猎列车37 0.27` 做多材料离线大样本。
+  - 该配置开启使用组件中的物品；材料很多，不能使用自带默认短超时。
+- 配置来源：
+  - `inventory_ui_state.json` 中 `app_users.dev_local.craft_assist_presets[]`，预设名 `狩猎列车37 0.27`。
+  - 目标：`target_wear_raw="0.27"`，`target_wear=0.27000001072883606`。
+  - 材料：
+    - main `count=7`，`AUG | 钢铁哨兵 (久经沙场)` + `P90 | 满昏作品 (久经沙场)`，relative `0.27..0.3`。
+    - aux `count=3`，`法玛斯 | 半袖式 (久经沙场)`，relative `0.15..0.38`。
+  - 离线 payload 使用 `use_component_items=true` / `include_component_items=true`、`wear_approach_mode=below`、`wear_offset_pct=1`、`include_cooling=false`。
+- 新增验证 artifact 脚本：
+  - `output/playwright/train-hunting-037-027-offline-final-verify.js`
+  - 直接读取 `inventory_ui_state.json` 的预设和 `logs/processed_inventory/inventory_processed_20260502_205953.json`。
+  - 走生产 `buildCraftCandidateContext(...)` + `createCraftAssistService().selectForRecipe(...)`，不走 HTTP / worker pool。
+  - 脚本启动时兜底设置：
+    - `SHARD_JOB_TIMEOUT_MS=120000`
+    - `PREFILTER_GROUP_TIMEOUT_MS=300000`
+    - `PREFILTER_CALL_TIMEOUT_MS=600000`
+  - 支持 `current` 与 `no-role-sort-cache` 两个变体；后者通过内存 transform 近似恢复第二项优化前 role-aware 过滤后排序路径，用于同 payload 对比。
+- 当前优化版结果：
+  - 第 1 次 current：`duration_ms=22500.027`，`service_duration_ms=22450.021`。
+  - 第 2 次 current：`duration_ms=16706.021`，`service_duration_ms=16670.135`。
+  - 结果均 PASS，`overall=0.2699999734759331`，`Math.fround=0.26999998092651367`，低于 raw。
+- no-role-sort-cache 对照：
+  - 第 1 次对照：`duration_ms=17822.735`，`service_duration_ms=17755.491`。
+  - 第 2 次对照：`duration_ms=21395.097`，`service_duration_ms=21356.425`。
+  - 结果同样 PASS，item ids 与 current 一致。
+- 解释：
+  - 首轮 current 是冷启动第一跑，不宜单独拿来和第二跑对照。
+  - 热启动交替对比中，current `16.706s` vs no-role-sort-cache `21.395s`，第二项 sort-cache 对该多材料样本约减少 `4.689s`，约 `21.9%`。
+  - 四次平均因冷/热启动交错和波动较大，仅作辅助参考：current 平均约 `19.603s`，no-role-sort-cache 平均约 `19.609s`，几乎持平；更可信的是同一轮热启动交替对比。
+- Artifacts：
+  - `output/playwright/train-hunting-037-027-offline-final-current-20260503T053732Z.json/.md`
+  - `output/playwright/train-hunting-037-027-offline-final-current-20260503T053913Z.json/.md`
+  - `output/playwright/train-hunting-037-027-offline-final-no-role-sort-cache-20260503T053824Z.json/.md`
+  - `output/playwright/train-hunting-037-027-offline-final-no-role-sort-cache-20260503T053944Z.json/.md`
+- 限制：
+  - 这是离线 route-equivalent，不是 HTTP/UI runtime。
+  - no-role-sort-cache 是脚本内存 transform，不是 git checkout 到旧提交。
+  - 未跑完整仓库测试，未审计其他 worktree。
+
+## 2026-05-03 handoff - craft assist efficiency batch ready to commit
+
+- 当前目标：
+  - 在已提交 `ce988b6 fix: correct craft assist below target selection` 之后，完成 raw-aware below 辅助选材的性能优化批次。
+  - 本批次包括：
+    - 单材料 fallback refinement 预筛 / cache / progress 统计。
+    - 去掉 `searchCraftAssistBestSolution(...)` 重复候选准备。
+    - role-aware refinement 每轮 `availableAsc` / `availableDesc` 排序缓存，过滤后不再二次 sort。
+- 当前 root worktree：
+  - 已检查：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 分支：`main`
+  - HEAD：`ce988b6 fix: correct craft assist below target selection`
+  - 其他 worktree：未审计，不能把本结论扩展到其他 worktree。
+- 准备提交范围：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+  - `tests/craftAssistSearch.test.js`
+  - `docs/agent/session-log.md`
+- 不要提交 / 不要处理：
+  - `AGENTS.md`
+  - `backup/ui_state/`
+  - `.playwright-cli/`
+  - `output/`
+  - 其他 worktree
+- 已完成实现：
+  - 单材料 fallback refinement：
+    - 对 1换1 / 2换2 refinement 增加 mean 预筛，跳过不可能落入 target window、不严格低于 raw、或 raw gap 已不可能优于当前 best 的组合。
+    - 增加单次 search 内 fallback refinement cache。
+    - 新增 `target_step_fallback_refinement` progress event，用于统计 scored / skipped attempts。
+  - 重复候选准备：
+    - `groupsWithOrdered.ordered` 复用 `preparedGroups` 已经排好序的 `group.candidates`，不再重复 `buildOrderedCandidates(...)`。
+  - role-aware sort cache：
+    - 每轮为 material result 缓存 `availableAsc` / `availableDesc`。
+    - pair swap 和 individual refinement 从正确方向的缓存列表过滤，不再过滤后 `.sort(...)`。
+    - 增加内部测试统计 `debugStats.roleAwareAvailableSorts` / `debugStats.roleAwareFilteredSorts`。
+- 测试 / review 证据：
+  - `test_search_raw_aware_below_single_material_fallback_refinement_stays_within_budget`
+  - `test_search_target_step_prepares_candidates_once_per_group`
+  - `test_refine_role_aware_caches_available_sorts_per_iteration`
+  - `test_refine_role_aware_uses_sorted_cached_available_for_lower_bound_probe`
+  - gpt-5.4 review 对 duplicate candidate preparation：无 blocking。
+  - gpt-5.4 review 对 role-aware sort cache：无 blocking；建议补 behavior-level lowerBound/probe 测试，已补。
+- Fresh verification：
+  - `node --test tests/craftAssistSearch.test.js` PASS，最新 duration `3278.0461ms`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js docs/agent/session-log.md` PASS；仅 Git LF/CRLF warning。
+  - `node output/playwright/sunset-hunting-02142-offline-final-verify.js` 当前优化版 PASS：`duration_ms=13627.535`，`service_duration_ms=13589.351`，结果仍为 `overall=0.21428497433662413`，低于 raw。
+  - `node output/playwright/train-hunting-037-027-offline-final-verify.js current` PASS：
+    - cold-ish run `duration_ms=22500.027`
+    - warm run `duration_ms=16706.021`
+    - result `overall=0.2699999734759331`，`Math.fround=0.26999998092651367`，低于 raw。
+  - `node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache` PASS：
+    - run1 `duration_ms=17822.735`
+    - run2 `duration_ms=21395.097`
+    - result / item ids 与 current 一致。
+- 性能结论：
+  - Sun set / 狩猎0.2142 单材料大样本：本批次第一刀从约 `44.3s` 降到约 `13.5s`；第二项 role-aware sort cache 对该单材料样本没有可见收益。
+  - 狩猎列车37 0.27 多材料样本：热启动交替对比中 current `16.706s` vs no-role-sort-cache `21.395s`，第二项约减少 `4.689s`，约 `21.9%`。
+  - 四次均值受冷 / 热启动和运行波动影响很大，仅作辅助参考；若要正式基准，应跑 3-5 轮交替取中位数。
+- 已知限制：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 做 HTTP/UI runtime 复测。
+  - `output/playwright/train-hunting-037-027-offline-final-verify.js` 是验证 artifact，未纳入业务提交范围。
+  - `no-role-sort-cache` 是脚本内存 transform，不是 checkout 旧提交。
+- 下一步核心动刀点 3：
+  - 目标：评估并拆分 `runBeamSearchWithinCap(...)` 的增量扩窗 / 状态复用，避免每次扩大 `capExtra` 都从头构造窗口、展开 slots、跑 beam。
+  - 第一刀不要直接重构。
+  - 先做 profiling / instrumentation：
+    - 记录每个 `capExtra` 的窗口大小、slot 展开数、beam states 数、score attempts、是否命中 primary / fallback。
+    - 对 `Sun set / 狩猎0.2142` 和 `狩猎列车37 0.27` 两个离线脚本都采样。
+  - 再拆方案：
+    - 方案 A：只缓存 window / slot 构造结果，保持 beam 从头跑。
+    - 方案 B：增量追加新增候选窗口，但仍重新 score beam frontier。
+    - 方案 C：真正复用 beam frontier；高风险，必须有行为等价测试和大样本对照。
+  - 必须保持不变：
+    - raw ceiling
+    - primary-first
+    - closest-below fallback
+    - target window / lowerBound / upperBound 语义
+    - tie-break score tuple
+  - 验证门槛：
+    - 先为 instrumentation 补测试或 artifact，不改变结果。
+    - 再用两条离线大样本确认 item ids / overall 不变或更优，且低于 raw。
+    - 最后再考虑真实 HTTP/UI runtime 复测。
+- 下个会话启动指令：
+  - `不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md 顶部 craft assist 记忆，再看 git status --short --branch 和最新 commit。先复述：当前目标是承接 craft assist raw-aware below 性能优化；真实进度是 ce988b6 后的本批次性能优化已准备提交/或已提交，包含 fallback refinement 预筛/cache、重复候选准备去重、role-aware sort cache；最后验证包括 craftAssistSearch.test、diff check、Sun set 0.2142 离线、狩猎列车37 0.27 离线；下一步核心动刀点 3 是先对 runBeamSearchWithinCap 增量扩窗/状态复用做 profiling 与方案拆分，不要直接重构。只声明已检查当前 root worktree C:/Users/18220/Desktop/cs2_alchemy，其他 worktree 未审计；不要触碰 AGENTS.md、backup/ui_state、.playwright-cli、output 或其他 worktree，除非用户明确要求。`
