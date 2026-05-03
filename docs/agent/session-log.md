@@ -2062,3 +2062,491 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
     - 最后再考虑真实 HTTP/UI runtime 复测。
 - 下个会话启动指令：
   - `不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md 顶部 craft assist 记忆，再看 git status --short --branch 和最新 commit。先复述：当前目标是承接 craft assist raw-aware below 性能优化；真实进度是 ce988b6 后的本批次性能优化已准备提交/或已提交，包含 fallback refinement 预筛/cache、重复候选准备去重、role-aware sort cache；最后验证包括 craftAssistSearch.test、diff check、Sun set 0.2142 离线、狩猎列车37 0.27 离线；下一步核心动刀点 3 是先对 runBeamSearchWithinCap 增量扩窗/状态复用做 profiling 与方案拆分，不要直接重构。只声明已检查当前 root worktree C:/Users/18220/Desktop/cs2_alchemy，其他 worktree 未审计；不要触碰 AGENTS.md、backup/ui_state、.playwright-cli、output 或其他 worktree，除非用户明确要求。`
+
+## 2026-05-03 handoff - craft assist beam profiling instrumentation added
+
+- 当前目标：
+  - 承接 craft assist raw-aware below 性能优化的核心动刀点 3。
+  - 本轮只做 `runBeamSearchWithinCap(...)` profiling / instrumentation 第一刀，不做 beam 增量扩窗或状态复用重构。
+- 当前 root worktree：
+  - 已检查并修改：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 分支：`main`
+  - 本轮开始时 HEAD：`e229376 perf: optimize craft assist target search`
+  - 其他 worktree：仅列出过，未审计内容，不能把本结论扩展到其他 worktree。
+- 已完成实现：
+  - `searchCraftAssistBestSolution(...)` 新增可选 `onSearchProfile` sink。
+  - `runBeamSearchWithinCap(...)` 默认关闭 profiling；只有传入 `onSearchProfile` 函数时才生成 profile event。
+  - profile event 只通过回调输出，不混入默认 search result / HTTP / UI payload。
+  - 指标是聚合数字和数组：
+    - cap / inner extra
+    - window sizes
+    - slot count
+    - beam input / output states
+    - candidate attempts
+    - duplicate skips
+    - next states
+    - partial score / prune scale
+    - complete score attempts
+    - stop reason
+    - elapsedMs
+  - 未记录 candidate / state / selected / usedIds 等候选或状态明细。
+- 必须保持不变且本轮未改的行为：
+  - raw ceiling
+  - primary-first
+  - closest-below fallback
+  - target window / lowerBound / upperBound 语义
+  - tie-break score tuple 与排序顺序
+  - 默认 HTTP/UI payload shape
+- 新增测试：
+  - `test_search_beam_profile_is_optional_and_preserves_result`
+    - 验证默认不开 profile 时结果无 `profile` 字段。
+    - 验证开启 profile 后 picked ids / overall / scoreTuple / windowExtra 与 baseline 一致。
+    - 验证 beam profile 指标是有限非负数。
+  - `test_search_beam_profile_target_step_stop_reason_preserves_result`
+    - 验证 `targetStepSpec` 路径下 profile 能覆盖 `primary_target_step` 或 `stable_target_window_fallback` stop reason。
+    - 验证 target-step profile 开关前后结果一致。
+  - `assertBeamProfilePayloadShape(...)`
+    - 白名单约束 profile event / inner extra 字段。
+    - 防止未来把 candidate / state / selected / usedIds 等明细塞进 profile payload。
+- 子 agent / review 结果：
+  - 实现 worker 状态：`DONE`。
+  - gpt-5.4 review：无 blocking。
+  - review 建议补 target-step stop reason 与 payload 白名单测试；已补，且未再改生产逻辑。
+- 已验证：
+  - `node --test tests/craftAssistSearch.test.js` PASS，duration `3414.157ms`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js docs/agent/session-log.md` 待本日志写入后重新跑。
+- 未验证：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 做 HTTP/UI runtime 复测。
+  - 未跑 Sun set / 狩猎0.2142 与 狩猎列车37 0.27 的 profiling artifact 采样。
+  - 未审计其他 worktree。
+- 当前未提交业务改动范围：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+  - `tests/craftAssistSearch.test.js`
+  - `docs/agent/session-log.md`
+- 不要提交 / 不要处理，除非用户明确要求：
+  - `AGENTS.md`
+  - `backup/ui_state/`
+  - `.playwright-cli/`
+  - `output/`
+  - 其他 worktree
+- 下一步第一刀：
+  - 复用现有离线脚本，为 `Sun set / 狩猎0.2142` 与 `狩猎列车37 0.27` 开启 `onSearchProfile` 采样，输出 profile artifact。
+  - 先比较 cap / inner extra / slot / prune / complete score 的真实占比，再决定是否进入：
+    - 方案 A：缓存 window / slot 构造结果，beam 仍从头跑。
+    - 方案 B：增量追加新增候选窗口，但重新 score beam frontier。
+    - 方案 C：复用 beam frontier；高风险，必须另做行为等价测试和大样本对照。
+
+## 2026-05-03 handoff - craft assist offline beam profile artifacts generated
+
+- 当前目标：
+  - 完成两条离线样本的 beam profile artifact 采样。
+  - 本轮只改验证脚本 / 生成验证产物，不改生产服务参数链，不改搜索语义。
+- 当前 root worktree：
+  - 已检查并修改：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 当前 HEAD：`e229376 perf: optimize craft assist target search`
+  - 其他 worktree：仅列出过，未审计内容。
+- 已完成脚本改造：
+  - `output/playwright/sunset-hunting-02142-offline-final-verify.js`
+  - `output/playwright/train-hunting-037-027-offline-final-verify.js`
+  - 两个脚本复用现有 `installSearchHook()` monkey patch，在 wrapper 里向 `searchCraftAssistBestSolution(...)` 注入 `onSearchProfile`。
+  - 保留并继续调用原始 `args.onSearchProfile`（如果未来上游传入）。
+  - profile artifact 以单独并列文件输出，不改变原 final verification artifact 的 PASS / FAIL 判定。
+  - profile artifact schema：`schema_version: "beam_profile_v1"`。
+- 最新有效 profile artifacts（已脱敏，不含 item ids / selected / usedIds / candidate 明细）：
+  - `output/playwright/sunset-hunting-02142-offline-profile-20260503T071455Z.json`
+  - `output/playwright/sunset-hunting-02142-offline-profile-20260503T071455Z.md`
+  - `output/playwright/train-hunting-037-027-offline-profile-current-20260503T071513Z.json`
+  - `output/playwright/train-hunting-037-027-offline-profile-current-20260503T071513Z.md`
+  - `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T071535Z.json`
+  - `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T071535Z.md`
+- 旧 profile artifacts 注意：
+  - `20260503T070100Z` / `20260503T070121Z` / `20260503T070149Z` 那组旧 profile artifact 曾包含 `result_summary.item_ids`。
+  - gpt-5.4 review 将其判为 selected 明细等价泄露。
+  - 已用最新 `071455Z` / `071513Z` / `071535Z` 这组替代；后续结论只引用最新这组。
+- 最新采样结果：
+  - Sun set / 狩猎0.2142：
+    - command: `node output/playwright/sunset-hunting-02142-offline-final-verify.js`
+    - PASS
+    - duration `12233.678ms`
+    - overall `0.21428497433662413`
+    - profile events `4`
+    - search call count `2`
+    - beam cap event count `4`
+    - total candidate attempts `6062120`
+    - complete score attempts `24752`
+    - top stop reasons：`complete_scored=134`, `stable_target_window_fallback=4`, `completed_cap=2`
+  - 狩猎列车37 0.27 current：
+    - command: `node output/playwright/train-hunting-037-027-offline-final-verify.js current`
+    - PASS
+    - duration `16478.101ms`
+    - overall `0.2699999734759331`
+    - profile events `4`
+    - search call count `1`
+    - beam cap event count `4`
+    - total candidate attempts `4159588`
+    - complete score attempts `53217`
+    - top stop reasons：`no_complete_solution=195`, `complete_scored=98`, `completed_cap=3`, `primary_target_step=2`
+  - 狩猎列车37 0.27 no-role-sort-cache：
+    - command: `node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache`
+    - PASS
+    - duration `16057.753ms`
+    - overall `0.2699999734759331`
+    - profile events `4`
+    - search call count `1`
+    - beam cap event count `4`
+    - total candidate attempts `4159588`
+    - complete score attempts `53217`
+    - top stop reasons：`no_complete_solution=195`, `complete_scored=98`, `completed_cap=3`, `primary_target_step=2`
+- 本轮审查 / 修正：
+  - gpt-5.4 review 范围：两个离线脚本和三份 profile artifact。
+  - blocking issue：旧 profile artifact 的 `result_summary.item_ids` 暴露最终选中资产 ID，与“只保留聚合 profile 信息”冲突。
+  - 已修正：profile JSON / MD 不再写 item ids；final verification artifact 保留 item ids 用于验证追溯。
+  - 本地 Node 检查最新三份 profile JSON：
+    - `schema_version` 均为 `beam_profile_v1`
+    - `status` 均为 `PASS`
+    - `forbidden_hits` 均为空
+    - 禁止匹配包括：`item_ids`, `item ids`, `selected`, `usedIds`, `candidate`, `candidates`, `state`, `states`
+    - `candidateAttempts` 作为聚合字段允许保留。
+- Fresh verification：
+  - `node --check output/playwright/sunset-hunting-02142-offline-final-verify.js` PASS。
+  - `node --check output/playwright/train-hunting-037-027-offline-final-verify.js` PASS。
+  - `node --test tests/craftAssistSearch.test.js` PASS，duration `3551.6573ms`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js docs/agent/session-log.md output/playwright/sunset-hunting-02142-offline-final-verify.js output/playwright/train-hunting-037-027-offline-final-verify.js` PASS；仅 Git LF/CRLF warning。
+- 当前业务 / 验证改动范围：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+  - `tests/craftAssistSearch.test.js`
+  - `docs/agent/session-log.md`
+  - `output/playwright/sunset-hunting-02142-offline-final-verify.js`
+  - `output/playwright/train-hunting-037-027-offline-final-verify.js`
+  - `output/playwright/*offline-profile-20260503T071455Z*`
+  - `output/playwright/*offline-profile-current-20260503T071513Z*`
+  - `output/playwright/*offline-profile-no-role-sort-cache-20260503T071535Z*`
+- 仍未验证：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 做 HTTP/UI runtime 复测。
+  - 未审计其他 worktree。
+- 下一步建议：
+  - 用最新 profile 汇总判断下一刀优先级：
+    - 两个大样本都只有 4 个 beam cap event。
+    - candidate attempts 量级在 `4.16M` 到 `6.06M`。
+    - no-role-sort-cache 与 current 在 train 样本的 beam profile 聚合完全一致，说明当前 role-aware sort-cache 的收益不来自 beam 搜索规模变化，而来自 refinement / 排序侧开销。
+  - 若继续优化 `runBeamSearchWithinCap(...)`，先考虑低风险方案 A：缓存 window / slot 构造统计与可复用结构；再评估是否值得碰更高风险的 beam frontier 复用。
+
+## 2026-05-03 runBeamSearchWithinCap window/slot preparation cache 子任务
+
+- 范围：只改 `node_sidecar/src/services/craftAssistSearch.js`、`tests/craftAssistSearch.test.js`，并生成新的离线 profile artifacts；未改 HTTP/UI route、服务层参数链、数据库或其他业务模块。
+- 实现：
+  - 新增 `prepareBeamWindowSlots(...)`，只封装每个 `extra` 对应的 `windows` / `slots` 准备。
+  - 在单次 `searchCraftAssistBestSolution(...)` 内创建 `beamPreparationCache`，传给每轮 `runBeamSearchWithinCap(...)`，用于跨 cap 扩张复用同一 `extra` 的准备结果。
+  - 每个 `extra` 的 `beam` 仍在循环内从空状态初始化；没有复用 beam frontier。
+  - profile inner stats 新增 `windowPreparationCount` / `slotPreparationCount`，仍不包含 candidate / selected / state / usedIds 等明细。
+- TDD / guard：
+  - 先写 `test_search_beam_profile_reuses_prepared_windows_and_slots_across_cap_expansion()` 和 profile shape guard。
+  - RED：`node --test tests/craftAssistSearch.test.js` 失败于 `inner.windowPreparationCount should be finite`。
+  - GREEN：实现缓存与 profile 统计后，同命令 PASS。
+- 最新验证：
+  - `node --test tests/craftAssistSearch.test.js` PASS，duration `3401.9506ms`。
+  - `node output/playwright/sunset-hunting-02142-offline-final-verify.js` PASS。
+    - artifact: `output/playwright/sunset-hunting-02142-offline-profile-20260503T073524Z.json`
+    - duration `13979.077ms`，overall `0.21428497433662413`
+    - candidate attempts `6062120`，complete score attempts `24752`，profile event count `4`
+    - inner extras `136`，window preparations `86`，slot preparations `86`
+  - `node output/playwright/train-hunting-037-027-offline-final-verify.js current` PASS。
+    - artifact: `output/playwright/train-hunting-037-027-offline-profile-current-20260503T073547Z.json`
+    - duration `18164.817ms`，overall `0.2699999734759331`
+    - candidate attempts `4159588`，complete score attempts `53217`，profile event count `4`
+    - inner extras `294`，window preparations `119`，slot preparations `119`
+  - `node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache` PASS。
+    - artifact: `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T073612Z.json`
+    - duration `18074.668ms`，overall `0.2699999734759331`
+    - candidate attempts `4159588`，complete score attempts `53217`，profile event count `4`
+    - inner extras `294`，window preparations `119`，slot preparations `119`
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js docs/agent/session-log.md output/playwright/sunset-hunting-02142-offline-final-verify.js output/playwright/train-hunting-037-027-offline-final-verify.js` PASS；仅 LF/CRLF warning。
+- 结论：
+  - 缓存确实减少了重复准备次数，但 candidate attempts / complete score attempts 与基线一致，duration 三组都没有可见收益：Sunset `12233.678ms -> 13979.077ms`，Train current `16478.101ms -> 18164.817ms`，Train no-role-sort-cache `16057.753ms -> 18074.668ms`。
+  - 建议不保留该优化作为性能收益项；若保留，只能作为低风险 profile 可观测 / 准备去重清理，不能宣称提速。
+- 未验证：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 做 HTTP/UI runtime 复测。
+  - 未审计其他 worktree；本轮只检查并修改当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy`。
+
+## 2026-05-03 window/slot preparation cache 试验回滚
+
+- 依据：按 gpt-5.4 review 结论，并结合上方三组 profile 结果，该试验减少了 window/slot 准备次数，但没有减少 candidate attempts / complete score attempts，也没有可见耗时收益。
+- 已回滚代码 / 测试：
+  - 删除 `prepareBeamWindowSlots(...)`。
+  - 删除 `runBeamSearchWithinCap(...)` 的 `preparationCache` 参数和 `beamPreparationCache` / `cachedPreparation` / `preparationKey` 逻辑。
+  - 删除 `searchCraftAssistBestSolution(...)` 内的 `beamPreparationCache` 传递。
+  - 恢复每个 inner `extra` 内直接准备 `windows`，再直接调用 `expandMaterialSlots(...)` 准备 `slots`。
+  - 删除 profile 字段 `windowPreparationCount` / `slotPreparationCount` 及其测试断言。
+  - 删除 `test_search_beam_profile_reuses_prepared_windows_and_slots_across_cap_expansion()`。
+- 保留：
+  - `onSearchProfile`、`beam_cap` / `innerExtras` profile 能力。
+  - `candidateAttempts`、`duplicateSkips`、`partialScoreAttempts`、`completeScoreAttempts`、`stopReason`、`elapsedMs` 等 profile 聚合字段。
+  - 两个 profile 行为测试和 profile payload 白名单测试。
+  - 离线脚本与已生成 profile artifacts；这些 artifacts 作为失败试验证据保留，不清理。
+
+## 2026-05-03 final handoff - craft assist beam profiling retained, window/slot cache rejected
+
+- 当前总目标：
+  - 继续优化 craft assist raw-aware below 场景的大耗时。
+  - 当前阶段已经从“直接优化”切到“用 profile 找大头，再只保留有收益的改动”。
+- 当前 root worktree：
+  - 已检查并修改：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 分支：`main`
+  - HEAD：`e229376 perf: optimize craft assist target search`
+  - 其他 worktree 仅列出，未审计内容：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- 当前未提交业务改动：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+    - 保留 `onSearchProfile`。
+    - 保留 `beam_cap` / `innerExtras` profile event。
+    - 保留 `candidateAttempts`、`duplicateSkips`、`nextStates`、`partialScoreAttempts`、`partialPrunedStates`、`completeScoreAttempts`、`stopReason`、`elapsedMs`。
+    - 不包含 window/slot preparation cache。
+  - `tests/craftAssistSearch.test.js`
+    - 保留 profile 默认关闭不污染结果的测试。
+    - 保留 target-step stop reason 与结果不变测试。
+    - 保留 profile payload 白名单测试。
+    - 不包含 window/slot preparation cache 专属测试。
+  - `docs/agent/session-log.md`
+    - 记录 profile instrumentation、离线 artifact、无收益试验、回滚结论。
+- 当前验证 / artifact 改动：
+  - `output/playwright/sunset-hunting-02142-offline-final-verify.js`
+  - `output/playwright/train-hunting-037-027-offline-final-verify.js`
+  - 这两个文件在 `output/` 未跟踪目录内，是验证脚本，不是生产业务代码。
+  - 已生成多组 profile artifacts；最新有效脱敏基线为：
+    - `output/playwright/sunset-hunting-02142-offline-profile-20260503T071455Z.json/.md`
+    - `output/playwright/train-hunting-037-027-offline-profile-current-20260503T071513Z.json/.md`
+    - `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T071535Z.json/.md`
+  - window/slot cache 失败试验 artifact 保留为证据：
+    - `output/playwright/sunset-hunting-02142-offline-profile-20260503T073524Z.json`
+    - `output/playwright/train-hunting-037-027-offline-profile-current-20260503T073547Z.json`
+    - `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T073612Z.json`
+- 已完成并保留：
+  - beam profile instrumentation：
+    - 默认关闭。
+    - 仅通过 `onSearchProfile` 回调输出。
+    - 不进入默认 search result / HTTP / UI payload。
+    - 只输出聚合字段，不输出 item ids / selected / usedIds / candidate / state 明细。
+  - 离线脚本 profile artifact：
+    - 两个脚本通过 `installSearchHook()` monkey patch 注入 `onSearchProfile`。
+    - 保留并继续调用原始 `args.onSearchProfile`。
+    - 单独输出 `beam_profile_v1` JSON / MD artifact。
+    - final verification artifact 仍可保留 item ids 用于验证追溯；profile artifact 不保留 item ids。
+- 已尝试但不保留：
+  - window/slot preparation cache。
+  - 结果：
+    - 减少了准备次数：Sunset `136 -> 86`，Train `294 -> 119`。
+    - 但 candidate attempts / complete score attempts 完全不变。
+    - 三组 duration 均无收益且更慢：
+      - Sunset `12233.678ms -> 13979.077ms`
+      - Train current `16478.101ms -> 18164.817ms`
+      - Train no-role-sort-cache `16057.753ms -> 18074.668ms`
+  - gpt-5.4 review 建议回滚；已局部回滚代码和测试。
+  - 后续不要再把准备阶段缓存当作主攻方向，除非有新的证据表明准备阶段成为大头。
+- 关键 profile 结论：
+  - 两个大样本都只有 `4` 个 beam cap event。
+  - 大头仍是 candidate 展开和评分 / prune：
+    - Sun set latest retained baseline：candidate attempts `6062120`，complete score attempts `24752`。
+    - Train latest retained baseline：candidate attempts `4159588`，complete score attempts `53217`。
+  - Train current 与 no-role-sort-cache 的 beam profile 聚合完全一致，说明 role-aware sort-cache 的收益不来自 beam 搜索规模变化，而来自 refinement / 排序侧开销。
+- Fresh verification：
+  - `node --test tests/craftAssistSearch.test.js` PASS，duration `3297.565ms`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js docs/agent/session-log.md output/playwright/sunset-hunting-02142-offline-final-verify.js output/playwright/train-hunting-037-027-offline-final-verify.js` PASS；仅 Git LF/CRLF warning。
+  - `node --check output/playwright/sunset-hunting-02142-offline-final-verify.js` PASS。
+  - `node --check output/playwright/train-hunting-037-027-offline-final-verify.js` PASS。
+- 当前脏文件说明：
+  - `AGENTS.md` 仍为无关修改，本轮未处理。
+  - `backup/ui_state/` 快照删除 / 新增仍为运行态产物，本轮未处理。
+  - `.playwright-cli/`、`output/` 仍为验证 / 运行产物，本轮未清理。
+  - 除非用户明确要求提交或清理，不要处理上述无关 / 运行态文件。
+- 必须保持不变：
+  - raw ceiling。
+  - primary-first。
+  - closest-below fallback。
+  - target window / lowerBound / upperBound 语义。
+  - tie-break score tuple 与排序顺序。
+  - 默认 HTTP/UI payload shape。
+  - profile artifact 脱敏约束。
+- 下一步第一刀：
+  - 不再做 window/slot preparation cache。
+  - 直接分析和试验减少 candidate attempts / scoring / prune 成本。
+  - 推荐下一步由子 agent 只读拆解：
+    - `pruneBeam(...)` 中 canonical 去重、partial scoring、排序、slice 的相对成本。
+    - 是否可以在不改变 tie-break 的前提下减少每个 slot 的候选展开量。
+    - 是否可以对 partial scoring 做 memo/cache，但必须证明 key 不会损害 targetStepSpec / role-aware / score tuple 语义。
+  - 第一刀仍应 TDD + profile artifact 对照：
+    - 保证 picked ids / overall / scoreTuple / windowExtra 不变。
+    - candidate attempts 或 complete score attempts 必须下降，或 wall time 稳定下降。
+    - 两条离线大样本都要复测。
+- 下个会话启动指令：
+  - `不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、git status --short --branch、git worktree list --porcelain。先复述：当前目标是 craft assist raw-aware below 大耗时优化；已保留 beam profiling 与离线 profile artifact；window/slot preparation cache 已试验但无收益并已回滚；下一步不要再优化准备阶段，要直接分析 candidate attempts / scoring / prune 大头。只声明已检查当前 root worktree C:/Users/18220/Desktop/cs2_alchemy，其他 worktree 未审计；不要处理 AGENTS.md、backup/ui_state、.playwright-cli、output 或其他 worktree，除非用户明确要求。`
+
+## 2026-05-03 next cut dispatch - candidate/prune analysis complete
+
+- 当前目标：
+  - 继续优化 craft assist raw-aware below 大耗时。
+  - 本轮按用户要求使用多 agent；主 agent 只做调度与结果审查。
+- 当前 root worktree：
+  - 已检查范围仅限 `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 其他 worktree 只列出，未审计内容。
+  - 不处理 `AGENTS.md`、`backup/ui_state/`、`.playwright-cli/`、`output/` 或其他 worktree。
+- 已收齐三个只读子 agent 结论：
+  - candidate attempts 大头来自跨 cap 重跑相同 inner `extra`、每 slot 的 `beam states * window candidates` 展开、同组排列重复和 duplicate check 后置。
+  - scoring/prune 大头来自 `pruneBeam(...)` 先 partial scoring 再 canonical 去重，以及 `scorePartialState(...)` 重复扫描 selected。
+  - 测试护栏缺口是缺少小型金标准结果测试和 attempts 下降测试；现有 raw-aware below / profile shape 测试可作为基础保护。
+- 选定下一刀：
+  - 优先试验低风险方案：在单次 `searchCraftAssistBestSolution(...)` 内跨 cap 复用相同 inner `extra` 的完整 `runBeamSearchWithinCap(...)` 结果。
+  - 理由：同一 `extra` 的窗口由 `need + extra` 决定；在 `groupsWithOrdered`、`targetStepSpec`、`beamWidth`、`mode` 不变时，结果不依赖外层 `capExtra`。
+  - 该方案不是 window/slot preparation cache，不优化准备阶段，而是消除 cap `24 -> 49 -> 99...` 时重复运行的 inner 搜索。
+- 暂不做：
+  - 同组 canonical 组合展开。
+  - raw ceiling 不可行剪枝。
+  - partial scoring 聚合重写。
+  - top-K 替代全量 sort。
+  - 上述方向语义风险更高，等低风险复用结果 A/B 后再评估。
+- 派发实现子 agent 前保护项：
+  - raw ceiling、primary-first、closest-below fallback、target window / lowerBound / upperBound 语义不变。
+  - tie-break score tuple 与排序顺序不变。
+  - 默认 HTTP/UI payload shape 不变。
+  - profile artifact 继续脱敏，不输出 item ids / selected / usedIds / candidate / state 明细。
+  - 先补 characterization / attempts 测试，再实现。
+
+## 2026-05-03 handoff - exact inner-extra reuse implemented
+
+- 当前目标：
+  - craft assist raw-aware below 大耗时优化，第一刀落在 candidate/scoring 重复工作，而不是准备阶段。
+- 当前 root worktree：
+  - 已检查并修改范围仅限 `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 其他 worktree 只列出，未审计内容。
+  - 本轮未处理 `AGENTS.md`、`backup/ui_state/`、`.playwright-cli/`、`output/` 或其他 worktree。
+- 本轮实现：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+    - 在单次 `searchCraftAssistBestSolution(...)` 生命周期内创建 `innerExtraResultCache`。
+    - `runBeamSearchWithinCap(...)` 对同一 inner `extra` 复用完整 beam search result，消除外层 cap 扩张后对 `extra 0..旧 cap` 的重复搜索。
+    - 缓存命中时不重新展开 candidates，不重新做 partial / complete scoring attempts。
+    - 缓存结果通过 `cloneBeamSearchSolution(...)` 浅拷贝 `selected` / `scoreTuple`，避免缓存对象被后续流程污染。
+    - 未恢复 window/slot preparation cache。
+    - 未改变 score tuple、排序顺序、cap 增长策略、beamWidth、raw ceiling、primary-first、closest-below fallback。
+  - `tests/craftAssistSearch.test.js`
+    - 新增 profile shape helper，限制 beam profile event/inner keys。
+    - 新增 profile 默认不污染结果测试。
+    - 新增 target-step stop reason 与结果不变测试。
+    - 新增跨 cap 复用 inner extra 的小样本测试：
+      - 断言 `pickedIds / overall / scoreTuple / windowExtra` 与 baseline 一致。
+      - 断言 cap 至少扩张到 `>24`。
+      - 断言出现 `cacheHit` / `reusedInnerExtras`。
+      - 断言 `candidateAttempts < 5000`、`partialScoreAttempts < 3000`、`completeScoreAttempts < 60`。
+    - profile forbidden keys 增加 `item_ids` / `itemIds`，继续禁止 `candidate/candidates/state/states/selected/usedIds/selectedIdsByGroup`。
+    - 对 `cacheHits/cacheMisses/reusedInnerExtras` 做 finite non-negative number 断言，对 inner `cacheHit` 做 boolean 断言。
+    - cached inner 不再使用 `*_cached` stopReason；通过 `cacheHit` 字段表示复用，保持 stopReason 枚举兼容。
+- 子 agent / review：
+  - 实现子 agent 完成 TDD 与初始验证。
+  - 两个 gpt-5.4 review 子 agent 范围审查：
+    - 语义 / 算法 review：无 blocking issue。
+    - 测试 / profile review：无 blocking issue。
+  - 已按 review 非阻塞建议补强 profile 字段类型测试、forbidden keys 和 cached stopReason 兼容。
+- 实现子 agent 给出的 attempts 证据：
+  - 两轮 cap 小样本 caps：`[24, 25]`。
+  - 结果一致：`pickedIds / overall / scoreTuple / windowExtra` 全部一致。
+  - 旧未优化聚合约：`candidateAttempts=8623`、`partialScoreAttempts=4951`、`completeScoreAttempts=83`。
+  - 新实现聚合：`candidateAttempts=4401`、`partialScoreAttempts=2529`、`completeScoreAttempts=42`。
+  - `cacheHits=25`、`cacheMisses=26`、`reusedInnerExtras=25`。
+- Fresh verification：
+  - `node --test tests/craftAssistSearch.test.js` PASS，duration `3361.6331ms`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js docs/agent/session-log.md` PASS；仅 Git LF/CRLF warning。
+- 未验证：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 做 HTTP/UI runtime 复测。
+  - 未跑 `output/playwright/*offline-final-verify.js`，因为本轮用户明确要求不要处理 `output/`，离线脚本会写新的 artifact。
+  - 未审计其他 worktree。
+- 下一步建议：
+  - 若用户明确允许写 `output/`，跑两条大样本离线验证并对比最新脱敏基线：
+    - `node output/playwright/sunset-hunting-02142-offline-final-verify.js`
+    - `node output/playwright/train-hunting-037-027-offline-final-verify.js current`
+    - 可选：`node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache`
+  - 大样本必须比较：
+    - PASS / overall / below raw / selected item ids（final artifact）/ profile forbidden keys。
+    - profile 聚合：candidateAttempts / partialScoreAttempts / completeScoreAttempts / cacheHits / reusedInnerExtras。
+  - 若大样本收益稳定，再评估下一刀：
+    - `pruneBeam(...)` 先 canonical 再 partial scoring。
+    - 同组 canonical 组合展开。
+    - raw ceiling 确定性不可行剪枝。
+  - 上述后续方向风险更高，仍必须先写等价测试。
+
+## 2026-05-03 offline verification - exact inner-extra reuse on large samples
+
+- 用户已明确允许写 `output/`，因此本轮跑了两条保留的大样本离线验证和一个 train 对照模式。
+- Fresh commands：
+  - `node output/playwright/sunset-hunting-02142-offline-final-verify.js` PASS。
+  - `node output/playwright/train-hunting-037-027-offline-final-verify.js current` PASS。
+  - `node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache` PASS。
+- 新生成 artifacts：
+  - Sunset:
+    - final JSON: `output/playwright/sunset-hunting-02142-offline-final-20260503T083718Z.json`
+    - final MD: `output/playwright/sunset-hunting-02142-offline-final-20260503T083718Z.md`
+    - profile JSON: `output/playwright/sunset-hunting-02142-offline-profile-20260503T083718Z.json`
+    - profile MD: `output/playwright/sunset-hunting-02142-offline-profile-20260503T083718Z.md`
+  - Train current:
+    - final JSON: `output/playwright/train-hunting-037-027-offline-final-current-20260503T083740Z.json`
+    - final MD: `output/playwright/train-hunting-037-027-offline-final-current-20260503T083740Z.md`
+    - profile JSON: `output/playwright/train-hunting-037-027-offline-profile-current-20260503T083740Z.json`
+    - profile MD: `output/playwright/train-hunting-037-027-offline-profile-current-20260503T083740Z.md`
+  - Train no-role-sort-cache:
+    - final JSON: `output/playwright/train-hunting-037-027-offline-final-no-role-sort-cache-20260503T083759Z.json`
+    - final MD: `output/playwright/train-hunting-037-027-offline-final-no-role-sort-cache-20260503T083759Z.md`
+    - profile JSON: `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T083759Z.json`
+    - profile MD: `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T083759Z.md`
+- Sunset / 狩猎 0.2142：
+  - PASS。
+  - duration `12485.327ms`，service duration `12437.118ms`。
+  - overall `0.21428497433662413`，fround `0.2142849713563919`，below raw `true`。
+  - 与最新脱敏基线 `20260503T071455Z` 对比：
+    - profile events `4 -> 4`，inner extras `136 -> 136`。
+    - candidateAttempts `6062120 -> 4319188`，下降 `28.75%`。
+    - partialScoreAttempts `4896522 -> 3577206`，下降 `26.94%`。
+    - completeScoreAttempts `24752 -> 15976`，下降 `35.46%`。
+    - nextStates `4896522 -> 3577206`，下降 `26.94%`。
+    - duplicateSkips `1165598 -> 741982`，下降 `36.34%`。
+    - cacheHits `50`，cacheMisses `86`，reusedInnerExtras `50`。
+    - top reasons：`complete_scored=134`、`stable_target_window_fallback=4`、`completed_cap=2`。
+    - profile forbidden hits：none。
+- Train / 狩猎列车37 0.27 current：
+  - PASS。
+  - duration `9560.123ms`，service duration `9522.297ms`。
+  - overall `0.2699999734759331`，fround `0.26999998092651367`，below raw `true`。
+  - 与最新脱敏基线 `20260503T071513Z` 对比：
+    - profile events `4 -> 4`，inner extras `294 -> 294`。
+    - candidateAttempts `4159588 -> 2185697`，下降 `47.45%`。
+    - partialScoreAttempts `3881036 -> 2074010`，下降 `46.56%`。
+    - completeScoreAttempts `53217 -> 22255`，下降 `58.18%`。
+    - nextStates `3881036 -> 2074010`，下降 `46.56%`。
+    - duplicateSkips `278552 -> 111687`，下降 `59.90%`。
+    - cacheHits `175`，cacheMisses `119`，reusedInnerExtras `175`。
+    - top reasons：`no_complete_solution=195`、`complete_scored=98`、`completed_cap=3`、`primary_target_step=2`。
+    - profile forbidden hits：none。
+- Train / 狩猎列车37 0.27 no-role-sort-cache：
+  - PASS。
+  - duration `8726.909ms`，service duration `8684.703ms`。
+  - overall `0.2699999734759331`，fround `0.26999998092651367`，below raw `true`。
+  - 与最新脱敏基线 `20260503T071535Z` 对比：
+    - profile events `4 -> 4`，inner extras `294 -> 294`。
+    - candidateAttempts `4159588 -> 2185697`，下降 `47.45%`。
+    - partialScoreAttempts `3881036 -> 2074010`，下降 `46.56%`。
+    - completeScoreAttempts `53217 -> 22255`，下降 `58.18%`。
+    - nextStates `3881036 -> 2074010`，下降 `46.56%`。
+    - duplicateSkips `278552 -> 111687`，下降 `59.90%`。
+    - cacheHits `175`，cacheMisses `119`，reusedInnerExtras `175`。
+    - top reasons：`no_complete_solution=195`、`complete_scored=98`、`completed_cap=3`、`primary_target_step=2`。
+    - profile forbidden hits：none。
+- 结论：
+  - exact inner-extra result reuse 在两个真实大样本上均保持结果有效。
+  - 该优化确实减少 candidate expansion / partial scoring / complete scoring 工作量。
+  - Train current 与 no-role-sort-cache 的新 beam profile 聚合仍完全一致，说明这刀和 role sort cache 侧无冲突。
+- 仍未验证：
+  - 未跑完整仓库测试。
+  - 未重启真实 Electron / sidecar 做 HTTP/UI runtime 复测。
+  - 未审计其他 worktree。

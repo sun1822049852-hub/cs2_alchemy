@@ -38,6 +38,86 @@ function traceStages(result) {
     .map((step) => String(step && step.stage || ""));
 }
 
+function assertFiniteNonNegativeNumber(value, label) {
+  assert.equal(Number.isFinite(Number(value)), true, `${label} should be finite`);
+  assert.equal(Number(value) >= 0, true, `${label} should be non-negative`);
+}
+
+const BEAM_PROFILE_EVENT_KEYS = new Set([
+  "phase",
+  "capExtra",
+  "totalSlots",
+  "innerExtras",
+  "cacheHits",
+  "cacheMisses",
+  "reusedInnerExtras",
+  "stopReason",
+  "elapsedMs"
+]);
+const BEAM_PROFILE_INNER_KEYS = new Set([
+  "extra",
+  "windowSizes",
+  "slotCount",
+  "beamInputStates",
+  "beamOutputStates",
+  "candidateAttempts",
+  "duplicateSkips",
+  "nextStates",
+  "partialScoreAttempts",
+  "partialPrunedStates",
+  "completeScoreAttempts",
+  "cacheHit",
+  "stopReason",
+  "elapsedMs"
+]);
+const BEAM_PROFILE_FORBIDDEN_KEYS = new Set([
+  "candidate",
+  "candidates",
+  "item_ids",
+  "itemIds",
+  "state",
+  "states",
+  "selected",
+  "usedIds",
+  "selectedIdsByGroup"
+]);
+
+function assertBeamProfilePayloadShape(event) {
+  assert.equal(!!event && typeof event === "object" && !Array.isArray(event), true);
+  assert.deepEqual(Object.keys(event).sort(), [...BEAM_PROFILE_EVENT_KEYS].sort());
+  for (const key of Object.keys(event)) {
+    assert.equal(BEAM_PROFILE_FORBIDDEN_KEYS.has(key), false, `profile event should not include ${key}`);
+  }
+  assertFiniteNonNegativeNumber(event.cacheHits, "cacheHits");
+  assertFiniteNonNegativeNumber(event.cacheMisses, "cacheMisses");
+  assertFiniteNonNegativeNumber(event.reusedInnerExtras, "reusedInnerExtras");
+  assert.equal(Array.isArray(event.innerExtras), true);
+  for (const inner of event.innerExtras) {
+    assert.equal(!!inner && typeof inner === "object" && !Array.isArray(inner), true);
+    assert.deepEqual(Object.keys(inner).sort(), [...BEAM_PROFILE_INNER_KEYS].sort());
+    for (const key of Object.keys(inner)) {
+      assert.equal(BEAM_PROFILE_FORBIDDEN_KEYS.has(key), false, `profile inner should not include ${key}`);
+    }
+    assert.equal(typeof inner.cacheHit, "boolean");
+  }
+}
+
+function sumBeamProfileField(events, field) {
+  return (Array.isArray(events) ? events : []).reduce((total, event) => {
+    const innerTotal = (Array.isArray(event && event.innerExtras) ? event.innerExtras : [])
+      .reduce((sum, inner) => sum + Number(inner && inner[field] || 0), 0);
+    return total + innerTotal;
+  }, 0);
+}
+
+function countBeamProfileInnerWhere(events, predicate) {
+  return (Array.isArray(events) ? events : []).reduce((total, event) => {
+    return total + (Array.isArray(event && event.innerExtras) ? event.innerExtras : [])
+      .filter(predicate)
+      .length;
+  }, 0);
+}
+
 function test_role_aware_push_slides_aux_window_down_when_over_target() {
   const groups = [
     {
@@ -398,6 +478,213 @@ function test_search_best_solution_infinite_mode_can_cross_target_for_closer_sin
   assert.equal(pickedIds(infinite).includes("u5"), false);
   assert.equal(pickedIds(infinite).includes("u1"), true);
   assert.equal(Math.abs(infinite.overall - 0.50) < Math.abs(belowOnly.overall - 0.50), true);
+}
+
+function test_search_beam_profile_is_optional_and_preserves_result() {
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Solo", role: "main", count: 10},
+      candidates: [
+        makeCandidate("b1", 0.47, 0, "main"),
+        makeCandidate("b2", 0.47, 0, "main"),
+        makeCandidate("b3", 0.47, 0, "main"),
+        makeCandidate("b4", 0.47, 0, "main"),
+        makeCandidate("b5", 0.47, 0, "main"),
+        makeCandidate("u1", 0.53, 0, "main"),
+        makeCandidate("u2", 0.53, 0, "main"),
+        makeCandidate("u3", 0.53, 0, "main"),
+        makeCandidate("u4", 0.53, 0, "main"),
+        makeCandidate("u5", 0.51, 0, "main"),
+        makeCandidate("u6", 0.531, 0, "main")
+      ]
+    }
+  ];
+  const baseline = searchCraftAssistBestSolution({
+    groups,
+    targetValue: 0.50,
+    approachMode: "infinite",
+    beamWidth: 12
+  });
+  const profileEvents = [];
+  const profiled = searchCraftAssistBestSolution({
+    groups,
+    targetValue: 0.50,
+    approachMode: "infinite",
+    beamWidth: 12,
+    onSearchProfile(event) {
+      profileEvents.push(event);
+    }
+  });
+
+  assert.equal(!!baseline, true);
+  assert.equal(!!profiled, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(baseline, "profile"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(profiled, "profile"), false);
+  assert.deepEqual(pickedIds(profiled), pickedIds(baseline));
+  assert.equal(profiled.overall, baseline.overall);
+  assert.deepEqual(profiled.scoreTuple, baseline.scoreTuple);
+  assert.equal(profiled.windowExtra, baseline.windowExtra);
+  assert.equal(profileEvents.length > 0, true);
+
+  const event = profileEvents.find((entry) => entry && entry.phase === "beam_cap");
+  assert.equal(!!event, true);
+  assertFiniteNonNegativeNumber(event.capExtra, "capExtra");
+  assertFiniteNonNegativeNumber(event.totalSlots, "totalSlots");
+  assertFiniteNonNegativeNumber(event.elapsedMs, "elapsedMs");
+  assert.equal(typeof event.stopReason, "string");
+  assert.equal(Array.isArray(event.innerExtras), true);
+  assert.equal(event.innerExtras.length > 0, true);
+
+  const inner = event.innerExtras[0];
+  assertFiniteNonNegativeNumber(inner.extra, "inner.extra");
+  assert.equal(Array.isArray(inner.windowSizes), true);
+  assert.equal(inner.windowSizes.every((value) => Number.isFinite(Number(value)) && Number(value) >= 0), true);
+  assertFiniteNonNegativeNumber(inner.slotCount, "inner.slotCount");
+  assertFiniteNonNegativeNumber(inner.beamInputStates, "inner.beamInputStates");
+  assertFiniteNonNegativeNumber(inner.beamOutputStates, "inner.beamOutputStates");
+  assertFiniteNonNegativeNumber(inner.candidateAttempts, "inner.candidateAttempts");
+  assertFiniteNonNegativeNumber(inner.duplicateSkips, "inner.duplicateSkips");
+  assertFiniteNonNegativeNumber(inner.nextStates, "inner.nextStates");
+  assertFiniteNonNegativeNumber(inner.partialScoreAttempts, "inner.partialScoreAttempts");
+  assertFiniteNonNegativeNumber(inner.partialPrunedStates, "inner.partialPrunedStates");
+  assertFiniteNonNegativeNumber(inner.completeScoreAttempts, "inner.completeScoreAttempts");
+  assertFiniteNonNegativeNumber(inner.elapsedMs, "inner.elapsedMs");
+  assert.equal(typeof inner.stopReason, "string");
+  assertBeamProfilePayloadShape(event);
+}
+
+function test_search_beam_profile_target_step_stop_reason_preserves_result() {
+  const inputStep = Math.fround(0.27);
+  const targetStep = prevFloat32(inputStep);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below"
+  });
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Solo", role: "main", count: 10},
+      candidates: [
+        ...Array.from({length: 10}, (_, index) => makeCandidate(`input-${index + 1}`, inputStep, 0, "main")),
+        ...Array.from({length: 10}, (_, index) => makeCandidate(`target-${index + 1}`, targetStep, 0, "main"))
+      ]
+    }
+  ];
+  const baseline = searchCraftAssistBestSolution({
+    groups,
+    targetValue: inputStep,
+    targetStepSpec,
+    beamWidth: 12
+  });
+  const profileEvents = [];
+  const profiled = searchCraftAssistBestSolution({
+    groups,
+    targetValue: inputStep,
+    targetStepSpec,
+    beamWidth: 12,
+    onSearchProfile(event) {
+      profileEvents.push(event);
+    }
+  });
+
+  assert.equal(!!baseline, true);
+  assert.equal(!!profiled, true);
+  assert.deepEqual(pickedIds(profiled), pickedIds(baseline));
+  assert.equal(profiled.overall, baseline.overall);
+  assert.deepEqual(profiled.scoreTuple, baseline.scoreTuple);
+  assert.equal(profiled.windowExtra, baseline.windowExtra);
+  assert.equal(profileEvents.length > 0, true);
+  const stopReasons = profileEvents.flatMap((event) => [
+    String(event && event.stopReason || ""),
+    ...(Array.isArray(event && event.innerExtras)
+      ? event.innerExtras.map((inner) => String(inner && inner.stopReason || ""))
+      : [])
+  ]);
+  assert.equal(
+    stopReasons.includes("primary_target_step") || stopReasons.includes("stable_target_window_fallback"),
+    true
+  );
+  for (const event of profileEvents) {
+    assertBeamProfilePayloadShape(event);
+  }
+}
+
+function test_search_beam_reuses_inner_extra_across_cap_expansion_without_result_change() {
+  const raw = "0.214285";
+  const inputStep = Math.fround(Number(raw));
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    inputRaw: raw,
+    approachMode: "below",
+    offsetValue: Number(raw) * 0.01
+  });
+  const primaryHigh = (
+    Number(targetStepSpec.targetStep) * 10
+    - Number(targetStepSpec.lowerTargetStep) * 9
+  );
+  const groups = [
+    {
+      index: 0,
+      material: {name: "Aux", role: "aux", count: 9},
+      candidates: Array.from({length: 9}, (_, index) => (
+        makeCandidate(`aux-lower-${index + 1}`, targetStepSpec.lowerTargetStep, 0, "aux")
+      ))
+    },
+    {
+      index: 1,
+      material: {name: "Main", role: "main", count: 1},
+      candidates: [
+        ...Array.from({length: 25}, (_, index) => (
+          makeCandidate(`main-lower-${index + 1}`, targetStepSpec.lowerTargetStep, 1, "main")
+        )),
+        makeCandidate("main-primary-high", primaryHigh, 1, "main")
+      ]
+    }
+  ];
+  const baseline = searchCraftAssistBestSolution({
+    groups,
+    targetValue: inputStep,
+    targetStepSpec,
+    beamWidth: 2
+  });
+  const attemptedCaps = [];
+  const profileEvents = [];
+  const profiled = searchCraftAssistBestSolution({
+    groups,
+    targetValue: inputStep,
+    targetStepSpec,
+    beamWidth: 2,
+    onSearchProgress(event) {
+      if (event && event.phase === "cap") attemptedCaps.push(Number(event.capExtra));
+    },
+    onSearchProfile(event) {
+      profileEvents.push(event);
+    }
+  });
+
+  assert.equal(!!baseline, true);
+  assert.equal(!!profiled, true);
+  assert.deepEqual(pickedIds(profiled), pickedIds(baseline));
+  assert.equal(profiled.overall, baseline.overall);
+  assert.deepEqual(profiled.scoreTuple, baseline.scoreTuple);
+  assert.equal(profiled.windowExtra, baseline.windowExtra);
+  assert.equal(Math.max(...attemptedCaps) > 24, true);
+  assert.equal(profileEvents.length >= 2, true);
+  assert.equal(countBeamProfileInnerWhere(profileEvents, (inner) => inner && inner.cacheHit === true) > 0, true);
+  assert.equal(
+    countBeamProfileInnerWhere(profileEvents, (inner) => (
+      inner && inner.cacheHit === true && String(inner.stopReason || "").endsWith("_cached")
+    )),
+    0
+  );
+  assert.equal(profileEvents.reduce((sum, event) => sum + Number(event && event.reusedInnerExtras || 0), 0) > 0, true);
+  assert.equal(sumBeamProfileField(profileEvents, "candidateAttempts") < 5000, true);
+  assert.equal(sumBeamProfileField(profileEvents, "partialScoreAttempts") < 3000, true);
+  assert.equal(sumBeamProfileField(profileEvents, "completeScoreAttempts") < 60, true);
+  for (const event of profileEvents) {
+    assertBeamProfilePayloadShape(event);
+  }
 }
 
 function test_search_step_target_below_uses_previous_float32_step() {
@@ -1280,6 +1567,9 @@ test_role_aware_push_applies_aux_compensation_refinement();
 test_single_material_compensation_chooses_closest_global_second_swap();
 test_single_material_compensation_exposes_second_swap_pruning_trace();
 test_search_best_solution_infinite_mode_can_cross_target_for_closer_single_material_match();
+test_search_beam_profile_is_optional_and_preserves_result();
+test_search_beam_profile_target_step_stop_reason_preserves_result();
+test_search_beam_reuses_inner_extra_across_cap_expansion_without_result_change();
 test_search_step_target_below_uses_previous_float32_step();
 test_search_offset_window_prefers_primary_below_step_over_lower_allowed_step();
 test_search_offset_window_returns_lower_allowed_step_when_primary_unavailable();

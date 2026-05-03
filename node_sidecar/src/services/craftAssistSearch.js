@@ -1555,9 +1555,12 @@ function pruneBeam(states, beamWidth, totalSlots, targetValue, mode, approachMod
   return scored.slice(0, Math.max(1, Number(beamWidth) || 1)).map((entry) => entry.state);
 }
 
-function pickBestCompleteSolution(states, targetValue, mode, approachMode = "below", targetStepSpec = null) {
+function pickBestCompleteSolution(states, targetValue, mode, approachMode = "below", targetStepSpec = null, profileStats = null) {
   let best = null;
   for (const state of Array.isArray(states) ? states : []) {
+    if (profileStats && typeof profileStats === "object") {
+      profileStats.completeScoreAttempts = Number(profileStats.completeScoreAttempts || 0) + 1;
+    }
     const scored = scoreCompleteSelection(state.selected, targetValue, mode, approachMode, targetStepSpec);
     if (!scored) continue;
     const candidate = {
@@ -1574,6 +1577,15 @@ function pickBestCompleteSolution(states, targetValue, mode, approachMode = "bel
     }
   }
   return best;
+}
+
+function cloneBeamSearchSolution(solution) {
+  if (!solution) return null;
+  return {
+    ...solution,
+    selected: Array.isArray(solution.selected) ? solution.selected.slice() : [],
+    scoreTuple: Array.isArray(solution.scoreTuple) ? solution.scoreTuple.slice() : solution.scoreTuple
+  };
 }
 
 function buildTargetStepFallbackRefinementScore(selected, targetValue, targetStepSpec) {
@@ -1755,21 +1767,113 @@ function shouldStopAfterBoundedTargetWindowFallback({best, solved, groupsWithOrd
   return !candidateTouchesCapBoundary(solved.selected, groupsWithOrdered, capExtra);
 }
 
-function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below", targetStepSpec = null}) {
+function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below", targetStepSpec = null, onSearchProfile = null, innerExtraResultCache = null}) {
   let best = null;
+  const profileEnabled = typeof onSearchProfile === "function";
+  const capStartedAt = profileEnabled ? Date.now() : 0;
+  const capProfile = profileEnabled
+    ? {
+      phase: "beam_cap",
+      capExtra: Number(capExtra || 0),
+      totalSlots: Number(totalSlots || 0),
+      innerExtras: [],
+      cacheHits: 0,
+      cacheMisses: 0,
+      reusedInnerExtras: 0,
+      stopReason: "",
+      elapsedMs: 0
+    }
+    : null;
+  const finishCapProfile = (stopReason) => {
+    if (!profileEnabled) return;
+    capProfile.stopReason = String(stopReason || "completed_cap");
+    capProfile.elapsedMs = Math.max(0, Date.now() - capStartedAt);
+    onSearchProfile(capProfile);
+  };
   for (let extra = 0; extra <= capExtra; extra += 1) {
+    const innerStartedAt = profileEnabled ? Date.now() : 0;
     const windows = groupsWithOrdered.map((group) => {
       const need = Math.max(0, Number(group && group.material && group.material.count || 0));
       const limit = Math.min(group.ordered.length, need + capExtra);
       return group.ordered.slice(0, Math.min(limit, need + extra));
     });
+    const innerProfile = profileEnabled
+      ? {
+        extra: Number(extra),
+        windowSizes: windows.map((window) => Array.isArray(window) ? window.length : 0),
+        slotCount: 0,
+        beamInputStates: 0,
+        beamOutputStates: 0,
+        candidateAttempts: 0,
+        duplicateSkips: 0,
+        nextStates: 0,
+        partialScoreAttempts: 0,
+        partialPrunedStates: 0,
+        completeScoreAttempts: 0,
+        cacheHit: false,
+        stopReason: "",
+        elapsedMs: 0
+      }
+      : null;
+    const finishInnerProfile = (stopReason) => {
+      if (!profileEnabled) return;
+      innerProfile.stopReason = String(stopReason || "complete_scored");
+      innerProfile.elapsedMs = Math.max(0, Date.now() - innerStartedAt);
+      capProfile.innerExtras.push(innerProfile);
+    };
+    const cacheKey = Number(extra);
+    if (innerExtraResultCache && innerExtraResultCache.has(cacheKey)) {
+      const cachedEntry = innerExtraResultCache.get(cacheKey) || {};
+      const solved = cloneBeamSearchSolution(cachedEntry.solved);
+      if (profileEnabled) {
+        innerProfile.windowSizes = Array.isArray(cachedEntry.windowSizes) ? cachedEntry.windowSizes.slice() : [];
+        innerProfile.slotCount = Number(cachedEntry.slotCount || 0);
+        innerProfile.beamInputStates = Number(cachedEntry.beamInputStates || 0);
+        innerProfile.beamOutputStates = Number(cachedEntry.beamOutputStates || 0);
+        innerProfile.partialPrunedStates = Number(cachedEntry.partialPrunedStates || 0);
+        innerProfile.cacheHit = true;
+        capProfile.cacheHits += 1;
+        capProfile.reusedInnerExtras += 1;
+      }
+      if (shouldStopTargetStepExpansion({solved, groupsWithOrdered, capExtra: extra, targetStepSpec})) {
+        finishInnerProfile("primary_target_step");
+        finishCapProfile("primary_target_step");
+        return {
+          ...solved,
+          windowExtra: extra
+        };
+      }
+      if (shouldStopAfterStableTargetWindowFallback({solved, groupsWithOrdered, capExtra: extra, targetStepSpec})) {
+        finishInnerProfile("stable_target_window_fallback");
+        finishCapProfile("stable_target_window_fallback");
+        return {
+          ...solved,
+          windowExtra: extra
+        };
+      }
+      if (solved && (!best || compareScoreTuples(solved.scoreTuple, best.scoreTuple) < 0)) {
+        best = {
+          ...solved,
+          windowExtra: extra
+        };
+      }
+      finishInnerProfile(solved ? "complete_scored" : "no_complete_solution");
+      continue;
+    }
+    if (profileEnabled) {
+      capProfile.cacheMisses += 1;
+    }
     if (windows.some((window, index) => {
       const need = Math.max(0, Number(groupsWithOrdered[index] && groupsWithOrdered[index].material && groupsWithOrdered[index].material.count || 0));
       return window.length < need;
     })) {
+      finishInnerProfile("incomplete_window");
       continue;
     }
     const slots = expandMaterialSlots(groupsWithOrdered, windows);
+    if (profileEnabled) {
+      innerProfile.slotCount = slots.length;
+    }
     let beam = [{
       slotIndex: 0,
       selected: [],
@@ -1780,9 +1884,20 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
     for (const groupIndex of slots) {
       const nextStates = [];
       const window = windows[groupIndex];
+      if (profileEnabled) {
+        innerProfile.beamInputStates += beam.length;
+      }
       for (const state of beam) {
         for (const candidate of window) {
-          if (state.usedIds.has(candidate.id)) continue;
+          if (profileEnabled) {
+            innerProfile.candidateAttempts += 1;
+          }
+          if (state.usedIds.has(candidate.id)) {
+            if (profileEnabled) {
+              innerProfile.duplicateSkips += 1;
+            }
+            continue;
+          }
           const usedIds = new Set(state.usedIds);
           usedIds.add(candidate.id);
           const selectedIdsByGroup = (Array.isArray(state.selectedIdsByGroup)
@@ -1799,18 +1914,43 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
           });
         }
       }
+      if (profileEnabled) {
+        innerProfile.nextStates += nextStates.length;
+        innerProfile.partialScoreAttempts += nextStates.length;
+      }
       beam = pruneBeam(nextStates, beamWidth, totalSlots, targetValue, mode, approachMode, targetStepSpec);
+      if (profileEnabled) {
+        innerProfile.partialPrunedStates += Math.max(0, nextStates.length - beam.length);
+        innerProfile.beamOutputStates += beam.length;
+      }
       if (!beam.length) break;
     }
-    if (!beam.length) continue;
-    const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode, targetStepSpec);
+    if (!beam.length) {
+      finishInnerProfile("beam_exhausted");
+      continue;
+    }
+    const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode, targetStepSpec, innerProfile);
+    if (innerExtraResultCache) {
+      innerExtraResultCache.set(cacheKey, {
+        solved: cloneBeamSearchSolution(solved),
+        windowSizes: profileEnabled ? innerProfile.windowSizes.slice() : windows.map((window) => Array.isArray(window) ? window.length : 0),
+        slotCount: profileEnabled ? Number(innerProfile.slotCount || 0) : slots.length,
+        beamInputStates: profileEnabled ? Number(innerProfile.beamInputStates || 0) : 0,
+        beamOutputStates: profileEnabled ? Number(innerProfile.beamOutputStates || 0) : 0,
+        partialPrunedStates: profileEnabled ? Number(innerProfile.partialPrunedStates || 0) : 0
+      });
+    }
     if (shouldStopTargetStepExpansion({solved, groupsWithOrdered, capExtra: extra, targetStepSpec})) {
+      finishInnerProfile("primary_target_step");
+      finishCapProfile("primary_target_step");
       return {
         ...solved,
         windowExtra: extra
       };
     }
     if (shouldStopAfterStableTargetWindowFallback({solved, groupsWithOrdered, capExtra: extra, targetStepSpec})) {
+      finishInnerProfile("stable_target_window_fallback");
+      finishCapProfile("stable_target_window_fallback");
       return {
         ...solved,
         windowExtra: extra
@@ -1822,7 +1962,9 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
         windowExtra: extra
       };
     }
+    finishInnerProfile(solved ? "complete_scored" : "no_complete_solution");
   }
+  finishCapProfile(best ? "completed_cap" : "no_solution");
   return best;
 }
 
@@ -2420,7 +2562,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
   };
 }
 
-function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = null, beamWidth = 200, approachMode = "below", onSearchProgress = null} = {}) {
+function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = null, beamWidth = 200, approachMode = "below", onSearchProgress = null, onSearchProfile = null} = {}) {
   const sourceGroups = Array.isArray(groups) ? groups : [];
   const mode = resolveSearchMode(sourceGroups);
   const searchTargetValue = resolveSearchTargetValue(targetValue, targetStepSpec);
@@ -2453,6 +2595,7 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
     return Math.max(acc, Math.max(0, group.ordered.length - need));
   }, 0);
   const fallbackRefinementCache = new Map();
+  const innerExtraResultCache = new Map();
   const refineSingleMaterialTargetStepFallbackOnce = (args) => {
     const key = buildSingleMaterialTargetStepFallbackRefinementCacheKey(args);
     if (fallbackRefinementCache.has(key)) return fallbackRefinementCache.get(key);
@@ -2489,7 +2632,9 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
       totalSlots,
       capExtra,
       approachMode: normalizedApproachMode,
-      targetStepSpec
+      targetStepSpec,
+      onSearchProfile,
+      innerExtraResultCache
     });
     if (hasTargetStepSpec(targetStepSpec) && solved && isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec)) {
       best = solved;
