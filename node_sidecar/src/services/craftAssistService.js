@@ -4,6 +4,8 @@ const {resolvePrefilterOptions, resolveShardCount, runPrefilterPhase} = require(
 const {
   resolveCraftAssistTargetStepSpec,
   isMeanOnTargetStep,
+  isMeanOnPrimaryTargetStep,
+  targetStepPriorityTuple,
   quantizeMeanToTargetDomain
 } = require("./craftAssistFloat32Step");
 const {
@@ -61,6 +63,12 @@ function parseOptionalWear01(value) {
   return n;
 }
 
+function formatCraftAssistRawLogValue(targetWearRaw, targetValue) {
+  const rawText = asString(targetWearRaw == null ? "" : targetWearRaw).trim();
+  if (rawText) return rawText;
+  return `legacy_step:${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`;
+}
+
 function validateCraftAssistFinalOverall({
   overall,
   targetValue,
@@ -88,13 +96,16 @@ function validateCraftAssistFinalOverall({
     };
   }
   if (targetStepSpec && typeof targetStepSpec === "object") {
+    const inputStep = Number(targetStepSpec.inputStep);
     const targetStep = Number(targetStepSpec.targetStep);
+    const lowerTargetStep = Number(targetStepSpec.lowerTargetStep);
+    const upperTargetStep = Number(targetStepSpec.upperTargetStep);
     const quantizedOverall = quantizeMeanToTargetDomain(numericOverall);
     const passed = isMeanOnTargetStep(numericOverall, targetStepSpec);
 
     craftAssistLogger.infoAlways(
       "craft_assist",
-      `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} quantized=${numberTextTrunc(quantizedOverall, WEAR_INPUT_DECIMALS)} input_step=${numberTextTrunc(targetStepSpec.inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStep, WEAR_INPUT_DECIMALS)} passed=${passed}`
+      `验证: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} quantized_overall=${numberTextTrunc(quantizedOverall, WEAR_INPUT_DECIMALS)} input_step=${numberTextTrunc(inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStep, WEAR_INPUT_DECIMALS)} lower_target_step=${numberTextTrunc(lowerTargetStep, WEAR_INPUT_DECIMALS)} upper_target_step=${numberTextTrunc(upperTargetStep, WEAR_INPUT_DECIMALS)} passed=${passed}`
     );
 
     if (passed) {
@@ -103,7 +114,7 @@ function validateCraftAssistFinalOverall({
 
     craftAssistLogger.warnAlways(
       "craft_assist",
-      `验证拒绝: quantized=${numberTextTrunc(quantizedOverall, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStep, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
+      `验证拒绝: quantized_overall=${numberTextTrunc(quantizedOverall, WEAR_INPUT_DECIMALS)} input_step=${numberTextTrunc(inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStep, WEAR_INPUT_DECIMALS)} lower_target_step=${numberTextTrunc(lowerTargetStep, WEAR_INPUT_DECIMALS)} upper_target_step=${numberTextTrunc(upperTargetStep, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
     );
 
     return {
@@ -112,7 +123,10 @@ function validateCraftAssistFinalOverall({
       overall: numericOverall,
       quantized_overall: quantizedOverall,
       target: numericTarget,
+      input_step: inputStep,
       target_step: targetStep,
+      lower_target_step: lowerTargetStep,
+      upper_target_step: upperTargetStep,
       safe_target: numericSearchTarget,
       approach_mode: normalizedApproachMode,
       item_ids: normalizedItemIds,
@@ -165,8 +179,23 @@ function buildCraftAssistFailureLogText(result = {}) {
   if (Number.isFinite(Number(result && result.overall))) {
     parts.push(`overall=${numberTextTrunc(result.overall, WEAR_INPUT_DECIMALS)}`);
   }
+  if (Number.isFinite(Number(result && result.quantized_overall))) {
+    parts.push(`quantized_overall=${numberTextTrunc(result.quantized_overall, WEAR_INPUT_DECIMALS)}`);
+  }
   if (Number.isFinite(Number(result && result.target))) {
     parts.push(`target=${numberTextTrunc(result.target, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.input_step))) {
+    parts.push(`input_step=${numberTextTrunc(result.input_step, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.target_step))) {
+    parts.push(`target_step=${numberTextTrunc(result.target_step, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.lower_target_step))) {
+    parts.push(`lower_target_step=${numberTextTrunc(result.lower_target_step, WEAR_INPUT_DECIMALS)}`);
+  }
+  if (Number.isFinite(Number(result && result.upper_target_step))) {
+    parts.push(`upper_target_step=${numberTextTrunc(result.upper_target_step, WEAR_INPUT_DECIMALS)}`);
   }
   if (Number.isFinite(Number(result && result.safe_target))) {
     parts.push(`safe_target=${numberTextTrunc(result.safe_target, WEAR_INPUT_DECIMALS)}`);
@@ -590,6 +619,46 @@ function collectCraftAssistCandidatesForMaterial(material, rowsByName, blockedId
   if (cacheKey) candidateCache.set(cacheKey, list);
   if (!(blockedIds instanceof Set) || blockedIds.size <= 0) return list;
   return list.filter((item) => !blockedIds.has(item.id));
+}
+
+function inferCraftAssistQuantityShortfallCode({
+  material,
+  rowsByName,
+  blockedIds,
+  targetValue,
+  requiredCount,
+  candidateCount,
+  useRelativeFilter = true,
+  includeCooling = false,
+  allRows = null
+} = {}) {
+  if (requiredCount <= 0 || candidateCount >= requiredCount) return "";
+  const blocked = blockedIds instanceof Set ? blockedIds : new Set();
+  const availableWithoutBlocked = collectCraftAssistCandidatesForMaterial(
+    material,
+    rowsByName,
+    new Set(),
+    targetValue,
+    {useRelativeFilter, candidateCache: null}
+  ).length;
+  if (blocked.size > 0 && availableWithoutBlocked >= requiredCount) {
+    return "material_quantity_insufficient_blocked";
+  }
+  if (includeCooling || !Array.isArray(allRows) || allRows.length <= 0) {
+    return "";
+  }
+  const rowsByNameWithCooling = buildCraftAssistRowsByName(getCraftCandidates(allRows, {includeCooling: true}));
+  const availableWithCooling = collectCraftAssistCandidatesForMaterial(
+    material,
+    rowsByNameWithCooling,
+    blocked,
+    targetValue,
+    {useRelativeFilter, candidateCache: null}
+  ).length;
+  if (availableWithCooling >= requiredCount) {
+    return "material_quantity_insufficient_cooling_filtered";
+  }
+  return "";
 }
 
 function pickCraftAssistClosest(candidates, count, targetValue) {
@@ -1326,6 +1395,22 @@ function pickBetterCraftAssistSolvedCandidate(currentBest, nextCandidate) {
     : currentBest;
 }
 
+function pickBetterCraftAssistTargetStepSolvedCandidate(currentBest, nextCandidate, targetStepSpec) {
+  if (!currentBest) return nextCandidate || null;
+  if (!nextCandidate) return currentBest;
+  const currentPriority = targetStepPriorityTuple(currentBest.overall, targetStepSpec);
+  const nextPriority = targetStepPriorityTuple(nextCandidate.overall, targetStepSpec);
+  const priorityDiff = compareScoreTuples(nextPriority, currentPriority);
+  if (priorityDiff < 0) return nextCandidate;
+  if (priorityDiff > 0) return currentBest;
+  if (Array.isArray(currentBest.scoreTuple) && Array.isArray(nextCandidate.scoreTuple)) {
+    return compareScoreTuples(nextCandidate.scoreTuple, currentBest.scoreTuple) < 0
+      ? nextCandidate
+      : currentBest;
+  }
+  return currentBest;
+}
+
 function didCraftAssistSolvedCandidateImprove(previousCandidate, nextCandidate) {
   if (!nextCandidate) return false;
   if (!previousCandidate) return true;
@@ -1333,6 +1418,23 @@ function didCraftAssistSolvedCandidateImprove(previousCandidate, nextCandidate) 
     return compareScoreTuples(nextCandidate.scoreTuple, previousCandidate.scoreTuple) < 0;
   }
   return Number(nextCandidate.overall) > Number(previousCandidate.overall);
+}
+
+function shouldRunCraftAssistContextRefine({
+  baseSolved,
+  expandSolved,
+  bestPrefilterSolved,
+  targetStepSpec = null
+} = {}) {
+  if (!bestPrefilterSolved) return false;
+  if (
+    targetStepSpec
+    && typeof targetStepSpec === "object"
+    && !isMeanOnPrimaryTargetStep(bestPrefilterSolved.overall, targetStepSpec)
+  ) {
+    return true;
+  }
+  return didCraftAssistSolvedCandidateImprove(baseSolved, expandSolved);
 }
 
 function cloneCraftAssistCandidateForSearch(candidate) {
@@ -1594,7 +1696,7 @@ async function solveCraftAssistGroupsForRarity({
   const baseSolved = isCraftAssistSolvedCandidate(baseSolvedCandidate, targetValue, approachMode, targetStepSpec)
     ? baseSolvedCandidate
     : null;
-  if (targetStepSpec && baseSolved) {
+  if (targetStepSpec && baseSolved && isMeanOnPrimaryTargetStep(baseSolved.overall, targetStepSpec)) {
     return {
       solved: baseSolved,
       prefilterSummary: buildCraftAssistPrefilterSummary({
@@ -1624,7 +1726,7 @@ async function solveCraftAssistGroupsForRarity({
     const expandSolved = isCraftAssistSolvedCandidate(expandSolvedCandidate, targetValue, approachMode, targetStepSpec)
       ? expandSolvedCandidate
       : null;
-    if (targetStepSpec && expandSolved) {
+    if (targetStepSpec && expandSolved && isMeanOnPrimaryTargetStep(expandSolved.overall, targetStepSpec)) {
       return {
         solved: expandSolved,
         prefilterSummary: buildCraftAssistPrefilterSummary({
@@ -1634,10 +1736,17 @@ async function solveCraftAssistGroupsForRarity({
         })
       };
     }
-    let bestPrefilterSolved = pickBetterCraftAssistSolvedCandidate(baseSolved, expandSolved);
+    let bestPrefilterSolved = targetStepSpec
+      ? pickBetterCraftAssistTargetStepSolvedCandidate(baseSolved, expandSolved, targetStepSpec)
+      : pickBetterCraftAssistSolvedCandidate(baseSolved, expandSolved);
     if (bestPrefilterSolved) {
       let contextRefineSummary = null;
-      if (didCraftAssistSolvedCandidateImprove(baseSolved, expandSolved)) {
+      if (shouldRunCraftAssistContextRefine({
+        baseSolved,
+        expandSolved,
+        bestPrefilterSolved,
+        targetStepSpec
+      })) {
         const contextRefined = runCraftAssistContextRefine({
           groups,
           targetValue,
@@ -1646,7 +1755,9 @@ async function solveCraftAssistGroupsForRarity({
           targetStepSpec,
           prefilterOptions
         });
-        bestPrefilterSolved = pickBetterCraftAssistSolvedCandidate(bestPrefilterSolved, contextRefined.solved);
+        bestPrefilterSolved = targetStepSpec
+          ? pickBetterCraftAssistTargetStepSolvedCandidate(bestPrefilterSolved, contextRefined.solved, targetStepSpec)
+          : pickBetterCraftAssistSolvedCandidate(bestPrefilterSolved, contextRefined.solved);
         contextRefineSummary = contextRefined.summary;
       }
       return {
@@ -1686,7 +1797,9 @@ async function runCraftAssistSelectionForRecipe({
   useRelativeFilter = true,
   wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
   candidateCache = null,
-  prefilterOptions = null
+  prefilterOptions = null,
+  includeCooling = false,
+  allRows = null
 }) {
   const blocked = blockedIds instanceof Set ? blockedIds : new Set();
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
@@ -1729,7 +1842,22 @@ async function runCraftAssistSelectionForRecipe({
         return {ok: false, message: `父类材料【${materialName}】无可用材料，${offsetHintText}`};
       }
       if (requiredCount > 0 && candidateCount < requiredCount) {
-        return {ok: false, message: `父类材料【${materialName}】可用数量不足：需${requiredCount}，仅${candidateCount}，${offsetHintText}`};
+        const code = inferCraftAssistQuantityShortfallCode({
+          material: item.material,
+          rowsByName,
+          blockedIds: blocked,
+          targetValue: searchTargetValue,
+          requiredCount,
+          candidateCount,
+          useRelativeFilter,
+          includeCooling,
+          allRows
+        });
+        return {
+          ok: false,
+          code: code || undefined,
+          message: `父类材料【${materialName}】可用数量不足：需${requiredCount}，仅${candidateCount}，${offsetHintText}`
+        };
       }
       return {ok: false, message: `父类材料【${materialName}】在当前条件下无法满足同稀有度数量要求`};
     }
@@ -1770,14 +1898,22 @@ async function runCraftAssistSelectionForRecipe({
     if (!solved || !Array.isArray(solved.materialResults) || solved.overall == null) continue;
     if (targetStepSpec) {
       if (isMeanOnTargetStep(solved.overall, targetStepSpec)) {
-        bestSolved = {
+        const solvedCandidate = {
           rarity: Number(rarity),
           materialResults: solved.materialResults,
           overall: Number(solved.overall),
           scoreTuple: solved.scoreTuple,
           trace: attachCraftAssistPrefilterTrace(solved.trace || null, prefilterSummary)
         };
-        break;
+        if (isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec)) {
+          bestSolved = solvedCandidate;
+          break;
+        }
+        bestSolved = pickBetterCraftAssistTargetStepSolvedCandidate(
+          bestSolved,
+          solvedCandidate,
+          targetStepSpec
+        );
       }
       const fallbackSolved = searchCraftAssistBestSolution({
         groups,
@@ -1790,14 +1926,22 @@ async function runCraftAssistSelectionForRecipe({
         && Array.isArray(fallbackSolved.materialResults)
         && isMeanOnTargetStep(fallbackSolved.overall, targetStepSpec)
       ) {
-        bestSolved = {
+        const fallbackCandidate = {
           rarity: Number(rarity),
           materialResults: fallbackSolved.materialResults,
           overall: Number(fallbackSolved.overall),
           scoreTuple: fallbackSolved.scoreTuple,
           trace: attachCraftAssistPrefilterTrace(fallbackSolved.trace || null, prefilterSummary)
         };
-        break;
+        if (isMeanOnPrimaryTargetStep(fallbackSolved.overall, targetStepSpec)) {
+          bestSolved = fallbackCandidate;
+          break;
+        }
+        bestSolved = pickBetterCraftAssistTargetStepSolvedCandidate(
+          bestSolved,
+          fallbackCandidate,
+          targetStepSpec
+        );
       }
       continue;
     }
@@ -1953,6 +2097,7 @@ async function selectCraftAssistForRecipe({
   selectionContext,
   candidateRows,
   targetWear,
+  targetWearRaw,
   wearFilterMode,
   wearApproachMode,
   materials,
@@ -1967,11 +2112,15 @@ async function selectCraftAssistForRecipe({
   }
 
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
+  const normalizedWearOffsetPct = normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  const offsetValue = getCraftAssistWearOffsetByTarget(targetValue, normalizedWearOffsetPct);
   let targetStepSpec = null;
   try {
     targetStepSpec = resolveCraftAssistTargetStepSpec({
       inputStep: targetValue,
-      approachMode
+      inputRaw: targetWearRaw,
+      approachMode,
+      offsetValue
     });
   } catch (err) {
     return {
@@ -1982,7 +2131,7 @@ async function selectCraftAssistForRecipe({
   }
   craftAssistLogger.info(
     "craft_assist",
-    `目标台阶: raw=${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)} input_step=${numberTextTrunc(targetStepSpec.inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStepSpec.targetStep, WEAR_INPUT_DECIMALS)} approach_mode=${approachMode}`
+    `目标台阶: raw=${formatCraftAssistRawLogValue(targetWearRaw, targetValue)} input_step=${numberTextTrunc(targetStepSpec.inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStepSpec.targetStep, WEAR_INPUT_DECIMALS)} approach_mode=${approachMode}`
   );
 
   const context = resolveCraftAssistSelectionContext({
@@ -2017,8 +2166,10 @@ async function selectCraftAssistForRecipe({
     targetStepSpec,
     wearApproachMode: approachMode,
     useRelativeFilter: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
-    wearOffsetPct: normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
+    wearOffsetPct: normalizedWearOffsetPct,
     candidateCache: context.candidateCache instanceof Map ? context.candidateCache : null,
+    includeCooling: !!includeCooling,
+    allRows: Array.isArray(rows) ? rows : null,
     prefilterOptions: typeof enableFastCraftAssist === "boolean"
       ? {enableOversizedPrefilter: enableFastCraftAssist}
       : null
@@ -2101,6 +2252,8 @@ module.exports = {
   buildCraftAssistSelectionContextFromCandidateRows,
   __test: {
     isCraftAssistSolvedCandidate,
+    runCraftAssistContextRefine,
+    shouldRunCraftAssistContextRefine,
     validateCraftAssistFinalOverall,
     buildCraftAssistFailureLogText
   }

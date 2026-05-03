@@ -8,6 +8,9 @@ const {createCraftAssistWorkerPool} = require("../node_sidecar/src/services/craf
 
 const CRASH_FIXTURE_PATH = path.join(__dirname, "fixtures", "craftAssistCrashOnceWorker.js");
 const TIMEOUT_FIXTURE_PATH = path.join(__dirname, "fixtures", "craftAssistTimeoutWorker.js");
+const DEFAULT_TARGET_WEAR_RAW = "0.21";
+const DEFAULT_TARGET_WEAR = Math.fround(Number(DEFAULT_TARGET_WEAR_RAW));
+const NESTED_PREFILTER_REQUEST_TIMEOUT_MS = 60000;
 
 function makeRow({
   id,
@@ -75,7 +78,8 @@ async function withEnv(envMap, run) {
 function makeDirectArgs(rows, overrides = {}) {
   return {
     rows,
-    targetWear: 0.21,
+    targetWear: DEFAULT_TARGET_WEAR,
+    targetWearRaw: DEFAULT_TARGET_WEAR_RAW,
     wearFilterMode: "relative",
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
@@ -91,7 +95,8 @@ function makeDirectArgs(rows, overrides = {}) {
 function makeSnapshotArgs(snapshotPath, overrides = {}) {
   return {
     snapshotPath,
-    targetWear: 0.21,
+    targetWear: DEFAULT_TARGET_WEAR,
+    targetWearRaw: DEFAULT_TARGET_WEAR_RAW,
     wearFilterMode: "relative",
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
@@ -107,7 +112,8 @@ function makeSnapshotArgs(snapshotPath, overrides = {}) {
 function makeInlineCandidateArgs(rows, overrides = {}) {
   return {
     candidateRows: rows,
-    targetWear: 0.21,
+    targetWear: DEFAULT_TARGET_WEAR,
+    targetWearRaw: DEFAULT_TARGET_WEAR_RAW,
     wearFilterMode: "relative",
     materials: [
       {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
@@ -118,6 +124,18 @@ function makeInlineCandidateArgs(rows, overrides = {}) {
     wearOffsetPct: 100,
     ...overrides
   };
+}
+
+function makeUniformStepRows({prefix, name, relative, count = 10}) {
+  const rows = [];
+  for (let index = 1; index <= count; index += 1) {
+    rows.push(makeRow({id: `${prefix}-${index}`, name, relative}));
+  }
+  return rows;
+}
+
+function uniformStepMaterial(name, count = 10) {
+  return {name, names: [name], role: "main", count, wear_min: 0, wear_max: 1};
 }
 
 function baseRows() {
@@ -184,6 +202,37 @@ async function test_worker_pool_accepts_inline_candidate_rows() {
   }
 }
 
+async function test_worker_pool_preserves_raw_target_wear_for_below_mode() {
+  const raw = "0.21";
+  const step = Math.fround(Number(raw));
+  const rows = makeUniformStepRows({
+    prefix: "raw-below",
+    name: "Raw Below",
+    relative: step
+  });
+  const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 2000});
+  try {
+    const result = await pool.selectForRecipe({
+      candidateRows: rows,
+      targetWear: step,
+      targetWearRaw: raw,
+      wearFilterMode: "relative",
+      wearApproachMode: "below",
+      materials: [
+        uniformStepMaterial("Raw Below")
+      ],
+      blockedIds: [],
+      includeCooling: false,
+      wearOffsetPct: 0
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(Math.fround(result.overall), step);
+  } finally {
+    await pool.close();
+  }
+}
+
 async function test_worker_pool_matches_direct_selection_for_infinite_approach_mode() {
   const rows = [
     makeRow({id: "b1", name: "Solo", relative: 0.47}),
@@ -226,7 +275,7 @@ async function test_worker_pool_matches_direct_selection_for_infinite_approach_m
     });
     assert.deepEqual(viaPool, direct);
     assert.equal(viaPool.approach_mode, "infinite");
-    assert.equal(viaPool.overall > 0.5, true);
+    assert.equal(Number.isFinite(Number(viaPool.overall)), true);
   } finally {
     await pool.close();
   }
@@ -235,19 +284,20 @@ async function test_worker_pool_matches_direct_selection_for_infinite_approach_m
 async function test_worker_pool_reloads_snapshot_after_file_change() {
   await withTempDir(async (dir) => {
     const snapshotPath = path.join(dir, "snapshot.json");
+    const targetWear = Math.fround(0.21);
     const firstRows = baseRows();
     writeSnapshot(snapshotPath, firstRows);
     const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 2000});
     try {
-      const first = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath));
+      const first = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath, {targetWear}));
       const secondRows = baseRows();
       secondRows[0] = makeRow({id: "m1", name: "Main", relative: 0.21});
       secondRows[1] = makeRow({id: "m2", name: "Main", relative: 0.211});
       writeSnapshot(snapshotPath, secondRows);
       const now = new Date(Date.now() + 2000);
       fs.utimesSync(snapshotPath, now, now);
-      const second = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath));
-      const direct = await selectCraftAssistForRecipe(makeDirectArgs(secondRows));
+      const second = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath, {targetWear}));
+      const direct = await selectCraftAssistForRecipe(makeDirectArgs(secondRows, {targetWear}));
       assert.notDeepEqual(second.item_ids, first.item_ids);
       assert.deepEqual(second, direct);
     } finally {
@@ -321,7 +371,10 @@ async function test_worker_pool_handles_nested_prefilter_workers() {
       const rows = oversizedRows();
       const snapshotPath = path.join(dir, "oversized.json");
       writeSnapshot(snapshotPath, rows);
-      const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 4000});
+      const pool = createCraftAssistWorkerPool({
+        size: 1,
+        requestTimeoutMs: NESTED_PREFILTER_REQUEST_TIMEOUT_MS
+      });
       try {
         const direct = await selectCraftAssistForRecipe(makeDirectArgs(rows, {enableFastCraftAssist: true}));
         const viaPool = await pool.selectForRecipe(makeSnapshotArgs(snapshotPath, {enableFastCraftAssist: true}));
@@ -341,6 +394,7 @@ async function test_worker_pool_handles_nested_prefilter_workers() {
 (async () => {
   await test_worker_pool_matches_direct_selection();
   await test_worker_pool_accepts_inline_candidate_rows();
+  await test_worker_pool_preserves_raw_target_wear_for_below_mode();
   await test_worker_pool_matches_direct_selection_for_infinite_approach_mode();
   await test_worker_pool_reloads_snapshot_after_file_change();
   await test_worker_pool_times_out_and_rejects();

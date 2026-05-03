@@ -62,6 +62,24 @@ function assertValidTargetInputStep(inputStep) {
   }
 }
 
+function normalizeTargetInputRaw(inputRaw) {
+  if (inputRaw === undefined || inputRaw === null || inputRaw === "") return null;
+
+  const value = Number(inputRaw);
+  if (
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 1
+  ) {
+    throw makeCraftAssistStepError(
+      "invalid_target_raw",
+      "Craft assist target raw wear must be a finite value in [0, 1]."
+    );
+  }
+
+  return value;
+}
+
 function normalizeApproachMode(approachMode) {
   return String(approachMode || "").trim() === "infinite" ? "infinite" : "below";
 }
@@ -80,27 +98,83 @@ function buildRawMeanGuidanceRange(targetStep) {
   };
 }
 
-function resolveCraftAssistTargetStepSpec({inputStep, approachMode} = {}) {
-  assertValidTargetInputStep(inputStep);
+function normalizeOffsetValue(offsetValue) {
+  const value = Number(offsetValue);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
 
-  const normalizedMode = normalizeApproachMode(approachMode);
-  if (normalizedMode === "below" && inputStep === 0) {
+function resolveWindowEndpoint(value, fallbackStep, direction) {
+  if (!Number.isFinite(value)) return fallbackStep;
+
+  const clamped = Math.min(1, Math.max(0, value));
+  const step = Math.fround(clamped);
+  if (direction < 0 && Number(step) > clamped) return prevFloat32(step);
+  if (direction > 0 && Number(step) < clamped) return nextFloat32(step);
+  return step;
+}
+
+function resolveBelowTargetStep(inputStep, inputRaw) {
+  if (inputRaw !== null) {
+    if (inputRaw === 0) {
+      throw makeCraftAssistStepError(
+        "unreachable_below_target",
+        "Craft assist cannot target a float32 step below zero."
+      );
+    }
+    return Number(inputStep) < inputRaw ? inputStep : prevFloat32(inputStep);
+  }
+
+  if (inputStep === 0) {
     throw makeCraftAssistStepError(
       "unreachable_below_target",
       "Craft assist cannot target a float32 step below zero."
     );
   }
+  return prevFloat32(inputStep);
+}
 
-  const targetStep = normalizedMode === "below" ? prevFloat32(inputStep) : inputStep;
+function assertTargetStepMatchesRaw(inputStep, inputRaw) {
+  if (inputRaw !== null && Math.fround(inputRaw) !== inputStep) {
+    throw makeCraftAssistStepError(
+      "invalid_target_step",
+      "Craft assist target step must match the float32 step derived from raw wear."
+    );
+  }
+}
+
+function resolveCraftAssistTargetStepSpec({inputStep, inputRaw, targetWearRaw, approachMode, offsetValue} = {}) {
+  assertValidTargetInputStep(inputStep);
+
+  const normalizedMode = normalizeApproachMode(approachMode);
+  const raw = normalizeTargetInputRaw(inputRaw ?? targetWearRaw);
+  assertTargetStepMatchesRaw(inputStep, raw);
+  const targetStep = normalizedMode === "below"
+    ? resolveBelowTargetStep(inputStep, raw)
+    : inputStep;
+  const offset = normalizeOffsetValue(offsetValue);
+  const hasOffsetWindow = offset > 0;
+  const lowerTargetStep = hasOffsetWindow
+    ? resolveWindowEndpoint(Number(inputStep) - offset, targetStep, -1)
+    : targetStep;
+  const upperTargetStep = hasOffsetWindow && normalizedMode === "infinite"
+    ? resolveWindowEndpoint(Number(inputStep) + offset, targetStep, 1)
+    : targetStep;
+  const lowerRange = buildRawMeanGuidanceRange(lowerTargetStep);
+  const upperRange = buildRawMeanGuidanceRange(upperTargetStep);
   const range = buildRawMeanGuidanceRange(targetStep);
 
   return {
     inputStep,
+    inputRaw: raw,
+    targetWearRaw: raw,
     targetStep,
+    lowerTargetStep,
+    upperTargetStep,
+    hasOffsetWindow,
     prevStep: range.prevStep,
     nextStep: range.nextStep,
-    lowerBound: range.lowerBound,
-    upperBound: range.upperBound,
+    lowerBound: lowerRange.lowerBound,
+    upperBound: upperRange.upperBound,
     approachMode: normalizedMode
   };
 }
@@ -110,14 +184,54 @@ function quantizeMeanToTargetDomain(mean) {
 }
 
 function isMeanOnTargetStep(mean, spec) {
+  const quantizedMean = quantizeMeanToTargetDomain(mean);
+  const lowerTargetStep = Number(spec && spec.lowerTargetStep);
+  const upperTargetStep = Number(spec && spec.upperTargetStep);
+  const targetStep = Number(spec && spec.targetStep);
+
+  if (Number.isFinite(lowerTargetStep) && Number.isFinite(upperTargetStep)) {
+    return quantizedMean >= lowerTargetStep && quantizedMean <= upperTargetStep;
+  }
+  return quantizedMean === targetStep;
+}
+
+function isMeanOnPrimaryTargetStep(mean, spec) {
   return quantizeMeanToTargetDomain(mean) === Number(spec && spec.targetStep);
+}
+
+function targetStepPriorityTuple(mean, spec) {
+  const quantizedMean = quantizeMeanToTargetDomain(mean);
+  const quantizedValue = Number(quantizedMean);
+  const inputStep = Number(spec && spec.inputStep);
+  const targetStep = Number(spec && spec.targetStep);
+  const approachMode = normalizeApproachMode(spec && spec.approachMode);
+  if (quantizedMean === targetStep) return [0, 0, quantizedValue];
+
+  if (!isMeanOnTargetStep(quantizedMean, spec)) {
+    return [2, distanceFromMeanToTargetRange(quantizedMean, spec), quantizedValue];
+  }
+
+  if (approachMode === "below") {
+    const rawTarget = Number(spec && (spec.inputRaw ?? spec.targetWearRaw));
+    const fallbackGap = Number.isFinite(rawTarget)
+      ? rawTarget - Number(mean)
+      : targetStep - quantizedValue;
+    return [1, fallbackGap, quantizedValue];
+  }
+
+  return [1, Math.abs(quantizedValue - inputStep), quantizedValue];
 }
 
 function compareMeanToTargetRange(mean, spec) {
   const quantizedMean = quantizeMeanToTargetDomain(mean);
+  const lowerTargetStep = Number(spec && spec.lowerTargetStep);
+  const upperTargetStep = Number(spec && spec.upperTargetStep);
   const targetStep = Number(spec && spec.targetStep);
-  if (quantizedMean === targetStep) return 0;
-  return quantizedMean < targetStep ? -1 : 1;
+  const lower = Number.isFinite(lowerTargetStep) ? lowerTargetStep : targetStep;
+  const upper = Number.isFinite(upperTargetStep) ? upperTargetStep : targetStep;
+
+  if (quantizedMean >= lower && quantizedMean <= upper) return 0;
+  return quantizedMean < lower ? -1 : 1;
 }
 
 function distanceFromMeanToTargetRange(mean, spec) {
@@ -142,6 +256,8 @@ module.exports = {
   resolveCraftAssistTargetStepSpec,
   quantizeMeanToTargetDomain,
   isMeanOnTargetStep,
+  isMeanOnPrimaryTargetStep,
+  targetStepPriorityTuple,
   compareMeanToTargetRange,
   distanceFromMeanToTargetRange
 };

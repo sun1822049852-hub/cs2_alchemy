@@ -16,6 +16,7 @@ function extractBlock(startMarker, endMarker) {
 
 function loadDirtyFns(overrides = {}) {
   const source = [
+    extractBlock("function resolveCraftAssistTargetWearPair(", "function normalizeCraftAssistTargetWearStepOrFallback("),
     extractBlock("function buildCraftAssistPresetComparableSnapshot(", "function getCurrentCraftAssistPresetComparableSnapshot("),
     extractBlock("function getCurrentCraftAssistPresetComparableSnapshot(", "function isCraftAssistPresetEditingDirty("),
     extractBlock("function isCraftAssistPresetEditingDirty(", "function restoreCraftAssistDraftSnapshot(")
@@ -23,6 +24,10 @@ function loadDirtyFns(overrides = {}) {
   const context = {
     state: overrides.state,
     parseOptionalWear01: overrides.parseOptionalWear01 || ((value) => value == null ? null : Number(value)),
+    normalizeCraftAssistTargetWearStep: overrides.normalizeCraftAssistTargetWearStep || ((value) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? Math.fround(Math.max(0, Math.min(1, numeric))) : null;
+    }),
     projectCraftAssistPersistedMaterialsFromState: overrides.projectCraftAssistPersistedMaterialsFromState || ((materials) => JSON.parse(JSON.stringify(Array.isArray(materials) ? materials : []))),
     normalizeCraftAssistMaterialList: overrides.normalizeCraftAssistMaterialList || ((materials) => Array.isArray(materials) ? materials : []),
     normalizeCraftAssistFilterMode: overrides.normalizeCraftAssistFilterMode || ((mode) => String(mode || "").trim() === "absolute" ? "absolute" : "relative"),
@@ -89,13 +94,15 @@ function testRenameCountsAsDirtyEditingState() {
     craftAssistPresetEditingId: "preset_1",
     craftAssistPresetEditingName: "赤线（副本）",
     craftAssistPresetEditingInitialSnapshot: null,
-    craftAssistTargetWear: 0.123456,
+    craftAssistTargetWear: Math.fround(0.21),
+    craftAssistTargetWearRaw: "0.21",
     craftAssistMaterials: [{id: "mat_1", count: 10}]
   };
   const app = loadDirtyFns({state});
   state.craftAssistPresetEditingInitialSnapshot = app.buildCraftAssistPresetComparableSnapshot({
     name: "赤线",
-    targetWear: 0.123456,
+    targetWear: Math.fround(0.21),
+    targetWearRaw: "0.21",
     materials: [{id: "mat_1", count: 10}]
   });
 
@@ -103,6 +110,30 @@ function testRenameCountsAsDirtyEditingState() {
     app.isCraftAssistPresetEditingDirty(),
     true,
     "changing only the preset name should still mark the editing session as dirty"
+  );
+}
+
+function testTargetWearRawDifferenceCountsAsDirtyEditingState() {
+  const state = {
+    craftAssistPresetEditingId: "preset_1",
+    craftAssistPresetEditingName: "赤线",
+    craftAssistPresetEditingInitialSnapshot: null,
+    craftAssistTargetWear: Math.fround(0.21),
+    craftAssistTargetWearRaw: String(Math.fround(0.21)),
+    craftAssistMaterials: [{id: "mat_1", count: 10}]
+  };
+  const app = loadDirtyFns({state});
+  state.craftAssistPresetEditingInitialSnapshot = app.buildCraftAssistPresetComparableSnapshot({
+    name: "赤线",
+    targetWear: Math.fround(0.21),
+    targetWearRaw: "0.21",
+    materials: [{id: "mat_1", count: 10}]
+  });
+
+  assert.equal(
+    app.isCraftAssistPresetEditingDirty(),
+    true,
+    "changing only the preserved raw decimal should still mark the editing session as dirty"
   );
 }
 
@@ -118,6 +149,7 @@ function testSaveEditingSessionPersistsEditedName() {
       id: "preset_1",
       name: "旧配置名",
       target_wear: 0.1,
+      target_wear_raw: "0.1",
       materials: [{id: "mat_1", count: 10}],
       created_at: 11,
       updated_at: 11
@@ -131,6 +163,7 @@ function testSaveEditingSessionPersistsEditedName() {
       id: "snapshot_1",
       name,
       target_wear: 0.2,
+      target_wear_raw: "0.21",
       materials: [{id: "mat_1", count: 10}],
       created_at: 22,
       updated_at: 22
@@ -158,6 +191,8 @@ function testSaveEditingSessionPersistsEditedName() {
 
   assert.equal(ok, true, "saving an editing session with a renamed preset should succeed");
   assert.equal(state.craftAssistPresets[0].name, "新配置名");
+  assert.equal(state.craftAssistPresets[0].target_wear_raw, "0.21");
+  assert.equal(state.craftAssistPresets[0].target_wear, 0.2);
   assert.equal(savedToStorage, 1, "renamed preset should still persist back to storage");
   assert.equal(renderCalls, 1, "renamed preset save should rerender the panel");
   assert.equal(
@@ -177,6 +212,7 @@ function testDuplicatePresetCreatesNamedCopyBesideOriginal() {
         id: "preset_alpha",
         name: "赤线",
         target_wear: 0.123,
+        target_wear_raw: "0.123",
         materials: [{id: "mat_1", count: 10, items: [{id: "mat_1__1", name: "赤线"}]}],
         created_at: 11,
         updated_at: 11
@@ -185,6 +221,7 @@ function testDuplicatePresetCreatesNamedCopyBesideOriginal() {
         id: "preset_beta",
         name: "蓝钢",
         target_wear: 0.456,
+        target_wear_raw: "0.456",
         materials: [{id: "mat_2", count: 10, items: [{id: "mat_2__1", name: "蓝钢"}]}],
         created_at: 22,
         updated_at: 22
@@ -212,6 +249,7 @@ function testDuplicatePresetCreatesNamedCopyBesideOriginal() {
   assert.equal(state.craftAssistPresets.length, 3, "duplicating a preset should insert one new preset");
   assert.equal(state.craftAssistPresets[1].id, "preset_copy");
   assert.equal(state.craftAssistPresets[1].name, "赤线（副本）");
+  assert.equal(state.craftAssistPresets[1].target_wear_raw, "0.123");
   assert.deepEqual(state.craftAssistPresets[1].materials, [{id: "mat_1", count: 10, items: [{id: "mat_1__1", name: "赤线"}]}]);
   assert.equal(savedToStorage, 1, "duplicated preset should persist to storage");
   assert.equal(renderCalls, 1, "duplicated preset should rerender the preset panel");
@@ -224,6 +262,7 @@ function testDuplicatePresetCreatesNamedCopyBesideOriginal() {
 
 function main() {
   testRenameCountsAsDirtyEditingState();
+  testTargetWearRawDifferenceCountsAsDirtyEditingState();
   testSaveEditingSessionPersistsEditedName();
   testDuplicatePresetCreatesNamedCopyBesideOriginal();
   console.log("craft-assist-preset-editing tests passed");

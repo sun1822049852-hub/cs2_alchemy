@@ -35,7 +35,7 @@ const state = {
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
   craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftHideCollection: false, craftHideQuantity: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 0,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "", craftProgressMode: "", craftProgressPercent: 0, craftProgressPercentTarget: 0,
-  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistApproachMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
+  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistTargetWearRaw: "", craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistApproachMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
   simulationViewMode: "workspace", simulationOutputRole: "primary_output", simulationMaterialRole: "main_material", simulationOutputChooserOpen: false, simulationMaterialChooserOpen: false, simulationPresets: [], simulationActivePresetId: "", simulationWorkspacePreset: null, simulationWorkspaceSourcePresetId: "", simulationPickerOpen: false, simulationPickerMode: "", simulationPickerTitle: "", simulationPickerQuery: "", simulationPickerResults: [], simulationPickerError: "", simulationLoading: false, simulationPersisting: false, simulationSearchLoading: false, simulationRequestSeq: 0, simulationSearchSeq: 0, simulationModalOpen: false, simulationModalMode: "", simulationModalPresetId: "", simulationModalSlot: "", simulationModalItemType: "", simulationModalItemSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false, componentOpBusyAction: "",
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
@@ -1387,6 +1387,7 @@ function createDefaultCraftAccountScopedState() {
     craftAssistPickRole: "main",
     craftAssistUseAbsoluteWear: false,
     craftAssistTargetWear: null,
+    craftAssistTargetWearRaw: "",
     craftAssistMainCount: 5,
     craftAssistAuxCount: 5,
     craftAssistMaterials: [],
@@ -1477,6 +1478,10 @@ function normalizeCraftAccountScopedStateSnapshot(snapshot) {
   const predictorContextId = String(source.craftPredictorContextId || "").trim();
   const predictorContextLabel = String(source.craftPredictorContextLabel || source.craftPredictorSelectedConfigLabel || "").trim();
   const predictorAutoOpenMuted = !!source.craftPredictorAutoOpenMuted;
+  const targetWearPair = resolveCraftAssistTargetWearPair(
+    source.craftAssistTargetWear,
+    source.craftAssistTargetWearRaw
+  );
   return {
     ...base,
     craftSelectedItemIds: normalizeCraftAccountScopedItemIdList(selectedIds),
@@ -1490,7 +1495,8 @@ function normalizeCraftAccountScopedStateSnapshot(snapshot) {
     craftAssistRoleChooserOpen: !!source.craftAssistRoleChooserOpen,
     craftAssistPickRole: String(source.craftAssistPickRole || "").trim() === "aux" ? "aux" : "main",
     craftAssistUseAbsoluteWear: !!source.craftAssistUseAbsoluteWear,
-    craftAssistTargetWear: source.craftAssistTargetWear == null ? null : Number(source.craftAssistTargetWear),
+    craftAssistTargetWear: targetWearPair ? targetWearPair.target_wear : null,
+    craftAssistTargetWearRaw: targetWearPair ? targetWearPair.target_wear_raw : "",
     craftAssistMainCount: Math.max(0, Math.min(10, Math.trunc(Number(source.craftAssistMainCount != null ? source.craftAssistMainCount : base.craftAssistMainCount) || base.craftAssistMainCount))),
     craftAssistAuxCount: Math.max(0, Math.min(10, Math.trunc(Number(source.craftAssistAuxCount != null ? source.craftAssistAuxCount : base.craftAssistAuxCount) || base.craftAssistAuxCount))),
     craftAssistMaterials: projectCraftAssistAccountScopedMaterials(source.craftAssistMaterials),
@@ -1526,6 +1532,7 @@ function buildCurrentCraftAccountScopedStateSnapshot() {
     craftAssistRoleChooserOpen: state.craftAssistRoleChooserOpen,
     craftAssistPickRole: state.craftAssistPickRole,
     craftAssistTargetWear: state.craftAssistTargetWear,
+    craftAssistTargetWearRaw: state.craftAssistTargetWearRaw,
     craftAssistMaterials: projectCraftAssistAccountScopedMaterials(state.craftAssistMaterials),
     craftAssistPresetApplyCountMap: state.craftAssistPresetApplyCountMap,
     craftAssistPresetEditingId: state.craftAssistPresetEditingId,
@@ -1558,6 +1565,7 @@ function applyCraftAccountScopedStateSnapshot(snapshot, {runtimeSnapshot = null,
   state.craftAssistPickRole = next.craftAssistPickRole;
   state.craftAssistUseAbsoluteWear = !!next.craftAssistUseAbsoluteWear;
   state.craftAssistTargetWear = next.craftAssistTargetWear;
+  state.craftAssistTargetWearRaw = next.craftAssistTargetWearRaw;
   state.craftAssistMainCount = next.craftAssistMainCount;
   state.craftAssistAuxCount = next.craftAssistAuxCount;
   state.craftAssistMaterials = next.craftAssistMaterials;
@@ -3919,6 +3927,43 @@ function parseOptionalWear01(value) {
   const clamped = Math.max(0, Math.min(1, n));
   return clamped;
 }
+function normalizeCraftAssistTargetWearStep(value) {
+  const parsed = parseOptionalWear01(value);
+  return parsed == null ? null : Math.fround(parsed);
+}
+function resolveCraftAssistTargetWearPair(targetWearValue, targetWearRawValue, {fallback = null} = {}) {
+  const rawText = String(targetWearRawValue == null ? "" : targetWearRawValue).trim();
+  if (rawText) {
+    const parsedRaw = Number(rawText);
+    if (!Number.isFinite(parsedRaw) || parsedRaw < 0 || parsedRaw > 1) return null;
+    return {
+      target_wear_raw: rawText,
+      target_wear: Math.fround(parsedRaw)
+    };
+  }
+  const parsedTargetWear = parseOptionalWear01(targetWearValue);
+  if (parsedTargetWear != null) {
+    const targetWear = Math.fround(parsedTargetWear) === parsedTargetWear
+      ? parsedTargetWear
+      : Math.fround(parsedTargetWear);
+    return {
+      target_wear_raw: String(parsedTargetWear),
+      target_wear: targetWear
+    };
+  }
+  if (fallback == null && fallback !== 0) return null;
+  const fallbackParsed = parseOptionalWear01(fallback);
+  if (fallbackParsed == null) return null;
+  return {
+    target_wear_raw: String(fallbackParsed),
+    target_wear: Math.fround(fallbackParsed)
+  };
+}
+function normalizeCraftAssistTargetWearStepOrFallback(value, fallback = 0.5) {
+  const normalized = normalizeCraftAssistTargetWearStep(value);
+  if (normalized != null) return normalized;
+  return normalizeCraftAssistTargetWearStep(fallback) || 0;
+}
 function inferWearSuffixRangeByName(name) {
   const normalized = normalizeWearToken(name);
   if (!normalized) return null;
@@ -4211,10 +4256,11 @@ function getCraftComponentSummaryMapForAccount(username) {
 }
 function buildCraftAssistDraftSnapshotFromScopedState(scopedState) {
   const source = scopedState && typeof scopedState === "object" ? scopedState : createDefaultCraftAccountScopedState();
-  const targetWear = parseOptionalWear01(source.craftAssistTargetWear);
+  const targetWearPair = resolveCraftAssistTargetWearPair(source.craftAssistTargetWear, source.craftAssistTargetWearRaw);
   return {
     panel_open: !!source.craftAssistOpen,
-    target_wear: targetWear,
+    target_wear: targetWearPair ? targetWearPair.target_wear : null,
+    target_wear_raw: targetWearPair ? targetWearPair.target_wear_raw : "",
     materials: projectCraftAssistPersistedMaterialsFromState(source.craftAssistMaterials),
     pick_role: normalizeCraftAssistRole(source.craftAssistPickRole)
   };
@@ -5879,7 +5925,9 @@ function sanitizeCraftAssistPresetPayload(payload) {
   const name = String(source.name || "").trim();
   if (!name) return null;
   const filterMode = normalizeCraftAssistFilterMode(source.wear_filter_mode);
-  const targetWear = clampWear01(source.target_wear, 0.5);
+  const targetWearPair = resolveCraftAssistTargetWearPair(source.target_wear, source.target_wear_raw);
+  if (!targetWearPair) return null;
+  const targetWear = targetWearPair.target_wear;
   const materials = projectCraftAssistPersistedMaterialsFromState(normalizeCraftAssistMaterialList(source.materials, {
     targetWear,
     idPrefix: "preset_material",
@@ -5894,6 +5942,7 @@ function sanitizeCraftAssistPresetPayload(payload) {
     id: String(source.id || makeCraftAssistUid("preset")).trim() || makeCraftAssistUid("preset"),
     name,
     target_wear: targetWear,
+    target_wear_raw: targetWearPair.target_wear_raw,
     materials,
     created_at: createdAt || Date.now(),
     updated_at: updatedAt || Date.now()
@@ -5982,15 +6031,16 @@ function formatCraftAssistPresetTime(value) {
 function buildCurrentCraftAssistPresetSnapshot(name) {
   const presetName = String(name || "").trim();
   if (!presetName) return null;
-  const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
-  if (targetWear == null) return null;
+  const targetWearPair = resolveCraftAssistTargetWearPair(state.craftAssistTargetWear, state.craftAssistTargetWearRaw);
+  if (!targetWearPair) return null;
   const materials = projectCraftAssistPersistedMaterialsFromState(state.craftAssistMaterials)
     .filter((entry) => entry.count > 0);
   if (!materials.length) return null;
   return sanitizeCraftAssistPresetPayload({
     id: makeCraftAssistUid("preset"),
     name: presetName,
-    target_wear: targetWear,
+    target_wear: targetWearPair.target_wear,
+    target_wear_raw: targetWearPair.target_wear_raw,
     materials,
     created_at: Date.now(),
     updated_at: Date.now()
@@ -7408,16 +7458,19 @@ function commitCraftAssistTargetWearInput(input) {
   const raw = String(input.value || "").trim();
   if (raw === wearTextFull(0) && String(input.dataset && input.dataset.displayDefault || "") === "1") {
     delete input.dataset.displayDefault;
+    delete input.dataset.persistedRaw;
     return null;
   }
-  const parsed = parseOptionalWear01(raw);
-  if (parsed == null) {
+  const pair = resolveCraftAssistTargetWearPair(null, raw);
+  if (!pair) {
     if (raw) input.value = "";
+    delete input.dataset.persistedRaw;
     return null;
   }
   delete input.dataset.displayDefault;
-  input.value = wearTextFull(parsed);
-  return parsed;
+  input.dataset.persistedRaw = pair.target_wear_raw;
+  input.value = pair.target_wear_raw;
+  return pair.target_wear;
 }
 function renderCraftAssistList() {
   if (!ui.craftAssistList) return;
@@ -7845,9 +7898,9 @@ function validateCurrentCraftAssistPresetBeforeNaming() {
   if (!materialCheck.ok) {
     return materialCheck;
   }
-  const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
-  if (targetWear == null) {
-    return {ok: false, message: "请先填写目标相对磨损"};
+  const targetWearPair = resolveCraftAssistTargetWearPair(state.craftAssistTargetWear, state.craftAssistTargetWearRaw);
+  if (!targetWearPair) {
+    return {ok: false, message: "请先填写有效的目标相对磨损"};
   }
   const probe = buildCurrentCraftAssistPresetSnapshot("__precheck__");
   return validateCraftAssistPresetSnapshot(probe);
@@ -7858,17 +7911,19 @@ function isCraftAssistPresetEditing() {
 }
 
 function buildCraftAssistDraftSnapshotFromState() {
-  const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
+  const targetWearPair = resolveCraftAssistTargetWearPair(state.craftAssistTargetWear, state.craftAssistTargetWearRaw);
   return {
     panel_open: !!state.craftAssistOpen,
-    target_wear: targetWear,
+    target_wear: targetWearPair ? targetWearPair.target_wear : null,
+    target_wear_raw: targetWearPair ? targetWearPair.target_wear_raw : "",
     materials: projectCraftAssistPersistedMaterialsFromState(state.craftAssistMaterials),
     pick_role: normalizeCraftAssistRole(state.craftAssistPickRole)
   };
 }
 
-function buildCraftAssistPresetComparableSnapshot({name = "", targetWear = null, wearFilterMode = "relative", materials = []} = {}) {
-  const parsedTargetWear = parseOptionalWear01(targetWear);
+function buildCraftAssistPresetComparableSnapshot({name = "", targetWear = null, targetWearRaw = "", wearFilterMode = "relative", materials = []} = {}) {
+  const targetWearPair = resolveCraftAssistTargetWearPair(targetWear, targetWearRaw);
+  const parsedTargetWear = targetWearPair ? targetWearPair.target_wear : null;
   const normalizedMaterials = projectCraftAssistPersistedMaterialsFromState(normalizeCraftAssistMaterialList(materials, {
     targetWear: parsedTargetWear,
     idPrefix: "assist",
@@ -7878,6 +7933,7 @@ function buildCraftAssistPresetComparableSnapshot({name = "", targetWear = null,
   return {
     name: String(name || "").trim(),
     target_wear: parsedTargetWear,
+    target_wear_raw: targetWearPair ? targetWearPair.target_wear_raw : "",
     materials: normalizedMaterials
   };
 }
@@ -7887,6 +7943,7 @@ function getCurrentCraftAssistPresetComparableSnapshot() {
   return buildCraftAssistPresetComparableSnapshot({
     name: state.craftAssistPresetEditingName,
     targetWear: state.craftAssistTargetWear,
+    targetWearRaw: state.craftAssistTargetWearRaw,
     wearFilterMode: filterMode,
     materials: state.craftAssistMaterials
   });
@@ -7902,7 +7959,9 @@ function isCraftAssistPresetEditingDirty() {
 
 function restoreCraftAssistDraftSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return;
-  state.craftAssistTargetWear = parseOptionalWear01(snapshot.target_wear);
+  const targetWearPair = resolveCraftAssistTargetWearPair(snapshot.target_wear, snapshot.target_wear_raw);
+  state.craftAssistTargetWear = targetWearPair ? targetWearPair.target_wear : null;
+  state.craftAssistTargetWearRaw = targetWearPair ? targetWearPair.target_wear_raw : "";
   state.craftAssistMaterials = normalizeCraftAssistMaterialList(snapshot.materials, {
     targetWear: state.craftAssistTargetWear,
     idPrefix: "assist",
@@ -7930,7 +7989,8 @@ function clearCraftAssistPresetEditingState({restoreDraft = false} = {}) {
 function loadCraftAssistPresetIntoDraft(preset) {
   const normalized = sanitizeCraftAssistPresetPayload(preset);
   if (!normalized) return null;
-  state.craftAssistTargetWear = parseOptionalWear01(normalized.target_wear);
+  state.craftAssistTargetWear = normalizeCraftAssistTargetWearStep(normalized.target_wear);
+  state.craftAssistTargetWearRaw = String(normalized.target_wear_raw || "").trim();
   state.craftAssistMaterials = normalizeCraftAssistMaterialList(normalized.materials, {
     targetWear: state.craftAssistTargetWear,
     idPrefix: "assist",
@@ -8016,12 +8076,14 @@ async function applyCraftAssistPreset(presetId, {autoSelect = true, applyCount =
     const draftBackup = buildCraftAssistDraftSnapshotFromState();
     const repeatCount = normalizeCraftAssistApplyCount(applyCount, 1);
     const runUsername = String(state.currentAccountUsername || state.accountSelectedUsername || "").trim();
+    const targetWearPair = resolveCraftAssistTargetWearPair(preset.target_wear, preset.target_wear_raw);
     const batchOptions = {
       sourcePresetName: preset.name,
       repeatCount,
       draftSnapshot: {
         panel_open: draftBackup.panel_open,
-        target_wear: preset.target_wear,
+        target_wear: targetWearPair ? targetWearPair.target_wear : null,
+        target_wear_raw: targetWearPair ? targetWearPair.target_wear_raw : "",
         wear_filter_mode: preset.wear_filter_mode,
         materials: preset.materials,
         pick_role: draftBackup.pick_role
@@ -8509,7 +8571,9 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     ? draftSnapshot
     : buildCraftAssistDraftSnapshotFromScopedState(scopedState);
   const wearFilterMode = normalizeCraftAssistFilterMode(runSnapshot.wear_filter_mode);
-  const targetValue = parseOptionalWear01(runSnapshot.target_wear);
+  const targetWearPair = resolveCraftAssistTargetWearPair(runSnapshot.target_wear, runSnapshot.target_wear_raw);
+  const targetValue = targetWearPair ? targetWearPair.target_wear : null;
+  const targetWearRaw = targetWearPair ? targetWearPair.target_wear_raw : "";
   const materials = normalizeCraftAssistMaterialsForRun({
     materials: runSnapshot.materials,
     targetWear: targetValue,
@@ -8588,6 +8652,49 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
     }
 
     const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+    const summarizeDebugMaterials = (list) => {
+      return (Array.isArray(list) ? list : []).map((material) => {
+        const base = material && typeof material === "object" ? material : {};
+        const fallbackItems = Array.isArray(base.names)
+          ? base.names.map((name) => ({
+              name,
+              wear_filter_mode: base.wear_filter_mode,
+              wear_min: base.wear_min,
+              wear_max: base.wear_max
+            }))
+          : [];
+        const rawItems = Array.isArray(base.items) && base.items.length ? base.items : fallbackItems;
+        const itemNames = rawItems
+          .map((item) => String(item && item.name || "").trim())
+          .filter(Boolean);
+        const wearRanges = rawItems
+          .map((item) => {
+            const wearMin = Number(item && item.wear_min);
+            const wearMax = Number(item && item.wear_max);
+            return {
+              name: String(item && item.name || "").trim(),
+              wear_filter_mode: String(item && item.wear_filter_mode || base.wear_filter_mode || "").trim(),
+              wear_min: Number.isFinite(wearMin) ? wearMin : null,
+              wear_max: Number.isFinite(wearMax) ? wearMax : null
+            };
+          })
+          .filter((entry) => entry.name || entry.wear_filter_mode || entry.wear_min != null || entry.wear_max != null);
+        return {
+          role: String(base.role || "").trim() || "main",
+          count: Number(base.count || 0) || 0,
+          item_names: itemNames,
+          wear_ranges: wearRanges
+        };
+      }).filter((entry) => entry.item_names.length || entry.wear_ranges.length || entry.count > 0);
+    };
+    const normalizeFailureInfo = (err) => {
+      const data = err && err.data && typeof err.data === "object" ? err.data : null;
+      const message = String(data && data.message || err && err.message || "辅助选材暂时失败，请重试。").trim()
+        || "辅助选材暂时失败，请重试。";
+      const detail = String(data && data.detail || err && err.message || "").trim() || message;
+      const code = String(data && data.code || err && err.code || "").trim();
+      return {code, message, detail};
+    };
     let run = null;
     try {
       run = await api("/api/craft/assist-select", {
@@ -8597,6 +8704,7 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
         body: JSON.stringify({
           username: runUsername,
           target_wear: targetValue,
+          target_wear_raw: targetWearRaw,
           wear_approach_mode: state.craftAssistApproachMode ? "infinite" : "below",
           materials,
           use_component_items: !!state.craftUseComponentItems,
@@ -8607,8 +8715,24 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
         })
       });
     } catch (err) {
+      const failure = normalizeFailureInfo(err);
+      console.warn("[craft-assist] auto selection failed", {
+        account: runUsername,
+        target_wear: targetValue,
+        target_wear_raw: targetWearRaw,
+        wear_approach_mode: state.craftAssistApproachMode ? "infinite" : "below",
+        wear_offset_pct: wearOffsetPct,
+        enable_fast_craft_assist: !!state.craftAssistFastMode,
+        use_component_items: !!state.craftUseComponentItems,
+        include_cooling: !!state.craftIncludeCooling,
+        blocked_ids_length: blockedIds.size,
+        materials: summarizeDebugMaterials(materials),
+        code: failure.code,
+        message: failure.message,
+        detail: failure.detail
+      });
       removeCreatedEntry();
-      setScopedStatus(`配方#${recipeNo}：${err.message}`, true);
+      setScopedStatus(`配方#${recipeNo}：${failure.message}`, true);
       return false;
     }
 
@@ -9539,9 +9663,9 @@ function renderCraftAssistPanel() {
     ui.craftAssistTargetWear.placeholder = wearTextFull(0);
   }
   if (ui.craftAssistTargetWear && document.activeElement !== ui.craftAssistTargetWear) {
-    const targetWear = parseOptionalWear01(state.craftAssistTargetWear);
-    ui.craftAssistTargetWear.value = targetWear == null ? wearTextFull(0) : wearTextFull(targetWear);
-    if (targetWear == null) ui.craftAssistTargetWear.dataset.displayDefault = "1";
+    const targetWearPair = resolveCraftAssistTargetWearPair(state.craftAssistTargetWear, state.craftAssistTargetWearRaw);
+    ui.craftAssistTargetWear.value = targetWearPair ? targetWearPair.target_wear_raw : wearTextFull(0);
+    if (!targetWearPair) ui.craftAssistTargetWear.dataset.displayDefault = "1";
     else delete ui.craftAssistTargetWear.dataset.displayDefault;
   }
   const filterMode = getCraftAssistFilterMode();
@@ -14070,7 +14194,9 @@ function renderBatchCraftPage() {
 async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, existingItemIds) {
   const accountRows = getCraftRowsForAccount(username);
   if (!accountRows.length) return null;
-  const targetValue = parseOptionalWear01(draftSnapshot.target_wear);
+  const targetWearPair = resolveCraftAssistTargetWearPair(draftSnapshot.target_wear, draftSnapshot.target_wear_raw);
+  const targetValue = targetWearPair ? targetWearPair.target_wear : null;
+  const targetWearRaw = targetWearPair ? targetWearPair.target_wear_raw : "";
   const materials = normalizeCraftAssistMaterialsForRun({
     materials: draftSnapshot.materials,
     targetWear: targetValue,
@@ -14078,9 +14204,45 @@ async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, exi
   });
   if (!materials.length || targetValue == null) return null;
   const mode = craftAssistTargetCountFromMaterials(materials);
+  const summarizeDebugMaterials = (list) => {
+    return (Array.isArray(list) ? list : []).map((material) => {
+      const base = material && typeof material === "object" ? material : {};
+      const fallbackItems = Array.isArray(base.names)
+        ? base.names.map((name) => ({
+            name,
+            wear_filter_mode: base.wear_filter_mode,
+            wear_min: base.wear_min,
+            wear_max: base.wear_max
+          }))
+        : [];
+      const rawItems = Array.isArray(base.items) && base.items.length ? base.items : fallbackItems;
+      const itemNames = rawItems
+        .map((item) => String(item && item.name || "").trim())
+        .filter(Boolean);
+      const wearRanges = rawItems
+        .map((item) => {
+          const wearMin = Number(item && item.wear_min);
+          const wearMax = Number(item && item.wear_max);
+          return {
+            name: String(item && item.name || "").trim(),
+            wear_filter_mode: String(item && item.wear_filter_mode || base.wear_filter_mode || "").trim(),
+            wear_min: Number.isFinite(wearMin) ? wearMin : null,
+            wear_max: Number.isFinite(wearMax) ? wearMax : null
+          };
+        })
+        .filter((entry) => entry.name || entry.wear_filter_mode || entry.wear_min != null || entry.wear_max != null);
+      return {
+        role: String(base.role || "").trim() || "main",
+        count: Number(base.count || 0) || 0,
+        item_names: itemNames,
+        wear_ranges: wearRanges
+      };
+    }).filter((entry) => entry.item_names.length || entry.wear_ranges.length || entry.count > 0);
+  };
   const payload = {
     username,
     target_wear: targetValue,
+    target_wear_raw: targetWearRaw,
     wear_approach_mode: state.batchCraftApproachMode ? "infinite" : "below",
     materials,
     use_component_items: !!state.batchCraftUseComponentItems,
@@ -14103,7 +14265,35 @@ async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, exi
       result: null
     };
   } catch (err) {
-    return null;
+    const data = err && err.data && typeof err.data === "object" ? err.data : null;
+    const message = String(data && data.message || err && err.message || "辅助选材暂时失败，请重试。").trim()
+      || "辅助选材暂时失败，请重试。";
+    const detail = String(data && data.detail || err && err.message || "").trim() || message;
+    const code = String(data && data.code || err && err.code || "").trim();
+    const occupiedItemIdsLength = Array.isArray(existingItemIds) ? existingItemIds.length : 0;
+    console.warn("[craft-assist][batch] account selection failed", {
+      account: username,
+      target_wear: targetValue,
+      target_wear_raw: targetWearRaw,
+      wear_approach_mode: payload.wear_approach_mode,
+      wear_offset_pct: payload.wear_offset_pct,
+      enable_fast_craft_assist: payload.enable_fast_craft_assist,
+      use_component_items: payload.use_component_items,
+      include_cooling: payload.include_cooling,
+      blocked_ids_length: Array.isArray(payload.blocked_ids) ? payload.blocked_ids.length : 0,
+      occupied_item_ids_length: occupiedItemIdsLength,
+      materials: summarizeDebugMaterials(materials),
+      code,
+      message,
+      detail
+    });
+    return {
+      failed: true,
+      username,
+      code,
+      message,
+      detail
+    };
   }
 }
 
@@ -14150,14 +14340,20 @@ async function runBatchCraftAssistSelect() {
   // 并行：所有账号同时选材
   const promises = state.batchCraftAccounts.map(async (username) => {
     const accountEntry = {username, recipes: []};
+    const failures = [];
     const usedItemIds = [];
     // 每个账号最多尝试 limit 次（总数上限由后面统一截断）
     for (let r = 0; r < limit; r++) {
       const result = await callBatchCraftAssistSelectForAccount(username, draftSnapshot, usedItemIds);
       if (!result) break;
+      if (result.failed) {
+        failures.push(result);
+        break;
+      }
       accountEntry.recipes.push(result);
       usedItemIds.push(...result.item_ids);
     }
+    accountEntry.failures = failures;
     return accountEntry;
   });
 
@@ -14168,6 +14364,18 @@ async function runBatchCraftAssistSelect() {
       allEntries.push(result.value);
     }
   }
+  const failureSummaries = results
+    .filter((result) => result.status === "fulfilled")
+    .flatMap((result) => Array.isArray(result.value && result.value.failures) ? result.value.failures : [])
+    .map((failure) => {
+      const account = String(failure && failure.username || "").trim();
+      const message = String(failure && failure.message || "").trim();
+      return account && message ? `${account}：${message}` : message || account;
+    })
+    .filter(Boolean);
+  const failureSummaryText = failureSummaries.slice(0, 3).join("；");
+  const hiddenFailureCount = Math.max(0, failureSummaries.length - 3);
+  const failureSuffix = hiddenFailureCount > 0 ? `；另 ${hiddenFailureCount} 个账号失败` : "";
 
   // 按总数上限截断
   let totalCount = 0;
@@ -14184,6 +14392,16 @@ async function runBatchCraftAssistSelect() {
 
   state.batchCraftBusy = false;
   const totalRecipes = state.batchCraftQueue.reduce((s, e) => s + e.recipes.length, 0);
+  if (failureSummaries.length && totalRecipes <= 0) {
+    setBatchCraftStatus(`选材失败：${failureSummaries.length} 个账号。${failureSummaryText}${failureSuffix}`, true);
+    renderBatchCraftPage();
+    return;
+  }
+  if (failureSummaries.length) {
+    setBatchCraftStatus(`部分账号选材失败：失败 ${failureSummaries.length} 个账号。${failureSummaryText}${failureSuffix}。已选 ${state.batchCraftQueue.length} 个账号，共 ${totalRecipes} 组配方`, true);
+    renderBatchCraftPage();
+    return;
+  }
   setBatchCraftStatus(`选材完成：${state.batchCraftQueue.length} 个账号，共 ${totalRecipes} 组配方`);
   renderBatchCraftPage();
 }
@@ -15616,6 +15834,7 @@ function bindEvents() {
   if (ui.craftAssistTargetWear) {
     const commitTargetWear = () => {
       state.craftAssistTargetWear = commitCraftAssistTargetWearInput(ui.craftAssistTargetWear);
+      state.craftAssistTargetWearRaw = String(ui.craftAssistTargetWear && ui.craftAssistTargetWear.dataset && ui.craftAssistTargetWear.dataset.persistedRaw || "").trim();
       renderCraftAssistPanel();
     };
     ui.craftAssistTargetWear.onfocus = () => {

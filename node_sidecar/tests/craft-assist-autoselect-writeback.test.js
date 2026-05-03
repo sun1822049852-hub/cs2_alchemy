@@ -5,6 +5,8 @@ const vm = require("node:vm");
 
 const APP_PATH = path.resolve(__dirname, "../ui/app.js");
 const APP_SOURCE = fs.readFileSync(APP_PATH, "utf8");
+const INDEX_PATH = path.resolve(__dirname, "../ui/index.html");
+const INDEX_SOURCE = fs.readFileSync(INDEX_PATH, "utf8");
 
 function extractConst(name) {
   const match = APP_SOURCE.match(new RegExp(`^const\\s+${name}\\s*=\\s*[^;]+;`, "m"));
@@ -22,6 +24,14 @@ function extractBlock(startMarker, endMarker) {
 
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function testCraftPageHasVisibleStatusTextMount() {
+  assert.match(
+    INDEX_SOURCE,
+    /<span(?=[^>]*id="craftStatusText")(?=[^>]*class="[^"]*\bstatus-text\b[^"]*")(?=[^>]*aria-live="polite")[^>]*>/,
+    "craft page should expose #craftStatusText with polite live announcements for setCraftStatus() failures"
+  );
 }
 
 function createScopedState() {
@@ -56,6 +66,7 @@ function loadApplyCraftAssistAutoSelection() {
   const ids = Array.from({length: 10}, (_, index) => String(index + 1));
   const rows = ids.map((id) => ({asset_id: id}));
   let savedScopedState = createScopedState();
+  const warnCalls = [];
   function createAbortError(message = "aborted") {
     const err = new Error(message);
     err.name = "AbortError";
@@ -97,6 +108,7 @@ function loadApplyCraftAssistAutoSelection() {
   const source = [
     extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT"),
     extractConst("WEAR_INPUT_DECIMALS"),
+    extractBlock("function resolveCraftAssistTargetWearPair(", "function normalizeCraftAssistTargetWearStepOrFallback("),
     extractBlock("async function api(", "function parseEventData("),
     extractBlock("function createDefaultCraftAssistRuntimeState(", "function createDefaultCraftAccountScopedState("),
     extractBlock("async function applyCraftAssistAutoSelection(", "async function applyCraftAssistAutoSelectionBatch(")
@@ -111,7 +123,17 @@ function loadApplyCraftAssistAutoSelection() {
     Set,
     Map,
     JSON,
-    console,
+    console: {
+      warn(...args) {
+        warnCalls.push(args);
+      },
+      info() {},
+      log() {},
+      error() {},
+      groupCollapsed() {},
+      groupEnd() {},
+      table() {}
+    },
     AbortController: AbortControllerMock,
     setTimeout(fn) {
       if (typeof fn === "function") fn();
@@ -129,6 +151,8 @@ function loadApplyCraftAssistAutoSelection() {
       craftAssistPendingUiAction: "",
       craftAssistPendingPresetId: "",
       craftAssistRunToken: "",
+      craftAssistFastMode: false,
+      craftAssistApproachMode: false,
       craftUseComponentItems: false,
       craftIncludeCooling: false,
       craftAssistWearOffsetPct: 5,
@@ -237,15 +261,27 @@ function loadApplyCraftAssistAutoSelection() {
   };
   vm.runInNewContext(source, context, {filename: APP_PATH});
   context.getSavedScopedState = () => deepClone(savedScopedState);
+  context.getWarnCalls = () => warnCalls.map((entry) => entry.slice());
   return context;
 }
 
 async function testSuccessfulAutoSelectionWritesBackFilledRecipeInsteadOfEmptyShell() {
   const app = loadApplyCraftAssistAutoSelection();
+  const targetWearRaw = "0.21";
+  const targetWearStep = Math.fround(Number(targetWearRaw));
+  app.buildCraftAssistDraftSnapshotFromScopedState = () => ({
+    panel_open: true,
+    target_wear: targetWearStep,
+    target_wear_raw: targetWearRaw,
+    materials: [{id: "mat-1", role: "main", count: 10, items: [{id: "mat-1__1", name: "AK", wear_filter_mode: "relative", wear_min: 0.1, wear_max: 0.2, custom_range: true}]}],
+    pick_role: "main"
+  });
   app.fetch = async (_path, options = {}) => ({
     ok: true,
     async json() {
       const request = JSON.parse(String(options && options.body || "{}"));
+      assert.equal(request.target_wear_raw, targetWearRaw);
+      assert.equal(request.target_wear, targetWearStep);
       assert.equal(Object.prototype.hasOwnProperty.call(request, "wear_filter_mode"), false);
       assert.deepEqual(request.materials, [{id: "mat-1", role: "main", count: 10, items: [{id: "mat-1__1", name: "AK", wear_filter_mode: "relative", wear_min: 0.1, wear_max: 0.2, custom_range: true}]}]);
       return {
@@ -295,9 +331,77 @@ async function testHungAutoSelectionRequestStillClearsBusyStateAfterTimeout() {
   assert.equal(app.getCraftAssistActiveRunToken("acc-a"), "");
 }
 
+async function testFailedAutoSelectionShowsHumanMessageAndLogsDetailSummary() {
+  const app = loadApplyCraftAssistAutoSelection();
+  const targetWearRaw = "0.21";
+  const targetWearStep = Math.fround(Number(targetWearRaw));
+  app.buildCraftAssistDraftSnapshotFromScopedState = () => ({
+    panel_open: true,
+    target_wear: targetWearStep,
+    target_wear_raw: targetWearRaw,
+    materials: [{id: "mat-1", role: "main", count: 10, items: [{id: "mat-1__1", name: "AK", wear_filter_mode: "relative", wear_min: 0.1, wear_max: 0.2, custom_range: true}]}],
+    pick_role: "main"
+  });
+  app.fetch = async () => ({
+    ok: false,
+    status: 400,
+    async json() {
+      return {
+        ok: false,
+        code: "inventory_insufficient",
+        message: "辅助选材失败：当前库存里没有足够符合条件的材料。",
+        detail: "candidateRows is required"
+      };
+    }
+  });
+
+  const ok = await app.applyCraftAssistAutoSelection({accountUsername: "acc-a", pendingUiAction: "panel_apply"});
+  const saved = app.getSavedScopedState();
+  const warnCalls = app.getWarnCalls();
+
+  assert.equal(ok, false);
+  assert.equal(saved.craftRecipeQueue.length, 0);
+  assert.equal(saved.craftStatusError, true);
+  assert.match(saved.craftStatusText, /辅助选材失败：当前库存里没有足够符合条件的材料。/);
+  assert.doesNotMatch(saved.craftStatusText, /candidateRows is required/);
+  assert.equal(warnCalls.length, 1);
+  assert.match(String(warnCalls[0][0] || ""), /craft-assist/i);
+  assert.deepEqual(JSON.parse(JSON.stringify(warnCalls[0][1])), {
+    account: "acc-a",
+    target_wear: targetWearStep,
+    target_wear_raw: targetWearRaw,
+    wear_approach_mode: "below",
+    wear_offset_pct: 5,
+    enable_fast_craft_assist: false,
+    use_component_items: false,
+    include_cooling: false,
+    blocked_ids_length: 0,
+    materials: [
+      {
+        role: "main",
+        count: 10,
+        item_names: ["AK"],
+        wear_ranges: [
+          {
+            name: "AK",
+            wear_filter_mode: "relative",
+            wear_min: 0.1,
+            wear_max: 0.2
+          }
+        ]
+      }
+    ],
+    code: "inventory_insufficient",
+    message: "辅助选材失败：当前库存里没有足够符合条件的材料。",
+    detail: "candidateRows is required"
+  });
+}
+
 async function main() {
+  testCraftPageHasVisibleStatusTextMount();
   await testSuccessfulAutoSelectionWritesBackFilledRecipeInsteadOfEmptyShell();
   await testHungAutoSelectionRequestStillClearsBusyStateAfterTimeout();
+  await testFailedAutoSelectionShowsHumanMessageAndLogsDetailSummary();
   console.log("craft-assist-autoselect-writeback tests passed");
 }
 

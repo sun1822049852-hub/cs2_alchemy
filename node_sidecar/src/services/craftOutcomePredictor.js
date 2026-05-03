@@ -52,6 +52,7 @@ function normalizeWearApproachMode(value) {
 function resolvePredictionTargetRelativeWear(targetRelativeWear, approachMode) {
   return resolveCraftAssistTargetStepSpec({
     inputStep: Math.fround(targetRelativeWear),
+    inputRaw: targetRelativeWear,
     approachMode: normalizeWearApproachMode(approachMode)
   }).targetStep;
 }

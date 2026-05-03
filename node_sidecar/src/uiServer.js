@@ -801,7 +801,65 @@ function normalizeRouteItemIds(ids) {
     .filter(Boolean)));
 }
 
+function createCraftAssistRouteValidationError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = 400;
+  return err;
+}
+
+function normalizeCraftAssistRouteTarget(body) {
+  const payload = body && typeof body === "object" ? body : {};
+  const hasRaw = Object.prototype.hasOwnProperty.call(payload, "target_wear_raw");
+  let rawText = "";
+  let rawValue = null;
+  if (hasRaw) {
+    rawText = asString(payload.target_wear_raw).trim();
+    rawValue = Number(rawText);
+    if (!rawText || !Number.isFinite(rawValue) || rawValue < 0 || rawValue > 1) {
+      throw createCraftAssistRouteValidationError(
+        "invalid_target_wear",
+        "target_wear_raw must be a finite number in [0, 1]"
+      );
+    }
+  }
+
+  const targetWear = Number(payload.target_wear);
+  if (
+    !Number.isFinite(targetWear) ||
+    targetWear < 0 ||
+    targetWear > 1 ||
+    Math.fround(targetWear) !== targetWear
+  ) {
+    throw createCraftAssistRouteValidationError(
+      "invalid_target_step",
+      "target_wear must be an exact float32 number in [0, 1]"
+    );
+  }
+
+  if (!hasRaw) {
+    return {
+      targetWear,
+      targetWearRaw: String(targetWear)
+    };
+  }
+
+  const expectedStep = Math.fround(rawValue);
+  if (targetWear !== expectedStep) {
+    throw createCraftAssistRouteValidationError(
+      "invalid_target_step",
+      "target_wear must equal Math.fround(Number(target_wear_raw))"
+    );
+  }
+
+  return {
+    targetWear,
+    targetWearRaw: rawText
+  };
+}
+
 function buildCraftAssistSelectRoutePayload(body, {rows = []} = {}) {
+  const target = normalizeCraftAssistRouteTarget(body);
   const includeComponentItems = parseLooseBoolean(
     Object.prototype.hasOwnProperty.call(body || {}, "include_component_items")
       ? body.include_component_items
@@ -820,7 +878,8 @@ function buildCraftAssistSelectRoutePayload(body, {rows = []} = {}) {
   }).candidateRows;
   return {
     request: {
-      targetWear: body && body.target_wear,
+      targetWear: target.targetWear,
+      targetWearRaw: target.targetWearRaw,
       wearFilterMode: body && body.wear_filter_mode,
       wearApproachMode: body && body.wear_approach_mode,
       materials: normalizeCraftAssistMaterialListCanonical(body && body.materials, {
@@ -836,6 +895,369 @@ function buildCraftAssistSelectRoutePayload(body, {rows = []} = {}) {
       enableFastCraftAssist
     },
     candidateRows
+  };
+}
+
+function isCraftAssistPlainLanguageMessage(message) {
+  const text = asString(message).trim();
+  if (!text) {
+    return false;
+  }
+  if (!/[\u4e00-\u9fff]/.test(text)) {
+    return false;
+  }
+  return !/(float32|quantized|worker|snapshotpath|safetargetvalue|steam_precision_margin|candidaterows|target_wear|wear_filter_mode|wear_offset_pct|enable_fast_craft_assist|use_component_items|include_component_items|include_cooling)/i.test(text);
+}
+
+function parseCraftAssistBracketMaterialName(text) {
+  const match = asString(text).match(/父类材料【([^】]+)】/);
+  return match && match[1] ? match[1].trim() : "";
+}
+
+function parseCraftAssistQuantityShortfall(text) {
+  const match = asString(text).match(/父类材料【([^】]+)】可用数量不足[:：]\s*需\s*(\d+)\s*[，,]\s*仅\s*(\d+)/);
+  if (!match) {
+    return null;
+  }
+  const materialName = asString(match[1]).trim();
+  const requiredCount = Number(match[2]);
+  const availableCount = Number(match[3]);
+  if (!materialName || !Number.isFinite(requiredCount) || !Number.isFinite(availableCount)) {
+    return null;
+  }
+  return {
+    materialName,
+    requiredCount,
+    availableCount
+  };
+}
+
+function normalizeCraftAssistFailure(input, {defaultStatus = 400, defaultCode = ""} = {}) {
+  const payload = input && typeof input === "object" ? input : {};
+  const explicitMessage = asString(payload.message).trim();
+  const explicitDetail = asString(payload.detail).trim();
+  const rawCode = asString(payload.code || payload.reason || "").trim();
+  const rawDetail = explicitDetail || explicitMessage || asString(payload.error && payload.error.message ? payload.error.message : payload.error).trim();
+  const rawMessage = explicitMessage || rawDetail;
+  const lower = `${rawCode} ${rawDetail || rawMessage}`.toLowerCase();
+  const lowerCode = rawCode.toLowerCase();
+  const includesAny = (parts) => parts.some((part) => lower.includes(String(part || "").toLowerCase()));
+  const codeIsAny = (codes) => codes.some((code) => lowerCode === String(code || "").toLowerCase());
+  const explicitStatus = Math.trunc(Number(payload.status));
+  const fallbackStatus = Math.trunc(Number(defaultStatus));
+  const safeDefaultStatus = fallbackStatus >= 400 && fallbackStatus <= 599 ? fallbackStatus : 500;
+  const resolvedStatus = explicitStatus >= 400 && explicitStatus <= 599 ? explicitStatus : safeDefaultStatus;
+  const enableFastCraftAssist = parseLooseBoolean(payload.enableFastCraftAssist);
+  const detail = rawDetail || rawMessage || "craft assist failure";
+  const genericMessages = {
+    parameter: "辅助选材失败：请检查目标磨损和材料数量。",
+    inventory: "辅助选材失败：当前库存里没有足够符合条件的材料。",
+    target: "辅助选材失败：当前材料组合达不到目标磨损，请放宽磨损范围或更换材料。",
+    internal: "辅助选材暂时失败，请重试。"
+  };
+
+  if (includesAny(["prefilter"])) {
+    return {
+      status: resolvedStatus >= 500 ? resolvedStatus : 500,
+      payload: {
+        ok: false,
+        message: "快速选材预筛失败，请关闭快速模式。",
+        detail,
+        code: rawCode || "craft_assist_prefilter_failed"
+      }
+    };
+  }
+
+  if (codeIsAny(["worker_timeout"]) || includesAny(["craft assist worker timeout", "worker timeout", "timeout after"])) {
+    return {
+      status: resolvedStatus >= 500 ? resolvedStatus : 500,
+      payload: {
+        ok: false,
+        message: enableFastCraftAssist
+          ? "辅助选材计算超时，请缩小材料范围后重试。"
+          : "辅助选材计算超时，请缩小材料范围或使用快速选材。",
+        detail,
+        code: rawCode || "worker_timeout"
+      }
+    };
+  }
+
+  if (codeIsAny(["worker_exited", "worker_crash", "worker_error"]) || includesAny(["worker exited", "worker crash", "worker error"])) {
+    return {
+      status: resolvedStatus >= 500 ? resolvedStatus : 500,
+      payload: {
+        ok: false,
+        message: "辅助选材后台异常。",
+        detail,
+        code: rawCode || "craft_assist_worker_error"
+      }
+    };
+  }
+
+  if (codeIsAny(["final_result_not_on_target_step"]) || includesAny(["非目标 float32 台阶"])) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "选材结果未通过最终校验，请放宽目标或更换材料。",
+        detail,
+        code: rawCode || "final_result_not_on_target_step"
+      }
+    };
+  }
+
+  if (codeIsAny(["account_required", "username_required"]) || includesAny(["username is required"])) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "请先选择要选材的账号。",
+        detail,
+        code: "account_required"
+      }
+    };
+  }
+
+  if (
+    codeIsAny(["target_step_invalid", "invalid_target_step"])
+    || includesAny(["target_wear must equal math.fround(number(target_wear_raw))"])
+    || includesAny(["exact float32", "target step invalid", "不是可用台阶", "可用台阶"])
+  ) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: includesAny(["target_wear_raw", "math.fround(number(target_wear_raw))"])
+          ? "目标磨损和原始输入不一致，请重新输入目标磨损。"
+          : "目标磨损不是可用台阶，请用预测器或输入框生成的目标值。",
+        detail,
+        code: rawCode || "invalid_target_step"
+      }
+    };
+  }
+
+  if (
+    codeIsAny(["invalid_target_wear", "target_wear"])
+    || includesAny(["target_wear", "target_wear_raw", "请先输入目标相对磨损", "目标磨损为空", "目标磨损非法"])
+    || (includesAny(["目标磨损必须"]) && !includesAny(["float32", "台阶"]))
+  ) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "请填写 0 到 1 之间的目标磨损。",
+        detail,
+        code: "invalid_target_wear"
+      }
+    };
+  }
+
+  if (codeIsAny(["snapshot_missing"]) || includesAny(["snapshot_missing", "库存快照不存在", "库存快照失效", "库存缓存已失效", "库存快照"])) {
+    return {
+      status: 409,
+      payload: {
+        ok: false,
+        message: "库存缓存已失效，请先刷新该账号库存。",
+        detail,
+        code: "snapshot_missing"
+      }
+    };
+  }
+
+  if (includesAny(["candidaterows"])) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "辅助选材上下文失效，请刷新库存后重试。",
+        detail,
+        code: "craft_assist_context_missing"
+      }
+    };
+  }
+
+  if (includesAny(["主库存无可选炼金物品"])) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "当前库存没有可用于炼金的物品。",
+        detail,
+        code: "inventory_no_candidates"
+      }
+    };
+  }
+
+  const isCoolingShortfall = codeIsAny(["material_quantity_insufficient_cooling_filtered"]);
+  const isBlockedShortfall = codeIsAny(["material_quantity_insufficient_blocked"]);
+  const isGenericShortfall = codeIsAny(["material_quantity_insufficient"]);
+  if (isCoolingShortfall || isBlockedShortfall || isGenericShortfall || includesAny(["可用数量不足"])) {
+    const parsedQuantity = parseCraftAssistQuantityShortfall(detail);
+    const materialName = parsedQuantity
+      ? parsedQuantity.materialName
+      : parseCraftAssistBracketMaterialName(detail);
+    const fallbackQuantityMessage = parsedQuantity
+      ? `材料【${parsedQuantity.materialName}】数量不足：需要 ${parsedQuantity.requiredCount} 件，当前可用 ${parsedQuantity.availableCount} 件。`
+      : materialName
+        ? `材料【${materialName}】数量不足，请调整材料范围。`
+        : "配方要求的材料数量不足，请调整材料范围。";
+    const specializedFallbackMessage = isCoolingShortfall
+      ? (parsedQuantity
+          ? `材料【${parsedQuantity.materialName}】数量不足：需要 ${parsedQuantity.requiredCount} 件，当前可用 ${parsedQuantity.availableCount} 件；有物品仍在冷却中，可勾选包含冷却物品或更换材料。`
+          : materialName
+            ? `材料【${materialName}】数量不足；有物品仍在冷却中，可勾选包含冷却物品或更换材料。`
+            : "配方要求的材料数量不足；有物品仍在冷却中，可勾选包含冷却物品或更换材料。")
+      : isBlockedShortfall
+        ? (parsedQuantity
+            ? `材料【${parsedQuantity.materialName}】数量不足：需要 ${parsedQuantity.requiredCount} 件，当前可用 ${parsedQuantity.availableCount} 件；部分物品已被本批次占用，请减少本批次配方或更换材料。`
+            : materialName
+              ? `材料【${materialName}】数量不足；部分物品已被本批次占用，请减少本批次配方或更换材料。`
+              : "配方要求的材料数量不足；部分物品已被本批次占用，请减少本批次配方或更换材料。")
+        : fallbackQuantityMessage;
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: specializedFallbackMessage,
+        detail,
+        code: rawCode || "material_quantity_insufficient"
+      }
+    };
+  }
+
+  if (includesAny(["无可用材料"])) {
+    const materialName = parseCraftAssistBracketMaterialName(detail);
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: materialName
+          ? `材料【${materialName}】库存中没有可用件。`
+          : "配方要求的材料库存中没有可用件。",
+        detail,
+        code: "material_missing"
+      }
+    };
+  }
+
+  if (includesAny(["同稀有度数量要求", "稀有度不一致"])) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "当前材料无法凑齐同一稀有度的 10 件。",
+        detail,
+        code: "rarity_requirement_unmet"
+      }
+    };
+  }
+
+  if (codeIsAny(["final_result_invalid"]) || includesAny(["final_result_invalid", "终局校验失败"])) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "选材结果未通过最终校验，请放宽目标或更换材料。",
+        detail,
+        code: rawCode || "final_result_invalid"
+      }
+    };
+  }
+
+  if (includesAny([
+    "无法找到可用逼近结果",
+    "结果均值需小于目标磨损",
+    "达不到目标磨损",
+    "无法满足目标磨损",
+    "cannot target below zero"
+  ])) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: "当前材料组合达不到目标磨损，请放宽范围或更换材料。",
+        detail,
+        code: rawCode && rawCode !== "craft_assist_target_unreachable"
+          ? rawCode
+          : "target_unreachable"
+      }
+    };
+  }
+
+  if (isCraftAssistPlainLanguageMessage(rawMessage)) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: rawMessage,
+        detail,
+        code: rawCode || defaultCode || "craft_assist_failed"
+      }
+    };
+  }
+
+  if (includesAny([
+    "craft assist worker",
+    "worker timeout",
+    "worker pool",
+    "snapshotpath",
+    "safetargetvalue",
+    "steam_precision_margin",
+    "timeout after",
+    "quantized"
+  ])) {
+    return {
+      status: resolvedStatus >= 500 ? resolvedStatus : 500,
+      payload: {
+        ok: false,
+        message: genericMessages.internal,
+        detail,
+        code: rawCode || "craft_assist_internal_error"
+      }
+    };
+  }
+
+  if (includesAny([
+    "目标磨损必须",
+    "float32",
+    "wear_filter_mode",
+    "wear_offset_pct",
+    "enable_fast_craft_assist",
+    "use_component_items",
+    "include_component_items",
+    "include_cooling"
+  ]) || (!isCraftAssistPlainLanguageMessage(rawMessage) && includesAny(["invalid", "required", "must be"]))) {
+    return {
+      status: resolvedStatus,
+      payload: {
+        ok: false,
+        message: isCraftAssistPlainLanguageMessage(rawMessage) ? rawMessage : genericMessages.parameter,
+        detail,
+        code: rawCode || "craft_assist_invalid_input"
+      }
+    };
+  }
+
+  if (includesAny(["timeout"])) {
+    return {
+      status: resolvedStatus >= 500 ? resolvedStatus : 500,
+      payload: {
+        ok: false,
+        message: genericMessages.internal,
+        detail,
+        code: rawCode || "craft_assist_internal_error"
+      }
+    };
+  }
+
+  return {
+    status: resolvedStatus >= 500 ? resolvedStatus : 500,
+    payload: {
+      ok: false,
+      message: genericMessages.internal,
+      detail,
+      code: rawCode || defaultCode || "craft_assist_internal_error"
+    }
   };
 }
 
@@ -2788,7 +3210,13 @@ async function handleApi(req, res, urlObj, deps = {}) {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     if (!username) {
-      writeJson(res, 400, {ok: false, message: "username is required"});
+      const failure = normalizeCraftAssistFailure({
+        message: "username is required"
+      }, {
+        defaultStatus: 400,
+        defaultCode: "craft_assist_invalid_input"
+      });
+      writeJson(res, failure.status, failure.payload);
       return true;
     }
     if (!requireSteamAccountAccess(res, auth, username)) {
@@ -2799,29 +3227,70 @@ async function handleApi(req, res, urlObj, deps = {}) {
     try {
       loaded = loadRowsForAccountFromSnapshot(username);
     } catch (err) {
-      writeJson(res, 409, {ok: false, message: asString(err && err.message ? err.message : err)});
+      const failure = normalizeCraftAssistFailure({
+        message: asString(err && err.message ? err.message : err),
+        code: asString(err && err.code ? err.code : ""),
+        status: 409
+      }, {
+        defaultStatus: 409
+      });
+      writeJson(res, failure.status, failure.payload);
       return true;
     }
-    const normalizedAssist = buildCraftAssistSelectRoutePayload(body, {
-      rows: loaded.rows
-    });
+    let normalizedAssist = null;
+    try {
+      normalizedAssist = buildCraftAssistSelectRoutePayload(body, {
+        rows: loaded.rows
+      });
+    } catch (err) {
+      const failure = normalizeCraftAssistFailure({
+        message: asString(err && err.message ? err.message : err),
+        code: asString(err && err.code ? err.code : ""),
+        status: Number(err && err.status) || 400
+      }, {
+        defaultStatus: 400,
+        defaultCode: "craft_assist_invalid_input"
+      });
+      writeJson(res, failure.status, failure.payload);
+      return true;
+    }
     const workerArgs = normalizedAssist.request;
     const workerPool = getCraftAssistWorkerPool();
-    const result = workerPool
-      ? await workerPool.selectForRecipe({
-        snapshotPath: loaded.snapshot_path,
-        ...workerArgs
-      })
-      : await craftAssistService.selectForRecipe({
-        rows: loaded.rows,
-        candidateRows: normalizedAssist.candidateRows,
-        ...workerArgs
+    let result = null;
+    try {
+      result = workerPool
+        ? await workerPool.selectForRecipe({
+          snapshotPath: loaded.snapshot_path,
+          ...workerArgs
+        })
+        : await craftAssistService.selectForRecipe({
+          rows: loaded.rows,
+          candidateRows: normalizedAssist.candidateRows,
+          ...workerArgs
+        });
+    } catch (err) {
+      const failure = normalizeCraftAssistFailure({
+        message: asString(err && err.message ? err.message : err),
+        code: asString(err && err.code ? err.code : ""),
+        status: 500,
+        enableFastCraftAssist: workerArgs.enableFastCraftAssist
+      }, {
+        defaultStatus: 500
       });
+      writeJson(res, failure.status, failure.payload);
+      return true;
+    }
     if (!result.ok) {
-      writeJson(res, 400, {
-        ok: false,
-        message: asString(result.message || "").trim() || "辅助选材失败"
+      const failure = normalizeCraftAssistFailure({
+        message: asString(result.message || "").trim() || "辅助选材失败",
+        detail: asString(result.detail || "").trim(),
+        code: asString(result.code || result.reason || "").trim(),
+        status: 400,
+        enableFastCraftAssist: workerArgs.enableFastCraftAssist
+      }, {
+        defaultStatus: 400
       });
+      writeJson(res, failure.status, failure.payload);
       return true;
     }
     writeJson(res, 200, {

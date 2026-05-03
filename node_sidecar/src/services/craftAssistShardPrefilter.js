@@ -5,7 +5,7 @@ const path = require("node:path");
 const {Worker} = require("node:worker_threads");
 const {projectCraftAssistTraceMaterial} = require("../../ui/craftAssistItemWearShared");
 const {
-  distanceFromMeanToTargetRange
+  targetStepPriorityTuple
 } = require("./craftAssistFloat32Step");
 
 const DEFAULT_WORKER_PATH = path.resolve(__dirname, "craftAssistShardWorker.js");
@@ -210,23 +210,32 @@ function resolveStepTargetValue(targetValue, targetStepSpec) {
   return hasTargetStepSpec(targetStepSpec) ? Number(targetStepSpec.targetStep) : asFiniteFloat(targetValue, 0);
 }
 
-function candidateTargetDistance(candidate, targetValue, targetStepSpec = null) {
+function compareTuple(left, right) {
+  const len = Math.max(Array.isArray(left) ? left.length : 0, Array.isArray(right) ? right.length : 0);
+  for (let index = 0; index < len; index += 1) {
+    const diff = asFiniteFloat(left && left[index], 0) - asFiniteFloat(right && right[index], 0);
+    if (Math.abs(diff) > 1e-12) return diff;
+  }
+  return 0;
+}
+
+function candidateTargetPriorityTuple(candidate, targetValue, targetStepSpec = null) {
   const value = asFiniteFloat(candidate && candidate.value, 0);
   if (hasTargetStepSpec(targetStepSpec)) {
-    return distanceFromMeanToTargetRange(value, targetStepSpec);
+    return targetStepPriorityTuple(value, targetStepSpec);
   }
-  return Math.abs(value - asFiniteFloat(targetValue, 0));
+  return [Math.abs(value - asFiniteFloat(targetValue, 0))];
 }
 
 function buildCenterWindow(orderedCandidates, targetValue, options, targetStepSpec = null) {
   const list = Array.isArray(orderedCandidates) ? orderedCandidates : [];
   if (!list.length) return {centerOverlapSize: 0, candidates: []};
   let centerIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestTuple = null;
   for (let index = 0; index < list.length; index += 1) {
-    const distance = candidateTargetDistance(list[index], targetValue, targetStepSpec);
-    if (distance < bestDistance - 1e-12) {
-      bestDistance = distance;
+    const tuple = candidateTargetPriorityTuple(list[index], targetValue, targetStepSpec);
+    if (!bestTuple || compareTuple(tuple, bestTuple) < 0) {
+      bestTuple = tuple;
       centerIndex = index;
     }
   }

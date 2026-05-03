@@ -1031,3 +1031,741 @@
   - `git diff --check -- docs/agent/memory.md docs/superpowers/specs/2026-05-01-craft-assist-offset-step-window-design.md docs/superpowers/plans/2026-05-01-craft-assist-offset-step-window-implementation.md docs/agent/session-log.md` exit code `0`；仅提示 `docs/agent/memory.md` 与 `docs/agent/session-log.md` 下次 Git 触碰时 LF 会替换为 CRLF。
   - `rg -n "offsetValue|lowerAllowedStep|higher-offset|lower-offset|test_below_offset|test_infinite_offset|targetStepPriorityTuple|isMeanOnPrimaryTargetStep" node_sidecar/src tests` exit code `1` 且无输出，表示 `node_sidecar/src` 与 `tests` 中未发现本轮 offset 实现/测试残留。
   - `git status --short --branch` exit code `0`；当前在 `main`，本轮相关变更只有 `docs/agent/memory.md` 与 `docs/agent/session-log.md`，offset spec/plan 仍为未跟踪文档；`backup/ui_state/` 仍有运行态脏文件，本轮未处理。
+
+### 2026-05-01 handoff update - offset window P1/P2 implemented
+- Task: 用户批准按 offset step window implementation plan 开始实现，并明确“让子 agent 做工作，主 agent 只做审查”。
+- Scope held:
+  - 本轮实现只通过子 agent 修改代码；主 agent 只做本地验证、spec review、quality review 和 handoff。
+  - 未提交。
+  - 未改 UI controls、API field names、route response shape、wear-range database values。
+  - 未恢复 `STEAM_PRECISION_MARGIN` / `safeTargetValue` / raw `< target` 权威规则。
+  - 未处理 `AGENTS.md`、`backup/ui_state/` 运行态脏文件或其他 worktree。
+- Completed:
+  - P1 helper contract 已实现并通过两轮审查：
+    - `resolveCraftAssistTargetStepSpec` 支持 `offsetValue`。
+    - target spec 增加 `lowerTargetStep`、`upperTargetStep`、`hasOffsetWindow`。
+    - helper 增加 `isMeanOnPrimaryTargetStep`、`targetStepPriorityTuple`。
+    - `isMeanOnTargetStep`、`compareMeanToTargetRange`、`distanceFromMeanToTargetRange` 已按 allowed target window 工作。
+    - 修复审查发现的问题：no-offset `below` 覆盖缺口；`targetStepPriorityTuple` 不能让 outside-window miss 排在 allowed hit 前；补齐 compare/distance 的 window 契约测试。
+  - P2 search / prefilter / worker ranking 已实现并通过 spec + quality 复审：
+    - search score prefix 接入 `targetStepPriorityTuple`。
+    - primary step 才允许提前返回；non-primary allowed hit 可作为 fallback，不阻止后续 primary hit。
+    - search role-aware ordering 在有 `targetStepSpec` 时先按 target-window priority，再用 side bias tie-break；无 step spec 旧分桶逻辑保持。
+    - prefilter center window 在有 `targetStepSpec` 时按 target-window priority；无 step spec 等距时保留先遇到候选。
+    - shard worker 在有 `targetStepSpec` 时先按 target-window priority，再用 role side bias tie-break；无 step spec 旧排序保持。
+- Verification completed:
+  - `node tests/craftAssistFloat32Step.test.js` PASS。
+  - `node tests/craftAssistSearch.test.js` PASS。
+  - `node tests/craftAssistShardPrefilter.test.js` PASS。
+  - `git diff --check -- node_sidecar/src/services/craftAssistFloat32Step.js tests/craftAssistFloat32Step.test.js node_sidecar/src/services/craftAssistSearch.js node_sidecar/src/services/craftAssistShardPrefilter.js node_sidecar/src/services/craftAssistShardWorker.js tests/craftAssistSearch.test.js tests/craftAssistShardPrefilter.test.js` PASS with only LF/CRLF warnings.
+- Review notes:
+  - P1 initial spec review found missing no-offset `below` coverage; fixed and re-reviewed as `SPEC_OK`.
+  - P1 quality review found priority tuple allowed outside-window miss to outrank allowed hit; fixed and re-reviewed as ready.
+  - P2 spec review found worker role side bias outranking outside-window distance; fixed and re-reviewed as `SPEC_OK`.
+  - P2 quality review found search role-aware ordering mismatch and no-step prefilter center tie regression; both fixed and quality re-review returned ready.
+  - P2 quality review also raised "first primary hit may not be complete-score best"; re-review accepted current code because early returns were narrowed from any allowed hit to primary hit, and primary-hit complete tuple prefix is constant.
+- Changed files so far:
+  - `node_sidecar/src/services/craftAssistFloat32Step.js`
+  - `tests/craftAssistFloat32Step.test.js`
+  - `node_sidecar/src/services/craftAssistSearch.js`
+  - `node_sidecar/src/services/craftAssistShardPrefilter.js`
+  - `node_sidecar/src/services/craftAssistShardWorker.js`
+  - `tests/craftAssistSearch.test.js`
+  - `tests/craftAssistShardPrefilter.test.js`
+  - `docs/agent/session-log.md`
+- Next first cut:
+  - Continue with P3 service offset plumbing via sub agent only.
+  - Start at plan `P3.M1.T1.S1`: write service RED tests replacing old "offset ignored" assumption, then pass `getCraftAssistWearOffsetByTarget(targetValue, wearOffsetPct)` as `offsetValue` into `resolveCraftAssistTargetStepSpec`.
+  - Keep protecting UI/API/db shape and do not commit.
+
+### 2026-05-01 handoff update - offset window P4 verification
+- Task: P4 verification/handoff only for offset-window implementation after P1-P3 spec/quality review. No business code changes, no commit, no handling of `AGENTS.md`, `backup/ui_state/`, database, or other worktrees.
+- Offset-window semantics verified/documented:
+  - `wear_offset_pct` is treated as a positive tolerance converted into an `offsetValue`.
+  - `below` starts from `prevFloat32(inputStep)` and expands only toward lower-wear float32 target steps until the offset floor is covered.
+  - `infinite` starts from `inputStep` and expands both lower and higher target steps until `[inputStep - offsetValue, inputStep + offsetValue]` is covered; equal distance prefers the lower-wear side.
+  - Success remains `Math.fround(raw_mean)` hitting one of the allowed target steps. The old raw `< target`, `safeTargetValue`, and `STEAM_PRECISION_MARGIN` safe-target chain must stay removed.
+- Changed files observed in current main workspace for the offset-window implementation:
+  - `node_sidecar/src/services/craftAssistFloat32Step.js`
+  - `node_sidecar/src/services/craftAssistSearch.js`
+  - `node_sidecar/src/services/craftAssistService.js`
+  - `node_sidecar/src/services/craftAssistShardPrefilter.js`
+  - `node_sidecar/src/services/craftAssistShardWorker.js`
+  - `tests/craftAssistFloat32Step.test.js`
+  - `tests/craftAssistSearch.test.js`
+  - `tests/craftAssistService.test.js`
+  - `tests/craftAssistShardPrefilter.test.js`
+  - `docs/agent/session-log.md`
+- Verification commands and results:
+  - `node tests/craftAssistFloat32Step.test.js` exit code `0`; output: `craftAssistFloat32Step tests passed`.
+  - `node tests/craftAssistSearch.test.js` exit code `0`; output: `craftAssistSearch tests passed`.
+  - `node tests/craftAssistShardPrefilter.test.js` exit code `0`; output: `craftAssistShardPrefilter tests passed`.
+  - `node tests/craftAssistService.test.js` first parallel run timed out at 120s and was interrupted with `EPIPE`; this was not treated as a pass/fail result. Fresh standalone rerun with 300s timeout exited `0`; output ended with `craftAssistService tests passed`.
+  - `node tests/craftOutcomePredictor.test.js` exit code `0`; output: `craftOutcomePredictor tests passed` plus Node SQLite experimental warning.
+  - `rg -n "STEAM_PRECISION_MARGIN|getCraftAssistOutcomeSafeTarget|safeTargetValue" node_sidecar/src/services tests` exit code `1` with no output; this is expected and confirms no matches in the checked paths.
+  - `git status --short --branch` exit code `0`; branch `main`; showed existing dirty `AGENTS.md`, runtime `backup/ui_state/` deletions/untracked files, offset-window service/test changes, and `docs/agent/session-log.md`.
+- Residual risk / not covered:
+  - 未提交。
+  - 未做真实 UI / Electron 重启验证。
+  - 未运行完整 `npm test` 或全量回归。
+  - 只检查当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy`；未检查其他 worktree。
+  - `git status` 中 `AGENTS.md` 与 `backup/ui_state/` 运行态/外部脏文件未处理，按本轮范围保持原样。
+- Memory:
+  - `docs/agent/memory.md` 已有 offset-window 长期规则与旧 safe-target 禁止回退说明；本轮未修改 memory。
+
+### 2026-05-01 handoff update - craft assist user-facing errors start
+- Task: 规范 `/api/craft/assist-select` 失败响应的人话 `message`、调试 `detail` 和稳定 `code`，并让前端失败时状态栏只显示人话、控制台打印精简调试摘要。
+- User constraints:
+  - 主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 执行；继续使用子 agent，主 agent 只做审查。
+  - 不 stage、不 commit；不回退或覆盖他人/用户已有改动。
+  - 严格不改选材算法、不改 UI 布局、不改数据库、不碰 `backup/ui_state/`。
+  - 优先只改 `node_sidecar/src/uiServer.js`、`node_sidecar/ui/app.js`、三个 `node_sidecar/tests/*craft-assist*.test.js`。
+- Current workspace notes before dispatch:
+  - `git status --short --branch` showed branch `main` with existing dirty `AGENTS.md`, runtime `backup/ui_state/` deletes/untracked snapshots, offset-window service/test changes, and this session-log file.
+  - These existing dirty files are outside this task unless explicitly listed above; do not revert or normalize them.
+- Next action:
+  - Dispatch a Codex CLI implementation subagent to perform TDD RED/GREEN within the allowed files, then main agent reviews diff and reruns required verification.
+
+### 2026-05-01 handoff update - craft assist error mapping refined
+- Task: 在不改选材算法 / UI 布局 / 数据库的前提下，继续细化 `/api/craft/assist-select` 的错误映射；用户要求继续用子 agent 执行、主 agent 只审查。
+- Scope held:
+  - 本轮只把错误归类、用户文案、`detail/code` 和相关测试补齐。
+  - 未 stage、未 commit。
+  - 未处理 `AGENTS.md`、`backup/ui_state/`、其他 worktree 或 offset-window 既有脏文件。
+- Completed:
+  - [node_sidecar/src/uiServer.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/uiServer.js) 的 `normalizeCraftAssistFailure(...)` 已补齐主要映射：
+    - `account_required`：`请先选择要选材的账号。`
+    - `invalid_target_wear`：`请填写 0 到 1 之间的目标磨损。`
+    - `invalid_target_step`：`目标磨损不是可用台阶，请用预测器或输入框生成的目标值。`
+    - `snapshot_missing`：`库存缓存已失效，请先刷新该账号库存。`
+    - `craft_assist_context_missing`：`辅助选材上下文失效，请刷新库存后重试。`
+    - `inventory_no_candidates`：`当前库存没有可用于炼金的物品。`
+    - `material_missing`：`材料【X】库存中没有可用件。`
+    - `material_quantity_insufficient`：`材料【X】数量不足：需要 N 件，当前可用 M 件。`
+    - `rarity_requirement_unmet`：`当前材料无法凑齐同一稀有度的 10 件。`
+    - `final_result_invalid` 与 `final_result_not_on_target_step`：统一成 `选材结果未通过最终校验，请放宽目标或更换材料。`
+    - `target_unreachable` / `cannot target below zero`：统一成 `当前材料组合达不到目标磨损，请放宽范围或更换材料。`
+    - `worker_timeout`：
+      - 未启用快速选材：`辅助选材计算超时，请缩小材料范围或使用快速选材。`
+      - 已启用快速选材：`辅助选材计算超时，请缩小材料范围后重试。`
+    - `prefilter`：`快速选材预筛失败，请关闭快速模式。`
+    - `worker_exited` / `worker_crash` / `worker_error`：`辅助选材后台异常。`
+  - `detail` 保留原始技术信息；`code` 优先保留原 code，不足时补稳定 code。
+  - [node_sidecar/tests/craft-assist-route.test.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/tests/craft-assist-route.test.js) 已补齐相应路由映射测试；同时保留此前普通自动选材 / 批量 helper 的错误展示与 console 摘要测试。
+- Verification completed:
+  - `node ./node_sidecar/tests/craft-assist-route.test.js` exit code `0`；输出 `craft-assist-route tests passed`。
+  - `node ./node_sidecar/tests/craft-assist-autoselect-writeback.test.js` exit code `0`；输出 `craft-assist-autoselect-writeback tests passed`。
+  - `node ./node_sidecar/tests/batch-craft-assist-select.test.js` exit code `0`；输出 `batch-craft-assist-select tests passed`。
+  - `git diff --check -- node_sidecar/src/uiServer.js node_sidecar/tests/craft-assist-route.test.js node_sidecar/tests/craft-assist-autoselect-writeback.test.js node_sidecar/tests/batch-craft-assist-select.test.js` exit code `0`；仅有 LF/CRLF warning。
+- Verification notes:
+  - `craft-assist-route` 测试运行时会出现既有 heartbeat log、Node SQLite experimental warning 和 `MaxListenersExceededWarning`；本轮未处理这些警告。
+- Current files for this task:
+  - `node_sidecar/src/uiServer.js`
+  - `node_sidecar/tests/craft-assist-route.test.js`
+  - `node_sidecar/tests/craft-assist-autoselect-writeback.test.js`
+  - `node_sidecar/tests/batch-craft-assist-select.test.js`
+  - `node_sidecar/ui/app.js`
+- Residual risk / not covered:
+  - 本轮没有改 [node_sidecar/src/services/craftAssistService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/craftAssistService.js)；材料缺失 / 数量不足 / 稀有度不足等稳定 code 目前仍由路由层通过 message/detail 解析得到，而不是 service 原生返回稳定 code。
+  - 批量页仍然只在控制台打印账号级失败摘要，不会把单账号详细失败弹给用户。
+  - 尚未覆盖“冷却过滤导致数量不足”“blocked/本批次占用导致数量不足”的专门文案和测试。
+  - 未做真实 UI / Electron 重启验证；只做了路由与前端测试脚本验证。
+  - 当前主工作区同时存在 offset-window 相关 service/test 脏文件、`AGENTS.md` 和 `backup/ui_state/` 运行态脏文件；本 handoff 结论不覆盖它们的正确性。
+- Workspace:
+  - 当前工作目录：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 当前分支：`main`
+  - 当前 HEAD：`1452f9247ec09238a4b551257f77dfcb75cb8da2`
+  - 已知其他 worktree：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+  - 本轮只检查并使用主工作区；未检查 sibling worktree 的改动。
+- Next first cut:
+  - 若继续收尾这条线，先读本条 handoff、`git status --short --branch`、当前 `node_sidecar/src/uiServer.js` 与 `node_sidecar/tests/craft-assist-route.test.js` 最新 diff。
+  - 先核对用户是否还要继续优化“冷却过滤 / blocked 占用”类错误文案；若要，优先在 route test 里补 RED，再决定是否只靠 route 层映射够用，还是需要 service 返回更稳定 code。
+  - 若用户转入验收，优先让用户在真实 UI 中验证几种典型失败：快照失效、材料缺失、数量不足、worker timeout、快速模式 prefilter 失败。
+
+### 2026-05-01 handoff update - craft assist cooling/blocked shortfall implementation dispatched
+- Task: 继续 craft assist error mapping 收尾，只处理“冷却过滤导致数量不足”和“blocked_ids / 本批次占用导致数量不足”的用户文案与测试。
+- Current scope:
+  - 主 agent 只做审查、收敛和 handoff；实现交给 worker。
+  - 允许 worker 写入范围仅限：
+    - `node_sidecar/src/services/craftAssistService.js`
+    - `node_sidecar/src/uiServer.js`
+    - `tests/craftAssistService.test.js`
+    - `node_sidecar/tests/craft-assist-route.test.js`
+  - 继续禁止改 UI、前端测试、选材算法排序/搜索语义、数据库、`AGENTS.md`、`backup/ui_state/`、其他 worktree；不 stage、不 commit。
+- Review convergence:
+  - route-only 测试可以证明最终文案，但无法让后端稳定区分冷却过滤和 blocked 占用。
+  - 收敛为 service + route 最小方案：service 先返回稳定细分 code，route 再映射成两类人话 message；外层响应仍保持 `{ok:false,message,detail,code}`。
+- Worker dispatched:
+  - `Peirce` (`019de3b2-c961-7980-964f-ff2c660ac4f2`) 已派出执行 TDD。
+  - RED/GREEN 要求：先补 `tests/craftAssistService.test.js` 两条 RED，再补 `node_sidecar/tests/craft-assist-route.test.js` 两条 RED，随后最小实现并运行限定测试。
+- Next first cut:
+  - 等 worker 返回后，主 agent 只审查 diff、验证命令结果和 scope compliance。
+  - 若 worker 修改超范围或改变算法/UI，要求其修正，不由主 agent 直接接管业务实现。
+
+### 2026-05-01 handoff update - craft assist shortfall quality review fix dispatched
+- Task: 继续同一条 craft assist error mapping 收尾；worker 首轮已完成 cooling/blocked shortfall service code 与 route 文案，但质量审查发现仍有一项本轮直接问题。
+- Review results:
+  - Spec compliance reviewer: PASS，无 blocking issue。
+  - Code quality reviewer: FAIL。
+  - Accepted in-scope issue:
+    - `normalizeCraftAssistFailure(...)` 仍先依赖 detail/message 包含中文“可用数量不足”才进入 shortfall 分支，再看 `material_quantity_insufficient_cooling_filtered` / `material_quantity_insufficient_blocked`；需要改为 code-first。
+  - Out-of-scope high-risk finding retained, not fixed in this round:
+    - 既有 worker error route tests 使用带 `.code` 的 stub Error，美化了真实 worker pool 错误码行为；这不属于本次 cooling/blocked 收尾，且用户明确要求不要重做已完成的 uiServer 错误映射与 route/frontend tests。
+  - Low-risk limitation retained:
+    - cooling shortfall 识别依赖 service 拿到原始 `rows`；route direct/worker snapshot 主链路具备 rows，candidateRows/selectionContext-only 调用会回退普通数量不足。
+- Worker dispatched:
+  - 已向 `Peirce` (`019de3b2-c961-7980-964f-ff2c660ac4f2`) 追加修复任务。
+  - 写入范围限制为：
+    - `node_sidecar/src/uiServer.js`
+    - `node_sidecar/tests/craft-assist-route.test.js`
+  - 要求先补 code-only / wording-changed RED route tests，再最小修改 `normalizeCraftAssistFailure(...)`。
+- Local verification before this fix:
+  - `node tests/craftAssistService.test.js` exit code `0`，输出含大量既有 craft_assist logs，末尾 `craftAssistService tests passed`。
+  - `node node_sidecar/tests/craft-assist-route.test.js` exit code `0`，输出 `craft-assist-route tests passed`，伴随既有 heartbeat logs、Node SQLite experimental warning、MaxListenersExceededWarning。
+  - `node ./node_sidecar/tests/craft-assist-autoselect-writeback.test.js` exit code `0`。
+  - `node ./node_sidecar/tests/batch-craft-assist-select.test.js` exit code `0`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistService.js node_sidecar/src/uiServer.js tests/craftAssistService.test.js node_sidecar/tests/craft-assist-route.test.js` exit code `0`，仅 LF/CRLF warnings。
+- Next first cut:
+  - 等 worker 返回后，只审查 code-first shortfall diff 和新增 route tests。
+  - 复跑 route/frontend 限定验证；必要时只让 worker 继续修本轮 in-scope issue。
+
+### 2026-05-01 handoff update - craft assist cooling/blocked shortfall complete
+- Task: craft assist error mapping 收尾，补齐“冷却过滤导致数量不足”和“blocked_ids / 本批次占用导致数量不足”的稳定 code、用户文案与测试。
+- Scope held:
+  - 主 agent 只做审查、收敛、验证和 handoff；业务实现由 worker 完成。
+  - 未 stage、未 commit。
+  - 未改 UI 布局、数据库、选材排序/搜索语义、`AGENTS.md`、`backup/ui_state/` 或其他 worktree。
+  - 未重做已完成的 account/target/snapshot/worker/prefilter 等主映射测试；只在同一 route test 文件内补本次 shortfall 覆盖。
+- Completed:
+  - `node_sidecar/src/services/craftAssistService.js`
+    - 材料数量不足时，service 在能确认原因的情况下返回稳定细分 code：
+      - `material_quantity_insufficient_cooling_filtered`
+      - `material_quantity_insufficient_blocked`
+    - 普通数量不足仍保留原语义；若无法确认具体原因，仍回退普通数量不足。
+  - `node_sidecar/src/uiServer.js`
+    - `normalizeCraftAssistFailure(...)` 现在 code-first 消费上述两个 shortfall code。
+    - 中文数量解析只用于补材料名、required、available；当 detail/message 不含中文“可用数量不足”但 code 明确时，仍返回专属人话文案。
+    - 外层失败响应 shape 保持 `{ok:false,message,detail,code}`。
+    - 普通数量不足文案保持：`材料【X】数量不足：需要 N 件，当前可用 M 件。`
+  - `tests/craftAssistService.test.js`
+    - 增加 cooling-filtered shortfall service test。
+    - 增加 blocked shortfall service test。
+  - `node_sidecar/tests/craft-assist-route.test.js`
+    - 增加含中文数量明细的 cooling/blocked route mapping tests。
+    - 增加不含中文“可用数量不足”的 code-first cooling/blocked route mapping tests。
+- Review:
+  - Spec compliance review: PASS。
+  - First quality review: FAIL，发现 route 仍依赖中文 detail 才进入 shortfall 分支。
+  - Worker 修复后 quality re-review: PASS，无阻塞问题。
+  - Out-of-scope high-risk finding retained:
+    - 既有 worker error route tests 用带 `.code` 的 stub Error，美化了真实 worker pool 错误码行为；该问题不属于本次 cooling/blocked shortfall 收尾，且用户明确要求不要重做已完成的 uiServer 错误映射与 route/frontend tests，本轮未改。
+  - Known limitation retained:
+    - cooling shortfall 识别依赖 service 拿到原始 `rows`；当前 route direct/worker snapshot 主链路满足，candidateRows/selectionContext-only 调用会回退普通数量不足。
+- Verification completed:
+  - `node tests/craftAssistService.test.js` exit code `0`，末尾 `craftAssistService tests passed`；有既有 craft_assist info/warn 日志。
+  - `node node_sidecar/tests/craft-assist-route.test.js` exit code `0`，输出 `craft-assist-route tests passed`；有既有 heartbeat logs、Node SQLite experimental warning、MaxListenersExceededWarning。
+  - `node ./node_sidecar/tests/craft-assist-autoselect-writeback.test.js` exit code `0`，输出 `craft-assist-autoselect-writeback tests passed`。
+  - `node ./node_sidecar/tests/batch-craft-assist-select.test.js` exit code `0`，输出 `batch-craft-assist-select tests passed`。
+  - `git diff --check -- node_sidecar/src/services/craftAssistService.js node_sidecar/src/uiServer.js tests/craftAssistService.test.js node_sidecar/tests/craft-assist-route.test.js` exit code `0`，仅 LF/CRLF warnings。
+  - `git status --short --branch` exit code `0`；branch `main`；仍有既有 offset-window/service/test/UI 改动、`AGENTS.md`、`backup/ui_state/` 运行态脏文件，本轮未处理。
+- Workspace / worktree scope:
+  - 当前主工作区：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 只检查并修改主工作区；未检查其他 worktree 的改动。
+  - 已知其他 worktree 仍为：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- Next first cut:
+  - 若继续验收，优先真实 UI 验证普通数量不足、冷却过滤短缺、批量 blocked 占用短缺三类状态栏文案。
+  - 若继续技术债，单独开范围处理 worker error route tests 与真实 worker pool `.code` 行为差异；不要混入本次 shortfall 收尾结论。
+
+### 2026-05-02 handoff update - craft assist UI visibility fix verified and target-step root cause diagnosed
+- Current goal:
+  - 主线 1：完成 craft assist 失败文案在真实 UI 中的可见性修复验收。
+  - 主线 2：解释并收敛“目标磨损不是可用台阶，请使用预测器或输入框生成的目标值”在当前保存配方上全面触发的真实根因。
+- Scope held:
+  - 本轮继续只检查主工作区 `C:/Users/18220/Desktop/cs2_alchemy`。
+  - UI 修复继续按“子 agent 实现、主 agent 审查”执行；未提交、未 stage。
+  - 未处理 `AGENTS.md`、`backup/ui_state/`、数据库、其他 worktree。
+  - 未进入 worker error route tests / worker pool `.code` 技术债线。
+- Completed:
+  - craft assist UI 可见性修复已由子 agent 完成并经主 agent 审查通过，改动范围仅限：
+    - `node_sidecar/ui/index.html`
+    - `node_sidecar/ui/app.js`
+    - `node_sidecar/tests/craft-assist-autoselect-writeback.test.js`
+    - `node_sidecar/tests/batch-craft-assist-select.test.js`
+  - 单账号炼金页已恢复真实 `#craftStatusText` 承载点，并补 `aria-live="polite"`；失败时后端人话 `message` 进入页面状态栏，不再只剩 toast。
+  - batch helper 账号级失败已不再被“选材完成：0 个账号，共 0 组配方”覆盖；顶部 `#batchCraftStatusText` 现在显示失败账号数和前 3 条失败摘要，超出部分用“另 N 个账号失败”补充。
+  - 质量审查首轮提出的 3 点均已关闭：
+    - batch 多失败摘要不再只显示第一条；
+    - 增加 `1 成功 + 1 失败` 与 `3 个失败账号` 测试覆盖；
+    - `#craftStatusText` 增加 `aria-live="polite"` 并有测试覆盖。
+  - “目标磨损不是可用台阶”根因已确认：
+    - 当前 `inventory_ui_state.json` 中 `dev_local` 的 12 个 `craft_assist_presets` 全都保存了旧十进制 `target_wear`（如 `0.18`、`0.21`、`0.24`、`0.27`、`0.214285`）。
+    - 这些值都不满足后端当前 hard contract：`target_wear` 必须满足 `Math.fround(target_wear) === target_wear`。
+    - 因此它们在进入选材前就被 `resolveCraftAssistTargetStepSpec(...)` 拒绝为 `invalid_target_step`；`wear_offset_pct` 只有在目标台阶合法后才参与窗口扩展，所以调偏移阈值对这类报错无效。
+    - 实测样例：
+      - `0.21` 的 float32 台阶是 `0.20999999344348907`
+      - `0.24` 的 float32 台阶是 `0.23999999463558197`
+      - `0.27` 的 float32 台阶是 `0.27000001072883606`
+      - `0.214285` 的 float32 台阶是 `0.2142850011587143`
+    - 当前前端 `commitCraftAssistTargetWearInput(...)` 只是 `parseOptionalWear01(raw)` 后按原十进制文本回写；不会主动量化到 float32 台阶。保存/应用旧配方同样保留 raw decimal。
+- Review / verification completed:
+  - 子 agent 实现状态：DONE_WITH_CONCERNS；主 agent 完成 spec review、quality review、quality re-review。
+  - 只读审查结论：
+    - spec review: PASS
+    - quality re-review: PASS
+  - 主 agent 重新运行限定测试：
+    - `node ./node_sidecar/tests/craft-assist-autoselect-writeback.test.js` -> `craft-assist-autoselect-writeback tests passed`
+    - `node ./node_sidecar/tests/batch-craft-assist-select.test.js` -> `batch-craft-assist-select tests passed`
+    - `git diff --check -- node_sidecar/ui/index.html node_sidecar/ui/app.js node_sidecar/tests/craft-assist-autoselect-writeback.test.js node_sidecar/tests/batch-craft-assist-select.test.js node_sidecar/ui/styles.css` -> exit `0`，仅 LF/CRLF warning
+  - 主 agent 真实 Electron 运行态验证已完成：
+    - 验证方式：启动临时 Electron（PID `11212`）+ CDP 注入前端失败响应 + 读取真实 DOM；验证完已关闭该临时进程。
+    - 结论：
+      - 普通数量不足：显示在 `#craftStatusText`，带 `error` class 和 `aria-live="polite"`。
+      - 冷却过滤短缺：显示在 `#craftStatusText`，带 `error` class 和 `aria-live="polite"`。
+      - batch blocked 短缺：显示在 `#batchCraftStatusText`，不再出现“选材完成：0 个账号，共 0 组配方”覆盖。
+      - batch 多失败：显示失败账号数、前三条摘要和“另 N 个账号失败”。
+- Current workspace / scene:
+  - 工作目录：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 分支：`main`
+  - HEAD：`1452f9247ec09238a4b551257f77dfcb75cb8da2`
+  - 当前仍有未提交改动，既包括本轮 UI 文件，也包括既有 offset-window / service / tests 脏文件，以及 `AGENTS.md`、`backup/ui_state/` 运行态脏文件；本轮未清理。
+  - 当前现场仍有用户/外部启动的主工作区 Electron 进程在运行：
+    - `node main_ui_node_desktop.js` -> PID `47440`
+    - Electron 主进程 -> PID `56476`
+  - 只检查了主工作区；未检查其他 worktree。已知其他 worktree 仍为：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- Constraints / failed paths:
+  - 不要把“目标磨损不是可用台阶”误判成 offset-window 问题；这次根因在 `target_wear` 本身不是 float32 台阶值。
+  - 不要把当前提示文案“请使用预测器或输入框生成的目标值”当成已被产品验证的真相；至少当前保存配方链路并不会自动把输入框 raw decimal 量化成 float32 台阶。
+  - 若后续修这个问题，优先从前端保存/应用配方与目标磨损输入提交链路入手；不要先去改后端放宽 contract，否则会与现有 float32 目标命中语义冲突。
+- Verification gaps:
+  - 还没有修“旧保存配方 target_wear 自动迁移 / 保存时量化 / 应用时量化”本身。
+  - 还没有验证真实用户现场里“预测器生成值”是否总能回填为合法 float32 台阶，还是仍有 raw decimal 泄漏。
+  - 还没有新增针对 `craft_assist_presets` 持久化迁移的测试。
+- Next first cut:
+  - 若下一会话继续修这个新问题，先锁定范围到“辅助选材目标磨损量化与旧配方迁移”。
+  - 第一刀优先读：
+    - `docs/agent/session-log.md` 本节
+    - `docs/agent/memory.md`
+    - `git status --short --branch`
+    - `node_sidecar/ui/app.js` 中 `parseOptionalWear01(...)`、`commitCraftAssistTargetWearInput(...)`、`sanitizeCraftAssistPresetPayload(...)`、`loadCraftAssistPresetIntoDraft(...)`
+    - `node_sidecar/src/services/craftAssistFloat32Step.js`
+    - `inventory_ui_state.json` 当前 `dev_local` 下 `craft_assist_presets`
+  - 建议修复方向：
+    - 前端提交/保存 craft assist `target_wear` 时统一量化为合法 float32 台阶；
+    - 对已保存旧配方做加载时迁移或一次性持久化迁移；
+    - 明确“手输值”与“预测器值”在 `below` / `infinite` 下各自应该保存哪个 step，不要只做 `Math.fround(raw)` 表面修补。
+  - 做完后立刻验证：
+    - 旧保存配方能否不报 `invalid_target_step`
+    - route/service 仍保留现有 float32 contract
+    - 至少补一条持久化/应用链路测试
+
+### 2026-05-02 handoff update - craft assist target wear float32 quantization verified
+
+- Current goal:
+  - 修复 craft assist 保存配方 `target_wear` 的 float32 量化和旧 preset 迁移问题，避免旧十进制目标磨损统一触发 `invalid_target_step`。
+- Scope held:
+  - 本轮只检查和修改主工作区 `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 未检查其他 worktree。
+  - 未处理或修改 `AGENTS.md`、`backup/ui_state/`。
+  - 未重做已完成的 route/service/frontend UI 可见性运行态验证。
+- Completed:
+  - 子 agent 实现、主 agent 审查、多 agent 复核均完成；复核结论无 blocking issue。
+  - `node_sidecar/ui/app.js` 新增 craft assist target 专用量化入口：`parseOptionalWear01(...)` 仍保持通用解析，不全局改变其他磨损输入；craft assist 的 `target_wear` 统一走 `Math.fround(...)` 输入台阶。
+  - 保存新 preset、编辑/恢复 draft、旧 preset 加载、账号 scoped state snapshot、单账号 assist-select 请求、batch assist-select 请求前均会把 `target_wear` 收敛为合法 float32 台阶。
+  - `below` / `infinite` 语义未前移到前端：前端保存和发送的是输入台阶 `Math.fround(raw)`；`below` 继续由后端 `resolveCraftAssistTargetStepSpec(...)` 取前一个 float32 台阶，避免双重下移。
+  - 新增 `node_sidecar/tests/craft-assist-target-wear-step.test.js`，覆盖：
+    - 保存当前 preset 前量化 `target_wear`；
+    - 加载旧 preset 到 draft 时迁移；
+    - `normalizeCraftAssistPresetList(...)` 对 legacy preset 的迁移；
+    - `applyCraftAssistPreset(..., {autoSelect: true})` 传给 batch auto-select 的 `draftSnapshot.target_wear` 已量化且不是 `prevFloat32(...)`；
+    - 单账号和 batch 请求前量化 legacy `target_wear`。
+  - 相邻测试已随量化语义更新断言：
+    - `node_sidecar/tests/craft-assist-panel-render.test.js`
+    - `node_sidecar/tests/craft-assist-preset-editing.test.js`
+    - `node_sidecar/tests/batch-craft-assist-select.test.js`
+    - `node_sidecar/tests/craft-assist-account-state.test.js`
+    - `node_sidecar/tests/craft-assist-autoselect-writeback.test.js`
+- Verification completed:
+  - 初次尝试按项目规则提权运行 `node` 限定测试被当前会话策略拒绝：`approval policy is Never; reject command`。
+  - 随后改用前台直接运行同一组限定测试，全部通过：
+    - `node node_sidecar/tests/craft-assist-target-wear-step.test.js` -> `craft-assist-target-wear-step tests passed`
+    - `node node_sidecar/tests/craft-assist-panel-render.test.js` -> `craft-assist-panel-render tests passed`
+    - `node node_sidecar/tests/craft-assist-preset-editing.test.js` -> `craft-assist-preset-editing tests passed`
+    - `node node_sidecar/tests/batch-craft-assist-select.test.js` -> `batch-craft-assist-select tests passed`
+    - `node node_sidecar/tests/craft-assist-account-state.test.js` -> `craft-assist-account-state tests passed`
+    - `node node_sidecar/tests/craft-assist-autoselect-writeback.test.js` -> `craft-assist-autoselect-writeback tests passed`
+    - `node node_sidecar/tests/craft-assist-preset-apply.test.js` -> `craft-assist-preset-apply tests passed`
+    - `node tests/craftAssistFloat32Step.test.js` -> `craftAssistFloat32Step tests passed`
+  - `git diff --check -- node_sidecar/ui/app.js node_sidecar/tests/craft-assist-target-wear-step.test.js node_sidecar/tests/craft-assist-panel-render.test.js node_sidecar/tests/craft-assist-preset-editing.test.js node_sidecar/tests/batch-craft-assist-select.test.js node_sidecar/tests/craft-assist-account-state.test.js node_sidecar/tests/craft-assist-autoselect-writeback.test.js` -> exit `0`，仅 git 的 LF/CRLF warning。
+- Current workspace / scene:
+  - 分支仍为 `main`。
+  - 本轮目标相关新增/修改包括：
+    - `node_sidecar/ui/app.js`
+    - `node_sidecar/tests/craft-assist-target-wear-step.test.js`
+    - `node_sidecar/tests/craft-assist-panel-render.test.js`
+    - `node_sidecar/tests/craft-assist-preset-editing.test.js`
+    - `node_sidecar/tests/batch-craft-assist-select.test.js`
+    - `node_sidecar/tests/craft-assist-account-state.test.js`
+    - `node_sidecar/tests/craft-assist-autoselect-writeback.test.js`
+  - 工作区仍有此前已存在的未提交改动和运行态脏文件，包括 `AGENTS.md`、`backup/ui_state/`、既有 service/tests 脏文件；本轮未清理、未提交、未 stage。
+- Remaining gaps:
+  - 未做真实 Electron UI 端到端重新验证旧 `inventory_ui_state.json` 里的保存配方，因为本轮明确不重做已完成 UI 可见性验证；当前结论基于代码路径、测试和多 agent review。
+  - 未检查其他 worktree。
+
+### 2026-05-02 handoff update - raw decimal below semantics spec drafted
+
+- Current goal:
+  - 将用户新发现的 `below` 边界写成 spec：用户输入的是 `[0,1]` 范围内普通 `0.x` 十进制目标磨损；用户手感仍是十进制输入，但程序需要同时保存/传递机器可用 float32 台阶和用户原始 raw 语义，避免 `below` 误降一级。
+- Scope held:
+  - 本轮只在主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 写文档。
+  - 未改业务代码，未运行实现测试。
+  - 未处理或修改 `AGENTS.md`、`backup/ui_state/`。
+  - 未检查其他 worktree。
+- Completed:
+  - 与用户共同收敛并由 `gpt-5.5` / `xhigh` 只读子 agent 审查确认的产品语义：
+    - `below = 严格小于用户原始输入 raw 的最高 float32 台阶`。
+    - `step = Math.fround(raw)`。
+    - 若 `step < raw`，`belowTarget = step`。
+    - 若 `step > raw`，`belowTarget = prevFloat32(step)`。
+    - 若 `step === raw`，`belowTarget = prevFloat32(step)`，因为 equal 不算 below。
+    - 若 `raw === 0`，在 `[0,1]` 非负磨损域 below 不可达。
+  - 复核结论：
+    - 数学语义没有发现反例。
+    - `prevFloat32(step)` 在 `step > raw` 时不会仍然大于 raw，因为中间不存在其他 float32 台阶。
+    - 当前只存 `Math.fround(raw)` 能解决 `invalid_target_step`，但无法保留 raw 在 step 上方/下方/相等的信息，因此不能完整表达 `below` 语义。
+  - 新增 spec 草案：
+    - `docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md`
+  - spec 覆盖：
+    - 用户仍输入 `[0,1]` 内普通十进制小数；
+    - 保存/请求建议携带 `target_wear`（机器 float32 值）和 `target_wear_raw`（用户原始十进制文本）；
+    - 旧 `craft_assist_presets` 从仅有 `target_wear` 迁移为双字段；
+    - 前端输入、保存、应用、单账号、批量、predictor 的验收路径；
+    - `raw > step`、`raw < step`、`raw === step`、`raw === 0` 边界；
+    - 不放宽后端 float32 hard contract。
+- Current files touched this segment:
+  - Added: `docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md`
+  - Updated for handoff/memory only:
+    - `docs/agent/session-log.md`
+    - `docs/agent/memory.md`
+- Verification completed:
+  - 已只读打开新增 spec 核对内容。
+  - 尝试再派子 agent 审查 spec 时失败：`agent thread limit reached`，因此本 spec 尚未完成独立 spec review loop。
+- Current workspace / scene:
+  - 分支仍为 `main`。
+  - 工作区仍存在此前未提交改动和运行态脏文件，包括 `AGENTS.md`、`backup/ui_state/`、既有 service/tests/UI 改动；本轮未清理、未提交、未 stage。
+  - 只检查了当前主工作区；未检查其他 worktree。
+- Constraints / do not regress:
+  - 不要继续把 `below` 简化为 `prevFloat32(Math.fround(raw))`。
+  - 不要只保存一个 `Math.fround(raw)` 然后声称完整保留了 below 语义；这只解决了后端合法性，不解决 raw-vs-step 关系。
+  - 不要放宽后端 `Math.fround(target_wear) === target_wear` hard contract；新设计应通过 `target_wear_raw` 或等价关系补足语义。
+  - 用户明确说输入就是 `0.x` 小数，范围已经限制 `[0,1]`；不要扩成任意大数输入问题。
+- Next first cut:
+  - 下个会话先读：
+    - `docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md`
+    - `docs/agent/session-log.md` 最新两节
+    - `docs/agent/memory.md` 顶部 craft assist 相关记忆
+    - `git status --short --branch`
+  - 先复述当前目标：把 raw-based below 语义从 spec 转成实现计划，不要直接改代码。
+  - 第一刀建议是补 spec review 或写 implementation plan，明确后端 helper/API/frontend/predictor/旧数据迁移的分工。
+  - 如果进入实现，必须先写 failing tests：
+    - raw `0.21` 这类 `Math.fround(raw) < raw` 的 below 应命中 `Math.fround(raw)`，不能再降一级；
+    - raw `0.18` 这类 `Math.fround(raw) > raw` 的 below 应命中 `prevFloat32(step)`；
+    - raw 等于 f32 step 时 below 应命中 `prevFloat32(step)`；
+    - raw `0` below 不可达；
+    - 新/旧保存配方与单账号、batch、predictor 都要覆盖。
+
+### 2026-05-02 handoff update - craft assist raw-based below implementation P5 focused regression passed
+
+- Current goal:
+  - 实现 raw-based `below` 语义：`below = highest float32 step strictly lower than user raw decimal`。
+  - 当前新 contract 为同时携带 `target_wear`（machine float32 step）和 `target_wear_raw`（user raw decimal text）。
+- Scope held:
+  - 本轮只覆盖当前 root workspace：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 未检查其他 worktrees。
+  - 未重做 UI visibility verification。
+  - 未触碰 `AGENTS.md` 或 `backup/ui_state/`。
+  - 未 stage / commit。
+- Completed / reviewed phases:
+  1. `P1` shared helper：完成 `craftAssistFloat32Step` + tests，包含 infinite raw/step mismatch fix；spec + quality review passed。
+  2. `P2` route：完成 `uiServer` route contract + route tests；spec + quality review passed。
+  3. `P2` service / downstream：完成 `craftAssistService` + service tests + search/prefilter regressions；修复 service log `raw=` bug；search/prefilter regressions passed；但 service integration 的 red/green 证据受 pre-existing dirty workspace 影响，需保留 caveat。
+  4. `P3` frontend preset/state/draft migration：完成 `app.js` + `target-wear-step` + preset-editing tests；spec + quality review passed；另有 non-blocking note：invalid raw 的 user-visible failure path 仍可继续单独审视。
+  5. `P3` request builders：single / batch payloads 现在同时携带 `target_wear` + `target_wear_raw`；frontend 对 `below` 不再 pre-shift；已补 direct legacy auto-select 和 batch `raw=0.21` tests；spec + quality review passed。
+  6. `P4` predictor：`craftOutcomePredictor` 复用 shared helper；`raw=0.21` 先 red 后 green；spec + quality review passed。
+- P5 focused regression results:
+  - `node --test .\tests\craftAssistFloat32Step.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-route.test.js` PASS
+  - `node --test .\tests\craftAssistService.test.js` PASS，约 `120.9s`
+  - `node --test .\tests\craftAssistSearch.test.js` PASS
+  - `node --test .\tests\craftAssistShardPrefilter.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-target-wear-step.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-preset-editing.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-preset-apply.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-autoselect-writeback.test.js` PASS
+  - `node --test .\node_sidecar\tests\batch-craft-assist-select.test.js` PASS
+  - `node --test .\tests\craftOutcomePredictor.test.js` PASS
+  - `node --test .\tests\craftAssistApproachModeUi.test.js` PASS（auxiliary smoke，不属于 UI visibility verification）
+  - 无 timeout。
+  - Warnings：route / predictor tests 中有 SQLite experimental warnings，route test 有 `MaxListenersExceededWarning`，另有 heartbeat logs 与 service business `WARN/INFO` logs；均未导致失败。
+- Current workspace status from `git status` summary:
+  - 当前分支为 `main`。
+  - dirty tracked files 包括 `AGENTS.md`、`docs/agent/memory.md`、`docs/agent/session-log.md`、多处 craft assist service / route / predictor / frontend / tests 文件、`node_sidecar/ui/index.html`、以及 tests 文件。
+  - `backup/ui_state` 下存在 tracked deletes 与新的 untracked backup files；默认按 runtime churn 对待，除非用户明确要求处理。
+  - untracked 文件包括：
+    - `docs/superpowers/plans/2026-05-02-craft-assist-raw-below-target.md`
+    - `docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md`
+    - `node_sidecar/tests/craft-assist-target-wear-step.test.js`
+- Known caveats:
+  - 按设计 / 请求，本轮未做 UI runtime visibility verification。
+  - `craft-predictor-panel-state` 未运行，因为本轮未触及该 area。
+  - service integration 的 TDD red/green evidence 不完整，原因是 existing dirty workspace；但当前 service tests 与 review 已通过。
+  - 当前 workspace 还带有 pre-existing 的更宽 service changes / noise，例如 quantity shortfall / context refine；在没有 scoped diff review 前，不要自动把全部 service diff 都归因到本次 raw-below work。
+- Next first cut:
+  - 若继续，先对当前 raw-below direct impact area 做 final scoped diff review，或补一个 optional final code-review subagent。
+  - 然后问用户：保持 unstaged 供手动 app verification、直接 commit、还是继续迭代。
+  - 除非用户明确要求，否则不要 stage / commit。
+- Next-session startup prompt:
+  - `"不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md 顶部 craft assist 相关条目、当前 plan/spec、git status --short --branch；先复述当前目标、真实进度、最后一个已落盘动作、下一步 first cut；不要检查其他 worktrees，除非用户明确要求；不要触碰 AGENTS.md 或 backup/ui_state；不要重做 UI visibility verification。"`
+
+### 2026-05-02 handoff update - raw-based below final scoped review blocker fixed
+
+- Current goal:
+  - 对 raw-based `below` 实现做 final scoped review，并修复 review 中确认的 blocker。
+- Scope held:
+  - 只覆盖当前 root workspace：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 未检查其他 worktrees。
+  - 未重做 UI visibility verification。
+  - 未触碰 `AGENTS.md` 或 `backup/ui_state/`。
+  - 未 stage / commit。
+- Final scoped review results:
+  - Backend review 子 agent：未发现 blocking issue；补跑并通过：
+    - `node --test .\tests\craftAssistFloat32Step.test.js`
+    - `node --test .\node_sidecar\tests\craft-assist-route.test.js`
+    - `node --test .\tests\craftAssistService.test.js`（首轮 120s 超时，延长后通过）
+    - `node --test .\tests\craftAssistSearch.test.js`
+    - `node --test .\tests\craftAssistShardPrefilter.test.js`
+  - Predictor review 子 agent：未发现 blocking issue；补跑并通过：
+    - `node --test .\tests\craftAssistFloat32Step.test.js`
+    - `node --test .\tests\craftOutcomePredictor.test.js`
+  - Frontend review 子 agent：发现 2 个 blocking issue：
+    - `sanitizeCraftAssistPresetPayload(...)` 在目标字段缺失时会静默伪造 `target_wear=0.5` / `target_wear_raw="0.5"`。
+    - `resolveCraftAssistTargetWearPair(...)` 通过 generic `parseOptionalWear01(...)` clamp 越界 raw，导致 `"1.2"` / `"-0.1"` 被静默改成边界值。
+- Fix completed:
+  - Worker 子 agent 按 TDD 修复，修改：
+    - `node_sidecar/ui/app.js`
+    - `node_sidecar/tests/craft-assist-target-wear-step.test.js`
+  - 当前行为：
+    - 缺失 `target_wear` 与 `target_wear_raw` 的 preset sanitize 结果为 invalid/null，不再猜 `0.5`。
+    - `target_wear_raw` 存在时使用 craft-assist 专用严格校验：必须 finite 且在 `[0,1]` 内；越界不 clamp。
+    - 未全局修改 `parseOptionalWear01(...)`。
+    - raw-decimal legacy、f32-step-only legacy、dual-field mismatch trust-raw、unparsable raw invalid 的既有 contract 保持。
+- Main-agent verification after fix:
+  - `node --test .\node_sidecar\tests\craft-assist-target-wear-step.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-preset-editing.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-preset-apply.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-autoselect-writeback.test.js` PASS
+  - `node --test .\node_sidecar\tests\batch-craft-assist-select.test.js` PASS
+  - `node --test .\tests\craftAssistFloat32Step.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-route.test.js` PASS
+  - `node --test .\tests\craftOutcomePredictor.test.js` PASS
+  - `git diff --check -- ...` PASS；仅 Git LF/CRLF warning。
+- Current caveats:
+  - 未运行完整仓库测试集。
+  - 未做 Electron / browser UI runtime verification。
+  - `craft-predictor-panel-state` 仍未运行，因为当前未触及 predictor panel state。
+  - 当前 workspace 仍有既有 dirty/runtime files，包括 `AGENTS.md`、`backup/ui_state/`、`node_sidecar/ui/index.html`、多处 craft assist service/UI/tests 改动；不要把全部 dirty diff 自动归因于本次 blocker fix。
+- Recommended next step:
+  - 当前 raw-based below direct impact area 的 final scoped review 已完成且 blocker 已修。
+  - 下一步由用户决定：保持 unstaged 供手动 app verification、请求提交、或继续迭代其它 caveat。
+
+### 2026-05-02 handoff update - craft assist timeout investigation/fix
+
+- 用户反馈：
+  - raw-based `below` 改动后，辅助选材回回超时，导致用户无法在真实 UI 中验证结果。
+- 根因 1：
+  - 真实 `/api/craft/assist-select` 默认走 worker pool。
+  - `node_sidecar/src/services/craftAssistWorker.js` 原本没有把 `payload.targetWearRaw` 传给 `craftAssistService.selectForRecipe`，导致 worker 路径丢失 raw-based `below` 语义。
+  - 之前 direct service tests 绕过了 worker 路径，所以没有覆盖该问题。
+- 修复 1：
+  - `node_sidecar/src/services/craftAssistWorker.js` 传递 `targetWearRaw`。
+  - `tests/craftAssistWorkerPool.test.js` 增加 raw target wear 保真测试。
+  - `tests/fixtures/craftAssistCrashOnceWorker.js` 同步 worker fixture 行为。
+- 根因 2：
+  - `node_sidecar/src/services/craftAssistSearch.js` 在 `targetStepSpec` 下的 early-stop / cap 扩张条件只认 `isMeanOnPrimaryTargetStep(...)`。
+  - 合法 target window hit（`isMeanOnTargetStep(...)` 为 true）但不是 primary step 时，搜索继续扩 cap，导致慢/超时。
+- 修复 2：
+  - 保留 primary 排序和 primary 优先返回。
+  - `targetStepSpec` 下 cap 停止条件允许 `isMeanOnTargetStep(...)` 且未触碰窗口边界的合法 window hit。
+  - 非 `targetStepSpec` 的旧停止行为保持：solved 且未触碰 cap 边界时停止扩张。
+  - 更新测试：`tests/craftAssistSearch.test.js` 和 `tests/craftAssistService.test.js`。
+- 验证结果：
+  - `node --test .\tests\craftAssistSearch.test.js` PASS（约 0.4s）
+  - `node --test .\tests\craftAssistWorkerPool.test.js` PASS（约 3.0s）
+  - `node --test .\tests\craftAssistWorkerWiring.test.js` PASS
+  - `node --test .\tests\craftAssistService.test.js` PASS（约 61s）
+  - `node --test .\tests\craftAssistFloat32Step.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-route.test.js` PASS
+  - `node --test .\tests\craftAssistShardPrefilter.test.js` PASS
+  - `git diff --check -- ...` PASS，仅有 Git LF/CRLF warnings。
+- Scope held：
+  - 未重做 UI visibility verification。
+  - 未触碰 `AGENTS.md` / `backup/ui_state/`。
+  - 未检查其他 worktrees。
+  - 未 stage / commit。
+- Next：
+  - 让用户在真实 UI 里重试辅助选材。
+  - 若仍慢，下一步抓真实 worker payload / selection trace，而不是继续猜。
+
+### 2026-05-02 final handoff - craft assist timeout fix ready for UI retry
+
+- Current goal:
+  - 解决 raw-based `below` 改动后辅助选材在真实 UI / worker pool 路径回回超时的问题。
+- True progress:
+  - 已修两个确认根因：
+    1. worker pool 路径补传 `targetWearRaw`，避免真实 `/api/craft/assist-select` 丢 raw-based `below` 语义。
+    2. `craftAssistSearch` 的 targetStepSpec 扩窗早停不再只认 primary step；合法 target window hit 且未触碰 cap 边界即可停止扩张，同时保留 primary 排序 / 优先返回和非 targetStepSpec 旧早停行为。
+  - 已更新相关 tests：worker pool raw 保真、search 非 primary window hit 早停、service cached context 测试去掉 primary-only 旧断言。
+- Last confirmed verification:
+  - `node --test .\tests\craftAssistSearch.test.js` PASS
+  - `node --test .\tests\craftAssistWorkerPool.test.js` PASS
+  - `node --test .\tests\craftAssistWorkerWiring.test.js` PASS
+  - `node --test .\tests\craftAssistService.test.js` PASS，约 `61s`
+  - `node --test .\tests\craftAssistFloat32Step.test.js` PASS
+  - `node --test .\node_sidecar\tests\craft-assist-route.test.js` PASS
+  - `node --test .\tests\craftAssistShardPrefilter.test.js` PASS
+  - `git diff --check -- ...` PASS，仅 LF/CRLF warnings。
+- Scope held:
+  - 未重做 UI visibility verification。
+  - 未触碰 `AGENTS.md` / `backup/ui_state/`。
+  - 未检查其他 worktrees。
+  - 未 stage / commit。
+- Workspace caveats:
+  - 当前 root workspace `C:/Users/18220/Desktop/cs2_alchemy` 仍有大量既有 dirty files 和 runtime churn；`AGENTS.md`、`backup/ui_state/` 不属于本次修复范围。
+  - 本轮没有做 Electron / browser 真实 UI 重试，只做后端 / worker / route focused verification。
+- Next first cut:
+  - 让用户在真实 UI 里重试辅助选材。
+  - 如果仍慢，不要继续猜算法；第一刀抓真实 worker payload、是否携带 `target_wear_raw`、以及 selection trace / cap 扩张日志，再定位。
+- Next-session startup prompt:
+  - `不要依赖内置 resume。先读 docs/agent/session-log.md 最新两节、docs/agent/memory.md 顶部 craft assist 相关记忆、docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md、git status --short --branch。先复述：当前目标是验证/收敛 raw-based below 辅助选材超时修复；真实进度是 worker raw 传递和 search target window 早停已修并通过 focused tests；最后落盘动作是 2026-05-02 final handoff；下一步第一刀是在真实 UI 重试辅助选材，若仍慢则抓真实 worker payload/trace。不要重做 UI visibility verification，不要碰 AGENTS.md、backup/ui_state、其他 worktree；若文档与现场冲突，先指出差异再收敛。`
+
+### 2026-05-02 handoff append - raw-based below timeout fix awaiting real UI retry
+
+- Current goal:
+  - 验证 / 收敛 raw-based `below` 辅助选材超时修复。
+  - 目标是让真实 UI / worker pool 路径下 `/api/craft/assist-select` 不再因 raw-based `below` 改动而反复超时。
+- Current chunk / task:
+  - 当前 chunk：timeout fix 已完成 focused code/test 收敛，等待真实 UI 重试。
+  - 当前 task：把两个只读子 agent 审计确认的现场状态落盘，供下个会话承接。
+  - 当前方案 / plan：
+    - `docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md`
+    - `docs/superpowers/plans/2026-05-02-craft-assist-raw-below-target.md`
+- Completed / in progress:
+  - 已完成：
+    - worker pool 路径补传 `targetWearRaw`，避免真实接口丢失 raw-based `below` 语义。
+    - `craftAssistSearch` 的 `targetStepSpec` 扩窗早停已修复：不再只认 primary step；合法 target window hit 且未触碰 cap 边界即可停止扩张，同时保留 primary 排序 / 优先返回。
+    - predictor、前端 preset/request 双字段保存与迁移、后端 route/service/search/worker raw 传递均已按当前 raw-based below 方向对齐。
+  - 正在进行：
+    - 等待用户在真实 Electron / browser UI 里重试辅助选材，确认 worker pool 真实路径不再超时。
+- Current workspace / scene:
+  - 当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 分支：`main`
+  - HEAD：`1452f9247ec09238a4b551257f77dfcb75cb8da2`
+  - Git 状态：未提交、未 staged。
+  - 未提交业务改动集中在 craft assist raw-based `below`、双字段 `target_wear` / `target_wear_raw`、worker raw 传递、search target window 早停、predictor 对齐、前端 preset/request 双字段保存与迁移。
+  - runtime churn：`backup/ui_state/` 有旧快照删除和新快照未跟踪，本次不归因到业务改动；当前审计未见 `csgo_skins.db` 或 `inventory_ui_state.json` 变脏。
+  - 其他 worktree 仅列出，未审计：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- Errors / constraints:
+  - 不要把真实 UI 已验证写成事实；当前只确认 focused tests 和代码路径修复。
+  - 若真实 UI 仍慢，下一步先抓真实 worker payload，确认 `target_wear_raw` 是否传入，再抓 selection trace / cap 扩张日志；不要继续凭静态推断改算法。
+  - 不要触碰或改写 `AGENTS.md`；其中已有突发截断 / resume 失效恢复流程规则。
+  - 不要把 `backup/ui_state/` churn 归因成本次业务改动，除非后续任务明确要求处理运行态快照。
+  - 不要检查或修改其他 worktree，除非用户明确要求扩展审计范围。
+- Verification status:
+  - 前序会话记录的验证已通过，但本写入子 agent 没有重新执行这些命令：
+    - `node --test .\tests\craftAssistSearch.test.js`
+    - `node --test .\tests\craftAssistWorkerPool.test.js`
+    - `node --test .\tests\craftAssistWorkerWiring.test.js`
+    - `node --test .\tests\craftAssistService.test.js`，约 `61s`
+    - `node --test .\tests\craftAssistFloat32Step.test.js`
+    - `node --test .\node_sidecar\tests\craft-assist-route.test.js`
+    - `node --test .\tests\craftAssistShardPrefilter.test.js`
+    - `git diff --check -- ...` PASS，仅 LF/CRLF warnings。
+  - 验证缺口：
+    - 未做 Electron / browser 真实 UI 重试。
+    - 未重做 UI visibility verification。
+    - 未运行完整仓库测试集。
+    - 未检查其他 worktree。
+    - 当前 workspace 有大量既有 dirty files 和 runtime churn。
+- Next first cut:
+  - 让用户在真实 UI 里重试辅助选材。
+  - 如果仍然慢或超时，第一刀抓真实 worker payload，确认请求是否携带 `target_wear_raw`；第二刀抓 selection trace / cap 扩张日志，确认 target window early-stop 是否在真实数据中命中。
+- Next-session startup prompt:
+  - `不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md 顶部 craft assist 相关记忆、docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md、docs/superpowers/plans/2026-05-02-craft-assist-raw-below-target.md，再看 git status --short --branch。先复述：当前目标是验证/收敛 raw-based below 辅助选材超时修复；真实进度是 worker raw 传递和 search target window 早停已修并通过前序 focused tests；最后落盘动作是 2026-05-02 handoff append - raw-based below timeout fix awaiting real UI retry；可能未落盘动作未知；下一步第一刀是在真实 UI 重试辅助选材，若仍慢则抓真实 worker payload/trace。只声明已检查当前 root worktree C:/Users/18220/Desktop/cs2_alchemy，其他列出的 worktree 未审计；不要触碰 AGENTS.md、backup/ui_state 或其他 worktree；若文档与现场冲突，先指出差异再收敛。`
+
+## 2026-05-02 handoff - raw-based below timeout fix UI/network review completed
+
+- 当前目标：验证/收敛 raw-based below 辅助选材超时修复。
+- 当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`；其他 worktree 未审计。
+- 前序修复状态：按既有 handoff 记录，worker raw 传递和 search target window 早停已修，focused tests 前序通过；本 handoff writer worker 未重新运行测试，也不重新声明完整测试覆盖。
+- 真实 UI 复测 1：使用 `node src/uiServer.js` / `http://127.0.0.1:8787`，raw `0.21` below 场景中，`POST /api/craft/assist-select` 返回成功；server log 显示 `raw=0.21`、`below`、选材完成、`passed=true`。相关 artifact：`output/playwright/assist-result-20260502.png` 和 logs。
+- Review concern：第一轮 artifacts 未持久化完整 network payload/status/duration，因此只支持核心 PASS，不足以证明完整 HTTP 证据。
+- Network 补强复测：复用真实 Electron sidecar `http://127.0.0.1:51313/`，相关 artifact 为 `output/playwright/assist-network-20260502-20260502T130116Z.json`、`output/playwright/assist-network-20260502-20260502T130116Z.md`、`output/playwright/assist-network-20260502-20260502T130116Z.png`。
+- Network payload 证据：payload 包含 `target_wear: 0.20999999344348907`, `target_wear_raw: "0.21"`, `wear_approach_mode: "below"`, `enable_fast_craft_assist: false`。
+- Network response 证据：`status=200`, `duration_ms=219`, `ok=true`, `recipe_ok=true`, `overall=0.20948510617017746`, `item_ids=10`, `picks=10`。
+- gpt-5.4 review result：APPROVED。结论范围仅限：当前 root worktree 的一次真实 UI/sidecar raw `0.21` below 请求不再表现为超时，且 payload 带 `target_wear_raw`；不扩展为所有场景、全项目或其他 worktree。
+- 已知限制：未运行完整仓库测试；启动/刷新 UI 可能造成 runtime churn；不要处理 `AGENTS.md`、`backup/ui_state`。
+- 下一步：若用户想更强信心，可重复多次真实 UI 采样或跑完整测试；否则让用户在主程序里验证，不提交。
+
+## 2026-05-02 Handoff - craft assist below+offset fix
+
+当前目标：修复 `Sun set` + “使用组件中的物品” + `狩猎0.2142` below 选材未按 raw 下方最近台阶优先、且修复后曾引发超时的问题。
+
+当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`。其他 worktree 未审计。
+
+用户确认语义：below primary 是严格小于 `target_wear_raw` 的最近 float32 step；offset 只限定最多往更小方向退；不能让 window 内任意 hit 跳过 primary；不得返回 raw 以上。
+
+真实旧问题：payload `target_wear_raw="0.214285"`, `target_wear=0.2142850011587143`, `wear_offset_pct=1`, `use_component_items=true`，旧返回 `overall=0.21328119486570357`；当前 window `[0.21214213967323303, 0.2142849862575531]`。
+
+修复要点：primary-first 早停/final return；role-aware refine 前不再 window short-circuit；单材料大候选 bounded fallback stop；below raw ceiling 拒绝 raw/input 以上结果；worker pool nested prefilter 测试 timeout 从 4s 调到 60s 仅限该重用例。
+
+代码/测试改动文件：`node_sidecar/src/services/craftAssistSearch.js`, `node_sidecar/src/services/craftAssistFloat32Step.js`, `tests/craftAssistSearch.test.js`, `tests/craftAssistService.test.js`, `tests/craftAssistWorkerPool.test.js`。
+
+RED/GREEN：新增测试曾失败，包括 lower-window short-circuit、single material full expansion、above-raw candidate；最终 focused tests 全通过：search 3.651s、float32 0.440s、service 88.349s、workerPool 78.842s。
+
+gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker pool nested prefilter 60s timeout 避免误报但缺性能预算断言。
+
+真实 UI 最终复验：重启当前 root UI 后 PASS，`POST /api/craft/assist-select` HTTP 200，duration 11131ms，payload username 430158438/use_component_items true/below/raw 0.214285，response `overall=0.21318830996751786`, `Math.fround=0.2131883054971695`，旧值未返回，无超时，低于 raw；artifacts `output/playwright/sunset-hunting-02142-final-20260502T161500Z.json/.md/.png`。
+
+当前进程状态：最终复验后新进程保留运行，launcher PID 36348，相关子进程 53372 / 58480 / 48804，URL `http://127.0.0.1:56380`。
+
+限制：未跑全量仓库测试；未检查其他 worktree；runtime/artifact churn 预期存在，不处理 `AGENTS.md`/`backup_ui_state`。
+
+下一步：用户在主程序验证；若关注性能，后续单独补 nested prefilter 性能预算/基线。
+
+## 2026-05-03 handoff - latest closest-below fallback fix
+
+- 当前目标：修复 `Sun set` + “使用组件中的物品” + `狩猎0.2142` below fallback 仍距离 raw 太远的问题。
+- 当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`；其他 worktree 未审计。
+- 用户语义：primary 先找 raw 下方最近 float32 step；primary 不可行时 offset fallback 也要尽量接近 raw，仍必须低于 raw；不能因为 cap=24/第一个稳定窗口 hit 就停。
+- 证据：当前 UI 曾返回 `0.21318830996751786`；真实库存离线证据找到 `0.21428491771221161`，低于 raw `0.214285` 且明显更近；artifact `output/playwright/sunset-hunting-closest-below-evidence-20260502T164355Z.json/.md`。
+- 修复要点：fallback tuple 用 raw gap 排序；single-material below targetStepSpec stable fallback 后做 bounded refinement（1换1/2换2）找更近合法 below；raw ceiling 保持；primary 仍绝对优先。
+- 改动文件：`node_sidecar/src/services/craftAssistFloat32Step.js`, `node_sidecar/src/services/craftAssistSearch.js`, `tests/craftAssistFloat32Step.test.js`, `tests/craftAssistSearch.test.js`（并保留前轮相关 service/worker tests 改动）。
+- RED/GREEN：新增 tests 曾失败（fallback tuple 未按 raw gap；cap=24 过早停）；最终独立 focused tests 通过：float32 0.283s、search 2.925s、service 58.928s、workerPool 51.375s。
+- gpt-5.4 review：APPROVED；non-blocking concern 是 single-material bounded refinement 不是全局最优证明，若需要 3+ late candidates 联动仍可能不是全局最优。
+- UI 点击复验：自动化卡在账号管理页，`/api/craft/assist-select` 未发出，artifact `output/playwright/sunset-hunting-02142-closest-final-rerun-20260503T022941Z.*`，该次 BLOCKED 不是算法失败。
+- 离线 route-equivalent PASS：artifact `output/playwright/sunset-hunting-02142-offline-final-20260503T023718Z.json/.md`，duration 44274ms，overall `0.21428497433662413`, fround `0.2142849713563919`, below raw true, 比旧值更接近 raw。
+- 真实 sidecar HTTP endpoint PASS：POST `http://127.0.0.1:57701/api/craft/assist-select`, HTTP 200, duration 41916ms, overall `0.21428497433662413`, fround `0.2142849713563919`, 未返回 `0.21328119486570357` 或 `0.21318830996751786`, below raw true；artifact `output/playwright/sunset-hunting-02142-http-final-20260503T024113Z.json/.md`。
+- 当前进程状态：当前 sidecar URL `http://127.0.0.1:57701/` 仍运行；Rawls 重启后 launcher PID 52892，Electron PID 31988（若未来会话需核对请以实时进程为准）。
+- 限制：未跑全量仓库测试；未审计其他 worktree；runtime/artifact churn 预期存在；不要处理 AGENTS.md/backup_ui_state。
+- 下一步：用户在真实 UI 手动验证；若仍追求全局最优，需要单独设计超过 bounded 1换1/2换2 的全局/更强优化策略。

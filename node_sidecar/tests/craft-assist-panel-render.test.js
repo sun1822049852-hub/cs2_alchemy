@@ -335,6 +335,10 @@ function loadPanelFns(overrides = {}) {
     syncCraftSelectionListClearance: overrides.syncCraftSelectionListClearance,
     isCraftAssistPendingUiAction: overrides.isCraftAssistPendingUiAction,
     parseOptionalWear01: overrides.parseOptionalWear01,
+    normalizeCraftAssistTargetWearStep: overrides.normalizeCraftAssistTargetWearStep || ((value) => {
+      const parsed = overrides.parseOptionalWear01 ? overrides.parseOptionalWear01(value) : Number(value);
+      return parsed == null || !Number.isFinite(Number(parsed)) ? null : Math.fround(Math.max(0, Math.min(1, Number(parsed))));
+    }),
     wearTextFull: overrides.wearTextFull || ((value) => {
       const numeric = Number(value);
       return Number.isFinite(numeric) ? numeric.toFixed(6) : "";
@@ -471,6 +475,12 @@ function loadCraftAssistDecimalInputFns(overrides = {}) {
       if (!text) return null;
       const numeric = Number(text);
       return Number.isFinite(numeric) ? numeric : null;
+    }),
+    normalizeCraftAssistTargetWearStep: overrides.normalizeCraftAssistTargetWearStep || ((value) => {
+      const text = String(value == null ? "" : value).trim();
+      if (!text) return null;
+      const numeric = Number(text);
+      return Number.isFinite(numeric) ? Math.fround(Math.max(0, Math.min(1, numeric))) : null;
     }),
     wearTextFull: overrides.wearTextFull || ((value) => {
       const numeric = Number(value);
@@ -1188,7 +1198,7 @@ function testTargetWearDisplayDefaultStaysNullUntilUserActuallyEdits() {
 
   input.value = "0.123456";
   const edited = helperFns.commitCraftAssistTargetWearInput(input);
-  assert.equal(edited, 0.123456, "once the user edits target wear, the committed value should be parsed as a real number");
+  assert.equal(edited, Math.fround(0.123456), "once the user edits target wear, the committed value should be stored as a float32 step");
 }
 
 function main() {

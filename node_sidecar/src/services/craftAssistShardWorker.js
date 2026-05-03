@@ -3,7 +3,8 @@
 const {parentPort} = require("node:worker_threads");
 const {
   compareMeanToTargetRange,
-  distanceFromMeanToTargetRange
+  distanceFromMeanToTargetRange,
+  targetStepPriorityTuple
 } = require("./craftAssistFloat32Step");
 
 const EPSILON = 1e-9;
@@ -65,17 +66,25 @@ function buildScoreTuple(candidate, {role, targetValue, targetStepSpec = null}) 
   const distance = hasTargetStepSpec(targetStepSpec)
     ? distanceFromMeanToTargetRange(value, targetStepSpec)
     : Math.abs(value - targetValue);
+  const targetPriority = hasTargetStepSpec(targetStepSpec)
+    ? targetStepPriorityTuple(value, targetStepSpec)
+    : [distance];
   if (role === "neutral") {
-    return [distance, orderedIndex];
+    return [...targetPriority, orderedIndex];
   }
   const side = resolveCandidateSide(value, targetValue, targetStepSpec);
   const wrongSidePenalty = role === "main"
     ? (side === "below" ? 1 : 0)
     : (side === "above" ? 1 : 0);
-  if (role === "main") {
-    return [wrongSidePenalty, distance, -value, orderedIndex];
+  if (hasTargetStepSpec(targetStepSpec)) {
+    return role === "main"
+      ? [...targetPriority, wrongSidePenalty, -value, orderedIndex]
+      : [...targetPriority, wrongSidePenalty, value, orderedIndex];
   }
-  return [wrongSidePenalty, distance, value, orderedIndex];
+  if (role === "main") {
+    return [wrongSidePenalty, ...targetPriority, -value, orderedIndex];
+  }
+  return [wrongSidePenalty, ...targetPriority, value, orderedIndex];
 }
 
 function compareByOrderedIndex(left, right) {

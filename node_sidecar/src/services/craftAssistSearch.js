@@ -1,6 +1,8 @@
 const {projectCraftAssistTraceMaterial} = require("../../ui/craftAssistItemWearShared");
 const {
   isMeanOnTargetStep,
+  isMeanOnPrimaryTargetStep,
+  targetStepPriorityTuple,
   compareMeanToTargetRange,
   distanceFromMeanToTargetRange,
   quantizeMeanToTargetDomain
@@ -34,16 +36,37 @@ function resolveSearchTargetValue(targetValue, targetStepSpec) {
   return hasTargetStepSpec(targetStepSpec) ? Number(targetStepSpec.targetStep) : Number(targetValue);
 }
 
+function primaryOnlyTargetStepSpec(targetStepSpec) {
+  if (!hasTargetStepSpec(targetStepSpec)) return targetStepSpec;
+  return {
+    ...targetStepSpec,
+    lowerTargetStep: Number(targetStepSpec.targetStep),
+    upperTargetStep: Number(targetStepSpec.targetStep)
+  };
+}
+
+function resolveBelowTargetCeiling(targetValue, targetStepSpec = null) {
+  const rawInput = targetStepSpec
+    ? (targetStepSpec.inputRaw ?? targetStepSpec.targetWearRaw)
+    : null;
+  const raw = rawInput === null || rawInput === undefined || rawInput === ""
+    ? NaN
+    : Number(rawInput);
+  if (Number.isFinite(raw)) return raw;
+  const inputStep = Number(targetStepSpec && targetStepSpec.inputStep);
+  if (Number.isFinite(inputStep)) return inputStep;
+  return Number(targetValue);
+}
+
 function buildApproachTuplePrefix(overall, targetValue, approachMode, targetStepSpec = null) {
   if (hasTargetStepSpec(targetStepSpec)) {
-    const hit = isMeanOnTargetStep(overall, targetStepSpec);
-    const side = compareMeanToTargetRange(overall, targetStepSpec);
-    return [
-      hit ? 0 : 1,
-      distanceFromMeanToTargetRange(overall, targetStepSpec),
-      side > 0 ? 1 : 0,
-      Math.abs(side)
-    ];
+    if (
+      normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode) === "below"
+      && !isBelowTarget(overall, resolveBelowTargetCeiling(targetValue, targetStepSpec))
+    ) {
+      return null;
+    }
+    return targetStepPriorityTuple(overall, targetStepSpec);
   }
   const normalizedMode = normalizeApproachMode(approachMode);
   const numericOverall = Number(overall);
@@ -95,6 +118,9 @@ function makeSearchCandidate({candidate, groupIndex, role, targetValue, targetSt
     groupIndex,
     role,
     value,
+    targetPriorityTuple: hasTargetStepSpec(targetStepSpec)
+      ? targetStepPriorityTuple(value, targetStepSpec)
+      : null,
     distance: hasTargetStepSpec(targetStepSpec)
       ? distanceFromMeanToTargetRange(value, targetStepSpec)
       : Math.abs(value - searchTarget),
@@ -104,7 +130,16 @@ function makeSearchCandidate({candidate, groupIndex, role, targetValue, targetSt
   };
 }
 
+function compareCandidateTargetPriority(a, b) {
+  if (Array.isArray(a && a.targetPriorityTuple) || Array.isArray(b && b.targetPriorityTuple)) {
+    return compareScoreTuples(a && a.targetPriorityTuple, b && b.targetPriorityTuple);
+  }
+  return 0;
+}
+
 function compareByDistanceThenValueAsc(a, b) {
+  const priorityDiff = compareCandidateTargetPriority(a, b);
+  if (priorityDiff !== 0) return priorityDiff;
   const da = Number(a && a.distance || 0);
   const db = Number(b && b.distance || 0);
   if (da !== db) return da - db;
@@ -115,9 +150,29 @@ function compareByDistanceThenValueAsc(a, b) {
 }
 
 function compareByDistanceThenRoleBias(role, a, b) {
+  const priorityDiff = compareCandidateTargetPriority(a, b);
+  if (priorityDiff !== 0) return priorityDiff;
   const da = Number(a && a.distance || 0);
   const db = Number(b && b.distance || 0);
   if (da !== db) return da - db;
+  const va = Number(a && a.value || 0);
+  const vb = Number(b && b.value || 0);
+  if (va !== vb) return role === "aux" ? va - vb : vb - va;
+  return String(a && a.id || "").localeCompare(String(b && b.id || ""));
+}
+
+function candidateWrongSidePenalty(role, candidate) {
+  const side = String(candidate && candidate.side || "");
+  if (role === "main") return side === "below" ? 1 : 0;
+  if (role === "aux") return side === "above" ? 1 : 0;
+  return 0;
+}
+
+function compareByTargetPriorityThenRoleBias(role, a, b) {
+  const priorityDiff = compareCandidateTargetPriority(a, b);
+  if (priorityDiff !== 0) return priorityDiff;
+  const penaltyDiff = candidateWrongSidePenalty(role, a) - candidateWrongSidePenalty(role, b);
+  if (penaltyDiff !== 0) return penaltyDiff;
   const va = Number(a && a.value || 0);
   const vb = Number(b && b.value || 0);
   if (va !== vb) return role === "aux" ? va - vb : vb - va;
@@ -137,7 +192,17 @@ function buildOrderedCandidates(group, targetValue, mode, targetStepSpec = null)
     }))
     .filter((candidate) => Number.isFinite(candidate.value));
   if (mode === "single_material" || mode === "multi_material_neutral") {
-    return base.sort(compareByDistanceThenValueAsc);
+    return base.sort(compareByDistanceThenValueAsc).map((candidate, index) => ({
+      ...candidate,
+      orderedIndex: index
+    }));
+  }
+  if (hasTargetStepSpec(targetStepSpec)) {
+    return base.sort((a, b) => compareByTargetPriorityThenRoleBias(role, a, b))
+      .map((candidate, index) => ({
+        ...candidate,
+        orderedIndex: index
+      }));
   }
   const preferred = [];
   const fallback = [];
@@ -166,6 +231,7 @@ function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approach
   const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length;
   if (hasTargetStepSpec(targetStepSpec)) {
     const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    if (!prefix) return null;
     return {
       overall,
       predictedStepMean: quantizeMeanToTargetDomain(overall),
@@ -214,6 +280,7 @@ function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = 
   const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length;
   if (hasTargetStepSpec(targetStepSpec)) {
     const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    if (!prefix) return null;
     return {
       overall,
       predictedStepMean: quantizeMeanToTargetDomain(overall),
@@ -269,6 +336,7 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachM
   const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
   if (hasTargetStepSpec(targetStepSpec)) {
     const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    if (!prefix) return null;
     return {
       overall,
       predictedStepMean: quantizeMeanToTargetDomain(overall),
@@ -1303,14 +1371,12 @@ function scorePartialState(state, totalSlots, targetValue, mode, approachMode = 
   ) / totalSlots;
   const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
   if (hasTargetStepSpec(targetStepSpec)) {
-    const projectedGap = distanceFromMeanToTargetRange(projectedOverall, targetStepSpec);
-    const projectedSide = compareMeanToTargetRange(projectedOverall, targetStepSpec);
+    const projectedPriority = targetStepPriorityTuple(projectedOverall, primaryOnlyTargetStepSpec(targetStepSpec));
     if (mode === "single_material") {
       const above = values.filter((value) => value > searchTarget + EPSILON).length;
       const below = values.filter((value) => value < searchTarget - EPSILON).length;
       return [
-        projectedGap,
-        projectedSide > 0 ? 1 : 0,
+        ...projectedPriority,
         radius,
         Math.abs(above - below),
         calcVariance(values),
@@ -1329,8 +1395,7 @@ function scorePartialState(state, totalSlots, targetValue, mode, approachMode = 
       const mainMean = mains.length ? mains.reduce((sum, value) => sum + value, 0) / mains.length : 0;
       const auxMean = auxes.length ? auxes.reduce((sum, value) => sum + value, 0) / auxes.length : 0;
       return [
-        projectedGap,
-        projectedSide > 0 ? 1 : 0,
+        ...projectedPriority,
         wrongSidePenalty,
         -mainMean,
         auxMean,
@@ -1338,8 +1403,7 @@ function scorePartialState(state, totalSlots, targetValue, mode, approachMode = 
       ];
     }
     return [
-      projectedGap,
-      projectedSide > 0 ? 1 : 0,
+      ...projectedPriority,
       radius,
       calcVariance(values),
       values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length
@@ -1476,7 +1540,7 @@ function pickBestCompleteSolution(states, targetValue, mode, approachMode = "bel
       predictedStepMean: scored.predictedStepMean,
       scoreTuple: scored.tuple
     };
-    if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(scored.overall, targetStepSpec)) {
+    if (hasTargetStepSpec(targetStepSpec) && isMeanOnPrimaryTargetStep(scored.overall, targetStepSpec)) {
       return candidate;
     }
     if (!best || compareScoreTuples(scored.tuple, best.scoreTuple) < 0) {
@@ -1484,6 +1548,70 @@ function pickBestCompleteSolution(states, targetValue, mode, approachMode = "bel
     }
   }
   return best;
+}
+
+function buildTargetStepFallbackRefinementScore(selected, targetValue, targetStepSpec) {
+  const scored = scoreCraftAssistSolutionSingleMaterial({
+    selected,
+    targetValue,
+    approachMode: "infinite",
+    targetStepSpec
+  });
+  if (!scored || isMeanOnPrimaryTargetStep(scored.overall, targetStepSpec)) return null;
+  if (!isMeanOnTargetStep(scored.overall, targetStepSpec)) return null;
+  return scored;
+}
+
+function refineSingleMaterialTargetStepFallback({selected, candidates, targetValue, targetStepSpec} = {}) {
+  const currentSelected = Array.isArray(selected) ? selected : [];
+  const allCandidates = Array.isArray(candidates) ? candidates : [];
+  if (!currentSelected.length || !allCandidates.length || !hasTargetStepSpec(targetStepSpec)) return null;
+  let bestScore = buildTargetStepFallbackRefinementScore(currentSelected, targetValue, targetStepSpec);
+  if (!bestScore) return null;
+  let bestSelected = currentSelected;
+  const selectedIdSet = new Set(
+    currentSelected.map((candidate) => String(candidate && candidate.id || "")).filter(Boolean)
+  );
+  const unused = allCandidates.filter((candidate) => {
+    const id = String(candidate && candidate.id || "");
+    return id && !selectedIdSet.has(id);
+  });
+
+  for (let removeIndex = 0; removeIndex < currentSelected.length; removeIndex += 1) {
+    for (const addCandidate of unused) {
+      const nextSelected = currentSelected.slice();
+      nextSelected[removeIndex] = addCandidate;
+      const nextScore = buildTargetStepFallbackRefinementScore(nextSelected, targetValue, targetStepSpec);
+      if (nextScore && compareScoreTuples(nextScore.tuple, bestScore.tuple) < 0) {
+        bestScore = nextScore;
+        bestSelected = nextSelected;
+      }
+    }
+  }
+
+  for (let firstRemove = 0; firstRemove < currentSelected.length; firstRemove += 1) {
+    for (let secondRemove = firstRemove + 1; secondRemove < currentSelected.length; secondRemove += 1) {
+      for (let firstAdd = 0; firstAdd < unused.length; firstAdd += 1) {
+        for (let secondAdd = firstAdd + 1; secondAdd < unused.length; secondAdd += 1) {
+          const nextSelected = currentSelected.slice();
+          nextSelected[firstRemove] = unused[firstAdd];
+          nextSelected[secondRemove] = unused[secondAdd];
+          const nextScore = buildTargetStepFallbackRefinementScore(nextSelected, targetValue, targetStepSpec);
+          if (nextScore && compareScoreTuples(nextScore.tuple, bestScore.tuple) < 0) {
+            bestScore = nextScore;
+            bestSelected = nextSelected;
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    selected: bestSelected,
+    overall: bestScore.overall,
+    predictedStepMean: bestScore.predictedStepMean,
+    scoreTuple: bestScore.tuple
+  };
 }
 
 function candidateTouchesCapBoundary(selected, groupsWithOrdered, capExtra) {
@@ -1500,6 +1628,28 @@ function candidateTouchesCapBoundary(selected, groupsWithOrdered, capExtra) {
     }
   }
   return false;
+}
+
+function shouldStopTargetStepExpansion({solved, groupsWithOrdered, capExtra, targetStepSpec}) {
+  if (!hasTargetStepSpec(targetStepSpec) || !solved) return false;
+  return isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec);
+}
+
+function shouldStopAfterStableTargetWindowFallback({solved, groupsWithOrdered, capExtra, targetStepSpec}) {
+  if (!Array.isArray(groupsWithOrdered) || groupsWithOrdered.length !== 1) return false;
+  if (!hasTargetStepSpec(targetStepSpec) || !solved) return false;
+  if (!isMeanOnTargetStep(solved.overall, targetStepSpec)) return false;
+  if (isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec)) return false;
+  if (Number(capExtra) < INITIAL_WINDOW_EXTRA_CAP) return false;
+  return !candidateTouchesCapBoundary(solved.selected, groupsWithOrdered, capExtra);
+}
+
+function shouldStopAfterBoundedTargetWindowFallback({best, solved, groupsWithOrdered, capExtra, targetStepSpec}) {
+  if (!shouldStopAfterStableTargetWindowFallback({solved: best, groupsWithOrdered, capExtra, targetStepSpec})) {
+    return false;
+  }
+  if (!solved) return true;
+  return !candidateTouchesCapBoundary(solved.selected, groupsWithOrdered, capExtra);
 }
 
 function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below", targetStepSpec = null}) {
@@ -1551,7 +1701,13 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
     }
     if (!beam.length) continue;
     const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode, targetStepSpec);
-    if (hasTargetStepSpec(targetStepSpec) && solved && isMeanOnTargetStep(solved.overall, targetStepSpec)) {
+    if (shouldStopTargetStepExpansion({solved, groupsWithOrdered, capExtra: extra, targetStepSpec})) {
+      return {
+        ...solved,
+        windowExtra: extra
+      };
+    }
+    if (shouldStopAfterStableTargetWindowFallback({solved, groupsWithOrdered, capExtra: extra, targetStepSpec})) {
       return {
         ...solved,
         windowExtra: extra
@@ -1743,7 +1899,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
   const totalSelected = currentScore.selected.length;
   if (totalSelected <= 0) return null;
   const traceSteps = [];
-  if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(currentScore.overall, targetStepSpec)) {
+  if (hasTargetStepSpec(targetStepSpec) && isMeanOnPrimaryTargetStep(currentScore.overall, targetStepSpec)) {
     return {
       materialResults: currentResults,
       overall: Number(currentScore.overall),
@@ -2130,7 +2286,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
         scoreTuple: bestImprovement.scoreTuple
       };
       iterationImproved = true;
-      if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(currentScore.overall, targetStepSpec)) break;
+      if (hasTargetStepSpec(targetStepSpec) && isMeanOnPrimaryTargetStep(currentScore.overall, targetStepSpec)) break;
     }
 
     // === Step 2: Individual slot refinement ===
@@ -2160,7 +2316,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
   };
 }
 
-function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = null, beamWidth = 200, approachMode = "below"} = {}) {
+function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = null, beamWidth = 200, approachMode = "below", onSearchProgress = null} = {}) {
   const sourceGroups = Array.isArray(groups) ? groups : [];
   const mode = resolveSearchMode(sourceGroups);
   const searchTargetValue = resolveSearchTargetValue(targetValue, targetStepSpec);
@@ -2196,6 +2352,13 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
   let best = null;
   let capExtra = Math.min(maxExtra, INITIAL_WINDOW_EXTRA_CAP);
   while (true) {
+    if (typeof onSearchProgress === "function") {
+      onSearchProgress({
+        phase: "cap",
+        capExtra,
+        maxExtra
+      });
+    }
     const solved = runBeamSearchWithinCap({
       groupsWithOrdered,
       targetValue: searchTargetValue,
@@ -2206,16 +2369,60 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
       approachMode: normalizedApproachMode,
       targetStepSpec
     });
-    if (hasTargetStepSpec(targetStepSpec) && solved && isMeanOnTargetStep(solved.overall, targetStepSpec)) {
+    if (hasTargetStepSpec(targetStepSpec) && solved && isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec)) {
       best = solved;
       break;
     }
     if (solved && (!best || compareScoreTuples(solved.scoreTuple, best.scoreTuple) < 0)) {
       best = solved;
     }
-    if (capExtra >= maxExtra) break;
-    if (solved && !candidateTouchesCapBoundary(solved.selected, groupsWithOrdered, capExtra)) {
+    if (
+      hasTargetStepSpec(targetStepSpec)
+      && mode === "single_material"
+      && Array.isArray(groupsWithOrdered)
+      && groupsWithOrdered.length === 1
+      && normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode) === "below"
+      && solved
+      && isMeanOnTargetStep(solved.overall, targetStepSpec)
+      && !isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec)
+      && Number(capExtra) >= INITIAL_WINDOW_EXTRA_CAP
+    ) {
+      const refinedFallback = refineSingleMaterialTargetStepFallback({
+        selected: solved.selected,
+        candidates: groupsWithOrdered[0].ordered,
+        targetValue: searchTargetValue,
+        targetStepSpec
+      });
+      if (refinedFallback && compareScoreTuples(refinedFallback.scoreTuple, solved.scoreTuple) < 0) {
+        best = {
+          ...refinedFallback,
+          windowExtra: capExtra
+        };
+        break;
+      }
+    }
+    if (hasTargetStepSpec(targetStepSpec) && shouldStopAfterBoundedTargetWindowFallback({
+      best,
+      solved,
+      groupsWithOrdered,
+      capExtra,
+      targetStepSpec
+    })) {
       break;
+    }
+    if (capExtra >= maxExtra) break;
+    if (solved) {
+      if (!hasTargetStepSpec(targetStepSpec) && !candidateTouchesCapBoundary(solved.selected, groupsWithOrdered, capExtra)) {
+        break;
+      }
+      if (hasTargetStepSpec(targetStepSpec) && shouldStopTargetStepExpansion({
+        solved,
+        groupsWithOrdered,
+        capExtra,
+        targetStepSpec
+      })) {
+        break;
+      }
     }
     const nextCap = Math.min(
       maxExtra,
@@ -2226,6 +2433,26 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
   }
 
   if (!best) return null;
+  if (
+    hasTargetStepSpec(targetStepSpec)
+    && mode === "single_material"
+    && !isMeanOnPrimaryTargetStep(best.overall, targetStepSpec)
+    && isMeanOnTargetStep(best.overall, targetStepSpec)
+    && groupsWithOrdered.length === 1
+  ) {
+    const refinedFallback = refineSingleMaterialTargetStepFallback({
+      selected: best.selected,
+      candidates: groupsWithOrdered[0].ordered,
+      targetValue: searchTargetValue,
+      targetStepSpec
+    });
+    if (refinedFallback && compareScoreTuples(refinedFallback.scoreTuple, best.scoreTuple) < 0) {
+      best = {
+        ...best,
+        ...refinedFallback
+      };
+    }
+  }
   const selectedByGroup = groupsWithOrdered.map(() => []);
   for (const candidate of best.selected) {
     const index = Number(candidate && candidate.groupIndex || 0);
@@ -2236,7 +2463,7 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
     available: group.candidates,
     selected: selectedByGroup[index]
   }));
-  if (hasTargetStepSpec(targetStepSpec) && isMeanOnTargetStep(best.overall, targetStepSpec)) {
+  if (hasTargetStepSpec(targetStepSpec) && isMeanOnPrimaryTargetStep(best.overall, targetStepSpec)) {
     return {
       materialResults,
       overall: Number(best.overall),

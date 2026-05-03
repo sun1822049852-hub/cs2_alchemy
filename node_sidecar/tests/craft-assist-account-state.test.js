@@ -116,7 +116,7 @@ function testSaveAndRestoreCraftAccountScopedStateKeepsDraftButClearsRuntimeBusy
   assert.equal(app.state.craftAssistPendingPresetId, "");
   assert.equal(app.state.craftAssistOpen, true);
   assert.equal(app.state.craftAssistPickRole, "aux");
-  assert.equal(app.state.craftAssistTargetWear, 0.2142);
+  assert.equal(app.state.craftAssistTargetWear, Math.fround(0.2142));
   assert.equal(app.state.craftAssistMaterials[0].id, "m1");
   assert.equal(app.state.craftAssistPresetApplyCountMap.presetA, 2);
 }

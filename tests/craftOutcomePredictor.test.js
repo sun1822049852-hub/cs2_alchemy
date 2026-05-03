@@ -316,6 +316,90 @@ function test_predictor_defaults_to_below_previous_float32_step_for_output_float
   assert.equal(result.outcomes[0].name, "StatTrak™ AK-47 | Ice Coaled (Factory New)");
 }
 
+function test_predictor_below_uses_raw_decimal_step_when_raw_sits_above_float32_step() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const rawRelativeWear = 0.21;
+  const expectedStep = Number(Math.fround(rawRelativeWear).toFixed(12));
+  const expectedBelowStep = Number(prevFloat32(Math.fround(rawRelativeWear)).toFixed(12));
+  assert.equal(expectedStep, 0.209999993443);
+  assert.equal(expectedBelowStep, 0.209999978542);
+
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: rawRelativeWear,
+    input_rarity: "军规级",
+    stattrak: true,
+    groups: [{collection: "裂空武器箱", count: 3}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcomes[0].predicted_float, expectedStep);
+  assert.notEqual(result.outcomes[0].predicted_float, expectedBelowStep);
+}
+
+function test_predictor_below_rejects_unreachable_zero_raw() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: 0,
+    input_rarity: "军规级",
+    stattrak: true,
+    groups: [{collection: "裂空武器箱", count: 3}]
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.invalid_reason, "unreachable_below_target");
+}
+
+function test_predictor_below_uses_previous_float32_step_for_exact_step_input() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const rawRelativeWear = 0.20999999344348907;
+  assert.equal(Math.fround(rawRelativeWear), rawRelativeWear);
+  const expectedBelowStep = Number(prevFloat32(Math.fround(rawRelativeWear)).toFixed(12));
+
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: rawRelativeWear,
+    input_rarity: "军规级",
+    stattrak: true,
+    groups: [{collection: "裂空武器箱", count: 3}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcomes[0].predicted_float, expectedBelowStep);
+}
+
+function test_predictor_infinite_mode_keeps_input_float32_step() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const rawRelativeWear = 0.21;
+  const expectedStep = Number(Math.fround(rawRelativeWear).toFixed(12));
+
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: rawRelativeWear,
+    wear_approach_mode: "infinite",
+    input_rarity: "军规级",
+    stattrak: true,
+    groups: [{collection: "裂空武器箱", count: 3}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcomes[0].predicted_float, expectedStep);
+}
+
 function test_predictor_keeps_missing_wear_bounds_and_missing_concrete_rows() {
   const dbPath = buildPredictorFixtureDb();
   const predictor = createCraftOutcomePredictor({
@@ -387,6 +471,10 @@ function runTests() {
   test_predictor_returns_realtime_probabilities_for_partial_recipe();
   test_predictor_isolates_stattrak_pools_and_maps_wear();
   test_predictor_uses_infinite_mode_input_float32_step_for_output_float();
+  test_predictor_below_uses_raw_decimal_step_when_raw_sits_above_float32_step();
+  test_predictor_below_rejects_unreachable_zero_raw();
+  test_predictor_below_uses_previous_float32_step_for_exact_step_input();
+  test_predictor_infinite_mode_keeps_input_float32_step();
   test_predictor_defaults_to_below_previous_float32_step_for_output_float();
   test_predictor_keeps_missing_wear_bounds_and_missing_concrete_rows();
   console.log("craftOutcomePredictor tests passed");
