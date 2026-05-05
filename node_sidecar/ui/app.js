@@ -14325,8 +14325,8 @@ async function runBatchCraftAssistSelect() {
     return;
   }
   const limit = Math.max(1, Math.min(100, Math.trunc(Number(state.batchCraftLimit) || 10)));
+  const existingQueue = Array.isArray(state.batchCraftQueue) ? state.batchCraftQueue : [];
   state.batchCraftBusy = true;
-  state.batchCraftQueue = [];
   setBatchCraftStatus("正在并行选材...");
   renderBatchCraftPage();
 
@@ -14341,7 +14341,10 @@ async function runBatchCraftAssistSelect() {
   const promises = state.batchCraftAccounts.map(async (username) => {
     const accountEntry = {username, recipes: []};
     const failures = [];
-    const usedItemIds = [];
+    const existingEntry = existingQueue.find((entry) => String(entry && entry.username || "").trim() === username);
+    const usedItemIds = existingEntry && Array.isArray(existingEntry.recipes)
+      ? existingEntry.recipes.flatMap((recipe) => normalizeCraftRecipeItemIds(recipe && recipe.item_ids))
+      : [];
     // 每个账号最多尝试 limit 次（总数上限由后面统一截断）
     for (let r = 0; r < limit; r++) {
       const result = await callBatchCraftAssistSelectForAccount(username, draftSnapshot, usedItemIds);
@@ -14388,7 +14391,22 @@ async function runBatchCraftAssistSelect() {
     }
     totalCount += entry.recipes.length;
   }
-  state.batchCraftQueue = allEntries.filter((e) => e.recipes.length > 0);
+  const mergedEntries = existingQueue
+    .map((entry) => ({
+      ...entry,
+      recipes: Array.isArray(entry && entry.recipes) ? entry.recipes.slice() : []
+    }))
+    .filter((entry) => String(entry && entry.username || "").trim() && entry.recipes.length > 0);
+  for (const entry of allEntries.filter((e) => e.recipes.length > 0)) {
+    const username = String(entry && entry.username || "").trim();
+    const existingEntry = mergedEntries.find((item) => String(item && item.username || "").trim() === username);
+    if (existingEntry) {
+      existingEntry.recipes.push(...entry.recipes);
+    } else {
+      mergedEntries.push(entry);
+    }
+  }
+  state.batchCraftQueue = mergedEntries;
 
   state.batchCraftBusy = false;
   const totalRecipes = state.batchCraftQueue.reduce((s, e) => s + e.recipes.length, 0);

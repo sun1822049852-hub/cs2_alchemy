@@ -73,14 +73,14 @@ function loadBatchCraftAssistSelect(overrides = {}) {
   return context;
 }
 
-function createBatchRunHarness({DateImpl, accounts, api, limit = 10}) {
+function createBatchRunHarness({DateImpl, accounts, api, limit = 10, existingQueue = []}) {
   return loadBatchCraftAssistSelect({
     Date: DateImpl,
     state: {
       batchCraftAccounts: accounts,
       batchCraftSelectedPresetId: "preset-1",
       batchCraftLimit: limit,
-      batchCraftQueue: [],
+      batchCraftQueue: Array.isArray(existingQueue) ? existingQueue : [],
       batchCraftBusy: false,
       batchCraftStatusText: "",
       batchCraftStatusError: false,
@@ -137,6 +137,10 @@ function createBatchAssistError(message, code = "material_quantity_insufficient_
     detail: `${code} detail`
   };
   return err;
+}
+
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 function prevFloat32(value) {
@@ -499,6 +503,132 @@ async function test_batch_selection_summarizes_mixed_success_and_failure({DateIm
   assert.match(app.state.batchCraftStatusText, /已选 1 个账号，共 1 组配方/);
 }
 
+async function test_batch_selection_preserves_existing_queue_entries({DateImpl}) {
+  const expectedOldQueue = [
+    {
+      username: "old-account",
+      recipes: [
+        {
+          id: "old-recipe",
+          item_ids: ["old-1", "old-2", "old-3", "old-4", "old-5", "old-6", "old-7", "old-8", "old-9", "old-10"],
+          status: "pending",
+          result: null
+        }
+      ]
+    }
+  ];
+  const inputOldQueue = clonePlain(expectedOldQueue);
+  const expectedNewItemIds = ["new-1", "new-2", "new-3", "new-4", "new-5", "new-6", "new-7", "new-8", "new-9", "new-10"];
+  const app = createBatchRunHarness({
+    DateImpl,
+    accounts: ["new-account"],
+    limit: 1,
+    existingQueue: inputOldQueue,
+    async api(_route, options = {}) {
+      const request = JSON.parse(String(options.body || "{}"));
+      assert.equal(request.username, "new-account");
+      return {
+        ok: true,
+        item_ids: expectedNewItemIds,
+        overall: 0.2141
+      };
+    }
+  });
+
+  await app.runBatchCraftAssistSelect();
+
+  assert.equal(app.state.batchCraftQueue.length, 2);
+  assert.equal(app.state.batchCraftQueue[0].username, "old-account");
+  assert.deepEqual(app.state.batchCraftQueue[0].recipes[0].item_ids, expectedOldQueue[0].recipes[0].item_ids);
+  assert.equal(app.state.batchCraftQueue[1].username, "new-account");
+  assert.deepEqual(app.state.batchCraftQueue[1].recipes[0].item_ids, expectedNewItemIds);
+  assert.deepEqual(inputOldQueue, expectedOldQueue);
+}
+
+async function test_batch_selection_blocks_existing_same_account_recipe_items({DateImpl}) {
+  const expectedOldItemIds = ["old-1", "old-2", "old-3", "old-4", "old-5", "old-6", "old-7", "old-8", "old-9", "old-10"];
+  const expectedOldQueue = [
+    {
+      username: "same-account",
+      recipes: [
+        {
+          id: "old-recipe",
+          item_ids: expectedOldItemIds,
+          status: "pending",
+          result: null
+        }
+      ]
+    }
+  ];
+  const inputOldQueue = clonePlain(expectedOldQueue);
+  const expectedNewItemIds = ["new-1", "new-2", "new-3", "new-4", "new-5", "new-6", "new-7", "new-8", "new-9", "new-10"];
+  let capturedBlockedIds = null;
+  const app = createBatchRunHarness({
+    DateImpl,
+    accounts: ["same-account"],
+    limit: 1,
+    existingQueue: inputOldQueue,
+    async api(_route, options = {}) {
+      const request = JSON.parse(String(options.body || "{}"));
+      capturedBlockedIds = request.blocked_ids;
+      return {
+        ok: true,
+        item_ids: expectedNewItemIds,
+        overall: 0.2141
+      };
+    }
+  });
+
+  await app.runBatchCraftAssistSelect();
+
+  assert.deepEqual(capturedBlockedIds, expectedOldItemIds);
+  assert.equal(app.state.batchCraftQueue.length, 1);
+  assert.equal(app.state.batchCraftQueue[0].username, "same-account");
+  assert.equal(app.state.batchCraftQueue[0].recipes.length, 2);
+  assert.deepEqual(app.state.batchCraftQueue[0].recipes[0].item_ids, expectedOldItemIds);
+  assert.deepEqual(app.state.batchCraftQueue[0].recipes[1].item_ids, expectedNewItemIds);
+  assert.deepEqual(inputOldQueue, expectedOldQueue);
+}
+
+async function test_batch_selection_failure_preserves_existing_queue_entries({DateImpl}) {
+  const expectedOldQueue = [
+    {
+      username: "old-account",
+      recipes: [
+        {
+          id: "old-recipe",
+          item_ids: ["old-1", "old-2", "old-3", "old-4", "old-5", "old-6", "old-7", "old-8", "old-9", "old-10"],
+          status: "pending",
+          result: null
+        }
+      ]
+    }
+  ];
+  const inputOldQueue = clonePlain(expectedOldQueue);
+  const app = createBatchRunHarness({
+    DateImpl,
+    accounts: ["new-fail-account"],
+    limit: 1,
+    existingQueue: inputOldQueue,
+    async api() {
+      throw createBatchAssistError("辅助选材失败：new-fail-account 库存不足。");
+    }
+  });
+
+  await app.runBatchCraftAssistSelect();
+
+  assert.equal(app.state.batchCraftQueue.length, 1);
+  assert.equal(app.state.batchCraftQueue[0].username, "old-account");
+  assert.equal(app.state.batchCraftQueue[0].recipes.length, 1);
+  assert.deepEqual(app.state.batchCraftQueue[0].recipes[0].item_ids, expectedOldQueue[0].recipes[0].item_ids);
+  assert.equal(app.state.batchCraftQueue.some((entry) => entry.username === "new-fail-account"), false);
+  assert.equal(app.state.batchCraftBusy, false);
+  assert.equal(app.state.batchCraftStatusError, true);
+  assert.match(app.state.batchCraftStatusText, /选材失败|部分账号选材失败/);
+  assert.match(app.state.batchCraftStatusText, /new-fail-account/);
+  assert.deepEqual(inputOldQueue, expectedOldQueue);
+}
+
 async function test_batch_selection_summarizes_multiple_failures({DateImpl}) {
   const app = createBatchRunHarness({
     DateImpl,
@@ -543,6 +673,9 @@ async function main() {
     await test_batch_helper_keeps_null_and_logs_account_level_failure({DateImpl: FakeDate});
     await test_batch_selection_surfaces_blocked_shortfall_message_in_top_status({DateImpl: FakeDate});
     await test_batch_selection_summarizes_mixed_success_and_failure({DateImpl: FakeDate});
+    await test_batch_selection_preserves_existing_queue_entries({DateImpl: FakeDate});
+    await test_batch_selection_blocks_existing_same_account_recipe_items({DateImpl: FakeDate});
+    await test_batch_selection_failure_preserves_existing_queue_entries({DateImpl: FakeDate});
     await test_batch_selection_summarizes_multiple_failures({DateImpl: FakeDate});
   } finally {
     Math.random = originalRandom;
