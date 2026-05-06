@@ -2550,3 +2550,985 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
   - 未跑完整仓库测试。
   - 未重启真实 Electron / sidecar 做 HTTP/UI runtime 复测。
   - 未审计其他 worktree。
+
+## 2026-05-03 pruneBeam canonical-before-score - pre large-sample verification
+
+- Current goal: continue optimizing `craft assist raw-aware below` large-sample latency without changing result semantics.
+- Resume basis:
+  - Current root worktree: `C:/Users/18220/Desktop/cs2_alchemy` on `main`.
+  - Other worktrees were checked for conflict risk and did not touch `node_sidecar/src/services/craftAssistSearch.js`, `tests/craftAssistSearch.test.js`, `docs/agent`, or `output/playwright`.
+  - Latest prior completed optimization was `exact inner-extra result reuse`; do not redo window/slot preparation cache because it was already tried and reverted as slower/no benefit.
+- Implemented in current root worktree:
+  - `node_sidecar/src/services/craftAssistSearch.js`: `pruneBeam(...)` now canonical-merges states before partial scoring, then scores only unique canonical representatives.
+  - `tests/craftAssistSearch.test.js`: added a regression test that creates canonical-equivalent next states, compares baseline/profiled `pickedIds`, `overall`, `scoreTuple`, `windowExtra`, and `materialResults`, asserts aggregate-only profile payload, and verifies `partialScoreAttempts < nextStates`.
+  - Added short comments documenting the new profile counter semantics and the test fixture intent.
+- Must remain unchanged:
+  - raw-aware below: below means strictly below the user raw decimal ceiling.
+  - raw ceiling, primary-first, closest-below fallback, target window semantics, default HTTP/UI payload shape.
+  - profile output must remain aggregate-only and must not include item ids, selected, usedIds, candidate, or state details.
+  - `partialPrunedStates` remains generated states not kept into the next beam, including canonical merge and beam truncation.
+- Subagent review status:
+  - Spec review: no blocking issues.
+  - Code quality review: no blocking issues.
+  - Non-blocking suggestions were handled with a `materialResults` deep comparison and short comments.
+- Fresh verification already run by main agent:
+  - `node --test tests/craftAssistSearch.test.js` PASS.
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js` PASS with only LF/CRLF warnings.
+- In progress next:
+  - Run large-sample offline verification after this checkpoint:
+    - `node output/playwright/sunset-hunting-02142-offline-final-verify.js`
+    - `node output/playwright/train-hunting-037-027-offline-final-verify.js current`
+    - `node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache`
+  - These commands are expected to write new `output/playwright` artifacts.
+- Still not verified:
+  - Full repository test suite.
+  - Real Electron / sidecar HTTP/UI runtime.
+
+## 2026-05-03 pruneBeam canonical-merge-before-score optimization
+
+- Scope / goal:
+  - Continue performance optimization for `craft assist raw-aware below` after `exact inner-extra result reuse`.
+  - This slice optimizes `pruneBeam(...)` by canonical-merging equivalent beam states before partial scoring.
+  - Must remain unchanged: raw-aware below strictness, raw ceiling, primary-first, closest-below fallback, target window semantics, default HTTP/UI payload shape, aggregate-only profile payload, and no window/slot preparation cache retry.
+- Resume / coordination facts:
+  - Restored from handoff via parallel read-only subagents for docs/memory/plan, git/worktree state, and local JSONL session logs.
+  - Current root worktree reviewed: `C:/Users/18220/Desktop/cs2_alchemy` on `main`.
+  - Other known worktrees were checked by subagent for conflict risk only; they did not touch `node_sidecar/src/services/craftAssistSearch.js`, `tests/craftAssistSearch.test.js`, `docs/agent`, or `output/playwright` in the reviewed scope.
+- Implementation completed by worker subagent:
+  - Modified `node_sidecar/src/services/craftAssistSearch.js`:
+    - `pruneBeam(...)` now groups by `buildCanonicalStateKey(...)` first, then scores only unique canonical representative states.
+    - `partialScoreAttempts` now counts actual scored unique canonical states.
+    - `partialPrunedStates` remains generated states not kept into next beam, including canonical merge and beam truncation.
+  - Modified `tests/craftAssistSearch.test.js`:
+    - Added regression test for canonical-equivalent next states.
+    - Test compares baseline/profiled `pickedIds`, `overall`, `scoreTuple`, `windowExtra`, and `materialResults`.
+    - Test asserts `partialScoreAttempts < nextStates` and profile payload remains aggregate-only.
+  - Added comments only after code-quality review to clarify the profile metric contract and fixture purpose.
+- Review results:
+  - Spec review subagent (`gpt-5.4`) found no blocking issues.
+  - Code-quality review subagent (`gpt-5.4`) found no blocking issues.
+  - Non-blocking suggestions from reviewers were addressed with test-only deep compare and comment-only clarification.
+- Verification completed in this session:
+  - Worker RED: `node --test tests/craftAssistSearch.test.js` failed as expected on new `partialScoreAttempts < nextStates` assertion before implementation.
+  - Worker GREEN: `node --test tests/craftAssistSearch.test.js` PASS.
+  - Worker: `git diff --check -- tests/craftAssistSearch.test.js node_sidecar/src/services/craftAssistSearch.js` PASS with LF/CRLF warnings only.
+  - Main fresh verification: `node --test tests/craftAssistSearch.test.js` PASS (`craftAssistSearch tests passed`, 1 file, duration about 2.74s).
+  - Main fresh verification: `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js` PASS with LF/CRLF warnings only.
+  - Main offline large-sample verifications all PASS:
+    - `node output/playwright/sunset-hunting-02142-offline-final-verify.js` PASS.
+    - `node output/playwright/train-hunting-037-027-offline-final-verify.js current` PASS.
+    - `node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache` PASS.
+- New offline artifacts from pruneBeam optimization verification:
+  - Sunset:
+    - final JSON: `output/playwright/sunset-hunting-02142-offline-final-20260503T092400Z.json`
+    - final MD: `output/playwright/sunset-hunting-02142-offline-final-20260503T092400Z.md`
+    - profile JSON: `output/playwright/sunset-hunting-02142-offline-profile-20260503T092400Z.json`
+    - profile MD: `output/playwright/sunset-hunting-02142-offline-profile-20260503T092400Z.md`
+  - Train current:
+    - final JSON: `output/playwright/train-hunting-037-027-offline-final-current-20260503T092400Z.json`
+    - final MD: `output/playwright/train-hunting-037-027-offline-final-current-20260503T092400Z.md`
+    - profile JSON: `output/playwright/train-hunting-037-027-offline-profile-current-20260503T092400Z.json`
+    - profile MD: `output/playwright/train-hunting-037-027-offline-profile-current-20260503T092400Z.md`
+  - Train no-role-sort-cache:
+    - final JSON: `output/playwright/train-hunting-037-027-offline-final-no-role-sort-cache-20260503T092400Z.json`
+    - final MD: `output/playwright/train-hunting-037-027-offline-final-no-role-sort-cache-20260503T092400Z.md`
+    - profile JSON: `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T092400Z.json`
+    - profile MD: `output/playwright/train-hunting-037-027-offline-profile-no-role-sort-cache-20260503T092400Z.md`
+- Large-sample result notes:
+  - Sunset remained result-identical to previous verified exact-reuse artifact for status / overall / fround / below_raw / item_ids.
+  - Train current remained result-identical to previous verified exact-reuse artifact for status / overall / fround / below_raw / item_ids.
+  - Train no-role-sort-cache remained result-identical to previous verified exact-reuse artifact for status / overall / fround / below_raw / item_ids.
+  - New profile aggregate totals from `20260503T092400Z` artifacts:
+    - Sunset: `nextStates=3577206`, `partialScoreAttempts=2643470`, reduction vs nextStates about `26.10%`, forbidden profile hits `0`.
+    - Train current: `nextStates=2074010`, `partialScoreAttempts=1456446`, reduction vs nextStates about `29.78%`, forbidden profile hits `0`.
+    - Train no-role-sort-cache: same aggregate totals as Train current, forbidden profile hits `0`.
+  - CandidateAttempts are expected not to drop from this slice; this optimization targets partial scoring work after next state generation.
+- Current working tree notes:
+  - Business files changed by this slice: `node_sidecar/src/services/craftAssistSearch.js`, `tests/craftAssistSearch.test.js`, plus this `docs/agent/session-log.md` append.
+  - Pre-existing / runtime / unrelated dirty state still exists: `AGENTS.md`, `backup/ui_state/` backup churn, `.playwright-cli/`, and `output/` artifacts.
+  - Do not treat `backup/ui_state/` churn alone as this task's business diff.
+- Still not verified:
+  - Full repository test suite was not run.
+  - Real Electron / sidecar HTTP/UI runtime was not restarted or manually retested.
+  - Other worktrees were not fully diff-reviewed; only target-file conflict risk was checked.
+- Next step first cut:
+  - If continuing performance work, do not redo window/slot preparation cache.
+  - Candidate next optimizations remain higher risk and require new RED tests first:同组 canonical 组合展开, raw ceiling deterministic infeasible pruning, or expansion-level candidate dedupe.
+  - Before any next optimization, re-run `git status --short --branch`, inspect current diff for the two business files, and preserve raw-aware below semantics.
+
+## 2026-05-03 clarification - item id uniqueness and next optimization review
+
+- User clarified that `asset_id` / `item_id` is the unique identifier for a concrete inventory item.
+  - Treat the earlier theoretical "same id with different value/role payload" counterexample as not applicable to real business input.
+  - Current `pruneBeam` canonical merge can rely on `candidate.id` mapping to one concrete item payload in normal inventory/search data.
+- Multi-agent review correction remains important:
+  - Current evidence supports: result-identical large samples and fewer actual partial scoring calls on measured samples.
+  - Current evidence does not support: stable wall-time improvement or universal benefit across low-collision data.
+  - `partialScoreAttempts` now means scored unique canonical states; do not compare it to old artifacts as an unchanged metric semantics.
+- A new read-only exploration subagent was dispatched to review later optimization directions and look for better algorithms:
+  - Scope: `craft assist raw-aware below` search performance after exact inner-extra reuse and pruneBeam canonical-before-score.
+  - It must not write files or run scripts that write `output/`.
+  - It must rank future algorithm options by benefit/risk/proof required, and recommend only one small next slice with a RED test shape.
+- Until that review returns, do not start another implementation slice.
+
+## 2026-05-03 next optimization algorithm review result
+
+- Read-only exploration subagent returned after reviewing post-`pruneBeam` optimization routes.
+- Key conclusion:
+  - Keep current `pruneBeam canonical-merge-before-score`; treat it as reducing partial scoring work, not as proven wall-time win.
+  - Next likely bottleneck is `candidate expansion`, not `partial scoring`, `complete scoring`, fallback refinement, or cap expansion.
+  - The current hot loop still creates many same-group slot permutations before canonical merge, paying allocation costs for `new Set(state.usedIds)`, `selectedIdsByGroup` copy/sort, and `selected` array copy.
+- Recommended next slice:
+  - `same-group permutation collapse` for only `single group + repeated slots + raw-aware/target-step beam path` first.
+  - Goal: avoid generating permutation-equivalent states in the first place, not merely merging/scoring them later.
+  - RED test shape:
+    - single group, `count=3`, 5-6 candidates, large enough `beamWidth`, targetStepSpec path.
+    - Assert result equality fields: `pickedIds`, `overall`, `scoreTuple`, `windowExtra`, `materialResults`.
+    - Assert profile `nextStates` drops below a combination-level threshold; current implementation should fail because it expands permutations.
+  - Verification after implementation should start with `node --test tests/craftAssistSearch.test.js`; if user allows output writes, run the Sunset and Train offline final verify scripts afterward.
+- Other ranked directions:
+  1. Same-group permutation collapse: highest expected benefit, medium-high risk, needs strict equivalence proof.
+  2. Streaming canonical beam build: smaller step, reduces `nextStates` array pressure, medium risk.
+  3. Deterministic infeasible pruning by reachable bound: potentially useful for `no_complete_solution`, but high semantic risk around raw ceiling / primary-first / fallback.
+  4. Incremental partial-score state stats: lower-risk local CPU optimization, but needs timing proof rather than aggregate count proof.
+  5. Smarter cap jump / stop policy: high risk; not recommended next.
+- Do not pursue for now:
+  - Repeating window/slot preparation cache.
+  - Only optimizing string key / Map allocation while still generating permutations.
+  - Blind beamWidth tuning.
+  - Complete scoring cache work; profile magnitude is not the current main bottleneck.
+- Stable user clarification to preserve:
+  - `asset_id` / `item_id` is unique for a concrete inventory item. Do not block current `pruneBeam` on hypothetical same-id different-payload cases.
+
+## 2026-05-04 same-group permutation collapse implementation
+
+- 本轮目标:
+  - 继续 `craft assist raw-aware below` 大样本性能优化的下一刀：`same-group permutation collapse`。
+  - 目的只是在生成阶段少生成“同一材料组、重复 slot”的排列等价状态，不改变用户可见结果含义。
+- 启动前只读核对:
+  - 当前 root worktree: `C:/Users/18220/Desktop/cs2_alchemy` on `main`, HEAD `968466a3d817d0a921d8ddd6af831aeed654e9a7`。
+  - 只读查看了本轮允许文件的 diff：`exact inner-extra reuse` 和 `pruneBeam canonical-merge-before-score` 已在现场；未看到 `same-group permutation collapse` 已实现。
+  - 只列出了其他 worktree 路径，未审计其他 worktree diff，也未触碰其他 worktree。
+- RED 测试:
+  - 在 `tests/craftAssistSearch.test.js` 增加 `test_search_beam_collapses_single_group_repeated_slot_permutations_during_generation()`。
+  - 测试形状：单一材料组、`count=3`、6 个候选、`beamWidth=100`、raw-aware `targetStepSpec` below beam path。
+  - 断言 profile shape 仍是聚合字段，结果字段与 baseline/profiled 一致：`pickedIds`、`overall`、`scoreTuple`、`windowExtra`、`materialResults`。
+  - 断言 raw ceiling 仍严格 below：`targetStepSpec.targetStep < raw` 且 `profiled.overall < raw`。
+  - RED 命令：`node --test tests/craftAssistSearch.test.js`。
+  - RED 结果：失败符合预期，错误为 `same-group generation should stay at combination level: 191 > 87`，说明旧实现仍生成排列等价 `nextStates`。
+- GREEN 实现:
+  - 在 `node_sidecar/src/services/craftAssistSearch.js` 增加窄保护：
+    - 仅 `single_material`。
+    - 仅一个材料组。
+    - 仅重复 slot。
+    - 仅 `targetStepSpec` below。
+    - 仅存在明确 raw input / targetWearRaw 时启用。
+  - 在生成 `nextStates` 前计算同组 canonical key；同一层已生成过的组合直接跳过，不再复制 `usedIds`、`selectedIdsByGroup` 和 `selected` 状态。
+  - 保留旧逻辑里“先遇到的 canonical 代表状态”，后续 `pruneBeam(...)` 仍作为通用保护。
+  - 修正一个保护条件细节：`null` raw 不能因 `Number(null) === 0` 被误判为 raw-aware。
+  - 调整旧 canonical-merge profile 测试为非 raw target-step 场景，继续证明上一刀 `partialScoreAttempts < nextStates`，避免和新 raw-aware 生成 collapse 路径互相覆盖。
+- GREEN 验证:
+  - `node --test tests/craftAssistSearch.test.js` PASS，输出 `craftAssistSearch tests passed`，1 个 test file 通过，耗时约 `2906ms`。
+  - `git diff --check -- tests/craftAssistSearch.test.js node_sidecar/src/services/craftAssistSearch.js` PASS，仅有 LF/CRLF warning。
+  - 只读 profile 探测同一新测试夹具：`nextStates=87`，`partialScoreAttempts=87`，`overall=0.2142849862575531`，`windowExtra=3`。
+- 保持不变项确认:
+  - raw ceiling / strict below：新测试断言最终 `overall < raw`。
+  - primary-first / target window：新测试仍通过 raw-aware `targetStepSpec` primary result，`windowExtra` 与 baseline/profied 对齐。
+  - 返回 shape 和字段含义：新测试覆盖 `pickedIds`、`overall`、`scoreTuple`、`windowExtra`、`materialResults` 的 baseline/profiled 一致性。
+  - profile 脱敏：继续跑 `assertBeamProfilePayloadShape(...)`，禁止 `candidate`、`state`、`selected`、`usedIds`、`selectedIdsByGroup`、`itemIds` 等明细进入 profile。
+  - closest-below fallback：本轮未改 fallback/refinement 逻辑；仅由现有 focused test 间接覆盖，未做真实大样本回归。
+- 当前工作区备注:
+  - 本轮按用户限制只修改了 `tests/craftAssistSearch.test.js`、`node_sidecar/src/services/craftAssistSearch.js`、`docs/agent/session-log.md`。
+  - 未触碰 `backup/ui_state/`、`output/`、`.playwright-cli/`、`AGENTS.md` 或其他 worktree。
+  - 运行态/无关 dirty 文件仍按原样保留。
+- 未验证:
+  - 未跑完整仓库测试。
+  - 未跑 Sunset / Train 离线大样本验证。
+  - 未重启 Electron / sidecar，也未做 HTTP/UI runtime 复测。
+  - 未完整审计其他 worktree。
+- 下一步建议:
+  - 主 agent 先审查本轮 diff，重点看 raw-aware 保护条件、canonical key 跳过是否只影响生成阶段、以及 profile 字段语义是否仍为聚合计数。
+  - 若用户允许写 `output/`，再跑 Sunset / Train 离线大样本对照；否则先只把本轮作为 focused-test 级别优化提交候选。
+
+## 2026-05-04 same-group permutation collapse review follow-up
+
+- 本次角色:
+  - 修补子 agent，范围只限 review follow-up：补强测试证明力和 profile 口径说明，不改搜索生产逻辑。
+- 做了什么:
+  - 先检查当前新测试，确认它仍主要依赖 baseline/profiled 对比，缺少独立 oracle。
+  - 在 `test_search_beam_collapses_single_group_repeated_slot_permutations_during_generation()` 里加了小型组合枚举 oracle：直接枚举 6 选 3，找唯一一个低于 raw 且均值等于目标 step 的组合，并用它断言 `profiled` 的 `pickedIds` 和 `overall`。
+  - 把 `combinationLevelNextStates = 87` 改成由组合计数 helper 从 profile 的单组 window size / slot count 推出，避免裸 magic number；旧排列级行为仍应被 `191 > 87` 这类差距抓住。
+  - 在代码注释里补了一句 profile 口径：generation collapse 跳过的排列发生在写入 `nextStates` 之前，因此这些跳过项也不会进入 `partialPrunedStates`。
+- 验证:
+  - `node --test tests/craftAssistSearch.test.js` PASS，输出 `craftAssistSearch tests passed`，1 个 test file 通过。
+  - `git diff --check -- tests/craftAssistSearch.test.js node_sidecar/src/services/craftAssistSearch.js docs/agent/session-log.md` PASS，仅有 LF/CRLF warning。
+  - 未验证:
+    - 未跑完整仓库测试。
+    - 未跑 Sunset / Train 离线大样本验证。
+    - 未重启 Electron / sidecar，也未做 UI / HTTP runtime 复测。
+    - 未审计其他 worktree。
+
+## 2026-05-04 same-group permutation collapse validation subagent
+
+- 本次角色:
+  - 验证子 agent，范围只做 `same-group permutation collapse` 的离线收尾验证；不做全项目审查。
+  - 主工作区为 `C:/Users/18220/Desktop/cs2_alchemy`；未检查、未触碰其他 worktree。
+- 读取到的旧验证口径:
+  - 现成脚本是：
+    - `node output/playwright/sunset-hunting-02142-offline-final-verify.js`
+    - `node output/playwright/train-hunting-037-027-offline-final-verify.js current`
+    - `node output/playwright/train-hunting-037-027-offline-final-verify.js no-role-sort-cache`
+  - 两个脚本都指向旧库存快照 `logs/processed_inventory/inventory_processed_20260502_205953.json`。
+  - 旧 handoff 预期会生成新的 `output/playwright` final/profile artifacts；profile 口径为聚合指标，不含 item ids / selected / usedIds / candidate / state 明细。
+- 本次实际验证:
+  - `node --test tests/craftAssistSearch.test.js` PASS，1 个 test file 通过，duration `2763.3481ms`。
+  - `git diff --check -- tests/craftAssistSearch.test.js node_sidecar/src/services/craftAssistSearch.js docs/agent/session-log.md` PASS，仅 Git LF/CRLF warning。
+  - 检查现成离线脚本，确认没有 dry-run / no-write 开关，默认会写 `output/playwright` artifact。
+  - 用运行时拦截 `fs.writeFileSync` 的 no-write 包装尝试复跑 Sunset 脚本；没有写出新 artifact。
+  - Sunset no-write 复跑在进入搜索前 BLOCKED：缺少 `logs/processed_inventory/inventory_processed_20260502_205953.json`。
+  - Train current / no-role-sort-cache 脚本使用同一个缺失快照；为避免重复同一前置失败，未继续跑。
+  - 额外确认 `output/playwright/*20260504T043648Z*` 没有落盘文件。
+- Sunset / Train 大样本结果:
+  - 本次未能产出当前代码的大样本 profile 指标。
+  - 原因不是搜索代码报错，而是旧脚本依赖的精确库存快照当前主工作区不存在。
+  - 当前 `logs/processed_inventory/` 中可见较近快照包括 `inventory_processed_20260504_120952.json`、`inventory_processed_20260504_115555.json`、`inventory_processed_20260503_222250.json`、`inventory_processed_20260503_174254.json`、`inventory_processed_20260502_201922.json`、`inventory_processed_20260502_194550.json`，但没有 `inventory_processed_20260502_205953.json`。
+- 未验证 / 风险:
+  - 未同口径复跑 Sunset / Train 当前代码大样本，所以不能声明本轮优化在旧大样本上不报错或 profile 指标符合 handoff 预期。
+  - 未跑完整仓库测试。
+  - 未启动 Electron / sidecar，也未做 HTTP/UI runtime 复测。
+  - 未审计其他 worktree。
+
+## 2026-05-04 same-group permutation collapse final handoff
+
+- 本轮最终状态:
+  - 已完成 `same-group permutation collapse`。
+  - 先做 RED test，旧行为失败符合预期：`nextStates 191 > 87`，说明旧逻辑仍生成同组重复 slot 的排列等价状态。
+  - GREEN 后 focused test 已通过；当前同一 profile 口径为 `nextStates=87`、`partialScoreAttempts=87`。
+- Review follow-up 已完成:
+  - 新测试已加入独立 oracle：直接枚举 6 选 3。
+  - oracle 找到唯一组合 `["lower-1","lower-2","primary-high"]`，对应 `overall=0.2142849862575531`。
+  - 组合阈值已改为由 helper 根据 profile 的单组 window size / slot count 计算，不再裸写 `87`。
+  - profile 口径说明已补：generation collapse 跳过的排列发生在写入 `nextStates` 之前，因此不会进入 `partialPrunedStates`。
+- 审查结果:
+  - 两路 `gpt-5.4` 审查均无 blocking。
+  - 最终 follow-up review 结论为 PASS。
+- 已验证:
+  - `node --test tests/craftAssistSearch.test.js` PASS。
+  - `git diff --check -- tests/craftAssistSearch.test.js node_sidecar/src/services/craftAssistSearch.js docs/agent/session-log.md` PASS，仅有 LF/CRLF warning。
+- 大样本 Sunset / Train 状态:
+  - 同口径复跑未完成，当前不能声明大样本复验通过。
+  - 原因：旧快照 `logs/processed_inventory/inventory_processed_20260502_205953.json` 当前缺失。
+  - 现有离线 final 脚本硬编码这个旧快照，并且默认会写 `output/playwright/`。
+- 下次可继续选项:
+  - 恢复旧快照，并允许写 `output/` 后跑原 Sunset / Train 脚本。
+  - 或允许生成 / 使用新快照，但必须标明这是新口径验证。
+  - 否则保持结论为：Sunset / Train 同口径大样本未验证。
+- 仍未验证:
+  - 完整仓库测试。
+  - Electron / sidecar HTTP/UI runtime。
+  - 其他 worktree。
+  - Sunset / Train 同口径大样本。
+- 现场注意:
+  - 主 root 是 `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 其他 worktree 未审计。
+  - 运行态 / 验证产物和 `AGENTS.md` dirty 不要混入本轮业务判断。
+
+## 2026-05-04 processed inventory preserved backup
+
+- 备份时间: 2026-05-04 13:28:39 +08:00
+- 选择快照: C:\Users\18220\Desktop\cs2_alchemy\logs\processed_inventory\inventory_processed_20260504_131128.json
+- 备份路径: C:\Users\18220\Desktop\cs2_alchemy\backup\processed_inventory\inventory_processed_20260504_131128.preserved_for_large_sample_20260504_132712.json
+- 说明文件: C:\Users\18220\Desktop\cs2_alchemy\backup\processed_inventory\inventory_processed_20260504_131128.preserved_for_large_sample_20260504_132712.md
+- 用途: new-baseline large-sample validation；不是旧 inventory_processed_20260502_205953.json 口径。
+- 校验: source length=2674998 bytes, backup length=2674998 bytes, SHA256 match=True, SHA256=434C0289C6F21B5B8EA63132A9E3AD81A1417EBEFDFA496BF1372D159221A399
+- 范围: 只操作当前主工作区；未删除/移动原快照；未修改业务代码；未运行验证脚本；未检查其他 worktree。
+
+## 2026-05-04 new-baseline 20260504_131128 large-sample validation subagent
+
+- 本次角色和范围:
+  - 大样本验证子 agent，只在当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 操作。
+  - 本次是新快照新口径验证，源快照为 `logs/processed_inventory/inventory_processed_20260504_131128.json`，实际读取保留备份 `backup/processed_inventory/inventory_processed_20260504_131128.preserved_for_large_sample_20260504_132712.json`。
+  - SHA256 已确认：`434C0289C6F21B5B8EA63132A9E3AD81A1417EBEFDFA496BF1372D159221A399`。
+  - 未检查、未触碰其他 worktree；未修改 `node_sidecar/src/services/craftAssistSearch.js`；未修改 `tests/craftAssistSearch.test.js`；未删除/移动任何快照；未把备份复制成旧 `20260502_205953` 名称。
+- 新增验证脚本:
+  - `output/playwright/sunset-hunting-02142-new-baseline-20260504_131128-offline-final-verify.js`
+  - `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-verify.js`
+  - 两个脚本只读保留备份快照，输出文件名前缀带 `new-baseline-20260504_131128`；profile summary 增加 `candidateAttempts`、`nextStates`、`partialScoreAttempts`、`partialPrunedStates`、`beamInputStates`、`beamOutputStates`。
+- 实际运行命令和结果:
+  - `node --check output/playwright/sunset-hunting-02142-new-baseline-20260504_131128-offline-final-verify.js` PASS。
+  - `node --check output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-verify.js` PASS。
+  - `node output/playwright/sunset-hunting-02142-new-baseline-20260504_131128-offline-final-verify.js` 超时：外层命令约 `904040ms` 后 timeout；确认残留 PID `38896` 的 command line 是本次 Sunset 脚本后已停止。
+  - `node output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-verify.js current` 运行完成但业务结果为 `FAIL`，无异常抛出。
+  - `node output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-verify.js no-role-sort-cache` 运行完成但业务结果为 `FAIL`，无异常抛出。
+  - `node --test tests/craftAssistSearch.test.js` PASS，1 个 test file 通过，duration `2610.4525ms`。
+  - `git diff --check -- tests/craftAssistSearch.test.js node_sidecar/src/services/craftAssistSearch.js docs/agent/session-log.md output/playwright` PASS，仅 LF/CRLF warning。
+- Sunset 结果:
+  - 状态：未成功产出结果，外层超时后手动停止本次验证进程。
+  - 未生成 Sunset final/profile JSON/MD artifact。
+  - 只读诊断显示，新快照同条件 `法玛斯 | 半袖式 (久经沙场)` materialRows=`1184`，filteredCount=`1131`，filteredRelativeWear min=`0.16006329655647278`，max=`0.2053622603416443`。
+  - 旧可见 artifact `sunset-hunting-02142-offline-final-20260503T092400Z.json` 对应 filteredCount=`765`，duration_ms=`12433.883`，service_duration_ms=`11901.298`。本次新快照候选更多，且最高相对磨损低于目标 `0.214285`，疑似导致搜索空间退化；未改业务代码验证这个推断。
+  - profile 指标：无 artifact，`candidateAttempts` / `nextStates` / `partialScoreAttempts` / `partialPrunedStates` / `beamInputStates` / `beamOutputStates` 未取得。
+- Train current 结果:
+  - final JSON: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-current-20260504T055534Z.json`
+  - final MD: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-current-20260504T055534Z.md`
+  - profile JSON: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-profile-current-20260504T055534Z.json`
+  - profile MD: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-profile-current-20260504T055534Z.md`
+  - status=`FAIL`，duration_ms=`131.119`，service_duration_ms=`14.856`，ok=`false`，overall=`null`，below_raw=`false`，item_ids=`[]`。
+  - profile：search_call_count=`0`，event_count=`0`，beam_cap_event_count=`0`，candidateAttempts=`0`，nextStates=`0`，partialScoreAttempts=`0`，partialPrunedStates=`0`，beamInputStates=`0`，beamOutputStates=`0`。
+  - 候选诊断：main 需要 `7` 件，但 `AUG | 钢铁哨兵 (久经沙场)` filteredCount=`1`，`P90 | 满昏作品 (久经沙场)` filteredCount=`1`；aux `法玛斯 | 半袖式 (久经沙场)` filteredCount=`1184`。因此服务很快返回空结果，未进入搜索 profile。
+- Train no-role-sort-cache 结果:
+  - final JSON: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-no-role-sort-cache-20260504T055559Z.json`
+  - final MD: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-no-role-sort-cache-20260504T055559Z.md`
+  - profile JSON: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-profile-no-role-sort-cache-20260504T055559Z.json`
+  - profile MD: `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-profile-no-role-sort-cache-20260504T055559Z.md`
+  - status=`FAIL`，duration_ms=`51.598`，service_duration_ms=`14.172`，ok=`false`，overall=`null`，below_raw=`false`，item_ids=`[]`。
+  - profile：search_call_count=`0`，event_count=`0`，beam_cap_event_count=`0`，candidateAttempts=`0`，nextStates=`0`，partialScoreAttempts=`0`，partialPrunedStates=`0`，beamInputStates=`0`，beamOutputStates=`0`。
+  - 候选诊断同 current：main 候选不足，未进入搜索 profile。
+- 未验证 / 风险:
+  - Sunset 新口径未完成，不能声明 Sunset 大样本不报错或 profile 指标改善。
+  - Train 两种模式脚本运行未抛异常，但业务结果为空，不能作为“找到结果”的性能样本。
+  - 未跑完整仓库测试。
+  - 未启动 Electron / sidecar，也未做 HTTP/UI runtime 复测。
+  - 未审计其他 worktree。
+
+## 2026-05-04 nearest-baseline 20260502_201922 large-sample validation subagent
+
+- 本次角色和范围:
+  - 大样本验证子 agent，只在当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 操作。
+  - 用户要求“最近的相同快照”按离缺失旧快照 `logs/processed_inventory/inventory_processed_20260502_205953.json` 时间最近理解，不按最新快照理解。
+  - 本次未删除、移动原快照或已有备份；未复制成旧缺失名 `inventory_processed_20260502_205953.json`。
+  - 本轮未编辑 `node_sidecar/src/services/craftAssistSearch.js` 或 `tests/craftAssistSearch.test.js`；但当前工作区这两个文件已有 diff，未在本轮审计其内容。
+  - 未检查其他 worktree。
+- 快照选择:
+  - 目标缺失旧快照时间: `2026-05-02 20:59:53`。
+  - 已按 `logs/processed_inventory/inventory_processed_*.json` 与目标时间的绝对差排序。
+  - 选中源快照: `logs/processed_inventory/inventory_processed_20260502_201922.json`。
+  - 源快照时间: `2026-05-02 20:19:22`。
+  - 时间差: `00:40:31`，比目标旧快照早 2431 秒。
+  - 大小: `2256839` bytes，约 `2.15 MB`，大于 1MB。
+- 保留备份:
+  - 备份路径: `backup/processed_inventory/inventory_processed_20260502_201922_preserved_for_nearest_large_sample_20260504_140520.json`。
+  - 说明文件: `backup/processed_inventory/inventory_processed_20260502_201922_preserved_for_nearest_large_sample_20260504_140520.md`。
+  - SHA256: `18A19AB0D9540620BB50EEA700C4B905789D6DB79DD3211280982C2D70A708E0`。
+  - 校验: source length=`2256839` bytes，backup length=`2256839` bytes，SHA256 match=`true`。
+  - 说明: 这是离旧缺失快照最近的新口径 nearest-baseline，不是旧同口径快照。
+- 新增验证脚本:
+  - `output/playwright/sunset-hunting-02142-nearest-baseline-20260502_201922-offline-final-verify.js`
+  - `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-final-verify.js`
+  - 两个脚本只读取上述备份快照；输出文件名包含 `nearest-baseline-20260502_201922`。
+- 轻量只读预检:
+  - 备份快照 items=`1722`，production candidateRows=`985`。
+  - Sunset `法玛斯 | 半袖式 (久经沙场)` materialRows=`605`，filteredCount=`602`，满足 count=`10`。
+  - Train preset `狩猎列车37 0.27` 找到。
+  - Train main 需要 count=`7`，但主候选 totalFilteredCount=`6`：`AUG | 钢铁哨兵 (久经沙场)` filteredCount=`4`，`P90 | 满昏作品 (久经沙场)` filteredCount=`2`。预检已显示 Train 明显候选不足。
+- 实际运行命令和结果:
+  - `node output/playwright/sunset-hunting-02142-nearest-baseline-20260502_201922-offline-final-verify.js` 启动 PID `13440`，stdout/stderr/pid artifact 已保存；超过 15 分钟仍无 final result，已停止 PID `13440` 及子 PID `53708`。
+  - Sunset timeout artifact: `output/playwright/sunset-hunting-02142-nearest-baseline-20260502_201922-timeout-20260504_142914.json`
+  - Sunset timeout MD: `output/playwright/sunset-hunting-02142-nearest-baseline-20260502_201922-timeout-20260504_142914.md`
+  - Sunset run PID: `output/playwright/sunset-hunting-02142-nearest-baseline-20260502_201922-run-20260504_140907.pid.json`
+  - Sunset stdout: `output/playwright/sunset-hunting-02142-nearest-baseline-20260502_201922-run-20260504_140907.stdout.log`
+  - Sunset stderr: `output/playwright/sunset-hunting-02142-nearest-baseline-20260502_201922-run-20260504_140907.stderr.log`
+  - `node output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-final-verify.js current` 运行完成但业务结果为 `FAIL`，exit_code=`1`。
+  - `node output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-final-verify.js no-role-sort-cache` 运行完成但业务结果为 `FAIL`，exit_code=`1`。
+  - `node --test tests/craftAssistSearch.test.js` PASS，tests=`1`，pass=`1`，fail=`0`，duration_ms=`2736.9075`。
+  - `git diff --check -- tests/craftAssistSearch.test.js node_sidecar/src/services/craftAssistSearch.js docs/agent/session-log.md output/playwright backup/processed_inventory` PASS，仅 LF/CRLF warning。
+- Sunset nearest-baseline 结果:
+  - 状态: `TIMEOUT`。
+  - 是否找到结果: `false`。
+  - 记录 elapsed_seconds=`1205.974`。实际停止时间超过 900 秒上限，原因是轮询命令返回时已超过上限；发现后已立即停止残留进程。
+  - stdout 仅有目标台阶日志；stderr 为空。
+  - final/profile result artifact 未生成。
+  - profile 指标未取得：`candidateAttempts` / `nextStates` / `partialScoreAttempts` / `partialPrunedStates` / `beamInputStates` / `beamOutputStates` 均为不可用。
+- Train current 结果:
+  - final JSON: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-final-current-20260504T062937Z.json`
+  - final MD: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-final-current-20260504T062937Z.md`
+  - profile JSON: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-profile-current-20260504T062937Z.json`
+  - profile MD: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-profile-current-20260504T062937Z.md`
+  - status=`FAIL`，duration_ms=`51.428`，service_duration_ms=`13.3`，overall=`null`，fround=`null`，below_raw=`false`，item_ids=`[]`。
+  - 是否找到结果: `false`。
+  - profile：eventCount=`0`，candidateAttempts=`0`，nextStates=`0`，partialScoreAttempts=`0`，partialPrunedStates=`0`，beamInputStates=`0`，beamOutputStates=`0`。
+  - 结论: 主候选不足，服务快速返回空结果，未进入搜索 profile。
+- Train no-role-sort-cache 结果:
+  - final JSON: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-final-no-role-sort-cache-20260504T062956Z.json`
+  - final MD: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-final-no-role-sort-cache-20260504T062956Z.md`
+  - profile JSON: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-profile-no-role-sort-cache-20260504T062956Z.json`
+  - profile MD: `output/playwright/train-hunting-037-027-nearest-baseline-20260502_201922-offline-profile-no-role-sort-cache-20260504T062956Z.md`
+  - status=`FAIL`，duration_ms=`47.22`，service_duration_ms=`12.123`，overall=`null`，fround=`null`，below_raw=`false`，item_ids=`[]`。
+  - 是否找到结果: `false`。
+  - profile：eventCount=`0`，candidateAttempts=`0`，nextStates=`0`，partialScoreAttempts=`0`，partialPrunedStates=`0`，beamInputStates=`0`，beamOutputStates=`0`。
+  - 结论: 与 current 一致，主候选不足，未进入搜索 profile。
+- 未验证 / 风险:
+  - Sunset nearest-baseline 未完成，不能声明 Sunset 大样本找到结果或 profile 指标改善。
+  - Train 两种模式脚本运行未抛异常，但业务结果为空，不能作为“找到结果”的性能样本。
+  - 未跑完整仓库测试。
+  - 未启动 Electron / sidecar，也未做 HTTP/UI runtime 复测。
+  - 未审计其他 worktree。
+
+## 2026-05-04 craft debug persistent JSONL log
+
+- 本次目标:
+  - 新增汰换调试用持久化日志，避免只靠控制台复制。
+  - 记录辅助选材、实际执行汰换时上报的 10 件材料、执行后的产物信息。
+  - 只做日志链路，不改选材算法、Steam 上报顺序、below 判断或执行逻辑。
+- 主工作区:
+  - 已检查当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy`。
+  - `git worktree list --porcelain` 显示还存在 `feature-skin-db-sync`、`craft-outcome-predictor`、`skin-price-columns` 三个其它 worktree；本轮未审计这些 worktree。
+- 代码改动:
+  - 新增 `node_sidecar/src/craftDebugLog.js`。
+  - 新增 `node_sidecar/tests/craft-debug-log.test.js`。
+  - 修改 `node_sidecar/src/services/craftService.js`：执行完成并 settle 后写 `tradeup_execution`。
+  - 修改 `node_sidecar/src/uiServer.js`：`/api/craft/assist-select` 成功返回前写 `craft_assist_selection`。
+- 日志设计:
+  - JSONL，一行一个事件。
+  - 路径: `logs/craft_debug/craft_debug_YYYYMMDD.jsonl`。
+  - selection 事件记录 `target_raw`、`target`、`approach_mode`、`predicted_overall`、`quantized_overall`、配方信息、`item_ids_ordered`、`item_ids_key`、`picks`。
+  - execution 事件记录配方信息、`item_ids_ordered`、`item_ids_key`、`materials`、`gained_ids`、`gained_present_ids`、`gained_items`。
+  - 材料和产物投影保留 `float_value` / `absolute_wear` / `abs_wear` / `minfloat` / `maxfloat` / `relative_wear` / `rel_wear`，不做 `toFixed` 或 12 位截断，便于 ULP 级复盘。
+  - `item_ids_key` 是把 10 个材料 ID 数值排序后拼接，用于把同一组材料的选材和执行对上；它不是唯一运行 ID，同一组材料多次选材时会共享 key。
+- 鲁棒性补强:
+  - 写日志失败返回 `false` 并告警，不影响业务。
+  - 告警 `logger.warn` 本身也被保护，避免日志失败叠加告警失败拖垮业务。
+  - 选材侧直接传 `loaded.rows` 给日志 builder，由 builder 按 `result.item_ids` 投影，避免只按 `asset_id` 预筛造成材料字段缺失。
+- 子 agent 审查:
+  - Banach 只读审查当前四个相关文件，未发现 blocking 问题；指出 `item_ids_key` 非唯一、同步写磁盘有延迟风险、告警失败保护和选材投影可补强。
+  - Arendt 按范围补了告警保护、选材投影和单测。
+  - 两个已完成子 agent 均已关闭，避免占用名额。
+- 验证:
+  - `node node_sidecar/tests/craft-debug-log.test.js` PASS，输出 `craft-debug-log tests passed`。
+  - `node node_sidecar/tests/craft-assist-route.test.js` PASS，输出 `craft-assist-route tests passed`；有既有 heartbeat、SQLite experimental、MaxListeners warning。
+  - `node tests/craftAssistService.test.js` PASS，输出 `craftAssistService tests passed`。
+  - `node node_sidecar/tests/craft-permission-gate.test.js` FAIL，仍失败在 `test_helper_craft_routes_allow_simulation_permission_without_craft_use`，断言 `400 !== 200`；该失败发生在新增日志写入之前的 assist-select 输入/夹具路径，未作为本轮日志失败证据处理。
+- 测试产物清理:
+  - 测试曾写出 `logs/craft_debug/craft_debug_20260504.jsonl`，内容全为测试账号 `member_test` 的假 selection 事件。
+  - 已确认无真实运行日志后删除该 JSONL，避免后续磨损复盘混入测试数据。
+- 当前未处理:
+  - 未启动 Electron / sidecar 做真实 Steam 执行验证。
+  - 未给 execution 成功路径补集成测试。
+  - 未把同步写日志改成异步队列；目前按调试日志最小方案保留同步 append。
+
+## 2026-05-05 relative float platform validation reconnect
+
+- 断点来源:
+  - 上一段会话数据库样本已找回，但仓库旧 handoff 漏记了平台验证结论。
+- 用户提供的平台答案:
+  - `0.004999988246709108`
+  - `0.33458060026168823`
+- 子 agent 复核结论:
+  - `0.004999988246709108` 命中样本 2 once。
+  - `0.33458060026168823` 命中样本 1 step / 逐步 FL32。
+  - 二者不是同一口径，不能混作同一平台算法结论。
+- 当前判断:
+  - 不能据此判定 relative 内部全程逐步 FL32。
+  - 需要同一平台、同一输入精度继续复核第三组或更多样本。
+- 本次范围:
+  - 不改算法。
+  - 不改数据库。
+  - 不做真实汰换。
+
+## 2026-05-05 relative float validation candidates from DB
+
+- 当前目标:
+  - 从 `csgo_skins.db` 找下一轮外部平台可验证的 tradeup wear 口径样本。
+- 已确认口径定义:
+  - `once` = double 算完后关键结果一次 FL32。
+  - `step` = diff/range/div/mul/add 每步 FL32。
+- 本轮子 agent 范围:
+  - 只读完成。
+  - 无代码、数据库、真实汰换改动。
+- 最推荐先测:
+  - `UMP-45 | 车王` 输入 `0.3` -> `FAMAS | Djinn/法玛斯 | 爱神`，once `0.50000000000000000`，step `0.50000011920928966`
+  - `UMP-45 | 车王` 输入 `0.27` -> 同产物，once `0.20000000000000023`，step `0.20000010728836065`
+- 备选覆盖面样本:
+  - `UMP-45 | Grand Prix` 输入 `0.2738` -> `FAMAS | Djinn`，once `0.238000005484`，step `0.237999856472`
+  - `Five-SeveN | Monkey Business` 输入 `0.655` -> `M4A1-S | Hyper Beast`，once `0.693750023842`，step `0.693749904633`
+  - `G3SG1 | The Executioner` 输入 `0.595` -> `M4A4 | Royal Paladin`，once `0.5126760602`，step `0.512676179409`
+  - `Sawed-Off | Fubar` 输入 `0.835` -> `CZ75-Auto | Red Astor`，once `0.725000023842`，step `0.724999904633`
+- 平台判定:
+  - 同一平台、同一输入精度，结果靠近哪列就判哪个口径。
+  - 平台至少显示 8 位小数，6 位小数看不出。
+  - 避免把不同平台 / 不同输入精度的结果混成定论。
+- 下一步:
+  - 用户给平台答案后，按差值归类，并决定是否需要继续找第三类口径。
+
+## 2026-05-05 authoritative platform relative float results
+
+- 用户换了更权威平台并给出结果:
+  - `UMP-45 | Grand Prix/车王` input `0.3` -> `FAMAS | Djinn/爱神` = `0.50000001192092896`
+  - `UMP-45 | Grand Prix/车王` input `0.27` -> `FAMAS | Djinn/爱神` = `0.2000000137009068298`
+  - `G3SG1 | The Executioner` input `0.595` -> `M4A4 | Royal Paladin` = `0.512674090271`
+  - `AUG | Copperhead/铜斑蛇` input `0.1219...` -> `Glock-18 | Brass/黄铜` = `0.00769220944494009`
+- 子 agent 核对:
+  - `csgo_skins.db` 的三组区间/映射没有发现错误。
+  - `Brass/黄铜` 有同名跨武器风险，必须限定 `Glock-18 | Brass`。
+  - `StatTrak` 版本需保持一致。
+- 当前解释:
+  - 这些结果不支持简单 `once` / `step` 二选一。
+  - 更像平台实际参与计算的完整输入和用户给的短输入不同。
+  - `UMP` input `0.3` 反推平均输入约 `0.30000000119209286`。
+  - `UMP` input `0.27` 反推平均输入约 `0.27000000137009067`。
+  - `G3` 反推平均输入约 `0.5949982551155124`。
+  - `铜斑蛇` 结果反推输入约 `0.12199997445568442`，不像普通 `0.121900...`。
+- 当前不能据此改算法或定案。
+- 下一步必须拿:
+  - 每组 10 个材料完整原始磨损值。
+  - 平台完整输出值。
+  - 是否同一磨损。
+  - 是否手输 / 复制 / 截图显示。
+- 本轮未改算法、未改数据库、未真实汰换。
+
+## 2026-05-05 platform clean float32 evidence
+
+- 用户新给四条平台结果:
+  - `M4A4 | 透明弹匣` input `0.375` -> `P90 | 给爷冲` = `0.26249998807907104`
+  - `M4A4 | 透明弹匣` input `0.25` -> `R8左轮手枪 | 疯狂老八` = `0.25`
+  - `G3SG1 | 梦之林地` input `0.2142` -> `法玛斯 | 目皆转睛` = `0.2141999900341034`
+  - `M4A4 | 彼岸花` input `0.27` -> `格洛克18型 | 零食派对` = `0.27000001072883606`
+- 子 agent 复核:
+  - DB 映射和区间合法，普通版对普通版。
+  - `0.375` 和 `0.27` 都精确命中 `Math.fround(普通公式结果)`，最支持“最终输出为 float32”。
+  - `0.25` 无法区分但不冲突。
+- `0.2142` 那条按字面输入应为 `Math.fround(0.2142)=0.2142000049352646`，平台给的是下一档较低 float32，说明实际参与计算的完整输入可能略低于 `0.2142`；需要完整材料磨损原值。
+- 当前不能证明每一步都是 float32，只能较稳证明最终产物磨损以 float32 输出/落盘。
+- 风险:
+  - `StatTrak` 与中文名必须精确匹配。
+  - `目皆转睛` 是 `Rapid Eye Movement`，不是 `Eye of Athena`。
+- 本轮未改算法、未改数据库、未真实汰换。
+
+## 2026-05-05 tradeup f32 chain verified, relative-internal unresolved
+
+- 当前结论：用户确认本地样本/实例记录是正确的；`Desktop/problem` 的真实记录里，D 口径（材料 f32、执行顺序逐步 f32 sum、mean f32、out_min/out_max/range/mul/add 都 f32）对 69/69 exact，最大偏差 0 ULP；C/不完整 f32 有 3 条高 1 ULP。
+- 已找出的 3 条 C miss / D hit：`产物3.txt block 2` actual `0.149999439716339111`，C `0.149999454617500305`，D exact；`block 21` actual `0.188994199037551880`，C `0.188994213938713074`，D exact；`block 27` actual `0.149999439716339111`，C `0.149999454617500305`，D exact。
+- 用户拿 block 2 去平台验证，平台答案 `0.1499994546175003`，命中 C/不完整 f32，和 D 正确答案差约 `1.490116119e-8` = 1 ULP；因此该平台不能作为 D 口径反证。
+- 当前未解决点：`relative` 内部 `diff/range/div` 是否也逐步 f32 仍无法由现有 69/69 证明；现有 69/69 只证明从 logged relative_wear 往后输出链路必须全链路 f32。
+- 下一步第一刀：如继续，需要专门设计/寻找能隔离 `relative` 内部 `diff/range/div` 的真实样本；不要再用只验证输出映射链路的样本来证明 `relative` 内部。
+- 本轮未改算法、未改数据库、未真实汰换。
+
+## 2026-05-05 resume leveling tradeup calculation
+
+- 当前目标：承接断点，准备修改“练级汰换”的计算口径；用户明确允许并鼓励多 agent 并行，主 agent 只做子 agent 结果审查和整合。
+- 保护范围：未确认前不改真实执行、Steam 上报顺序、数据库、账号状态、运行态 UI state 备份；不把平台验证口径当作真实 Steam 反证；不混淆辅助选材、练级汰换模拟、真实执行日志三条链路。
+- 当前现场：主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 在 `main`；已有 `craftAssistSearch.js`、`craftService.js`、`uiServer.js`、`tests/craftAssistSearch.test.js` 和 craft debug log 相关未提交改动；`backup/ui_state/` 有运行态文件变脏；其它 worktree `feature-skin-db-sync`、`craft-outcome-predictor`、`skin-price-columns` 本轮尚未审计。
+- 已派出只读子 agent：
+  - Newton：收敛 handoff、memory、spec/plan，判断“练级汰换计算”应承接哪个方案和下一步。
+  - Copernicus：只读定位代码落点、测试落点和当前 diff 对计算链路的影响。
+- 子 agent 审查结论：
+  - Newton：文档断点指向真实汰换产物磨损应采用更完整 `float32` 链路；建议用 `产物3.txt block 2/21/27` 的 C miss / D hit 样本先写失败测试，再改共享计算点。
+  - Copernicus：代码落点发现汰换模拟导出到快速选材时，疑似把锚点绝对磨损 `active_anchor_abs_wear` 当作快速选材的相对目标磨损；建议在非 `0/1` 区间样本上补 UI 测试。
+- 已关闭只读子 agent Newton / Copernicus，避免占用名额。
+- 已派出 worker：
+  - Lagrange：只改后端产物磨损 `float32` 链路和对应 service tests；禁止碰 UI / craft assist search / debug log / docs。
+  - Cicero：只改汰换模拟导出 UI 和对应 UI 测试；禁止碰后端 service / craft assist search / debug log / docs。
+- 下一步第一刀：等待 worker 返回 RED/GREEN 证据后，主 agent 做结果审查；若 worker 返回 BLOCKED，先收敛 blocker，不直接改关键路径。
+- 未完成：业务代码修改由 worker 执行中；主 agent 尚未跑最终验证，尚未审计其它 worktree。
+
+## 2026-05-05 leveling tradeup calculation implemented
+
+- 本轮完成范围：
+  - 后端产物磨损输出链：已有 `relative_wear/sharedRelativeWear` 映射到产物绝对磨损时，改为 `out_min/out_max/range/mul/add` 全 `Math.fround` 语义。
+  - 汰换模拟导出到快速选材：锚点 `active_anchor_abs_wear` 会先按锚点 `minfloat/maxfloat` 转成相对磨损，再保存成 `target_wear_raw` + `target_wear=Math.fround(raw)`。
+  - 批量选材请求：从 preset 走 `runBatchCraftAssistSelect()` 时保留原始 `target_wear_raw`，不再退化成 `String(Math.fround(raw))`。
+- 改动文件：
+  - 新增 `node_sidecar/src/services/wearFloat32Math.js`。
+  - 修改 `node_sidecar/src/services/craftOutcomePredictor.js`、`node_sidecar/src/services/tradeupSimulationService.js`。
+  - 修改 `node_sidecar/ui/app.js`。
+  - 修改测试 `tests/craftOutcomePredictor.test.js`、`tests/tradeupSimulationService.test.js`、`node_sidecar/tests/tradeup-simulation-page-state.test.js`、`node_sidecar/tests/batch-craft-assist-select.test.js`。
+  - 更新 `docs/agent/memory.md` 稳定计算规则。
+- 子 agent RED/GREEN：
+  - Lagrange：`craftOutcomePredictor` RED 旧 C 值 `0.149999448657` vs D `0.149999439716`；`tradeupSimulationService` RED 旧 C 值 `0.188994207978` vs D `0.188994199038`；GREEN 两个测试通过。
+  - 主 agent review 发现 `missing bounds` target 曾会把 `null` 误标成 `Factory New`；Lagrange 补 RED 后修为 `absolute_wear=null`、`wear_label=""`，GREEN 通过。
+  - Cicero：UI 导出 RED 显示 `target_wear_raw` 从绝对 `0.4` 改成应为相对 `0.5`；GREEN 通过。
+  - Euclid review 发现 batch 请求会丢 `target_wear_raw`；Cicero 补 RED 后在 `draftSnapshot` 带上 `target_wear_raw`，GREEN 通过。
+- Review 结论：
+  - Arendt 后端只读 review：无 blocking；确认未改概率、below/raw target、relative 内部计算；建议后续可补 `minfloat != 0` 的真实 D 样本和 helper 输入防御。
+  - Euclid UI 只读 review：初审发现 batch raw 丢失 blocking；复核后确认 blocking 已关闭，未发现新 blocking。
+- 主 agent 最终验证：
+  - `node tests/craftOutcomePredictor.test.js` PASS；有 Node SQLite experimental warning。
+  - `node tests/tradeupSimulationService.test.js` PASS；有 Node SQLite experimental warning。
+  - `node --test node_sidecar/tests/tradeup-simulation-page-state.test.js` PASS。
+  - `node node_sidecar/tests/batch-craft-assist-select.test.js` PASS。
+  - `node --test node_sidecar/tests/craft-assist-target-wear-step.test.js` PASS。
+  - `node --test tests/craftAssistSearch.test.js` PASS。
+  - `node tests/craftAssistService.test.js` PASS；输出包含既有 craft_assist INFO/WARN 验证日志。
+  - `node --check node_sidecar/ui/app.js` PASS。
+  - `node --check node_sidecar/src/services/wearFloat32Math.js` PASS。
+  - `node --check node_sidecar/src/services/craftOutcomePredictor.js` PASS。
+  - `node --check node_sidecar/src/services/tradeupSimulationService.js` PASS。
+  - `git diff --check -- node_sidecar/src/services/wearFloat32Math.js node_sidecar/src/services/craftOutcomePredictor.js node_sidecar/src/services/tradeupSimulationService.js tests/craftOutcomePredictor.test.js tests/tradeupSimulationService.test.js node_sidecar/ui/app.js node_sidecar/tests/tradeup-simulation-page-state.test.js node_sidecar/tests/batch-craft-assist-select.test.js` PASS，仅 LF/CRLF warning。
+- 未完成 / 不声明：
+  - 未启动 Electron / sidecar，未做真实 UI runtime 联调。
+  - 未真实执行 Steam 汰换，不改 Steam 上报顺序。
+  - 未改数据库、账号状态、`backup/ui_state/` 运行态文件。
+  - 未解决 `relative` 内部 `diff/range/div` 是否逐步 f32。
+  - 未补 `minfloat != 0` 的真实 D 样本；当前作为后续测试增强建议。
+  - 未审计其它 worktree：`feature-skin-db-sync`、`craft-outcome-predictor`、`skin-price-columns`。
+
+## 2026-05-05 handoff - redo below by normalized 0-1 target
+
+- 用户刚刚重新解释并确认的新口径：
+  - 用户输入目标磨损 `0.21` 时，目的不是限制真实产物卡的绝对磨损必须 `< 0.21`。
+  - 因为真实汰换产物有多种，每种 `minfloat/maxfloat` 不同，产物结果不可预先确定，所以不能按真实产物区间去限制或反推目标。
+  - 正确理解：假装产物那边始终有一个 `0~1` 区间的标准物品；材料这一侧要控制相对磨损，使这个假想 `0~1` 产物的最终磨损严格 `< target_wear_raw`，并且越贴近目标越好。
+  - 因此 `target_wear_raw=0.21` 是 normalized 0~1 / 材料相对均值层的上限意图，不是真实产物 absolute wear 上限。
+- 与刚完成改动的关系：
+  - 刚完成的 D 口径输出链仍有效：真实产物绝对磨损展示和预测继续用 `out_min/out_max/range/mul/add` 全 `Math.fround`。
+  - 但 `below` 成功判断、fallback 排序、搜索目标不能因为真实产物区间而重新解释 raw；它们应回到 normalized relative / overall 层判断。
+  - 汰换模拟导出把锚点绝对磨损转成相对磨损再保存为 `target_wear_raw` 的方向仍符合这个口径；后续要核对所有入口是否都保持 raw 是 normalized relative。
+- 当前目标 / 当前 task：
+  - 下一轮要重做 `below` 和相关判断，范围应包括目标台阶解析、搜索成功判定、fallback / offset 排序、预测展示字段、日志字段和 UI 请求保存链路。
+  - 当前还没开始改代码；本条只是 handoff 和稳定约束落盘。
+- 必须保持不变：
+  - 不改真实 Steam 执行、材料上报顺序、权限、账号、数据库、运行态 UI state / backup。
+  - 不把平台网站结果当真实 Steam 反证。
+  - 不把真实产物 absolute wear `< raw` 当成 craft assist `below` 成功条件。
+  - 不把某个具体产物的 `minfloat/maxfloat` 反推成用户目标；产物区间只用于最终展示 / 预测该产物会是多少。
+  - 保留 `target_wear_raw` 原始文本 + `target_wear=Math.fround(raw)` 双字段，避免丢失 raw-vs-step 关系。
+- 下一步第一刀：
+  - 先写失败测试，不直接改实现。
+  - 建议从 `craftAssistService` / `craftAssistSearch` 的 `below` 成功与 fallback 排序下手：构造 `target_wear_raw=0.21`，存在多个 `overall < 0.21` 的组合时，应选择最贴近但仍严格低于 raw 的组合；任何 `overall >= 0.21` 都非法。
+  - 再补一个“真实产物区间不是 `0~1`”的预测/模拟测试：真实产物绝对磨损可以不小于 `0.21`，但只要 normalized overall `< 0.21`，就不能被判失败。
+  - 验证路径优先跑：`node tests/craftAssistService.test.js`、`node --test tests/craftAssistSearch.test.js`、`node tests/craftOutcomePredictor.test.js`、`node tests/tradeupSimulationService.test.js`，必要时再跑 batch/UI 入口测试。
+- 当前现场：
+  - 主工作区 `C:/Users/18220/Desktop/cs2_alchemy`，branch `main`。
+  - 本轮只更新了 handoff / memory；未执行新的业务测试。
+  - 当前主工作区已有大量未提交改动，包含刚完成的 D 口径与 UI 导出改动、craft debug log 改动、运行态 `backup/ui_state` 变化和 `output/` artifacts。
+  - 其它 worktree 仍未审计：`C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`。
+- 下个会话启动提示：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 “2026-05-05 handoff - redo below by normalized 0-1 target”、docs/agent/memory.md 中 2026-05-05 normalized 0~1 below 规则，再看 git status。先复述：用户输入 0.21 约束的是假想 0~1 产物 / normalized relative overall 必须严格低于 raw，并越贴近越好；不是限制真实产物 absolute wear。然后按 TDD 重做 below 和相关判断，先补失败测试再改实现，禁止改真实执行、数据库、账号和运行态备份。
+  ```
+
+## 2026-05-05 pause handoff - below target minus one micro
+
+- 暂停原因:
+  - 用户说明服务器限流，子 agent 反应会很慢，询问能否北京时间 3 点再开始。
+  - 主 agent 无法自行定时唤醒；只能在用户北京时间 3 点左右再次发消息后继续。
+- 当前总目标:
+  - 继续修 `below` 模式。
+  - 用户目标磨损仍按 normalized 0~1 / 产物侧假想 0~1 区间理解。
+  - `target - 0.000001` 只用于内部估算 / 起跳，不是最终红线。
+  - 最终合法红线仍是原始 target：最终 normalized result 必须 `< target`，并尽量贴近 target。
+  - `target - 0.000001 <= 0` 时，below 应提示目标过小 / 不可达。
+- 已完成:
+  - 多个子 agent 已完成只读定位、RED 测试清理、局部实现和验证。
+  - 已确认干净 RED：
+    - `craftAssistFloat32Step` / `craftAssistSearch` 证明旧逻辑没有用 `target - 0.000001` 起跳。
+    - `craftAssistService` 证明低于原始 target 的结果仍会被旧 target step/window 拦掉。
+  - 后续实现子 agent 已部分改动生产代码，主要集中在 `node_sidecar/src/services/craftAssistFloat32Step.js` 和 `node_sidecar/src/services/craftAssistService.js`。
+- 最后一个已验证状态:
+  - 只读验证 agent James 在当前主工作区跑过：
+    - `node --test tests/craftAssistFloat32Step.test.js` FAIL。
+    - `node --test tests/craftAssistSearch.test.js` PASS。
+    - `node --test tests/craftAssistService.test.js` FAIL。
+  - 当时失败点：
+    - `craftAssistFloat32Step`：`test_infinite_with_offset_includes_lower_and_upper_target_steps`，新增 allowed upper/window 逻辑误伤了 infinite + offset，上边界不再被认为合法。
+    - `craftAssistService`：`test_step_target_final_validation_allows_below_result_under_original_target`，`0.2699999511241913 < 0.27` 仍被 `final_result_not_on_target_step` 拒绝，说明终局还在要求命中 conservative step/window。
+- 重要不确定点:
+  - 最后一个小修子 agent Hilbert 被关闭时状态仍是 running，没有返回最终结果。
+  - 因此它可能已经对 `craftAssistFloat32Step.js` / `craftAssistService.js` 做了未报告的部分改动。
+  - 3 点继续时不能直接相信 James 的最后测试状态；必须先重新核对当前 git diff 和三条测试。
+- 当前现场:
+  - 当前主工作区：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - branch：`main`。
+  - 已检查当前主工作区 `git status --short --branch`，存在大量未提交改动。
+  - 业务相关脏文件包括：
+    - `node_sidecar/src/services/craftAssistFloat32Step.js`
+    - `node_sidecar/src/services/craftAssistSearch.js`
+    - `node_sidecar/src/services/craftAssistService.js`
+    - `tests/craftAssistFloat32Step.test.js`
+    - `tests/craftAssistSearch.test.js`
+    - `tests/craftAssistService.test.js`
+    - 以及之前 D 口径、craft debug log、UI 导出相关文件。
+  - 运行态文件仍有 `backup/ui_state/`、`backup/processed_inventory/`、`output/` 等变化；按项目规则不要默认当成本轮业务异常。
+  - 其它 worktree 仍未审计：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- 下一步第一刀:
+  - 用户北京时间 3 点左右发“继续”后，先不要直接派实现 agent。
+  - 先读本 handoff、`docs/agent/memory.md`，再跑只读核对：
+    - `git status --short --branch`
+    - `git diff -- node_sidecar/src/services/craftAssistFloat32Step.js node_sidecar/src/services/craftAssistService.js tests/craftAssistFloat32Step.test.js tests/craftAssistService.test.js`
+  - 然后重新跑三条目标测试：
+    - `node --test tests/craftAssistFloat32Step.test.js`
+    - `node --test tests/craftAssistSearch.test.js`
+    - `node --test tests/craftAssistService.test.js`
+  - 根据真实当前失败再派子 agent 小修，不要基于旧失败继续猜。
+- 必须保持不变:
+  - 不改真实 Steam 执行、材料上报顺序、权限、账号、数据库、运行态 UI state / backup。
+  - 不把 `target - 0.000001` 当最终合法红线。
+  - 不把真实产物 absolute wear `< target` 当 craft assist below 成功条件。
+  - 不让 allowed upper/window 误伤 infinite 模式。
+  - 不提交；保持未提交状态让用户验证。
+- 下个会话启动提示:
+  ```text
+  先读 docs/agent/session-log.md 最新 “2026-05-05 pause handoff - below target minus one micro” 和 docs/agent/memory.md。先复述：主 agent 只审查和分派，工作交给子 agent；below 的 target-0.000001 只用于估算/起跳，最终红线仍是原始 target。不要直接实现，先核对当前 git diff 和重新跑三条测试，因为最后一个小修子 agent 被 shutdown，可能留下未报告半成品改动。
+  ```
+
+## 2026-05-06 checkpoint - current service failure
+
+- 当前目标:
+  - 继续 `2026-05-05 pause handoff - below target minus one micro`。
+- 已核对现场:
+  - 当前 root worktree 为 `C:/Users/18220/Desktop/cs2_alchemy`，分支 `main`。
+  - 存在其他 worktree：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+  - 本轮只核对当前 root worktree，没有检查其他 worktree 的 diff。
+- 当前三条测试结果:
+  - `node --test tests/craftAssistFloat32Step.test.js` PASS，exit 0。
+  - `node --test tests/craftAssistSearch.test.js` PASS，exit 0。
+  - `node --test tests/craftAssistService.test.js` FAIL，exit 1；失败在 `test_step_target_below_offset_rejects_result_below_lower_boundary`，actual true expected false。
+- 下一步第一刀:
+  - 不要猜旧失败；围绕 service test 当前失败做根因定位和最小修复，保护 step/search 已通过行为。
+- 未检查范围:
+  - 没有检查其他 worktree。
+  - 没有做 full project review。
+  - 没有跑全量测试。
+
+## 2026-05-06 final checkpoint - below target minus one micro service semantics
+
+- 当前目标:
+  - 继续并收口 `2026-05-05 pause handoff - below target minus one micro`。
+- 本轮实际改动范围:
+  - `node_sidecar/src/services/craftAssistService.js`
+  - `tests/craftAssistService.test.js`
+- 做了什么:
+  - 修正 service 层 below 最终校验：无 offset 时只要求结果低于原始 target；有 offset 时还必须落在允许 window 内，不能低于 lower boundary。
+  - 统一候选筛选和最终校验口径，避免 final validation 放行、candidate screening 前置筛掉的分叉。
+  - 新增/调整 service 测试覆盖：below/no-offset 的 helper、final validation、fast public flow；below/offset 的 lower boundary 拒绝；确认 one micro 只是起跳估算，不是最终放行下界。
+  - 修正一条误导性 fallback 测试：不再声称单独覆盖 fallbackSolved 内部分支，改成准确的 fast public flow 覆盖，并去掉脆弱 trace 断言。
+- 审查结果:
+  - 最终代码审查 PASS，无 blocking suggestions，无 non-blocking suggestions。
+- 最终验证结果:
+  - `node --test tests/craftAssistFloat32Step.test.js` PASS，exit 0。
+  - `node --test tests/craftAssistSearch.test.js` PASS，exit 0。
+  - `node --test tests/craftAssistService.test.js` PASS，exit 0。
+- 未检查范围:
+  - 未跑全量测试。
+  - 未做 UI/Electron 运行态验证。
+  - 未检查其它 worktree。
+  - 未提交。
+- 当前 worktree 说明:
+  - 本轮只处理当前 root worktree `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 之前发现其它 worktree，但本轮未检查它们。
+- 下一步第一刀:
+  - 如果继续，应先看 `git diff -- node_sidecar/src/services/craftAssistService.js tests/craftAssistService.test.js`。
+  - 再按需决定是否跑更大范围测试。
+  - 不要再按已过期的 fallbackSolved 误导测试路线继续。
+
+## 2026-05-06 Eight account inventory anchor checkpoint
+
+- 用户目标:
+  - 后续自动选材都基于账号 `Eight` 的库存。
+  - 保存当前 Eight 库存快照，避免后续基准快照再次丢失。
+  - 删除此前为临时大样本验证保存的旧快照备份。
+- 当前确认:
+  - `Eight` 对应真实账号 username: `countsteam6`。
+  - `inventory_ui_state.json` 曾被运行态短暂写成极小状态；已从 `backup/ui_state/inventory_ui_state.backup_20260506_095941_750.json` 恢复 11 个账号的完整结构。
+  - 恢复后 `app_users.dev_local.last_selected_username` 和 `app_users.__global__.last_selected_username` 已设置为 `countsteam6`。
+  - 当前 Eight 库存快照来自 `accounts.countsteam6.snapshot_path`: `logs/processed_inventory/inventory_processed_20260506_100641.json`。
+  - `fetch_time`: `2026-05-06 10:06:41`。
+- 已保存的新基准:
+  - `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`
+  - `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.md`
+  - 大小: `2593827` bytes。
+  - SHA256: `74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`。
+- 已删除的旧临时备份:
+  - `backup/processed_inventory/inventory_processed_20260502_201922_preserved_for_nearest_large_sample_20260504_140520.json`
+  - `backup/processed_inventory/inventory_processed_20260502_201922_preserved_for_nearest_large_sample_20260504_140520.md`
+  - `backup/processed_inventory/inventory_processed_20260504_131128.preserved_for_large_sample_20260504_132712.json`
+  - `backup/processed_inventory/inventory_processed_20260504_131128.preserved_for_large_sample_20260504_132712.md`
+  - `backup/processed_inventory/inventory_processed_20260506_095741.preserved_for_eight_anchor_20260506_095916.json`
+  - `backup/processed_inventory/inventory_processed_20260506_095741.preserved_for_eight_anchor_20260506_095916.md`
+  - `backup/processed_inventory/inventory_processed_20260506_095941.preserved_for_eight_anchor_20260506_100358.json`
+  - `backup/processed_inventory/inventory_processed_20260506_095941.preserved_for_eight_anchor_20260506_100358.md`
+  - `backup/processed_inventory/inventory_processed_20260506_100441.preserved_for_eight_anchor_20260506_100632.json`
+  - `backup/processed_inventory/inventory_processed_20260506_100441.preserved_for_eight_anchor_20260506_100632.md`
+- 保护范围:
+  - 本次只把“账号库存锚点”固定为 `Eight/countsteam6`，不是修改汰换模拟的 `active_anchor_item` / `active_anchor_abs_wear`。
+  - 不要把 `active_anchor_item` 当作账号库存锚点；它是配方/目标物品锚点，乱改会改变配方含义。
+  - 未删除原始 `logs/processed_inventory/*.json`。
+- 未验证:
+  - 未启动 Electron / sidecar 做真实 UI runtime 复测。
+  - 未重新跑自动选材性能样本。
+  - 未检查其他 worktree。
+
+## 2026-05-06 incident handoff - inventory_ui_state saved configs missing from current file
+
+- 用户问题:
+  - 用户怀疑“保存的配置是不是被一并删除了”，要求做 handoff，下个对话优先解决。
+- 当前现场事实:
+  - 当前 `inventory_ui_state.json` 已变成小状态。
+  - 只读核对结果: `accounts=0`，`dev_local.craft_assist_presets=0`，`dev_local.tradeup_simulation_presets=0`，`dev_local.last_selected_username=countsteam6`。
+  - 这说明当前运行态文件里确实看不到用户保存的自动选材 / 汰换模拟配置。
+- 重要恢复线索:
+  - 最近完整备份仍存在: `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json`。
+  - 该备份只读核对结果:
+    - `accounts=11`
+    - `dev_local.craft_assist_presets=12`
+    - `dev_local.tradeup_simulation_presets=2`
+    - `dev_local.last_selected_username=countsteam6`
+    - `__global__.last_selected_username=countsteam6`
+    - `accounts.countsteam6` 存在
+  - 另有较早完整备份:
+    - `backup/ui_state/inventory_ui_state.backup_20260506_095941_750.json`，`accounts=11`，`craft=12`，`tradeup=2`
+    - `backup/ui_state/inventory_ui_state.backup_20260506_095741_858.json`，`accounts=11`，`craft=12`，`tradeup=2`
+- 当前判断:
+  - 不能说配置已经彻底丢失；完整配置仍在 `backup/ui_state` 备份里。
+  - 但当前主文件确实被覆盖成空配置状态。
+  - 具体根因未最终确认：可能与本轮为了固定 Eight/countsteam6 锚点而写回 `inventory_ui_state.json`、同时本地运行态仍在自动写 UI state 有关。
+  - 下个会话不要直接继续大改自动选材；先恢复 UI state 配置。
+- 下个会话第一刀:
+  1. 先停止/暂停正在写 `inventory_ui_state.json` 的本地 Electron / sidecar / refresh 进程，或至少确认没有进程继续自动写该文件。
+  2. 读取当前 `inventory_ui_state.json` 和 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json`，用 `Get-Content -Path ... -Encoding UTF8`。
+  3. 对比并确认备份中的 `accounts=11`、`craft_assist_presets=12`、`tradeup_simulation_presets=2`。
+  4. 从该备份恢复 `inventory_ui_state.json`，并确保:
+     - `dev_local.last_selected_username=countsteam6`
+     - `__global__.last_selected_username=countsteam6`
+     - `accounts.countsteam6.snapshot_path` 可按需指向已保存的 Eight 基准快照或当前真实快照，但不要删除 preset。
+  5. 恢复后立刻重读 `inventory_ui_state.json` 验证账号数和 preset 数量。
+  6. 再启动 UI / sidecar 做运行态验证。
+- 必须避免:
+  - 不要从当前空状态文件继续写配置。
+  - 不要用 `git status` 判断 `inventory_ui_state.json` 是否安全；它是被 `.gitignore` 忽略的运行态文件。
+  - 不要清理 `backup/ui_state`，尤其不要删除 `inventory_ui_state.backup_20260506_101909_213.json`。
+  - 不要把 `active_anchor_item` 当成账号库存锚点。
+- 已保留的 Eight 库存基准:
+  - `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`
+  - SHA256 `74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`
+- 未完成:
+  - 尚未恢复当前 `inventory_ui_state.json`。
+  - 尚未确认哪个进程最后覆盖了当前小状态。
+  - 尚未做 UI runtime 验证。
+
+## 2026-05-06 final checkpoint - below safe offset 0.0000001
+
+- 当前目标:
+  - 用户实测后确认 below 保守起跳余量从 `target - 0.000001` 改为 `target - 0.0000001`。
+- 本轮实际改动范围:
+  - `node_sidecar/src/services/craftAssistFloat32Step.js`
+  - `tests/craftAssistFloat32Step.test.js`
+  - `tests/craftAssistSearch.test.js`
+  - `tests/craftAssistService.test.js`
+- 做了什么:
+  - below 起跳余量改成 `0.0000001`。
+  - 最终放行规则不变：无 offset 低于原始 target 即可；有 offset 仍必须在 window 内、不能低于 lower boundary。
+  - 相关测试期待值、测试名、极小 raw 拒绝边界已同步到 `0.0000001`。
+  - 代码中目标文件不再有旧 `0.000001` / `one_micro` 命名；`docs/agent/session-log.md` 里的旧 `0.000001` 仅是历史记录。
+- TDD 证据:
+  - 实现子 agent 先改测试得到 RED：`node --test tests/craftAssistFloat32Step.test.js` 中 `test_resolve_below_raw_decimal_uses_conservative_target_when_float32_step_is_below_raw` 失败。
+  - 旧实际值: `0.2099989950656891`。
+  - 新期望值: `0.2099999040365219`。
+- 审查结果:
+  - 初始审查 FAIL 把上一轮已验收的 service 语义误当成本轮越界。
+  - 范围裁决审查确认该 FAIL 不成立于本轮范围，本轮未发现 blocking。
+- 最终验证结果:
+  - `node --test tests/craftAssistFloat32Step.test.js`: exit 0 / PASS。
+  - `node --test tests/craftAssistSearch.test.js`: exit 0 / PASS。
+  - `node --test tests/craftAssistService.test.js`: exit 0 / PASS。
+- 未检查范围:
+  - 未跑全量测试。
+  - 未做 UI/Electron 运行态验证。
+  - 未检查其它 worktree。
+  - 未提交。
+- 当前 worktree:
+  - 只处理当前 root worktree `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 其它 worktree 未检查。
+- 下一步第一刀:
+  - 如果继续，先看上述四个文件的 diff 和三条测试结果。
+  - 不要把上一轮已验收的 service 语义再次误判为本轮 `0.0000001` 改动越界。
+
+## 2026-05-06 memory checkpoint - below safe offset / service validation
+
+- 已把 below safe offset `0.0000001`、service validation 边界、测试锚点和未验证范围补进 `docs/agent/memory.md` 的长期记忆，避免后续重复讨论或重复误判。
+
+## 2026-05-06 latest handoff - restore saved UI configs before continuing
+
+- 当前必须优先处理的问题:
+  - 用户保存的配置当前没有出现在 `inventory_ui_state.json` 主文件里。
+  - 当前主文件只读核对结果: `accounts=0`，`dev_local.craft_assist_presets=0`，`dev_local.tradeup_simulation_presets=0`，`dev_local.last_selected_username=countsteam6`。
+- 不是彻底丢失:
+  - 最近完整备份仍存在: `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json`。
+  - 该备份只读核对结果: `accounts=11`，`dev_local.craft_assist_presets=12`，`dev_local.tradeup_simulation_presets=2`，`dev_local.last_selected_username=countsteam6`，`__global__.last_selected_username=countsteam6`，`accounts.countsteam6` 存在。
+- 下个对话第一刀:
+  1. 先不要继续自动选材提速实现。
+  2. 先停止或确认没有本地 Electron / sidecar / refresh 进程继续写 `inventory_ui_state.json`。
+  3. 用 `Get-Content -Path "...json" -Encoding UTF8` 读取当前主文件和 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json`。
+  4. 从该完整备份恢复 `inventory_ui_state.json`。
+  5. 恢复后确保 `dev_local.last_selected_username=countsteam6`、`__global__.last_selected_username=countsteam6`，但不要删除或重建 presets。
+  6. 立即重读验证 `accounts=11`、`craft_assist_presets=12`、`tradeup_simulation_presets=2`。
+  7. 再启动 UI / sidecar 做真实运行态验证。
+- 必须保护:
+  - 不要从当前空配置主文件继续写配置。
+  - 不要清理 `backup/ui_state/`。
+  - 不要删除 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json`。
+  - 不要把 `active_anchor_item` 当成账号库存锚点。
+- Eight 库存锚点基准仍保留:
+  - `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`
+  - SHA256 `74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`
+
+## 2026-05-06 memory checkpoint - Steam D output wear chain
+
+- 已把 Steam 原始汰换磨损算法 / D 口径输出链写入 `docs/agent/memory.md` 长期记忆。
+- 已固定的结论只覆盖已有 `relative_wear/sharedRelativeWear` 后映射到 `predicted_float/absolute_wear` 的输出段：`out_min/out_max/range/mul/add` 全链路 `Math.fround`。
+- `relative` 内部 `(float - min) / (max - min)` 的 `diff/range/div` 是否每一步都 `Math.fround` 仍未定案；后续不能把 D 口径输出链扩写成所有 Steam 相关计算都已完全复原。
+
+## 2026-05-06 final checkpoint - saved UI configs restored
+
+- 当前目标:
+  - 恢复上次运行态覆盖后从 `inventory_ui_state.json` 主文件里消失的保存配置。
+  - 只恢复目标配置：12 个自动选材配置、2 个汰换模拟配置。
+- 已核对来源:
+  - 当前主文件恢复前为小状态：`accounts=0`，`app_users.dev_local.craft_assist_presets=0`，`app_users.dev_local.tradeup_simulation_presets=0`，`last_selected_username=countsteam6`。
+  - 最近可信完整备份：`backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json`。
+  - 该备份中 `app_users.dev_local.craft_assist_presets=12`、`app_users.dev_local.tradeup_simulation_presets=2`、`accounts=11`、`last_selected_username=countsteam6`。
+  - `git diff` 未显示 `inventory_ui_state.json`，因为它被 `.gitignore` 忽略；相关 `git log -S/-G` 显示 preset 持久化来自既有 UI state 存储链，不是本次 tracked code diff 直接删除。
+- 恢复方式:
+  - 未整文件覆盖备份。
+  - 为避免改动无关运行态状态，只把备份中的两个 preset 数组回填到当前 `inventory_ui_state.json` 的 `app_users.dev_local`。
+  - 当前 `accounts` 仍保持恢复前的空对象；未恢复备份里的 11 个账号 UI state 和 `app_users.__global__`。
+- 已恢复的自动选材配置:
+  1. `狩猎0.2142`
+  2. `列车0.18`
+  3. `列车0.21`
+  4. `列车0.24`
+  5. `列车 0.27`
+  6. `狩猎列车28      0.24`
+  7. `狩猎列车28 0.27`
+  8. `狩猎列车28  0.21`
+  9. `狩猎列车38  0.21`
+  10. `狩猎列车19 0.27`
+  11. `狩猎列车28 0.27`
+  12. `狩猎列车37 0.27`
+- 已恢复的汰换模拟配置:
+  1. `事实上`
+  2. `1`
+- 验证结果:
+  - 只读重读 `inventory_ui_state.json`：`craft=12`，`tradeup=2`，`last_selected_username=countsteam6`。
+  - 与备份数组做 JSON 文本比较：`craft_match=True`，`tradeup_match=True`。
+  - SHA256:
+    - craft presets: `59d642b0e18cec79718b7a612a45fcf273dc6fd1ade62843d22af6db6fc92987`
+    - tradeup presets: `31e3c20b123b13a804323f6607852fd21705f1c6830781d18f9e5fe2e7ec69cb`
+  - 已运行轻量相关测试：`node node_sidecar/tests/ui-state-store-auth-scope.test.js`，结果 `ui-state-store-auth-scope tests passed`。
+- 未验证范围 / 风险:
+  - 未启动 Electron / sidecar 做真实 UI runtime 验证。
+  - 未跑全量测试。
+  - 未恢复备份中的账号 UI state；如果后续发现页面仍需要账号级 UI state 或 `__global__`，要单独确认是否按完整备份恢复。
+  - 未检查其他 worktree。
+  - 未提交。
+
+## 2026-05-06 user verification - saved UI configs
+
+- 用户实测结果:
+  - 用户确认 UI 中账号正常，功能正常。
+  - 因此本轮不再恢复备份中的 `accounts=11` 结构，也不整文件覆盖当前 `inventory_ui_state.json`。
+- 本轮提交前新增长期约束:
+  - 凡是承载用户保存配置或可恢复配置的 UI state 文件、运行态配置文件、备份快照都视为用户数据。
+  - 后续不得清理、覆盖删除或把空状态写回后当作正常收尾。
+  - 包括但不限于 `inventory_ui_state.json` 的自动选材 / 汰换模拟 presets，以及 `backup/ui_state/` 下仍可恢复这些配置的备份。
+  - 若确实需要清理，必须先说明会丢什么、保留哪份恢复源，并等用户明确同意。
+- 提交范围准备:
+  - 记录恢复结果和用户实测结论。
+  - 保留 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json` 作为本次可恢复来源。
+  - 不提交被 `.gitignore` 忽略的当前运行态主文件 `inventory_ui_state.json`。

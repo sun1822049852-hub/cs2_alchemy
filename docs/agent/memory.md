@@ -5,6 +5,10 @@
 - 2026-05-01: `craftAssistService` 的选材目标语义已改为 float32 台阶命中：`target_wear` 必须能精确表示为 `[0,1]` 内的 `float32`；无 offset 的原始阶段中，`below` 命中输入台阶的前一个 `float32` 台阶，`infinite` 命中输入台阶本身；成功判定以 `Math.fround(raw_mean)` 命中目标台阶为准。旧 `STEAM_PRECISION_MARGIN` / `safeTargetValue` 语义不再适用，也不能把每件材料候选预先统一转成 `float32`。原先“当前 phase 忽略 offset 输入，不做 offset window correction”只适用于 2026-05-01 的 no-offset float32 phase；已被后续 offset follow-up spec 取代：active `wear_offset_pct` 必须作为正数容差参与允许目标台阶窗口，方向由 `wear_approach_mode` 决定，最终仍以 `Math.fround(raw_mean)` 命中允许窗口内目标台阶为准。注意：`below` 固定取输入台阶前一档的语义已在 2026-05-02 被识别为不完整；新目标应以 raw-based below spec 为准。
 - 2026-05-02: `craftAssist` 旧保存配方中的 `target_wear` 若是普通十进制 raw value（如 `0.18` / `0.21` / `0.24` / `0.27` / `0.214285`），会被后端 `Math.fround(target_wear) === target_wear` hard contract 拒绝为 `invalid_target_step`，且 `wear_offset_pct` 不会生效。当前前端已修：craft assist 目标磨损专用链路会在输入提交、保存 preset、加载旧 preset、draft/scoped state restore、单账号和 batch assist-select 请求前统一量化为输入台阶 `Math.fround(raw)`；`below` 仍由后端再取 `prevFloat32(inputStep)`，前端不能保存/发送前一台阶，避免双重下移。后续不要放宽后端 float32 contract，也不要把通用 `parseOptionalWear01(...)` 全局改成量化函数。
 - 2026-05-02: 新确认的 raw-based below 产品语义：用户输入的是 `[0,1]` 范围内普通 `0.x` 十进制目标磨损；`below` 应等于“严格小于用户原始输入 raw 的最高 float32 台阶”，不是无条件 `prevFloat32(Math.fround(raw))`。规则：`step=Math.fround(raw)`；若 `step < raw`，below 目标就是 `step`；若 `step >= raw`，below 目标是 `prevFloat32(step)`；`raw===0` below 不可达。只保存/传递 `Math.fround(raw)` 会丢失 raw 在 step 上方/下方/相等的信息，只能解决 `invalid_target_step`，不能完整表达 below 语义。新 spec 草案位于 `docs/superpowers/specs/2026-05-02-craft-assist-raw-below-target-design.md`；建议保存/请求携带 `target_wear`（机器 float32）和 `target_wear_raw`（用户原始十进制文本）或等价 raw-vs-step 关系。
+- 2026-05-06: 凡是承载用户保存配置或可恢复配置的 UI state 文件、运行态配置文件、备份快照都视为用户数据，后续不得清理、覆盖删除或把空状态写回后当作正常收尾；包括但不限于 `inventory_ui_state.json` 里的 `craft_assist_presets` / `tradeup_simulation_presets`，以及 `backup/ui_state/` 下仍可恢复这些配置的备份。若任务确实需要清理这类文件，必须先逐项说明会丢什么、保留哪份恢复源，并等用户明确同意。
+- 2026-05-06: 本次已从 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json` 恢复 12 个自动选材配置和 2 个汰换模拟配置；用户随后确认 UI 中账号正常且功能正常。后续不要因为当前运行态文件里 `accounts=0` 就擅自整文件覆盖恢复账号结构；账号结构是否恢复必须以用户实际 UI 表现和明确指令为准。
+- 2026-05-05: 重新确认的 craft assist / 练级汰换 `below` 用户意图：用户输入 `target_wear_raw=0.21` 约束的是“假想产物区间恒为 `0~1` 时的最终磨损”，也就是材料组合的标准相对均值 / normalized 0~1 目标上限；不是限制真实产物各自 `minfloat/maxfloat` 映射后的成品磨损。真实产物有多种且区间不可预先限定，所以 `below` 判断不能按每个候选产物反推区间，也不能要求真实产物绝对磨损 `< raw`。应在 `overall` / normalized relative 层保证严格低于 raw，并在可行组合中尽量贴近 raw；真实产物绝对磨损只用于展示和结果预测。
+- 2026-05-05: 练级/汰换产物磨损输出链已按真实记录证据改为 D 口径：当已有 `relative_wear/sharedRelativeWear` 后，映射产物绝对磨损必须用 `out_min/out_max/range/mul/add` 全链路 `Math.fround` 语义，再按项目展示精度落到 `predicted_float/absolute_wear`。当前只覆盖“相对磨损 -> 产物绝对磨损”输出段；`relative` 内部 `(float-min)/(max-min)` 的 `diff/range/div` 是否逐步 f32 仍未定案，后续不要把本规则误扩成已解决 relative 内部。
 - 2026-04-29: 后续“批量上架”能力不能完整复用当前库存总览页面的显示规则。原因是库存总览当前会展示黄盾物品；因此应复用其 **GC 数据、选中态、组件取出与部分展示能力**，但上架流需要单独的“可卖/不可卖”选择规则与大窗口交互。
 - 2026-04-29: 当前前端里黄盾物品已经不可选；后续若把批量上架入口接到库存总览，不要重复发明一套黄盾前端拦截，但仍需单独确认冷却、`flags=24` 隐藏条目、以及 `Storage Unit` 本体在上架流中的禁用表现。
 - 2026-04-29: 这台机器当前把浏览器流量走在 Windows Internet Settings 系统代理上，现场值为 `127.0.0.1:15732`；但 [node_sidecar/src/networkPrecheck.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/networkPrecheck.js) 的 `getProxyUrl()` 只读取 `HTTPS_PROXY/HTTP_PROXY/ALL_PROXY` 环境变量，不会自动吃系统代理。因此凡是从 shell/Node 里直接拉 `steamcommunity.com`（尤其是真 Web inventory 对账），若不先显式设置 `HTTPS_PROXY`，就可能出现 `timeout / ECONNRESET`，即使浏览器/Electron 看起来已经“开了代理”。
@@ -38,3 +42,47 @@
 - 2026-04-19: 这台 Windows 机器上，`electron-builder` 的内置 `signAndEditExecutable` 会走 `app-builder.exe rcedit`，实际仍回落到旧版 `winCodeSign-2.6.0` 下载链，容易卡在 symlink 权限或网络超时。当前项目若只为保证安装包可构建与用户可见图标正确，应优先采用“`signAndEditExecutable: false` + packaged `app-icon.ico` + `build/installer.nsh` 重建快捷方式图标 + `BrowserWindow.icon`”的组合，而不是继续依赖内置 EXE 资源编辑。
 
 - Craft assist raw-based below 长期规则：primary 必须取严格小于 `target_wear_raw` 的最近 float32 step；offset fallback 也不是任意合法窗口命中，而是在仍低于 raw 的可行 fallback 中尽量贴近 raw。不能把 `Math.fround(overall)` 落在 window 内当成最终最优；同一 window fallback 内要按 raw gap / `target_wear_raw - overall` 排序。below 必须有 raw ceiling，任何 `overall >= target_wear_raw` 的结果即使距离更近也非法。单材料大候选场景（如 Sun set / 狩猎0.2142 / `use_component_items=true` / raw 0.214285）cap=24 的稳定窗口命中会过早返回；需 bounded refinement 或更强搜索，否则会返回 `0.213188...` 这类离 raw 仍远的结果。复验时不要只看 UI 点击；若 UI 自动化卡在页面状态，可直接 POST 当前真实 sidecar `/api/craft/assist-select` 同 payload，同时保留离线 route-equivalent 证据。此次耗时大头不是候选构建，也不是 HTTP；主要在单材料 765 候选、count=10 的 craft assist 搜索/worker 路径，尤其 primary-first + fallback refinement / nested prefilter worker，最终 HTTP endpoint 耗时约 41.9s，离线 service 约 44.3s，focused service/worker tests 约 50-60s 量级。
+- 2026-05-06: 后续自动选材提速基准账号固定为 `Eight/countsteam6` 的账号库存快照，而不是汰换模拟里的 `active_anchor_item` / `active_anchor_abs_wear`。`active_anchor_item` 是配方/目标物品锚点，不能为了“使用 Eight 库存”而改它。当前保留基准快照为 `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`，SHA256 `74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`。
+
+## 2026-05-06 Craft assist below safe offset / service validation 定案
+
+- 适用范围：仅针对当前 root worktree `C:/Users/18220/Desktop/cs2_alchemy` 中 CS2 craft assist 的 `below` 模式 safe offset / target step / service validation 语义，尤其是后续修改、审查或 debug 这条链路时；不要写成绝对全项目结论，也不要默认套到其它 worktree。
+- 已定案：below 保守起跳余量使用 `target - 0.0000001`，不是 `target - 0.000001`。
+- 原因白话：`0.000001` 虽稳但偏保守，用户实测 `0.0000001` 更贴合；目标是避开 float32/均值贴边偏差，不是明显拉低目标。
+- 重要边界：`0.0000001` 只是起跳估算，不是最终放行下界。
+- service 语义保持：below + 无 offset window 时，candidate/final validation 只要求 `overall < 原始 target ceiling`，不强制 strict step/window；below + 有 offset window 时，必须 `< 原始 target ceiling` 且在 offset window 内，不能低于 lower boundary。
+- 审查注意：不要把上一轮已验收的 service 语义，也就是“无 offset 只看低于原始 target、有 offset 才加 window”，再次误判为 `0.0000001` 本轮变更越界。
+- 代码位置提示：safe offset 常量 / resolve below target 在 `node_sidecar/src/services/craftAssistFloat32Step.js`；service 语义在 `node_sidecar/src/services/craftAssistService.js`。
+- 测试锚点：`node --test tests/craftAssistFloat32Step.test.js`、`node --test tests/craftAssistSearch.test.js`、`node --test tests/craftAssistService.test.js`。
+- 已验证事实：TDD RED 曾证明旧代码还用 `0.000001`；改成 `0.0000001` 后三条目标测试 PASS。
+- 未验证范围：未跑全量测试，未做 UI/Electron 运行态验证，未检查其它 worktree。
+
+## 2026-05-06 Steam 原始汰换磨损算法 / D 口径输出链定案
+
+- 适用范围：仅覆盖当前 root worktree `C:/Users/18220/Desktop/cs2_alchemy` 中 Steam/CS2 汰换产物磨损预测，尤其是从已确认的 `relative_wear/sharedRelativeWear` 到最终 `predicted_float/absolute_wear` 的输出链。不要写成所有 Steam 算法已完全复原。
+- 一句话结论：真实 Steam 输出链匹配 D 口径，即 `out_min/out_max/range/mul/add` 全链路 `Math.fround`，不是 JS double 最后才取整。
+- 已确认事实：
+  - `Desktop/problem` 69/69 条真实记录按 D 口径 exact 命中，最大偏差 0 ULP。
+  - C/不完整 f32 口径有 3 条高 1 ULP：`产物3.txt block 2 / 21 / 27`。
+  - 平台验证 block 2 命中 C/不完整 f32，和真实记录 D 口径差 1 ULP，所以平台网站不能作为真实 Steam 反证。
+  - 当前项目已把该输出链用于 `craftOutcomePredictor` 的 `predicted_float` 和 `tradeupSimulationService` 的 `absolute_wear`。
+  - 缺 bounds 时不能误标成 `Factory New`，应保持 `absolute_wear=null`、`wear_label=""`。
+- 算法步骤：
+  1. 已有 `relative_wear` 时，材料侧值按 `Math.fround` 口径处理。
+  2. 按 Steam 执行顺序逐步累加：`sum = Math.fround(sum + Math.fround(value))`。
+  3. 均值走 f32：`sharedRelativeWear = Math.fround(sum / Math.fround(count))`。
+  4. 输出映射：
+     - `out_min = Math.fround(minfloat)`
+     - `out_max = Math.fround(maxfloat)`
+     - `range = Math.fround(out_max - out_min)`
+     - `mul = Math.fround(Math.fround(sharedRelativeWear) * range)`
+     - `add = Math.fround(out_min + mul)`
+  5. 展示层再把 `add` 落到 `predicted_float/absolute_wear` 的展示精度。
+- 未定案边界：
+  - `relative` 内部 `(float - min) / (max - min)` 的 `diff/range/div` 是否每一步都 `Math.fround`，未定案。
+  - 当前结论只覆盖“已有 `relative_wear/sharedRelativeWear` 后，映射到产物绝对磨损”的输出段。
+  - 不能把它扩写成所有 Steam 相关计算都已完全复原。
+- 证据锚点：
+  - `docs/agent/session-log.md` 中 `2026-05-05 tradeup f32 chain verified, relative-internal unresolved`、`2026-05-05 leveling tradeup calculation implemented`。
+  - 代码：`node_sidecar/src/services/wearFloat32Math.js`、`node_sidecar/src/services/craftOutcomePredictor.js`、`node_sidecar/src/services/tradeupSimulationService.js`。
+  - 测试：`test_predictor_uses_float32_output_wear_chain_for_real_block_2_and_27_samples`、`test_resolve_uses_float32_output_wear_chain_for_real_block_21_sample`。
