@@ -1,0 +1,106 @@
+[
+  {
+    "id": "eight-preserved-hunting-02142",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "狩猎0.2142",
+    "sample_type": "single_material_large_pool"
+  },
+  {
+    "id": "eight-preserved-train-018",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "列车0.18",
+    "sample_type": "single_material_medium_pool"
+  },
+  {
+    "id": "eight-preserved-train-021",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "列车0.21",
+    "sample_type": "single_material_medium_pool"
+  },
+  {
+    "id": "eight-preserved-train-024",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "列车0.24",
+    "sample_type": "single_material_medium_pool"
+  },
+  {
+    "id": "eight-preserved-train-027",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "列车 0.27",
+    "sample_type": "single_material_large_pool"
+  },
+  {
+    "id": "eight-preserved-hunting-train-28-024",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "狩猎列车28 0.24",
+    "sample_type": "multi_material_large_pool"
+  },
+  {
+    "id": "eight-preserved-hunting-train-28-021",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "狩猎列车28 0.21",
+    "sample_type": "multi_material_large_pool"
+  },
+  {
+    "id": "eight-preserved-hunting-train-19-027",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "狩猎列车19 0.27",
+    "sample_type": "multi_material_large_pool"
+  },
+  {
+    "id": "eight-preserved-hunting-train-37-027",
+    "username": "countsteam6",
+    "account_label": "Eight",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+    "preset_name": "狩猎列车37 0.27",
+    "sample_type": "multi_material_large_pool"
+  },
+  {
+    "id": "sun-current-hunting-02142",
+    "username": "1822049852",
+    "account_label": "Sun",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json",
+    "preset_name": "狩猎0.2142",
+    "sample_type": "single_material_large_pool"
+  },
+  {
+    "id": "sun-current-train-024",
+    "username": "1822049852",
+    "account_label": "Sun",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json",
+    "preset_name": "列车0.24",
+    "sample_type": "single_material_large_pool"
+  },
+  {
+    "id": "sun-current-hunting-train-28-024",
+    "username": "1822049852",
+    "account_label": "Sun",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json",
+    "preset_name": "狩猎列车28 0.24",
+    "sample_type": "multi_material_large_pool"
+  },
+  {
+    "id": "sun-current-hunting-train-38-021",
+    "username": "1822049852",
+    "account_label": "Sun",
+    "snapshot_path": "backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json",
+    "preset_name": "狩猎列车38 0.21",
+    "sample_type": "multi_material_large_pool"
+  }
+]

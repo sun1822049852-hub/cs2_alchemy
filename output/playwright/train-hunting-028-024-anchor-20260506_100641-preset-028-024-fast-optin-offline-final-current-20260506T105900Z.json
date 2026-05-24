@@ -1,0 +1,377 @@
+{
+  "status": "PASS",
+  "timestamp": "2026-05-06T10:59:08.705Z",
+  "baseline": "anchor-20260506_100641-preset-028-024-fast-optin",
+  "variant": "current",
+  "duration_ms": 7813.582,
+  "service_duration_ms": 7777.789,
+  "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\backup\\processed_inventory\\inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+  "snapshot_sha256_expected": "74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461",
+  "payload": {
+    "username": "countsteam6",
+    "target_wear_raw": "0.24",
+    "target_wear": 0.23999999463558197,
+    "wear_filter_mode": "relative",
+    "wear_approach_mode": "below",
+    "use_component_items": true,
+    "include_component_items": true,
+    "include_cooling": false,
+    "wear_offset_pct": 1,
+    "enable_fast_craft_assist": false,
+    "blocked_ids": [],
+    "selected_item_ids": [],
+    "materials": [
+      {
+        "id": "craft-assist-material-r8rk11",
+        "role": "main",
+        "count": 8,
+        "items": [
+          {
+            "id": "craft-assist-material-r8rk11__aug钢铁哨兵久经沙场__1",
+            "name": "AUG | 钢铁哨兵 (久经沙场)",
+            "wear_filter_mode": "relative",
+            "wear_min": 0.23,
+            "wear_max": 0.26,
+            "custom_range": true
+          },
+          {
+            "id": "craft-assist-material-r8rk11__p90满昏作品久经沙场__2",
+            "name": "P90 | 满昏作品 (久经沙场)",
+            "wear_filter_mode": "relative",
+            "wear_min": 0.23,
+            "wear_max": 0.26,
+            "custom_range": true
+          }
+        ],
+        "direction": "gt"
+      },
+      {
+        "id": "craft-assist-material-1tmb0m7",
+        "role": "aux",
+        "count": 2,
+        "items": [
+          {
+            "id": "craft-assist-material-1tmb0m7__法玛斯半袖式久经沙场__1",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "wear_filter_mode": "relative",
+            "wear_min": 0.15,
+            "wear_max": 0.38,
+            "custom_range": false
+          }
+        ],
+        "direction": "lt"
+      }
+    ]
+  },
+  "env_timeouts": {
+    "SHARD_JOB_TIMEOUT_MS": "120000",
+    "PREFILTER_GROUP_TIMEOUT_MS": "300000",
+    "PREFILTER_CALL_TIMEOUT_MS": "600000",
+    "SCRIPT_TIMEOUT_MS": 900000
+  },
+  "candidate_context_stats": {
+    "include_component_items": true,
+    "include_cooling": false,
+    "total_craftable_count": 985,
+    "visible_candidate_count": 985,
+    "cooling_count": 0,
+    "selected_component_count": 0,
+    "main_free_slots": 998,
+    "main_capacity": 1000,
+    "main_occupied_slots": 2,
+    "main_hidden_count": 2,
+    "main_cooling_count": 990
+  },
+  "material_candidate_summary": [
+    {
+      "materialIndex": 0,
+      "role": "main",
+      "count": 8,
+      "items": [
+        {
+          "name": "AUG | 钢铁哨兵 (久经沙场)",
+          "wear_min": 0.23,
+          "wear_max": 0.26,
+          "materialRows": 35,
+          "filteredCount": 16,
+          "filteredByRarity": {
+            "2": 16
+          },
+          "filteredRelativeWear": {
+            "min": 0.2507447302341461,
+            "max": 0.259543240070343
+          }
+        },
+        {
+          "name": "P90 | 满昏作品 (久经沙场)",
+          "wear_min": 0.23,
+          "wear_max": 0.26,
+          "materialRows": 58,
+          "filteredCount": 26,
+          "filteredByRarity": {
+            "2": 26
+          },
+          "filteredRelativeWear": {
+            "min": 0.2506536841392517,
+            "max": 0.2599292993545532
+          }
+        }
+      ]
+    },
+    {
+      "materialIndex": 1,
+      "role": "aux",
+      "count": 2,
+      "items": [
+        {
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "wear_min": 0.15,
+          "wear_max": 0.38,
+          "materialRows": 605,
+          "filteredCount": 605,
+          "filteredByRarity": {
+            "2": 605
+          },
+          "filteredRelativeWear": {
+            "min": 0.1600818783044815,
+            "max": 0.3372519016265869
+          }
+        }
+      ]
+    }
+  ],
+  "target_step_spec": {
+    "inputStep": 0.23999999463558197,
+    "inputRaw": 0.24,
+    "targetWearRaw": 0.24,
+    "targetStep": 0.2399999052286148,
+    "lowerTargetStep": 0.23759998381137848,
+    "upperTargetStep": 0.2399999052286148,
+    "allowedUpperTargetStep": 0.23999999463558197,
+    "hasOffsetWindow": true,
+    "prevStep": 0.2399998903274536,
+    "nextStep": 0.239999920129776,
+    "lowerBound": 0.23759997636079788,
+    "upperBound": 0.24000000208616257,
+    "approachMode": "below"
+  },
+  "result": {
+    "ok": true,
+    "item_ids": [
+      "50581122009",
+      "50715101231",
+      "50581784956",
+      "50707122472",
+      "50904668857",
+      "50712808196",
+      "50905707435",
+      "50494932156",
+      "49852518812",
+      "49647138034"
+    ],
+    "overall": 0.2399999052286148,
+    "rarity": 2,
+    "approach_mode": "below",
+    "selection_trace": null,
+    "recipe_ok": true,
+    "recipe_reason": "",
+    "recipe_text": "配方：Industrial -> Mil-Spec（recipe 1）",
+    "picks": [
+      {
+        "index": 1,
+        "asset_id": "50581122009",
+        "name": "P90 | 满昏作品 (久经沙场)",
+        "relative_wear": "0.2506536841392517",
+        "absolute_wear": "0.2506536841392517",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 2,
+        "asset_id": "50715101231",
+        "name": "P90 | 满昏作品 (久经沙场)",
+        "relative_wear": "0.2507399320602417",
+        "absolute_wear": "0.2507399320602417",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 3,
+        "asset_id": "50581784956",
+        "name": "AUG | 钢铁哨兵 (久经沙场)",
+        "relative_wear": "0.2507447302341461",
+        "absolute_wear": "0.2507447302341461",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 4,
+        "asset_id": "50707122472",
+        "name": "P90 | 满昏作品 (久经沙场)",
+        "relative_wear": "0.2507972121238708",
+        "absolute_wear": "0.2507972121238708",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 5,
+        "asset_id": "50904668857",
+        "name": "P90 | 满昏作品 (久经沙场)",
+        "relative_wear": "0.2509950995445251",
+        "absolute_wear": "0.2509950995445251",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 6,
+        "asset_id": "50712808196",
+        "name": "P90 | 满昏作品 (久经沙场)",
+        "relative_wear": "0.2510518133640289",
+        "absolute_wear": "0.2510518133640289",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 7,
+        "asset_id": "50905707435",
+        "name": "P90 | 满昏作品 (久经沙场)",
+        "relative_wear": "0.2513148188591003",
+        "absolute_wear": "0.2513148188591003",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 8,
+        "asset_id": "50494932156",
+        "name": "AUG | 钢铁哨兵 (久经沙场)",
+        "relative_wear": "0.2532749176025390",
+        "absolute_wear": "0.2532749176025390",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 9,
+        "asset_id": "49852518812",
+        "name": "法玛斯 | 半袖式 (久经沙场)",
+        "relative_wear": "0.1953327059745788",
+        "absolute_wear": "0.1953327059745788",
+        "rarity": "Industrial"
+      },
+      {
+        "index": 10,
+        "asset_id": "49647138034",
+        "name": "法玛斯 | 半袖式 (久经沙场)",
+        "relative_wear": "0.1950941383838653",
+        "absolute_wear": "0.1950941383838653",
+        "rarity": "Industrial"
+      }
+    ]
+  },
+  "overall": 0.2399999052286148,
+  "fround": 0.2399999052286148,
+  "quantized_overall": 0.2399999052286148,
+  "below_raw": true,
+  "item_ids": [
+    "50581122009",
+    "50715101231",
+    "50581784956",
+    "50707122472",
+    "50904668857",
+    "50712808196",
+    "50905707435",
+    "50494932156",
+    "49852518812",
+    "49647138034"
+  ],
+  "search_events": [
+    {
+      "phase": "search_enter",
+      "variant": "current",
+      "search_index": 0,
+      "targetValue": 0.2399999052286148,
+      "approachMode": "infinite",
+      "hasTargetStepSpec": true,
+      "targetStepSpec": {
+        "inputStep": 0.23999999463558197,
+        "inputRaw": 0.24,
+        "targetWearRaw": 0.24,
+        "targetStep": 0.2399999052286148,
+        "lowerTargetStep": 0.23759998381137848,
+        "upperTargetStep": 0.2399999052286148,
+        "allowedUpperTargetStep": 0.23999999463558197,
+        "hasOffsetWindow": true,
+        "prevStep": 0.2399998903274536,
+        "nextStep": 0.239999920129776,
+        "lowerBound": 0.23759997636079788,
+        "upperBound": 0.24000000208616257,
+        "approachMode": "below"
+      },
+      "groupCounts": [
+        {
+          "index": 0,
+          "role": "main",
+          "count": 8,
+          "candidates": 42
+        },
+        {
+          "index": 1,
+          "role": "aux",
+          "count": 2,
+          "candidates": 605
+        }
+      ]
+    },
+    {
+      "phase": "search_exit",
+      "variant": "current",
+      "search_index": 0,
+      "duration_ms": 7761.851,
+      "ok": true,
+      "overall": 0.2399999052286148,
+      "fround": 0.2399999052286148,
+      "windowExtra": 57,
+      "selectedCount": 10
+    }
+  ],
+  "search_profile_summary": {
+    "search_call_count": 1,
+    "event_count": 3,
+    "beam_cap_event_count": 3,
+    "total_candidate_attempts": 3012909,
+    "candidateAttempts": 3012909,
+    "nextStates": 2692376,
+    "partialScoreAttempts": 2384435,
+    "partialPrunedStates": 5226960,
+    "beamInputStates": 203489,
+    "beamOutputStates": 228684,
+    "complete_score_attempts": 10977,
+    "completeScoreAttempts": 10977,
+    "top_stop_reasons": [
+      {
+        "reason": "no_complete_solution",
+        "count": 107
+      },
+      {
+        "reason": "complete_scored",
+        "count": 25
+      },
+      {
+        "reason": "primary_target_step",
+        "count": 2
+      },
+      {
+        "reason": "completed_cap",
+        "count": 1
+      },
+      {
+        "reason": "no_solution",
+        "count": 1
+      }
+    ]
+  },
+  "artifacts": {
+    "script": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\train-hunting-028-024-anchor-20260506_100641-fast-optin-offline-final-verify.js",
+    "json": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-final-current-20260506T105900Z.json",
+    "md": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-final-current-20260506T105900Z.md",
+    "profile_json": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-profile-current-20260506T105900Z.json",
+    "profile_md": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-profile-current-20260506T105900Z.md"
+  },
+  "limitations": [
+    "Offline route-equivalent verification, not an HTTP request through uiServer authentication and worker-pool timeout handling.",
+    "The script sets long shard/prefilter timeout environment variables before service modules are loaded and enforces SCRIPT_TIMEOUT_MS=900000.",
+    "Variant no-role-sort-cache uses an in-memory craftAssistSearch transform to approximate the pre sort-cache role-aware refinement behavior.",
+    "Temporary benchmark script derived from train-hunting-037-027-new-baseline-20260504_131128-offline-final-verify.js because listed snapshot files are absent in this workspace."
+  ]
+}

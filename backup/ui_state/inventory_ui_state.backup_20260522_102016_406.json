@@ -1,89 +1,80 @@
 {
   "accounts": {
     "430158438": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_171930.json",
-      "fetch_time": "2026-04-30 17:19:30",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260522_102016.json",
+      "fetch_time": "2026-05-22 10:20:16",
       "auth_state": "normal",
       "auth_reason": ""
     },
     "1822049852": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_214918.json",
-      "fetch_time": "2026-04-30 21:49:18",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countsteam01": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260422_185236.json",
-      "fetch_time": "2026-04-22 18:52:36",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "StupidChild005": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260422_220657.json",
-      "fetch_time": "2026-04-22 22:06:57",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "19174601720": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260425_171841.json",
-      "fetch_time": "2026-04-25 17:18:41",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countsteam002": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_141705.json",
-      "fetch_time": "2026-04-30 14:17:05",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countsteam04": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_222456.json",
-      "fetch_time": "2026-04-30 22:24:56",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260522_101906.json",
+      "fetch_time": "2026-05-22 10:19:06",
       "auth_state": "normal",
       "auth_reason": ""
     },
     "countsteam6": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_142300.json",
-      "fetch_time": "2026-04-30 14:23:00",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_193321.json",
+      "fetch_time": "2026-05-15 19:33:21",
       "auth_state": "normal",
       "auth_reason": ""
     },
-    "wy19174601720": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_234113.json",
-      "fetch_time": "2026-04-30 23:41:13",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countSteam5": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_175345.json",
-      "fetch_time": "2026-04-30 17:53:45",
+    "19174601720": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_190121.json",
+      "fetch_time": "2026-05-15 19:01:21",
       "auth_state": "normal",
       "auth_reason": ""
     },
     "selenomorphology": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_234016.json",
-      "fetch_time": "2026-04-30 23:40:16",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_193553.json",
+      "fetch_time": "2026-05-15 19:35:53",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countsteam002": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_191402.json",
+      "fetch_time": "2026-05-15 19:14:02",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countSteam5": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_191028.json",
+      "fetch_time": "2026-05-15 19:10:28",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "wy19174601720": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_193607.json",
+      "fetch_time": "2026-05-15 19:36:07",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "StupidChild005": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_190621.json",
+      "fetch_time": "2026-05-15 19:06:21",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countsteam04": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_192905.json",
+      "fetch_time": "2026-05-15 19:29:05",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countsteam01": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_192322.json",
+      "fetch_time": "2026-05-15 19:23:22",
       "auth_state": "normal",
       "auth_reason": ""
     }
   },
   "app_users": {
-    "admin": {
-      "craft_assist_presets": [],
-      "tradeup_simulation_presets": [],
-      "last_selected_username": "StupidChild005"
-    },
-    "member_test": {
-      "craft_assist_presets": [],
-      "tradeup_simulation_presets": [],
-      "last_selected_username": "1822049852"
-    },
     "dev_local": {
       "craft_assist_presets": [
         {
           "id": "preset_1775479995486_79308",
           "name": "狩猎0.2142",
-          "target_wear": 0.214285,
+          "target_wear": 0.2142850011587143,
+          "target_wear_raw": "0.214285",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -95,7 +86,7 @@
                   "name": "法玛斯 | 半袖式 (久经沙场)",
                   "wear_filter_mode": "relative",
                   "wear_min": 0.15,
-                  "wear_max": 0.23,
+                  "wear_max": 0.24,
                   "custom_range": true
                 }
               ],
@@ -103,12 +94,13 @@
             }
           ],
           "created_at": 1775479995486,
-          "updated_at": 1777530145119
+          "updated_at": 1777687901770
         },
         {
           "id": "preset_1775476837437_33606",
           "name": "列车0.18",
-          "target_wear": 0.18,
+          "target_wear": 0.18000000715255737,
+          "target_wear_raw": "0.18",
           "materials": [
             {
               "id": "craft-assist-material-r8rk11",
@@ -136,12 +128,13 @@
             }
           ],
           "created_at": 1775476837437,
-          "updated_at": 1775971992390
+          "updated_at": 1778401600495
         },
         {
           "id": "preset_1776515152593_99268",
           "name": "列车0.21",
-          "target_wear": 0.21,
+          "target_wear": 0.20999999344348907,
+          "target_wear_raw": "0.21",
           "materials": [
             {
               "id": "craft-assist-material-r8rk11",
@@ -169,12 +162,13 @@
             }
           ],
           "created_at": 1776515152593,
-          "updated_at": 1776515177032
+          "updated_at": 1777714841139
         },
         {
           "id": "preset_1776323294431_9477",
           "name": "列车0.24",
-          "target_wear": 0.24,
+          "target_wear": 0.23999999463558197,
+          "target_wear_raw": "0.24",
           "materials": [
             {
               "id": "craft-assist-material-r8rk11",
@@ -185,7 +179,7 @@
                   "id": "craft-assist-material-r8rk11__aug钢铁哨兵久经沙场__1",
                   "name": "AUG | 钢铁哨兵 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.23,
+                  "wear_min": 0.22,
                   "wear_max": 0.2525,
                   "custom_range": true
                 },
@@ -193,7 +187,7 @@
                   "id": "craft-assist-material-r8rk11__p90满昏作品久经沙场__2",
                   "name": "P90 | 满昏作品 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.23,
+                  "wear_min": 0.22,
                   "wear_max": 0.2525,
                   "custom_range": true
                 }
@@ -202,12 +196,13 @@
             }
           ],
           "created_at": 1776323294431,
-          "updated_at": 1776323294431
+          "updated_at": 1778510980024
         },
         {
           "id": "preset_1776323404028_49818",
           "name": "列车 0.27",
-          "target_wear": 0.27,
+          "target_wear": 0.27000001072883606,
+          "target_wear_raw": "0.27",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -218,7 +213,7 @@
                   "id": "craft-assist-material-fmxp9s__aug钢铁哨兵久经沙场__2",
                   "name": "AUG | 钢铁哨兵 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.26,
+                  "wear_min": 0.25,
                   "wear_max": 0.28,
                   "custom_range": true
                 },
@@ -226,8 +221,8 @@
                   "id": "craft-assist-material-fmxp9s__p90满昏作品久经沙场__3",
                   "name": "P90 | 满昏作品 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.26,
-                  "wear_max": 0.28,
+                  "wear_min": 0.25,
+                  "wear_max": 0.38,
                   "custom_range": true
                 }
               ],
@@ -235,12 +230,13 @@
             }
           ],
           "created_at": 1776323404028,
-          "updated_at": 1777529768348
+          "updated_at": 1778511572650
         },
         {
           "id": "preset_1776867200612_56036",
           "name": "狩猎列车28      0.24",
-          "target_wear": 0.24,
+          "target_wear": 0.23999999463558197,
+          "target_wear_raw": "0.24",
           "materials": [
             {
               "id": "craft-assist-material-r8rk11",
@@ -289,7 +285,8 @@
         {
           "id": "preset_1776323335952_23685",
           "name": "狩猎列车28 0.27",
-          "target_wear": 0.27,
+          "target_wear": 0.27000001072883606,
+          "target_wear_raw": "0.27",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -338,7 +335,8 @@
         {
           "id": "preset_1776323548374_69920",
           "name": "狩猎列车28  0.21",
-          "target_wear": 0.21,
+          "target_wear": 0.20999999344348907,
+          "target_wear_raw": "0.21",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -382,12 +380,13 @@
             }
           ],
           "created_at": 1776323548374,
-          "updated_at": 1776323737425
+          "updated_at": 1777641077383
         },
         {
           "id": "preset_1776323738934_40294",
           "name": "狩猎列车38  0.21",
-          "target_wear": 0.21,
+          "target_wear": 0.20999999344348907,
+          "target_wear_raw": "0.21",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -436,7 +435,8 @@
         {
           "id": "preset_1775480121359_85390",
           "name": "狩猎列车19 0.27",
-          "target_wear": 0.27,
+          "target_wear": 0.27000001072883606,
+          "target_wear_raw": "0.27",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -485,7 +485,8 @@
         {
           "id": "preset_1776323927538_15963",
           "name": "狩猎列车28 0.27",
-          "target_wear": 0.27,
+          "target_wear": 0.27000001072883606,
+          "target_wear_raw": "0.27",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -534,7 +535,8 @@
         {
           "id": "preset_1776324065286_3537",
           "name": "狩猎列车37 0.27",
-          "target_wear": 0.27,
+          "target_wear": 0.27000001072883606,
+          "target_wear_raw": "0.27",
           "materials": [
             {
               "id": "craft-assist-material-fmxp9s",
@@ -3120,12 +3122,12 @@
           "updated_at": 1777024732210
         }
       ],
-      "last_selected_username": "wy19174601720"
+      "last_selected_username": "430158438"
     },
     "__global__": {
       "craft_assist_presets": [],
       "tradeup_simulation_presets": [],
-      "last_selected_username": "wy19174601720"
+      "last_selected_username": "1822049852"
     }
   }
 }

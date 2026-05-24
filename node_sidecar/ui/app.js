@@ -10850,6 +10850,23 @@ function closeSimExportCraftModal(result) {
   simExportCraftResolver = null;
   if (typeof resolver === "function") resolver(result);
 }
+function resolveSimExportCraftTargetWearPair(preset) {
+  const absWear = Number(preset && preset.active_anchor_abs_wear);
+  if (!Number.isFinite(absWear)) return null;
+  const anchor = getTradeupSimulationAnchorBounds(preset);
+  const minWear = Number(anchor && anchor.minfloat);
+  const maxWear = Number(anchor && anchor.maxfloat);
+  let relativeWear = absWear;
+  if (Number.isFinite(minWear) && Number.isFinite(maxWear) && maxWear > minWear) {
+    relativeWear = (absWear - minWear) / (maxWear - minWear);
+  }
+  const clamped = clampWear01(relativeWear, 0);
+  const rounded = Math.round(clamped * 100000000) / 100000000;
+  return {
+    target_wear_raw: String(rounded),
+    target_wear: Math.fround(rounded)
+  };
+}
 function openSimExportCraftModal(preset) {
   simExportCraftMaterials = extractSimExportCraftMaterials(preset);
   simExportCraftSearchResults = [];
@@ -10859,9 +10876,9 @@ function openSimExportCraftModal(preset) {
   if (ui.simExportCraftSearchInput) ui.simExportCraftSearchInput.value = "";
   const presetName = String(preset && preset.name || "").trim();
   if (ui.simExportCraftName) ui.simExportCraftName.value = presetName;
-  const anchorWear = Number(preset && preset.active_anchor_abs_wear);
+  const targetWearPair = resolveSimExportCraftTargetWearPair(preset);
   if (ui.simExportCraftTargetWear) {
-    ui.simExportCraftTargetWear.value = Number.isFinite(anchorWear) ? anchorWear.toFixed(8) : "";
+    ui.simExportCraftTargetWear.value = targetWearPair ? targetWearPair.target_wear_raw : "";
   }
   const hasAux = simExportCraftMaterials.some((m) => m.role === "aux");
   if (ui.simExportCraftMainCount) ui.simExportCraftMainCount.value = hasAux ? "5" : "10";
@@ -10885,8 +10902,10 @@ function confirmSimExportCraftModal() {
     showErrorToast("请输入配置名称");
     return;
   }
-  const targetWear = parseOptionalWear01(ui.simExportCraftTargetWear && ui.simExportCraftTargetWear.value);
-  if (targetWear == null) {
+  const targetWearRawInput = String(ui.simExportCraftTargetWear && ui.simExportCraftTargetWear.value || "").trim();
+  const targetWear = parseOptionalWear01(targetWearRawInput);
+  const targetWearPair = resolveCraftAssistTargetWearPair(targetWear, targetWearRawInput);
+  if (!targetWearPair) {
     showErrorToast("请输入有效的目标磨损（0~1）");
     return;
   }
@@ -10956,7 +10975,8 @@ function confirmSimExportCraftModal() {
   const preset = sanitizeCraftAssistPresetPayload({
     id: makeCraftAssistUid("preset"),
     name,
-    target_wear: targetWear,
+    target_wear: targetWearPair.target_wear,
+    target_wear_raw: targetWearPair.target_wear_raw,
     materials,
     created_at: Date.now(),
     updated_at: Date.now()
@@ -14332,6 +14352,7 @@ async function runBatchCraftAssistSelect() {
 
   const draftSnapshot = {
     target_wear: sanitized.target_wear,
+    target_wear_raw: sanitized.target_wear_raw,
     wear_filter_mode: sanitized.wear_filter_mode,
     materials: sanitized.materials,
     pick_role: "main"

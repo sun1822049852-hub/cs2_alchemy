@@ -5,6 +5,10 @@ const {SchemaStore} = require("../schemaStore");
 const {parseInventory} = require("../inventoryParser");
 const {saveProcessedSnapshot} = require("../snapshotStore");
 const {asString, toInt, nowString} = require("../utils");
+const {
+  appendCraftDebugEvent,
+  buildTradeupExecutionEvent
+} = require("../craftDebugLog");
 
 const RARITY_NAME_MAP = {
   1: "Consumer",
@@ -535,6 +539,20 @@ function createCraftService({sessionPool, logger}) {
             settle_attempts: toInt(settle.attempts, 0)
           };
           steps.push(step);
+          appendCraftDebugEvent({
+            ...buildTradeupExecutionEvent({
+              account: accountName,
+              index: req.index,
+              total: recipeRequests.length,
+              recipeInfo,
+              itemIdsOrdered: req.item_ids,
+              materialRows: selectedRows,
+              gainedIds: step.gained_ids,
+              gainedPresentIds: step.gained_present_ids,
+              gainedRows: rows
+            }),
+            logger
+          });
           if (logger && !step.inventory_settled) {
             logger.warn(
               "craft_ops",

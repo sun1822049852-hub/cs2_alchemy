@@ -25,7 +25,12 @@ const {
   createCraftAssistService
 } = require("./services/craftAssistService");
 const {createCraftAssistWorkerPool} = require("./services/craftAssistWorkerPool");
+const {quantizeMeanToTargetDomain} = require("./services/craftAssistFloat32Step");
 const {buildCraftCandidateContext} = require("./services/craftCandidateService");
+const {
+  appendCraftDebugEvent,
+  buildCraftAssistSelectionEvent
+} = require("./craftDebugLog");
 const {normalizeCraftAssistMaterialListCanonical} = require("../ui/craftAssistItemWearShared");
 const {createCraftOutcomeCatalog} = require("./services/craftOutcomeCatalog");
 const {createCraftOutcomePredictor} = require("./services/craftOutcomePredictor");
@@ -3293,6 +3298,28 @@ async function handleApi(req, res, urlObj, deps = {}) {
       writeJson(res, failure.status, failure.payload);
       return true;
     }
+    const recipeMatch = asString(result.recipe_text || "").match(/recipe\s+(-?\d+)/i);
+    appendCraftDebugEvent({
+      ...buildCraftAssistSelectionEvent({
+        account: username,
+        targetRaw: workerArgs.targetWearRaw,
+        target: workerArgs.targetWear,
+        approachMode: result.approach_mode || workerArgs.wearApproachMode,
+        predictedOverall: result.overall,
+        quantizedOverall: Number.isFinite(Number(result.quantized_overall))
+          ? Number(result.quantized_overall)
+          : quantizeMeanToTargetDomain(result.overall),
+        recipeInfo: {
+          recipe: recipeMatch ? Number(recipeMatch[1]) : null,
+          recipe_name: result.recipe_text,
+          rarity: result.rarity,
+          stattrak: /\bStatTrak\b/i.test(asString(result.recipe_text || ""))
+        },
+        itemIdsOrdered: result.item_ids,
+        rows: loaded.rows
+      }),
+      logger
+    });
     writeJson(res, 200, {
       ok: true,
       ...result

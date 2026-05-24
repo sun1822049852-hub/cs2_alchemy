@@ -128,6 +128,7 @@ function loadSimulationFns(initialState = {}) {
       simulationActivePresetId: "",
       simulationWorkspacePreset: null,
       simulationWorkspaceSourcePresetId: "",
+      craftAssistPresets: [],
       simulationModalOpen: false,
       simulationModalMode: "",
       simulationModalPresetId: "",
@@ -141,6 +142,66 @@ function loadSimulationFns(initialState = {}) {
         return Promise.resolve({ok: true, presets: []});
       }
       return Promise.resolve({ok: true, presets: []});
+    },
+    parseOptionalWear01(value) {
+      const raw = String(value == null ? "" : value).trim();
+      if (!raw) return null;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return null;
+      return Math.max(0, Math.min(1, n));
+    },
+    clampWear01(value, fallback = 0) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return Math.max(0, Math.min(1, Number(fallback) || 0));
+      return Math.max(0, Math.min(1, n));
+    },
+    resolveCraftAssistTargetWearPair(targetWearValue, targetWearRawValue) {
+      const rawText = String(targetWearRawValue == null ? "" : targetWearRawValue).trim();
+      if (rawText) {
+        const parsedRaw = Number(rawText);
+        if (!Number.isFinite(parsedRaw) || parsedRaw < 0 || parsedRaw > 1) return null;
+        return {
+          target_wear_raw: rawText,
+          target_wear: Math.fround(parsedRaw)
+        };
+      }
+      const parsedTargetWear = context.parseOptionalWear01(targetWearValue);
+      if (parsedTargetWear == null) return null;
+      return {
+        target_wear_raw: String(parsedTargetWear),
+        target_wear: Math.fround(parsedTargetWear)
+      };
+    },
+    normalizeCraftAssistDirection(role) {
+      return String(role || "").trim() === "aux" ? "aux" : "main";
+    },
+    makeCraftAssistUid(prefix = "assist") {
+      return `${prefix}_test`;
+    },
+    sanitizeCraftAssistPresetPayload(payload) {
+      const source = payload && typeof payload === "object" ? payload : {};
+      const rawText = String(source.target_wear_raw == null ? "" : source.target_wear_raw).trim();
+      const rawValue = rawText ? Number(rawText) : Number(source.target_wear);
+      if (!Number.isFinite(rawValue) || rawValue < 0 || rawValue > 1) return null;
+      const name = String(source.name || "").trim();
+      if (!name) return null;
+      const materials = Array.isArray(source.materials) ? JSON.parse(JSON.stringify(source.materials)) : [];
+      if (!materials.length) return null;
+      return {
+        ...source,
+        name,
+        target_wear: Math.fround(rawValue),
+        target_wear_raw: rawText || String(rawValue),
+        materials
+      };
+    },
+    normalizeCraftAssistPresetList(values) {
+      return (Array.isArray(values) ? values : [])
+        .map((entry) => context.sanitizeCraftAssistPresetPayload(entry))
+        .filter(Boolean);
+    },
+    saveCraftAssistPresetsToStorage() {
+      context.craftAssistPresetSaveCount = (context.craftAssistPresetSaveCount || 0) + 1;
     }
   };
   vm.runInNewContext(source, context, {filename: APP_PATH});
@@ -1288,6 +1349,61 @@ function test_render_tradeup_simulation_selection_style_card_preserves_explicit_
   );
 }
 
+function test_sim_export_craft_preset_converts_anchor_absolute_wear_to_relative_target_wear() {
+  const app = loadSimulationFns();
+  const anchor = createSimulationItem({
+    markethashname: "AK-47 | 范式 (Field-Tested)",
+    basemarkethashname: "AK-47 | 范式",
+    collection: "控制收藏品",
+    rarity: "保密",
+    minfloat: 0.1,
+    maxfloat: 0.7
+  });
+  const material = createSimulationItem({
+    markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+    basemarkethashname: "Five-SeveN | 混沌点阵",
+    collection: "控制收藏品",
+    rarity: "受限",
+    minfloat: 0,
+    maxfloat: 1
+  });
+  const valueInput = (value = "") => ({value, focus() {}});
+  app.ui.simExportCraftName = valueInput();
+  app.ui.simExportCraftTargetWear = valueInput();
+  app.ui.simExportCraftMainCount = valueInput();
+  app.ui.simExportCraftAuxCount = valueInput();
+  app.ui.simExportCraftWearMin = valueInput();
+  app.ui.simExportCraftWearMax = valueInput();
+  app.ui.simExportCraftModal = {classList: createClassList(["hidden"])};
+  app.ui.simExportCraftSearchPanel = {classList: createClassList(["hidden"])};
+  app.ui.simExportCraftSearchResults = {innerHTML: ""};
+  app.ui.simExportCraftSearchInput = valueInput();
+  app.ui.simExportCraftMaterialList = {
+    innerHTML: "",
+    querySelectorAll() {
+      return [];
+    }
+  };
+
+  app.openSimExportCraftModal({
+    id: "preset_export_relative",
+    name: "相对磨损导出",
+    primary_output: anchor,
+    cover_output: anchor,
+    active_anchor_item: anchor,
+    active_anchor_abs_wear: 0.4,
+    main_material: material,
+    material_rows: [{collection: "控制收藏品", materials: [material]}]
+  });
+  app.confirmSimExportCraftModal();
+
+  assert.equal(app.state.craftAssistPresets.length, 1);
+  assert.equal(app.state.craftAssistPresets[0].target_wear_raw, "0.5");
+  assert.equal(app.state.craftAssistPresets[0].target_wear, Math.fround(0.5));
+  assert.notEqual(app.state.craftAssistPresets[0].target_wear, Math.fround(0.4));
+  assert.equal(app.craftAssistPresetSaveCount, 1);
+}
+
 async function test_delete_tradeup_simulation_preset_removes_saved_entry_and_persists() {
   const presetA = {
     id: "preset_a",
@@ -2206,6 +2322,7 @@ async function main() {
   test_render_simulation_selected_output_card_applies_factory_new_tone_class_to_bar();
   test_render_simulation_selected_material_card_applies_wear_tone_classes();
   test_render_tradeup_simulation_selection_style_card_preserves_explicit_wear_tone_spacing();
+  test_sim_export_craft_preset_converts_anchor_absolute_wear_to_relative_target_wear();
   await test_delete_tradeup_simulation_preset_removes_saved_entry_and_persists();
   await test_tradeup_simulation_picker_search_ignores_stale_response_after_reopen();
   await test_tradeup_simulation_picker_search_rerenders_full_modal_state();

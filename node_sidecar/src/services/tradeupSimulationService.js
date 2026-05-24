@@ -1,5 +1,6 @@
 const {asString} = require("../utils");
 const {normalizeCollectionKey, normalizeRarityRank} = require("./skinAlchemyRules");
+const {outputWearFromRelativeFloat32} = require("./wearFloat32Math");
 
 const FLOAT_PRECISION = 12;
 
@@ -106,6 +107,12 @@ function normalizeAnchors(anchors) {
   return Array.isArray(anchors) ? anchors : [];
 }
 
+function resolveOutputAbsoluteWear(candidate, sharedRelativeWear) {
+  return hasWearBounds(candidate)
+    ? roundNumber(outputWearFromRelativeFloat32(sharedRelativeWear, candidate.minfloat, candidate.maxfloat))
+    : null;
+}
+
 function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = []} = {}) {
   if (!catalog || typeof catalog.getItemByMarketHashName !== "function") {
     throw new Error("catalog.getItemByMarketHashName is required");
@@ -178,9 +185,7 @@ function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = 
       const warnings = [];
 
       const resolvedOutputs = outputs.map((candidate) => {
-        const absoluteWear = hasWearBounds(candidate)
-          ? roundNumber(Number(candidate.minfloat) + Number(candidate.wear_range) * sharedRelativeWear)
-          : null;
+        const absoluteWear = resolveOutputAbsoluteWear(candidate, sharedRelativeWear);
         const role = asString(candidate && candidate.basemarkethashname).trim() === asString(target.basemarkethashname).trim()
           ? "target"
           : asString(candidate && candidate.basemarkethashname).trim() === asString(driver.basemarkethashname).trim()
@@ -190,9 +195,7 @@ function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = 
       });
 
       const resolvedMaterials = materials.map((candidate) => {
-        const absoluteWear = hasWearBounds(candidate)
-          ? roundNumber(Number(candidate.minfloat) + Number(candidate.wear_range) * sharedRelativeWear)
-          : null;
+        const absoluteWear = resolveOutputAbsoluteWear(candidate, sharedRelativeWear);
         return buildResolvedItemEntry(candidate, {absoluteWear, editable: false, role: "material", snapshot, warnings});
       });
 
@@ -200,22 +203,19 @@ function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = 
         warnings.push(normalizeWarning("anchor_not_yet_resolved", "锚定暂未参与首期分支计算", {anchor}));
       }
 
+      const targetAbsoluteWear = target.markethashname === driver.markethashname
+        ? roundNumber(activeDriverAbsWear)
+        : resolveOutputAbsoluteWear(target, sharedRelativeWear);
+      const targetWearLabel = targetAbsoluteWear == null ? "" : predictedWearLevel(targetAbsoluteWear);
+
       return {
         ok: true,
         invalid_reason: "",
         message: "",
         target: {
           ...target,
-          absolute_wear: target.markethashname === driver.markethashname
-            ? roundNumber(activeDriverAbsWear)
-            : hasWearBounds(target)
-              ? roundNumber(Number(target.minfloat) + Number(target.wear_range) * sharedRelativeWear)
-              : null,
-          wear_label: target.markethashname === driver.markethashname
-            ? predictedWearLevel(activeDriverAbsWear)
-            : hasWearBounds(target)
-              ? predictedWearLevel(Number(target.minfloat) + Number(target.wear_range) * sharedRelativeWear)
-              : "",
+          absolute_wear: targetAbsoluteWear,
+          wear_label: targetWearLabel,
           editable: true
         },
         driver: {

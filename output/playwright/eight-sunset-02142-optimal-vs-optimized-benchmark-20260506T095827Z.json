@@ -1,0 +1,953 @@
+{
+  "status": "COMPLETE",
+  "timestamp": "2026-05-06T09:58:28.032Z",
+  "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\backup\\processed_inventory\\inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json",
+  "snapshot_sha256": "74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461",
+  "preset_name": "狩猎0.2142",
+  "preset": {
+    "id": "preset_1775479995486_79308",
+    "name": "狩猎0.2142",
+    "target_wear": 0.2142850011587143,
+    "target_wear_raw": "0.214285",
+    "materials": [
+      {
+        "id": "craft-assist-material-fmxp9s",
+        "role": "main",
+        "count": 10,
+        "items": [
+          {
+            "id": "craft-assist-material-fmxp9s__法玛斯半袖式久经沙场__1",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "wear_filter_mode": "relative",
+            "wear_min": 0.15,
+            "wear_max": 0.24,
+            "custom_range": true
+          }
+        ],
+        "direction": "gt"
+      }
+    ],
+    "created_at": 1775479995486,
+    "updated_at": 1777687901770
+  },
+  "payload": {
+    "target_wear_raw": "0.214285",
+    "target_wear": 0.2142850011587143,
+    "wear_filter_mode": "relative",
+    "wear_approach_mode": "below",
+    "use_component_items": true,
+    "include_component_items": true,
+    "include_cooling": false,
+    "wear_offset_pct": 1,
+    "enable_fast_craft_assist": false,
+    "blocked_ids": [],
+    "selected_item_ids": [],
+    "materials": [
+      {
+        "id": "craft-assist-material-fmxp9s",
+        "role": "main",
+        "count": 10,
+        "items": [
+          {
+            "id": "craft-assist-material-fmxp9s__法玛斯半袖式久经沙场__1",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "wear_filter_mode": "relative",
+            "wear_min": 0.15,
+            "wear_max": 0.24,
+            "custom_range": true
+          }
+        ],
+        "direction": "gt"
+      }
+    ]
+  },
+  "optimized_payload": {
+    "target_wear_raw": "0.214285",
+    "target_wear": 0.2142850011587143,
+    "wear_filter_mode": "relative",
+    "wear_approach_mode": "below",
+    "use_component_items": true,
+    "include_component_items": true,
+    "include_cooling": false,
+    "wear_offset_pct": 0,
+    "enable_fast_craft_assist": false,
+    "blocked_ids": [],
+    "selected_item_ids": [],
+    "materials": [
+      {
+        "id": "craft-assist-material-fmxp9s",
+        "role": "main",
+        "count": 10,
+        "items": [
+          {
+            "id": "craft-assist-material-fmxp9s__法玛斯半袖式久经沙场__1",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "wear_filter_mode": "relative",
+            "wear_min": 0.15,
+            "wear_max": 0.24,
+            "custom_range": true
+          }
+        ],
+        "direction": "gt"
+      }
+    ],
+    "optimized_evaluation_mode": "ignore_wear_offset_pct_for_baseline_comparison"
+  },
+  "optimized_evaluation_mode": "ignore_wear_offset_pct_for_baseline_comparison",
+  "target_wear_raw": 0.214285,
+  "target_wear": 0.2142850011587143,
+  "candidate_count": 602,
+  "pick_count": 10,
+  "baseline_overall": 0.19996105134487152,
+  "optimal_oracle": {
+    "oracle_status": "optimal",
+    "oracle_type": "exact_top_k_all_candidates_below_raw",
+    "detail": {
+      "oracle_type": "exact_top_k_all_candidates_below_raw",
+      "proof": "all_candidates_individually_below_target_so_top_k_values_maximize_below_sum",
+      "searched_nodes": 0,
+      "pruned_nodes": 0,
+      "shortcut": "top_k_all_below"
+    },
+    "overall": 0.19996105134487152,
+    "raw_gap": 0.014323948655128482,
+    "sum": 1.9996105134487152,
+    "item_ids": [
+      "49566142095",
+      "49647135189",
+      "49848551843",
+      "49579267175",
+      "49565867694",
+      "50762480157",
+      "50494929699",
+      "50728303227",
+      "50761838000",
+      "49848061318"
+    ],
+    "values": [
+      0.2004638910293579,
+      0.20042194426059723,
+      0.2003328502178192,
+      0.20019416511058807,
+      0.20009589195251465,
+      0.20008911192417145,
+      0.19999364018440247,
+      0.19975072145462036,
+      0.19929702579975128,
+      0.19897127151489258
+    ],
+    "duration_ms": 0.485,
+    "candidate_count": 602,
+    "pick_count": 10
+  },
+  "optimized": {
+    "optimized_status": "ok",
+    "optimized_type": "child_process",
+    "timeout_ms": 30000,
+    "exit_code": 0,
+    "signal": null,
+    "ok": true,
+    "overall": 0.19996105134487152,
+    "raw_gap": 0.014323948655128482,
+    "item_ids": [
+      "49566142095",
+      "49647135189",
+      "49848551843",
+      "49579267175",
+      "49565867694",
+      "50762480157",
+      "50494929699",
+      "50728303227",
+      "50761838000",
+      "49848061318"
+    ],
+    "duration_ms": 30.032,
+    "result": {
+      "ok": true,
+      "item_ids": [
+        "49566142095",
+        "49647135189",
+        "49848551843",
+        "49579267175",
+        "49565867694",
+        "50762480157",
+        "50494929699",
+        "50728303227",
+        "50761838000",
+        "49848061318"
+      ],
+      "overall": 0.19996105134487152,
+      "rarity": 2,
+      "approach_mode": "below",
+      "selection_trace": {
+        "mode": "single_material_raw_below_top_k",
+        "steps": [
+          {
+            "stage": "exact_top_k_all_below_raw",
+            "overall": 0.19996105134487152,
+            "selectedIds": [
+              "49565867694",
+              "49566142095",
+              "49579267175",
+              "49647135189",
+              "49848061318",
+              "49848551843",
+              "50494929699",
+              "50728303227",
+              "50761838000",
+              "50762480157"
+            ],
+            "groups": [
+              {
+                "index": 0,
+                "materialName": "法玛斯 | 半袖式 (久经沙场)",
+                "primary_name": "法玛斯 | 半袖式 (久经沙场)",
+                "item_names": [
+                  "法玛斯 | 半袖式 (久经沙场)"
+                ],
+                "label": "法玛斯 | 半袖式 (久经沙场)",
+                "role": "main",
+                "selectedIds": [
+                  "49565867694",
+                  "49566142095",
+                  "49579267175",
+                  "49647135189",
+                  "49848061318",
+                  "49848551843",
+                  "50494929699",
+                  "50728303227",
+                  "50761838000",
+                  "50762480157"
+                ]
+              }
+            ],
+            "strategy": "top_k_all_candidates_below_raw",
+            "raw_ceiling": 0.214285
+          }
+        ]
+      },
+      "recipe_ok": true,
+      "recipe_reason": "",
+      "recipe_text": "配方：Industrial -> Mil-Spec（recipe 1）",
+      "picks": [
+        {
+          "index": 1,
+          "asset_id": "49566142095",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.2004638910293579",
+          "absolute_wear": "0.2004638910293579",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 2,
+          "asset_id": "49647135189",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.2004219442605972",
+          "absolute_wear": "0.2004219442605972",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 3,
+          "asset_id": "49848551843",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.2003328502178192",
+          "absolute_wear": "0.2003328502178192",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 4,
+          "asset_id": "49579267175",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.2001941651105880",
+          "absolute_wear": "0.2001941651105880",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 5,
+          "asset_id": "49565867694",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.2000958919525146",
+          "absolute_wear": "0.2000958919525146",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 6,
+          "asset_id": "50762480157",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.2000891119241714",
+          "absolute_wear": "0.2000891119241714",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 7,
+          "asset_id": "50494929699",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.1999936401844024",
+          "absolute_wear": "0.1999936401844024",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 8,
+          "asset_id": "50728303227",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.1997507214546203",
+          "absolute_wear": "0.1997507214546203",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 9,
+          "asset_id": "50761838000",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.1992970257997512",
+          "absolute_wear": "0.1992970257997512",
+          "rarity": "Industrial"
+        },
+        {
+          "index": 10,
+          "asset_id": "49848061318",
+          "name": "法玛斯 | 半袖式 (久经沙场)",
+          "relative_wear": "0.1989712715148925",
+          "absolute_wear": "0.1989712715148925",
+          "rarity": "Industrial"
+        }
+      ]
+    },
+    "child_stderr_tail": null,
+    "child_stdout_tail": null,
+    "stage_log_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.stage.jsonl",
+    "child_result_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.child-result.json",
+    "stage_event_count": 13,
+    "stage_events": [
+      {
+        "role": "parent",
+        "phase": "oracle_complete",
+        "timestamp": "2026-05-06T09:58:27.806Z",
+        "oracle_status": "optimal",
+        "oracle_type": "exact_top_k_all_candidates_below_raw",
+        "overall": 0.19996105134487152,
+        "raw_gap": 0.014323948655128482,
+        "candidate_count": 602,
+        "pick_count": 10
+      },
+      {
+        "role": "parent",
+        "phase": "child_spawn",
+        "timestamp": "2026-05-06T09:58:27.811Z",
+        "timeout_ms": 30000,
+        "checkpoint_json_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.json"
+      },
+      {
+        "role": "child",
+        "phase": "optimized_evaluation_mode_ready",
+        "timestamp": "2026-05-06T09:58:27.935Z",
+        "optimized_evaluation_mode": "ignore_wear_offset_pct_for_baseline_comparison",
+        "wear_offset_pct": 0
+      },
+      {
+        "role": "child",
+        "phase": "child_start",
+        "timestamp": "2026-05-06T09:58:27.936Z",
+        "checkpoint_json_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.json",
+        "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\backup\\processed_inventory\\inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json"
+      },
+      {
+        "role": "child",
+        "phase": "snapshot_verified",
+        "timestamp": "2026-05-06T09:58:27.940Z",
+        "snapshot_sha256": "74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461"
+      },
+      {
+        "role": "child",
+        "phase": "candidate_context_ready",
+        "timestamp": "2026-05-06T09:58:27.984Z",
+        "candidate_count": 985,
+        "stats": {
+          "include_component_items": true,
+          "include_cooling": false,
+          "total_craftable_count": 985,
+          "visible_candidate_count": 985,
+          "cooling_count": 0,
+          "selected_component_count": 0,
+          "main_free_slots": 998,
+          "main_capacity": 1000,
+          "main_occupied_slots": 2,
+          "main_hidden_count": 2,
+          "main_cooling_count": 990
+        }
+      },
+      {
+        "role": "child",
+        "phase": "search_enter",
+        "timestamp": "2026-05-06T09:58:28.005Z",
+        "search_index": 0,
+        "target_value": 0.21428489685058594,
+        "approach_mode": "infinite",
+        "enable_raw_below_top_k_fast_path": true,
+        "has_target_step_spec": true,
+        "group_count": 1
+      },
+      {
+        "role": "child",
+        "phase": "search_exit",
+        "timestamp": "2026-05-06T09:58:28.010Z",
+        "search_index": 0,
+        "duration_ms": 5.297,
+        "ok": true,
+        "overall": 0.19996105134487152
+      },
+      {
+        "role": "child",
+        "phase": "search_enter",
+        "timestamp": "2026-05-06T09:58:28.012Z",
+        "search_index": 1,
+        "target_value": 0.21428489685058594,
+        "approach_mode": "infinite",
+        "enable_raw_below_top_k_fast_path": true,
+        "has_target_step_spec": true,
+        "group_count": 1
+      },
+      {
+        "role": "child",
+        "phase": "search_exit",
+        "timestamp": "2026-05-06T09:58:28.013Z",
+        "search_index": 1,
+        "duration_ms": 1.572,
+        "ok": true,
+        "overall": 0.19996105134487152
+      },
+      {
+        "role": "child",
+        "phase": "child_result_ready",
+        "timestamp": "2026-05-06T09:58:28.015Z",
+        "ok": true,
+        "overall": 0.19996105134487152,
+        "raw_gap": 0.014323948655128482,
+        "optimized_over_raw_amount": 0,
+        "duration_ms": 30.032
+      },
+      {
+        "role": "child",
+        "phase": "child_result_written",
+        "timestamp": "2026-05-06T09:58:28.018Z",
+        "child_result_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.child-result.json"
+      },
+      {
+        "role": "parent",
+        "phase": "child_exit",
+        "timestamp": "2026-05-06T09:58:28.030Z",
+        "exit_code": 0,
+        "signal": null,
+        "pid": 53892
+      }
+    ],
+    "child_result": {
+      "payload": {
+        "target_wear_raw": "0.214285",
+        "target_wear": 0.2142850011587143,
+        "wear_filter_mode": "relative",
+        "wear_approach_mode": "below",
+        "use_component_items": true,
+        "include_component_items": true,
+        "include_cooling": false,
+        "wear_offset_pct": 1,
+        "enable_fast_craft_assist": false,
+        "blocked_ids": [],
+        "selected_item_ids": [],
+        "materials": [
+          {
+            "id": "craft-assist-material-fmxp9s",
+            "role": "main",
+            "count": 10,
+            "items": [
+              {
+                "id": "craft-assist-material-fmxp9s__法玛斯半袖式久经沙场__1",
+                "name": "法玛斯 | 半袖式 (久经沙场)",
+                "wear_filter_mode": "relative",
+                "wear_min": 0.15,
+                "wear_max": 0.24,
+                "custom_range": true
+              }
+            ],
+            "direction": "gt"
+          }
+        ]
+      },
+      "optimized_payload": {
+        "target_wear_raw": "0.214285",
+        "target_wear": 0.2142850011587143,
+        "wear_filter_mode": "relative",
+        "wear_approach_mode": "below",
+        "use_component_items": true,
+        "include_component_items": true,
+        "include_cooling": false,
+        "wear_offset_pct": 0,
+        "enable_fast_craft_assist": false,
+        "blocked_ids": [],
+        "selected_item_ids": [],
+        "materials": [
+          {
+            "id": "craft-assist-material-fmxp9s",
+            "role": "main",
+            "count": 10,
+            "items": [
+              {
+                "id": "craft-assist-material-fmxp9s__法玛斯半袖式久经沙场__1",
+                "name": "法玛斯 | 半袖式 (久经沙场)",
+                "wear_filter_mode": "relative",
+                "wear_min": 0.15,
+                "wear_max": 0.24,
+                "custom_range": true
+              }
+            ],
+            "direction": "gt"
+          }
+        ],
+        "optimized_evaluation_mode": "ignore_wear_offset_pct_for_baseline_comparison"
+      },
+      "optimized_evaluation_mode": "ignore_wear_offset_pct_for_baseline_comparison",
+      "ok": true,
+      "overall": 0.19996105134487152,
+      "raw_gap": 0.014323948655128482,
+      "optimized_over_raw_amount": 0,
+      "item_ids": [
+        "49566142095",
+        "49647135189",
+        "49848551843",
+        "49579267175",
+        "49565867694",
+        "50762480157",
+        "50494929699",
+        "50728303227",
+        "50761838000",
+        "49848061318"
+      ],
+      "duration_ms": 30.032,
+      "result": {
+        "ok": true,
+        "item_ids": [
+          "49566142095",
+          "49647135189",
+          "49848551843",
+          "49579267175",
+          "49565867694",
+          "50762480157",
+          "50494929699",
+          "50728303227",
+          "50761838000",
+          "49848061318"
+        ],
+        "overall": 0.19996105134487152,
+        "rarity": 2,
+        "approach_mode": "below",
+        "selection_trace": {
+          "mode": "single_material_raw_below_top_k",
+          "steps": [
+            {
+              "stage": "exact_top_k_all_below_raw",
+              "overall": 0.19996105134487152,
+              "selectedIds": [
+                "49565867694",
+                "49566142095",
+                "49579267175",
+                "49647135189",
+                "49848061318",
+                "49848551843",
+                "50494929699",
+                "50728303227",
+                "50761838000",
+                "50762480157"
+              ],
+              "groups": [
+                {
+                  "index": 0,
+                  "materialName": "法玛斯 | 半袖式 (久经沙场)",
+                  "primary_name": "法玛斯 | 半袖式 (久经沙场)",
+                  "item_names": [
+                    "法玛斯 | 半袖式 (久经沙场)"
+                  ],
+                  "label": "法玛斯 | 半袖式 (久经沙场)",
+                  "role": "main",
+                  "selectedIds": [
+                    "49565867694",
+                    "49566142095",
+                    "49579267175",
+                    "49647135189",
+                    "49848061318",
+                    "49848551843",
+                    "50494929699",
+                    "50728303227",
+                    "50761838000",
+                    "50762480157"
+                  ]
+                }
+              ],
+              "strategy": "top_k_all_candidates_below_raw",
+              "raw_ceiling": 0.214285
+            }
+          ]
+        },
+        "recipe_ok": true,
+        "recipe_reason": "",
+        "recipe_text": "配方：Industrial -> Mil-Spec（recipe 1）",
+        "picks": [
+          {
+            "index": 1,
+            "asset_id": "49566142095",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.2004638910293579",
+            "absolute_wear": "0.2004638910293579",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 2,
+            "asset_id": "49647135189",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.2004219442605972",
+            "absolute_wear": "0.2004219442605972",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 3,
+            "asset_id": "49848551843",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.2003328502178192",
+            "absolute_wear": "0.2003328502178192",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 4,
+            "asset_id": "49579267175",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.2001941651105880",
+            "absolute_wear": "0.2001941651105880",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 5,
+            "asset_id": "49565867694",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.2000958919525146",
+            "absolute_wear": "0.2000958919525146",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 6,
+            "asset_id": "50762480157",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.2000891119241714",
+            "absolute_wear": "0.2000891119241714",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 7,
+            "asset_id": "50494929699",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.1999936401844024",
+            "absolute_wear": "0.1999936401844024",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 8,
+            "asset_id": "50728303227",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.1997507214546203",
+            "absolute_wear": "0.1997507214546203",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 9,
+            "asset_id": "50761838000",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.1992970257997512",
+            "absolute_wear": "0.1992970257997512",
+            "rarity": "Industrial"
+          },
+          {
+            "index": 10,
+            "asset_id": "49848061318",
+            "name": "法玛斯 | 半袖式 (久经沙场)",
+            "relative_wear": "0.1989712715148925",
+            "absolute_wear": "0.1989712715148925",
+            "rarity": "Industrial"
+          }
+        ]
+      },
+      "candidate_context_stats": {
+        "include_component_items": true,
+        "include_cooling": false,
+        "total_craftable_count": 985,
+        "visible_candidate_count": 985,
+        "cooling_count": 0,
+        "selected_component_count": 0,
+        "main_free_slots": 998,
+        "main_capacity": 1000,
+        "main_occupied_slots": 2,
+        "main_hidden_count": 2,
+        "main_cooling_count": 990
+      },
+      "optimized_search_events": [
+        {
+          "phase": "search_enter",
+          "search_index": 0,
+          "targetValue": 0.21428489685058594,
+          "approachMode": "infinite",
+          "enableRawBelowTopKFastPath": true,
+          "hasTargetStepSpec": true,
+          "groupCounts": [
+            {
+              "index": 0,
+              "role": "main",
+              "count": 10,
+              "candidates": 602
+            }
+          ]
+        },
+        {
+          "phase": "search_exit",
+          "search_index": 0,
+          "duration_ms": 5.253,
+          "ok": true,
+          "overall": 0.19996105134487152,
+          "selectedCount": 10
+        },
+        {
+          "phase": "search_enter",
+          "search_index": 1,
+          "targetValue": 0.21428489685058594,
+          "approachMode": "infinite",
+          "enableRawBelowTopKFastPath": true,
+          "hasTargetStepSpec": true,
+          "groupCounts": [
+            {
+              "index": 0,
+              "role": "main",
+              "count": 10,
+              "candidates": 602
+            }
+          ]
+        },
+        {
+          "phase": "search_exit",
+          "search_index": 1,
+          "duration_ms": 1.566,
+          "ok": true,
+          "overall": 0.19996105134487152,
+          "selectedCount": 10
+        }
+      ],
+      "optimized_search_profile_summary": {
+        "search_call_count": 2,
+        "event_count": 0,
+        "beam_cap_event_count": 0,
+        "total_candidate_attempts": 0,
+        "complete_score_attempts": 0,
+        "top_stop_reasons": []
+      },
+      "stage_events": [
+        {
+          "role": "parent",
+          "phase": "oracle_complete",
+          "timestamp": "2026-05-06T09:58:27.806Z",
+          "oracle_status": "optimal",
+          "oracle_type": "exact_top_k_all_candidates_below_raw",
+          "overall": 0.19996105134487152,
+          "raw_gap": 0.014323948655128482,
+          "candidate_count": 602,
+          "pick_count": 10
+        },
+        {
+          "role": "parent",
+          "phase": "child_spawn",
+          "timestamp": "2026-05-06T09:58:27.811Z",
+          "timeout_ms": 30000,
+          "checkpoint_json_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.json"
+        },
+        {
+          "role": "child",
+          "phase": "optimized_evaluation_mode_ready",
+          "timestamp": "2026-05-06T09:58:27.935Z",
+          "optimized_evaluation_mode": "ignore_wear_offset_pct_for_baseline_comparison",
+          "wear_offset_pct": 0
+        },
+        {
+          "role": "child",
+          "phase": "child_start",
+          "timestamp": "2026-05-06T09:58:27.936Z",
+          "checkpoint_json_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.json",
+          "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\backup\\processed_inventory\\inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json"
+        },
+        {
+          "role": "child",
+          "phase": "snapshot_verified",
+          "timestamp": "2026-05-06T09:58:27.940Z",
+          "snapshot_sha256": "74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461"
+        },
+        {
+          "role": "child",
+          "phase": "candidate_context_ready",
+          "timestamp": "2026-05-06T09:58:27.984Z",
+          "candidate_count": 985,
+          "stats": {
+            "include_component_items": true,
+            "include_cooling": false,
+            "total_craftable_count": 985,
+            "visible_candidate_count": 985,
+            "cooling_count": 0,
+            "selected_component_count": 0,
+            "main_free_slots": 998,
+            "main_capacity": 1000,
+            "main_occupied_slots": 2,
+            "main_hidden_count": 2,
+            "main_cooling_count": 990
+          }
+        },
+        {
+          "role": "child",
+          "phase": "search_enter",
+          "timestamp": "2026-05-06T09:58:28.005Z",
+          "search_index": 0,
+          "target_value": 0.21428489685058594,
+          "approach_mode": "infinite",
+          "enable_raw_below_top_k_fast_path": true,
+          "has_target_step_spec": true,
+          "group_count": 1
+        },
+        {
+          "role": "child",
+          "phase": "search_exit",
+          "timestamp": "2026-05-06T09:58:28.010Z",
+          "search_index": 0,
+          "duration_ms": 5.297,
+          "ok": true,
+          "overall": 0.19996105134487152
+        },
+        {
+          "role": "child",
+          "phase": "search_enter",
+          "timestamp": "2026-05-06T09:58:28.012Z",
+          "search_index": 1,
+          "target_value": 0.21428489685058594,
+          "approach_mode": "infinite",
+          "enable_raw_below_top_k_fast_path": true,
+          "has_target_step_spec": true,
+          "group_count": 1
+        },
+        {
+          "role": "child",
+          "phase": "search_exit",
+          "timestamp": "2026-05-06T09:58:28.013Z",
+          "search_index": 1,
+          "duration_ms": 1.572,
+          "ok": true,
+          "overall": 0.19996105134487152
+        },
+        {
+          "role": "child",
+          "phase": "child_result_ready",
+          "timestamp": "2026-05-06T09:58:28.015Z",
+          "ok": true,
+          "overall": 0.19996105134487152,
+          "raw_gap": 0.014323948655128482,
+          "optimized_over_raw_amount": 0,
+          "duration_ms": 30.032
+        }
+      ]
+    }
+  },
+  "raw_gap_optimal": 0.014323948655128482,
+  "raw_gap_optimized": 0.014323948655128482,
+  "gap_delta": 0,
+  "optimized_over_raw_amount": 0,
+  "optimized_vs_baseline_delta": 0,
+  "optimized_vs_baseline_abs_delta": 0,
+  "item_ids_same": true,
+  "duration_optimal_ms": 0.485,
+  "duration_optimized_ms": 30.032,
+  "speedup": 0.016149440596696856,
+  "candidate_context_stats": {
+    "include_component_items": true,
+    "include_cooling": false,
+    "total_craftable_count": 985,
+    "visible_candidate_count": 985,
+    "cooling_count": 0,
+    "selected_component_count": 0,
+    "main_free_slots": 998,
+    "main_capacity": 1000,
+    "main_occupied_slots": 2,
+    "main_hidden_count": 2,
+    "main_cooling_count": 990
+  },
+  "optimized_search_events": [
+    {
+      "phase": "search_enter",
+      "search_index": 0,
+      "targetValue": 0.21428489685058594,
+      "approachMode": "infinite",
+      "enableRawBelowTopKFastPath": true,
+      "hasTargetStepSpec": true,
+      "groupCounts": [
+        {
+          "index": 0,
+          "role": "main",
+          "count": 10,
+          "candidates": 602
+        }
+      ]
+    },
+    {
+      "phase": "search_exit",
+      "search_index": 0,
+      "duration_ms": 5.253,
+      "ok": true,
+      "overall": 0.19996105134487152,
+      "selectedCount": 10
+    },
+    {
+      "phase": "search_enter",
+      "search_index": 1,
+      "targetValue": 0.21428489685058594,
+      "approachMode": "infinite",
+      "enableRawBelowTopKFastPath": true,
+      "hasTargetStepSpec": true,
+      "groupCounts": [
+        {
+          "index": 0,
+          "role": "main",
+          "count": 10,
+          "candidates": 602
+        }
+      ]
+    },
+    {
+      "phase": "search_exit",
+      "search_index": 1,
+      "duration_ms": 1.566,
+      "ok": true,
+      "overall": 0.19996105134487152,
+      "selectedCount": 10
+    }
+  ],
+  "optimized_search_profile_summary": {
+    "search_call_count": 2,
+    "event_count": 0,
+    "beam_cap_event_count": 0,
+    "total_candidate_attempts": 0,
+    "complete_score_attempts": 0,
+    "top_stop_reasons": []
+  },
+  "artifacts": {
+    "script": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark.js",
+    "json": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.json",
+    "md": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.md",
+    "stage_log": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.stage.jsonl",
+    "child_result": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.child-result.json"
+  },
+  "stage_log_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.stage.jsonl",
+  "child_result_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\playwright\\eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.child-result.json",
+  "limitations": [
+    "This benchmark uses the offline service path, not an HTTP request through uiServer middleware.",
+    "The oracle is scoped to this single-material preset and this exact production-built candidate pool.",
+    "The optimized search profile keeps aggregate hook fields only and omits candidate/state details.",
+    "Optimized evidence is recovered from a persisted stage log and child result file so timeout runs still preserve progress."
+  ]
+}

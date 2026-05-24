@@ -1,83 +1,73 @@
-﻿{
+{
   "accounts": {
     "430158438": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260505_101516.json",
-      "fetch_time": "2026-05-05 10:15:16",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260522_102016.json",
+      "fetch_time": "2026-05-22 10:20:16",
       "auth_state": "normal",
       "auth_reason": ""
     },
     "1822049852": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260505_111119.json",
-      "fetch_time": "2026-05-05 11:11:19",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countsteam01": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260506_005925.json",
-      "fetch_time": "2026-05-06 00:59:25",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "StupidChild005": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260503_174254.json",
-      "fetch_time": "2026-05-03 17:42:54",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "19174601720": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260504_115555.json",
-      "fetch_time": "2026-05-04 11:55:55",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countsteam002": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260504_142915.json",
-      "fetch_time": "2026-05-04 14:29:15",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countsteam04": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260504_144430.json",
-      "fetch_time": "2026-05-04 14:44:30",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260522_101906.json",
+      "fetch_time": "2026-05-22 10:19:06",
       "auth_state": "normal",
       "auth_reason": ""
     },
     "countsteam6": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260506_100641.json",
-      "fetch_time": "2026-05-06 10:06:41",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_193321.json",
+      "fetch_time": "2026-05-15 19:33:21",
       "auth_state": "normal",
       "auth_reason": ""
     },
-    "wy19174601720": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260504_140240.json",
-      "fetch_time": "2026-05-04 14:02:40",
-      "auth_state": "normal",
-      "auth_reason": ""
-    },
-    "countSteam5": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260504_134229.json",
-      "fetch_time": "2026-05-04 13:42:29",
+    "19174601720": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_190121.json",
+      "fetch_time": "2026-05-15 19:01:21",
       "auth_state": "normal",
       "auth_reason": ""
     },
     "selenomorphology": {
-      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260430_234016.json",
-      "fetch_time": "2026-04-30 23:40:16",
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_193553.json",
+      "fetch_time": "2026-05-15 19:35:53",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countsteam002": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_191402.json",
+      "fetch_time": "2026-05-15 19:14:02",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countSteam5": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_191028.json",
+      "fetch_time": "2026-05-15 19:10:28",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "wy19174601720": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_193607.json",
+      "fetch_time": "2026-05-15 19:36:07",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "StupidChild005": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_190621.json",
+      "fetch_time": "2026-05-15 19:06:21",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countsteam04": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_192905.json",
+      "fetch_time": "2026-05-15 19:29:05",
+      "auth_state": "normal",
+      "auth_reason": ""
+    },
+    "countsteam01": {
+      "snapshot_path": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\logs\\processed_inventory\\inventory_processed_20260515_192322.json",
+      "fetch_time": "2026-05-15 19:23:22",
       "auth_state": "normal",
       "auth_reason": ""
     }
   },
   "app_users": {
-    "admin": {
-      "craft_assist_presets": [],
-      "tradeup_simulation_presets": [],
-      "last_selected_username": "StupidChild005"
-    },
-    "member_test": {
-      "craft_assist_presets": [],
-      "tradeup_simulation_presets": [],
-      "last_selected_username": "1822049852"
-    },
     "dev_local": {
       "craft_assist_presets": [
         {
@@ -138,7 +128,7 @@
             }
           ],
           "created_at": 1775476837437,
-          "updated_at": 1775971992390
+          "updated_at": 1778401600495
         },
         {
           "id": "preset_1776515152593_99268",
@@ -189,7 +179,7 @@
                   "id": "craft-assist-material-r8rk11__aug钢铁哨兵久经沙场__1",
                   "name": "AUG | 钢铁哨兵 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.23,
+                  "wear_min": 0.22,
                   "wear_max": 0.2525,
                   "custom_range": true
                 },
@@ -197,7 +187,7 @@
                   "id": "craft-assist-material-r8rk11__p90满昏作品久经沙场__2",
                   "name": "P90 | 满昏作品 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.23,
+                  "wear_min": 0.22,
                   "wear_max": 0.2525,
                   "custom_range": true
                 }
@@ -206,7 +196,7 @@
             }
           ],
           "created_at": 1776323294431,
-          "updated_at": 1776323294431
+          "updated_at": 1778510980024
         },
         {
           "id": "preset_1776323404028_49818",
@@ -223,7 +213,7 @@
                   "id": "craft-assist-material-fmxp9s__aug钢铁哨兵久经沙场__2",
                   "name": "AUG | 钢铁哨兵 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.26,
+                  "wear_min": 0.25,
                   "wear_max": 0.28,
                   "custom_range": true
                 },
@@ -231,8 +221,8 @@
                   "id": "craft-assist-material-fmxp9s__p90满昏作品久经沙场__3",
                   "name": "P90 | 满昏作品 (久经沙场)",
                   "wear_filter_mode": "relative",
-                  "wear_min": 0.26,
-                  "wear_max": 0.28,
+                  "wear_min": 0.25,
+                  "wear_max": 0.38,
                   "custom_range": true
                 }
               ],
@@ -240,7 +230,7 @@
             }
           ],
           "created_at": 1776323404028,
-          "updated_at": 1777529768348
+          "updated_at": 1778511572650
         },
         {
           "id": "preset_1776867200612_56036",
@@ -3132,12 +3122,12 @@
           "updated_at": 1777024732210
         }
       ],
-      "last_selected_username": "countsteam6"
+      "last_selected_username": "430158438"
     },
     "__global__": {
       "craft_assist_presets": [],
       "tradeup_simulation_presets": [],
-      "last_selected_username": "countsteam6"
+      "last_selected_username": "430158438"
     }
   }
 }

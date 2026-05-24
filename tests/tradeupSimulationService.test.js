@@ -8,6 +8,21 @@ const {createCraftOutcomeCatalog} = require("../node_sidecar/src/services/craftO
 const {createTradeupSimulationCatalog} = require("../node_sidecar/src/services/tradeupSimulationCatalog");
 const {createTradeupSimulationService} = require("../node_sidecar/src/services/tradeupSimulationService");
 
+function float32SequentialMean(values) {
+  let sum = Math.fround(0);
+  for (const value of values) {
+    sum = Math.fround(sum + Math.fround(value));
+  }
+  return Math.fround(sum / Math.fround(values.length));
+}
+
+function float32OutcomeWear(relativeWear, minfloat, maxfloat) {
+  const outMin = Math.fround(minfloat);
+  const outMax = Math.fround(maxfloat);
+  const range = Math.fround(outMax - outMin);
+  return Math.fround(outMin + Math.fround(Math.fround(relativeWear) * range));
+}
+
 function createTempSkinDb() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cs2-alchemy-sim-service-"));
   const dbPath = path.join(tempDir, "skins.db");
@@ -134,8 +149,91 @@ function buildSimulationFixtureDb() {
   return dbPath;
 }
 
+function buildDPrecisionFixtureDb() {
+  const {dbPath, db} = createTempSkinDb();
+  insertWearFamily(db, {
+    base: "AUG | Steel Sentinel",
+    collection: "Control Case",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 0.7
+  });
+  insertWearFamily(db, {
+    base: "P90 | Full Sunset",
+    collection: "Control Case",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 0.7
+  });
+  insertWearFamily(db, {
+    base: "FAMAS | Half Sleeve",
+    collection: "Control Case",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 0.7
+  });
+  insertWearFamily(db, {
+    base: "Driver | Relative Carrier",
+    collection: "Driver Case",
+    rarity: "受限",
+    minfloat: 0,
+    maxfloat: 1
+  });
+  insertWearFamily(db, {
+    base: "Glock-18 | Greenline",
+    collection: "Control Case",
+    rarity: "受限",
+    minfloat: 0,
+    maxfloat: 0.7
+  });
+  db.close();
+  return dbPath;
+}
+
+function buildMissingTargetBoundsFixtureDb() {
+  const {dbPath, db} = createTempSkinDb();
+  insertWearFamily(db, {
+    base: "AK-47 | Slate",
+    collection: "Snakebite Case",
+    rarity: "受限",
+    minfloat: 0,
+    maxfloat: 1
+  });
+  insertWearFamily(db, {
+    base: "M4A4 | In Living Color",
+    collection: "Snakebite Case",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 1
+  });
+  insertWearFamily(db, {
+    base: "Target | Missing Bounds",
+    collection: "Snakebite Case",
+    rarity: "受限",
+    minfloat: null,
+    maxfloat: null,
+    wearRange: null
+  });
+  db.close();
+  return dbPath;
+}
+
 function createFixtureService() {
   const dbPath = buildSimulationFixtureDb();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+  const outcomeCatalog = createCraftOutcomeCatalog({dbPath});
+  return createTradeupSimulationService({catalog, outcomeCatalog});
+}
+
+function createDPrecisionFixtureService() {
+  const dbPath = buildDPrecisionFixtureDb();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+  const outcomeCatalog = createCraftOutcomeCatalog({dbPath});
+  return createTradeupSimulationService({catalog, outcomeCatalog});
+}
+
+function createMissingTargetBoundsFixtureService() {
+  const dbPath = buildMissingTargetBoundsFixtureDb();
   const catalog = createTradeupSimulationCatalog({dbPath});
   const outcomeCatalog = createCraftOutcomeCatalog({dbPath});
   return createTradeupSimulationService({catalog, outcomeCatalog});
@@ -215,11 +313,66 @@ function test_resolve_allows_cross_collection_driver_relative_wear() {
   assert.equal(result.rows[0].materials.length, 3);
 }
 
+function test_resolve_uses_float32_output_wear_chain_for_real_block_21_sample() {
+  const service = createDPrecisionFixtureService();
+
+  const block21Materials = [
+    0.2758138477802276,
+    0.2811573147773742,
+    0.2813495993614197,
+    0.2814185917377472,
+    0.2814828157424927,
+    0.2815606594085693,
+    0.2816655933856964,
+    0.2820283174514770,
+    0.2820589840412140,
+    0.1713817417621612
+  ];
+  const relativeWearD = float32SequentialMean(block21Materials);
+  const driverWear = relativeWearD;
+  const expectedD = Number(float32OutcomeWear(relativeWearD, 0, 0.7).toFixed(12));
+  const oldC = Number((relativeWearD * 0.7).toFixed(12));
+  assert.equal(expectedD, 0.188994199038);
+  assert.equal(oldC, 0.188994207978);
+
+  const result = service.resolve({
+    target_item: {markethashname: "Glock-18 | Greenline (Minimal Wear)"},
+    active_driver_item: {markethashname: "Driver | Relative Carrier (Field-Tested)"},
+    active_driver_abs_wear: driverWear,
+    anchors: []
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(typeof result.rows[0].sharedRelativeWear, "number");
+
+  // Old chain would shift the derived absolute wear by ~1 ULP here; we want the float32 chain value exactly.
+  assert.equal(result.target.absolute_wear, expectedD);
+  assert.notEqual(result.target.absolute_wear, oldC);
+}
+
+function test_resolve_keeps_non_driver_target_wear_label_empty_when_bounds_missing() {
+  const service = createMissingTargetBoundsFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "Target | Missing Bounds (Factory New)"},
+    active_driver_item: {markethashname: "AK-47 | Slate (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, true);
+  assert.notEqual(result.target.markethashname, result.driver.markethashname);
+  assert.equal(result.target.absolute_wear, null);
+  assert.equal(result.target.wear_label, "");
+}
+
 function main() {
   test_resolve_builds_collection_row_with_outputs_and_locked_materials();
   test_resolve_rejects_out_of_range_driver_wear();
   test_resolve_keeps_missing_wear_bound_entries_as_degraded_cards();
   test_resolve_allows_cross_collection_driver_relative_wear();
+  test_resolve_uses_float32_output_wear_chain_for_real_block_21_sample();
+  test_resolve_keeps_non_driver_target_wear_label_empty_when_bounds_missing();
   console.log("tradeupSimulationService tests passed");
 }
 

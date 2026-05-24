@@ -135,6 +135,21 @@ function insertWearFamily(db, {
   }
 }
 
+function float32SequentialMean(values) {
+  let sum = Math.fround(0);
+  for (const value of values) {
+    sum = Math.fround(sum + Math.fround(value));
+  }
+  return Math.fround(sum / Math.fround(values.length));
+}
+
+function float32OutcomeWear(relativeWear, minfloat, maxfloat) {
+  const outMin = Math.fround(minfloat);
+  const outMax = Math.fround(maxfloat);
+  const range = Math.fround(outMax - outMin);
+  return Math.fround(outMin + Math.fround(Math.fround(relativeWear) * range));
+}
+
 function buildPredictorFixtureDb() {
   const {dbPath, db} = createTempPredictorDb();
   insertWearFamily(db, {
@@ -180,6 +195,19 @@ function buildPredictorFixtureDb() {
     collection: "Revolution Case",
     rarity: "受限",
     wearlevels: ["Minimal Wear"]
+  });
+  db.close();
+  return dbPath;
+}
+
+function buildDPrecisionPredictorFixtureDb() {
+  const {dbPath, db} = createTempPredictorDb();
+  insertWearFamily(db, {
+    base: "P250 | Just For Fun",
+    collection: "Control Case",
+    rarity: "受限",
+    minfloat: 0,
+    maxfloat: 0.7
   });
   db.close();
   return dbPath;
@@ -291,15 +319,16 @@ function test_predictor_uses_infinite_mode_input_float32_step_for_output_float()
   assert.equal(result.outcomes[0].name, "StatTrak™ AK-47 | Ice Coaled (Minimal Wear)");
 }
 
-function test_predictor_defaults_to_below_previous_float32_step_for_output_float() {
+function test_predictor_defaults_to_below_safe_offset_for_output_float() {
   const dbPath = buildPredictorFixtureDb();
   const predictor = createCraftOutcomePredictor({
     catalog: createCraftOutcomeCatalog({dbPath})
   });
   const rawRelativeWear = 0.069999999;
-  const inputStep = Math.fround(rawRelativeWear);
-  const expectedBelowStep = Number(prevFloat32(inputStep).toFixed(12));
-  assert.equal(expectedBelowStep, 0.069999992847);
+  const expectedBelowStep = Number(Math.fround(rawRelativeWear - 0.0000001).toFixed(12));
+  const oldPrevFloat32Step = Number(prevFloat32(Math.fround(rawRelativeWear)).toFixed(12));
+  assert.equal(expectedBelowStep, 0.06999989599);
+  assert.equal(oldPrevFloat32Step, 0.069999992847);
 
   const result = predictor.predict({
     required_count: 10,
@@ -312,6 +341,7 @@ function test_predictor_defaults_to_below_previous_float32_step_for_output_float
   assert.equal(result.ok, true);
   assert.equal(result.target_relative_wear, 0.069999999);
   assert.equal(result.outcomes[0].predicted_float, expectedBelowStep);
+  assert.notEqual(result.outcomes[0].predicted_float, oldPrevFloat32Step);
   assert.equal(result.outcomes[0].predicted_wearlevel, "Factory New");
   assert.equal(result.outcomes[0].name, "StatTrak™ AK-47 | Ice Coaled (Factory New)");
 }
@@ -322,10 +352,12 @@ function test_predictor_below_uses_raw_decimal_step_when_raw_sits_above_float32_
     catalog: createCraftOutcomeCatalog({dbPath})
   });
   const rawRelativeWear = 0.21;
-  const expectedStep = Number(Math.fround(rawRelativeWear).toFixed(12));
-  const expectedBelowStep = Number(prevFloat32(Math.fround(rawRelativeWear)).toFixed(12));
-  assert.equal(expectedStep, 0.209999993443);
-  assert.equal(expectedBelowStep, 0.209999978542);
+  const oldRawStep = Number(Math.fround(rawRelativeWear).toFixed(12));
+  const expectedBelowStep = Number(Math.fround(rawRelativeWear - 0.0000001).toFixed(12));
+  const oldPrevFloat32Step = Number(prevFloat32(Math.fround(rawRelativeWear)).toFixed(12));
+  assert.equal(oldRawStep, 0.209999993443);
+  assert.equal(expectedBelowStep, 0.209999904037);
+  assert.equal(oldPrevFloat32Step, 0.209999978542);
 
   const result = predictor.predict({
     required_count: 10,
@@ -336,8 +368,9 @@ function test_predictor_below_uses_raw_decimal_step_when_raw_sits_above_float32_
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.outcomes[0].predicted_float, expectedStep);
-  assert.notEqual(result.outcomes[0].predicted_float, expectedBelowStep);
+  assert.equal(result.outcomes[0].predicted_float, expectedBelowStep);
+  assert.notEqual(result.outcomes[0].predicted_float, oldRawStep);
+  assert.notEqual(result.outcomes[0].predicted_float, oldPrevFloat32Step);
 }
 
 function test_predictor_below_rejects_unreachable_zero_raw() {
@@ -358,14 +391,17 @@ function test_predictor_below_rejects_unreachable_zero_raw() {
   assert.equal(result.invalid_reason, "unreachable_below_target");
 }
 
-function test_predictor_below_uses_previous_float32_step_for_exact_step_input() {
+function test_predictor_below_uses_safe_offset_for_exact_float32_step_input() {
   const dbPath = buildPredictorFixtureDb();
   const predictor = createCraftOutcomePredictor({
     catalog: createCraftOutcomeCatalog({dbPath})
   });
   const rawRelativeWear = 0.20999999344348907;
   assert.equal(Math.fround(rawRelativeWear), rawRelativeWear);
-  const expectedBelowStep = Number(prevFloat32(Math.fround(rawRelativeWear)).toFixed(12));
+  const expectedBelowStep = Number(Math.fround(rawRelativeWear - 0.0000001).toFixed(12));
+  const oldPrevFloat32Step = Number(prevFloat32(Math.fround(rawRelativeWear)).toFixed(12));
+  assert.equal(expectedBelowStep, 0.209999889135);
+  assert.equal(oldPrevFloat32Step, 0.209999978542);
 
   const result = predictor.predict({
     required_count: 10,
@@ -377,6 +413,7 @@ function test_predictor_below_uses_previous_float32_step_for_exact_step_input() 
 
   assert.equal(result.ok, true);
   assert.equal(result.outcomes[0].predicted_float, expectedBelowStep);
+  assert.notEqual(result.outcomes[0].predicted_float, oldPrevFloat32Step);
 }
 
 function test_predictor_infinite_mode_keeps_input_float32_step() {
@@ -398,6 +435,70 @@ function test_predictor_infinite_mode_keeps_input_float32_step() {
 
   assert.equal(result.ok, true);
   assert.equal(result.outcomes[0].predicted_float, expectedStep);
+}
+
+function test_predictor_uses_float32_output_wear_chain_for_real_block_2_and_27_samples() {
+  const dbPath = buildDPrecisionPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const samples = [
+    {
+      label: "产物3 block 2",
+      materials: [
+        0.1982271969318390,
+        0.2294915914535522,
+        0.2214016467332840,
+        0.1960709542036056,
+        0.2215701788663864,
+        0.2264136672019958,
+        0.2265089154243469,
+        0.2265659868717193,
+        0.1696951240301132,
+        0.2269040942192077
+      ],
+      expectedD: 0.149999439716,
+      oldC: 0.149999448657
+    },
+    {
+      label: "产物3 block 27",
+      materials: [
+        0.2251613587141037,
+        0.1926978230476379,
+        0.1905441880226135,
+        0.1695592254400253,
+        0.2263000607490539,
+        0.2265266180038452,
+        0.2267705947160721,
+        0.2274858653545379,
+        0.2285781949758529,
+        0.2292252331972122
+      ],
+      expectedD: 0.149999439716,
+      oldC: 0.149999448657
+    }
+  ];
+
+  for (const sample of samples) {
+    const relativeWearD = float32SequentialMean(sample.materials);
+    const expectedD = Number(float32OutcomeWear(relativeWearD, 0, 0.7).toFixed(12));
+    const oldC = Number((relativeWearD * 0.7).toFixed(12));
+    assert.equal(expectedD, sample.expectedD, sample.label);
+    assert.equal(oldC, sample.oldC, sample.label);
+
+    const result = predictor.predict({
+      required_count: 10,
+      target_relative_wear: relativeWearD,
+      wear_approach_mode: "infinite",
+      input_rarity: "军规级",
+      stattrak: false,
+      groups: [{collection: "Control Case", count: 10}]
+    });
+
+    assert.equal(result.ok, true, sample.label);
+    assert.equal(result.outcomes[0].predicted_float, expectedD, sample.label);
+    assert.notEqual(result.outcomes[0].predicted_float, oldC, sample.label);
+  }
 }
 
 function test_predictor_keeps_missing_wear_bounds_and_missing_concrete_rows() {
@@ -473,9 +574,10 @@ function runTests() {
   test_predictor_uses_infinite_mode_input_float32_step_for_output_float();
   test_predictor_below_uses_raw_decimal_step_when_raw_sits_above_float32_step();
   test_predictor_below_rejects_unreachable_zero_raw();
-  test_predictor_below_uses_previous_float32_step_for_exact_step_input();
+  test_predictor_below_uses_safe_offset_for_exact_float32_step_input();
   test_predictor_infinite_mode_keeps_input_float32_step();
-  test_predictor_defaults_to_below_previous_float32_step_for_output_float();
+  test_predictor_uses_float32_output_wear_chain_for_real_block_2_and_27_samples();
+  test_predictor_defaults_to_below_safe_offset_for_output_float();
   test_predictor_keeps_missing_wear_bounds_and_missing_concrete_rows();
   console.log("craftOutcomePredictor tests passed");
 }

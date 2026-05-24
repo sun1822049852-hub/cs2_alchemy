@@ -650,6 +650,82 @@ async function test_batch_selection_summarizes_multiple_failures({DateImpl}) {
   assert.doesNotMatch(app.state.batchCraftStatusText, /选材完成：0 个账号，共 0 组配方/);
 }
 
+async function test_batch_selection_preserves_preset_target_wear_raw_in_assist_request({DateImpl}) {
+  let capturedRequest = null;
+  const app = loadBatchCraftAssistSelect({
+    Date: DateImpl,
+    state: {
+      batchCraftAccounts: ["acc-raw"],
+      batchCraftSelectedPresetId: "preset-raw",
+      batchCraftLimit: 1,
+      batchCraftQueue: [],
+      batchCraftBusy: false,
+      batchCraftStatusText: "",
+      batchCraftStatusError: false,
+      craftAssistPresets: [{
+        id: "preset-raw",
+        target_wear: Math.fround(0.21),
+        target_wear_raw: "0.21"
+      }],
+      batchCraftUseComponentItems: true,
+      batchCraftIncludeCooling: false,
+      batchCraftFastMode: true,
+      batchCraftApproachMode: true,
+      batchCraftWearOffsetPct: 17
+    },
+    hasCachedSnapshotForAccount(username) {
+      assert.equal(username, "acc-raw");
+      return true;
+    },
+    sanitizeCraftAssistPresetPayload(preset) {
+      assert.equal(preset.id, "preset-raw");
+      return {
+        target_wear: Math.fround(0.21),
+        target_wear_raw: "0.21",
+        wear_filter_mode: "relative",
+        materials: [{id: "mat-raw", role: "main", count: 10, items: [{id: "mat-raw__1", name: "AK"}]}]
+      };
+    },
+    getCraftRowsForAccount(username) {
+      assert.equal(username, "acc-raw");
+      return [{asset_id: "seed-raw"}];
+    },
+    normalizeCraftAssistFilterMode(value) {
+      return String(value || "").trim() === "absolute" ? "absolute" : "relative";
+    },
+    parseOptionalWear01(value) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : null;
+    },
+    normalizeCraftAssistMaterialsForRun({materials}) {
+      return Array.isArray(materials) ? materials : [];
+    },
+    craftAssistTargetCountFromMaterials(materials) {
+      assert.equal(materials.length, 1);
+      return 10;
+    },
+    async api(route, options = {}) {
+      assert.equal(route, "/api/craft/assist-select");
+      capturedRequest = JSON.parse(String(options.body || "{}"));
+      return {
+        ok: true,
+        item_ids: ["raw-1", "raw-2", "raw-3", "raw-4", "raw-5", "raw-6", "raw-7", "raw-8", "raw-9", "raw-10"],
+        overall: Math.fround(0.21)
+      };
+    },
+    normalizeCraftRecipeItemIds(ids) {
+      return Array.from(new Set((Array.isArray(ids) ? ids : []).map((value) => String(value || "").trim()).filter(Boolean)));
+    }
+  });
+
+  await app.runBatchCraftAssistSelect();
+
+  assert.ok(capturedRequest, "expected batch run to call assist-select");
+  assert.equal(capturedRequest.target_wear, Math.fround(0.21));
+  assert.equal(capturedRequest.target_wear_raw, "0.21");
+  assert.notEqual(capturedRequest.target_wear_raw, String(Math.fround(0.21)));
+}
+
 async function main() {
   const RealDate = Date;
   class FakeDate extends RealDate {
@@ -677,6 +753,7 @@ async function main() {
     await test_batch_selection_blocks_existing_same_account_recipe_items({DateImpl: FakeDate});
     await test_batch_selection_failure_preserves_existing_queue_entries({DateImpl: FakeDate});
     await test_batch_selection_summarizes_multiple_failures({DateImpl: FakeDate});
+    await test_batch_selection_preserves_preset_target_wear_raw_in_assist_request({DateImpl: FakeDate});
   } finally {
     Math.random = originalRandom;
   }

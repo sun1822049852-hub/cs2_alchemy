@@ -5,6 +5,7 @@ const {
   rarityLabelFromRank
 } = require("./skinAlchemyRules");
 const {resolveCraftAssistTargetStepSpec} = require("./craftAssistFloat32Step");
+const {outputWearFromRelativeFloat32} = require("./wearFloat32Math");
 
 const ALLOWED_REQUIRED_COUNTS = new Set([5, 10]);
 const FLOAT_PRECISION = 12;
@@ -191,7 +192,7 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
             continue;
           }
           const predictedFloat = roundNumber(
-            quantizedRelativeWear * Number(candidate.wear_range) + Number(candidate.minfloat)
+            outputWearFromRelativeFloat32(quantizedRelativeWear, candidate.minfloat, candidate.maxfloat)
           );
           const wearlevel = predictedWearLevel(predictedFloat);
           const concrete = snapshot.wearMap.get(candidate.basemarkethashname)?.get(wearlevel) || null;
