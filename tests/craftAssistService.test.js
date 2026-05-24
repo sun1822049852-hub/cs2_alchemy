@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const Module = require("node:module");
+const path = require("node:path");
 
 const {
   createCraftAssistService,
@@ -40,6 +42,20 @@ function makeRow({
   };
 }
 
+function makeCandidate(id, value, groupIndex, role) {
+  return {
+    id: String(id),
+    value: Number(value),
+    relative_value: Number(value),
+    groupIndex: Number(groupIndex),
+    role: String(role || ""),
+    row: {
+      asset_id: String(id),
+      rarity: 4
+    }
+  };
+}
+
 function inputStepForBelowTargetStep(targetStep) {
   return nextFloat32(Math.fround(targetStep));
 }
@@ -68,6 +84,46 @@ function runSelectWithContext({selectionContext, targetWear, materials, blockedI
     wearOffsetPct: RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
     ...extraArgs
   });
+}
+
+async function inspectMatchedContextRefine({fastResult, targetWear, rows, materials, ...extraArgs}) {
+  const inspection = await __test.inspectCraftAssistContextRefineMatchForSelection({
+    rows,
+    targetWear,
+    wearFilterMode: "relative",
+    materials,
+    blockedIds: [],
+    includeCooling: false,
+    wearOffsetPct: RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+    matchedRarity: fastResult && fastResult.rarity,
+    matchedOverall: fastResult && fastResult.overall,
+    ...extraArgs
+  });
+  assert.equal(inspection.ok, true);
+  return inspection;
+}
+
+function makeSeedRelaySingleGroup(values, count = 10) {
+  return [{
+    index: 0,
+    material: {name: "Solo", role: "main", count},
+    candidates: values.map((value, index) => makeCandidate(`seed-solo-${index + 1}`, value, 0, "main"))
+  }];
+}
+
+function makeSeedRelayDualGroups(mainValues, auxValues, mainCount = 8, auxCount = 2) {
+  return [
+    {
+      index: 0,
+      material: {name: "Main", role: "main", count: mainCount},
+      candidates: mainValues.map((value, index) => makeCandidate(`seed-main-${index + 1}`, value, 0, "main"))
+    },
+    {
+      index: 1,
+      material: {name: "Aux", role: "aux", count: auxCount},
+      candidates: auxValues.map((value, index) => makeCandidate(`seed-aux-${index + 1}`, value, 1, "aux"))
+    }
+  ];
 }
 
 function pickedIds(result) {
@@ -131,6 +187,103 @@ async function withEnv(envMap, run) {
       else process.env[key] = value;
     }
   }
+}
+
+function loadCraftAssistServiceWithOverrides({searchOverrides = null, shardOverrides = null} = {}) {
+  const servicePath = require.resolve("../node_sidecar/src/services/craftAssistService");
+  const serviceSourcePath = path.join(__dirname, "..", "node_sidecar", "src", "services", "craftAssistService.js");
+  const actualSearch = require("../node_sidecar/src/services/craftAssistSearch");
+  const actualShardPrefilter = require("../node_sidecar/src/services/craftAssistShardPrefilter");
+  const originalLoad = Module._load;
+  delete require.cache[servicePath];
+
+  Module._load = function patchedLoad(request, parent, isMain) {
+    if (parent && parent.filename === serviceSourcePath && request === "./craftAssistSearch") {
+      return {
+        ...actualSearch,
+        ...(searchOverrides && typeof searchOverrides === "object" ? searchOverrides : {})
+      };
+    }
+    if (parent && parent.filename === serviceSourcePath && request === "./craftAssistShardPrefilter") {
+      return {
+        ...actualShardPrefilter,
+        ...(shardOverrides && typeof shardOverrides === "object" ? shardOverrides : {})
+      };
+    }
+    return originalLoad(request, parent, isMain);
+  };
+
+  try {
+    return require(servicePath);
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[servicePath];
+  }
+}
+
+async function runSelectWithCapturedSearchCalls({
+  selectArgs = {},
+  searchOverrides = null,
+  shardOverrides = null
+} = {}) {
+  const actualSearch = require("../node_sidecar/src/services/craftAssistSearch");
+  const searchOverrideMap = searchOverrides && typeof searchOverrides === "object"
+    ? searchOverrides
+    : {};
+  const delegatedSearch = typeof searchOverrideMap.searchCraftAssistBestSolution === "function"
+    ? searchOverrideMap.searchCraftAssistBestSolution
+    : actualSearch.searchCraftAssistBestSolution;
+  const searchCalls = [];
+  const service = loadCraftAssistServiceWithOverrides({
+    searchOverrides: {
+      ...searchOverrideMap,
+      searchCraftAssistBestSolution(args = {}) {
+        searchCalls.push({
+          kind: classifyCraftAssistSearchGroups(args.groups),
+          enableRawBelowTopKFastPath: args.enableRawBelowTopKFastPath === true,
+          hasTargetStepSpec: !!args.targetStepSpec,
+          approachMode: String(args.approachMode || "")
+        });
+        return delegatedSearch(args);
+      }
+    },
+    shardOverrides
+  });
+  const result = await service.selectCraftAssistForRecipe(selectArgs);
+  return {
+    result,
+    searchCalls
+  };
+}
+
+function classifyCraftAssistSearchGroups(groups) {
+  const candidateIds = (Array.isArray(groups) ? groups : [])
+    .flatMap((group) => Array.isArray(group && group.candidates) ? group.candidates : [])
+    .map((candidate) => String(candidate && candidate.id || ""))
+    .filter(Boolean);
+  if (!candidateIds.length) return "unknown";
+  if (candidateIds.every((id) => id.startsWith("base-"))) return "base";
+  if (candidateIds.every((id) => id.startsWith("expand-"))) return "expand";
+  if (candidateIds.every((id) => id.startsWith("full-"))) return "full";
+  return "unknown";
+}
+
+function makeSolvedFromGroups(groups, overall) {
+  return {
+    overall: Number(overall),
+    scoreTuple: [0, 0, Number(overall)],
+    materialResults: (Array.isArray(groups) ? groups : []).map((group) => ({
+      material: group && group.material ? {...group.material} : {},
+      selected: Array.isArray(group && group.candidates)
+        ? group.candidates
+          .slice(0, Number(group && group.material && group.material.count || 0))
+          .map((candidate) => ({
+            ...candidate,
+            row: candidate && candidate.row ? {...candidate.row} : {asset_id: String(candidate && candidate.id || ""), rarity: 4}
+          }))
+        : []
+    }))
+  };
 }
 
 async function captureConsoleLogs(run) {
@@ -651,7 +804,9 @@ async function test_multi_material_returns_step_target_selection_without_legacy_
     ["a10", "a11", "a12", "a2", "a6", "a7", "a8", "a9", "m1", "m2"]
   );
   assert.equal(Math.fround(result.overall), Math.fround(0.21));
-  assert.equal(result.selection_trace, null);
+  assert.equal(!!(result.selection_trace && result.selection_trace.seed), true);
+  assert.equal(result.selection_trace.seed.kind, "seed_hit");
+  assert.equal(result.selection_trace.seed.mode, "multi_material_role");
 }
 
 async function test_prebuilt_selection_context_matches_direct_selection_even_with_blocked_ids() {
@@ -960,16 +1115,303 @@ async function test_fast_flag_false_forces_old_logic_even_when_env_enabled() {
   });
 }
 
-async function test_step_target_prefilter_window_hit_uses_context_refine_when_best_is_not_primary() {
+async function test_fast_flag_true_enables_single_material_raw_below_top_k_fast_path() {
+  const raw = "0.214285";
+  const targetStep = resolveCraftAssistTargetStepSpec({
+    inputStep: Math.fround(Number(raw)),
+    inputRaw: raw,
+    approachMode: "below",
+    offsetValue: 0
+  }).targetStep;
+  const rows = [
+    ...makeUniformStepRows({
+      prefix: "raw-fast-hit-target",
+      name: "Raw Fast Hit",
+      relative: targetStep
+    }),
+    ...makeSingleMaterialRowsFromValues({
+      prefix: "raw-fast-hit-lower",
+      name: "Raw Fast Hit",
+      values: [targetStep - 0.000001, targetStep - 0.000002]
+    })
+  ];
+
+  const result = await runSelect({
+    rows,
+    targetWear: Math.fround(Number(raw)),
+    targetWearRaw: raw,
+    wearApproachMode: "below",
+    wearOffsetPct: 0,
+    enableFastCraftAssist: true,
+    materials: [
+      uniformStepMaterial("Raw Fast Hit")
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.selection_trace && result.selection_trace.mode, "single_material_raw_below_top_k");
+  assert.equal(result.selection_trace.steps[0].stage, "exact_top_k_all_below_raw");
+  assert.equal(Math.fround(result.overall), targetStep);
+  assert.deepEqual(
+    pickedIds(result),
+    Array.from({length: 10}, (_, index) => `raw-fast-hit-target-${index + 1}`).sort()
+  );
+}
+
+async function test_fast_flag_false_keeps_single_material_raw_below_top_k_fast_path_disabled() {
+  const raw = "0.214285";
+  const targetStep = resolveCraftAssistTargetStepSpec({
+    inputStep: Math.fround(Number(raw)),
+    inputRaw: raw,
+    approachMode: "below",
+    offsetValue: 0
+  }).targetStep;
+  const rows = [
+    ...makeUniformStepRows({
+      prefix: "raw-fast-opt-out-target",
+      name: "Raw Fast Opt Out",
+      relative: targetStep
+    }),
+    ...makeSingleMaterialRowsFromValues({
+      prefix: "raw-fast-opt-out-lower",
+      name: "Raw Fast Opt Out",
+      values: [targetStep - 0.000001, targetStep - 0.000002]
+    })
+  ];
+
+  const result = await runSelect({
+    rows,
+    targetWear: Math.fround(Number(raw)),
+    targetWearRaw: raw,
+    wearApproachMode: "below",
+    wearOffsetPct: 0,
+    enableFastCraftAssist: false,
+    materials: [
+      uniformStepMaterial("Raw Fast Opt Out")
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.notEqual(result.selection_trace && result.selection_trace.mode, "single_material_raw_below_top_k");
+  assert.equal(Math.fround(result.overall), targetStep);
+  assert.deepEqual(
+    pickedIds(result),
+    Array.from({length: 10}, (_, index) => `raw-fast-opt-out-target-${index + 1}`).sort()
+  );
+}
+
+async function test_fast_flag_true_raw_below_top_k_falls_back_when_offset_window_exists() {
+  const raw = "0.214285";
+  const targetWindow = targetWindowSpecForTest({
+    inputStep: Math.fround(Number(raw)),
+    inputRaw: raw,
+    approachMode: "below",
+    wearOffsetPct: 1
+  });
+  const rows = [
+    ...makeUniformStepRows({
+      prefix: "raw-fast-offset-high",
+      name: "Raw Fast Offset",
+      relative: targetWindow.upperTargetStep
+    }),
+    ...makeUniformStepRows({
+      prefix: "raw-fast-offset-low",
+      name: "Raw Fast Offset",
+      relative: targetWindow.lowerTargetStep,
+      count: 1
+    })
+  ];
+
+  const slow = await runSelect({
+    rows,
+    targetWear: Math.fround(Number(raw)),
+    targetWearRaw: raw,
+    wearApproachMode: "below",
+    wearOffsetPct: 1,
+    enableFastCraftAssist: false,
+    materials: [
+      uniformStepMaterial("Raw Fast Offset")
+    ]
+  });
+  const {result: fast, searchCalls} = await runSelectWithCapturedSearchCalls({
+    selectArgs: {
+      rows,
+      targetWear: Math.fround(Number(raw)),
+      targetWearRaw: raw,
+      wearFilterMode: "relative",
+      wearApproachMode: "below",
+      wearOffsetPct: 1,
+      enableFastCraftAssist: true,
+      materials: [
+        uniformStepMaterial("Raw Fast Offset")
+      ],
+      blockedIds: [],
+      includeCooling: false
+    }
+  });
+
+  assert.equal(slow.ok, true);
+  assert.equal(fast.ok, true);
+  assert.equal(searchCalls.length, 1);
+  assert.equal(searchCalls[0].enableRawBelowTopKFastPath, true);
+  assert.equal(searchCalls[0].hasTargetStepSpec, true);
+  assert.notEqual(fast.selection_trace && fast.selection_trace.mode, "single_material_raw_below_top_k");
+  assert.deepEqual(pickedIds(fast), pickedIds(slow));
+  assert.equal(Math.fround(fast.overall), Math.fround(slow.overall));
+  assert.equal(pickedIds(fast).includes("raw-fast-offset-low-1"), false);
+}
+
+async function test_fast_flag_true_raw_below_top_k_falls_back_when_any_candidate_reaches_raw_ceiling() {
+  const raw = "0.214285";
+  const targetStep = Math.fround(Number(raw) - 0.0000001);
+  const rows = [
+    ...makeUniformStepRows({
+      prefix: "raw-fast-ceiling-safe",
+      name: "Raw Fast Ceiling",
+      relative: targetStep
+    }),
+    makeRow({
+      id: "raw-fast-ceiling-blocker",
+      name: "Raw Fast Ceiling",
+      relative: Number(raw)
+    })
+  ];
+
+  const slow = await runSelect({
+    rows,
+    targetWear: Math.fround(Number(raw)),
+    targetWearRaw: raw,
+    wearApproachMode: "below",
+    wearOffsetPct: 0,
+    enableFastCraftAssist: false,
+    materials: [
+      uniformStepMaterial("Raw Fast Ceiling")
+    ]
+  });
+  const {result: fast, searchCalls} = await runSelectWithCapturedSearchCalls({
+    selectArgs: {
+      rows,
+      targetWear: Math.fround(Number(raw)),
+      targetWearRaw: raw,
+      wearFilterMode: "relative",
+      wearApproachMode: "below",
+      wearOffsetPct: 0,
+      enableFastCraftAssist: true,
+      materials: [
+        uniformStepMaterial("Raw Fast Ceiling")
+      ],
+      blockedIds: [],
+      includeCooling: false
+    }
+  });
+
+  assert.equal(slow.ok, true);
+  assert.equal(fast.ok, true);
+  assert.equal(searchCalls.length, 1);
+  assert.equal(searchCalls[0].enableRawBelowTopKFastPath, true);
+  assert.equal(searchCalls[0].hasTargetStepSpec, true);
+  assert.notEqual(fast.selection_trace && fast.selection_trace.mode, "single_material_raw_below_top_k");
+  assert.deepEqual(pickedIds(fast), pickedIds(slow));
+  assert.equal(Math.fround(fast.overall), Math.fround(slow.overall));
+  assert.equal(pickedIds(fast).includes("raw-fast-ceiling-blocker"), false);
+}
+
+async function test_seed_relay_short_circuits_single_material_when_seed_proves_no_raw_solution() {
+  const relay = __test.runCraftAssistBaselineRelay({
+    groups: makeSeedRelaySingleGroup(Array.from({length: 10}, (_, index) => 0.51 + index * 0.001)),
+    targetValue: 0.5,
+    approachMode: "below",
+    baselineApproachMode: "below"
+  });
+
+  assert.equal(relay && relay.solved, null);
+  assert.equal(relay && relay.seedSummary && relay.seedSummary.kind, "seed_proved_no_raw_solution");
+  assert.equal(relay && relay.seedSummary && relay.seedSummary.mode, "single_material");
+}
+
+async function test_seed_relay_short_circuits_dual_material_when_seed_proves_no_raw_solution() {
+  const relay = __test.runCraftAssistBaselineRelay({
+    groups: makeSeedRelayDualGroups(
+      Array.from({length: 8}, (_, index) => 0.56 + index * 0.001),
+      Array.from({length: 2}, (_, index) => 0.55 + index * 0.001)
+    ),
+    targetValue: 0.5,
+    approachMode: "below",
+    baselineApproachMode: "below"
+  });
+
+  assert.equal(relay && relay.solved, null);
+  assert.equal(relay && relay.seedSummary && relay.seedSummary.kind, "seed_proved_no_raw_solution");
+  assert.equal(relay && relay.seedSummary && relay.seedSummary.mode, "multi_material_role");
+}
+
+async function test_seed_hit_attaches_seed_trace_on_single_material_success() {
+  const result = await runSelect({
+    rows: [
+      makeRow({id: "s1", name: "Solo", relative: 0.44}),
+      makeRow({id: "s2", name: "Solo", relative: 0.45}),
+      makeRow({id: "s3", name: "Solo", relative: 0.46}),
+      makeRow({id: "s4", name: "Solo", relative: 0.47}),
+      makeRow({id: "s5", name: "Solo", relative: 0.48}),
+      makeRow({id: "s6", name: "Solo", relative: 0.49}),
+      makeRow({id: "s7", name: "Solo", relative: 0.491}),
+      makeRow({id: "s8", name: "Solo", relative: 0.492}),
+      makeRow({id: "s9", name: "Solo", relative: 0.493}),
+      makeRow({id: "s10", name: "Solo", relative: 0.494}),
+      makeRow({id: "s11", name: "Solo", relative: 0.501}),
+      makeRow({id: "s12", name: "Solo", relative: 0.502}),
+      makeRow({id: "s13", name: "Solo", relative: 0.503})
+    ],
+    targetWear: 0.5,
+    wearApproachMode: "below",
+    wearOffsetPct: 0,
+    materials: [
+      {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(!!(result.selection_trace && result.selection_trace.seed), true);
+  assert.equal(result.selection_trace.seed.kind, "seed_hit");
+  assert.equal(result.selection_trace.seed.mode, "single_material");
+}
+
+async function test_seed_hit_keeps_target_step_handling_in_baseline() {
+  const inputStep = Math.fround(0.27);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below",
+    offsetValue: 0.01
+  });
+  const result = await runSelect({
+    rows: [
+      ...Array.from({length: 10}, (_, index) => makeRow({id: `lower-${index + 1}`, name: "Solo", relative: targetStepSpec.lowerTargetStep})),
+      ...Array.from({length: 10}, (_, index) => makeRow({id: `target-${index + 1}`, name: "Solo", relative: targetStepSpec.targetStep}))
+    ],
+    targetWear: inputStep,
+    wearApproachMode: "below",
+    wearOffsetPct: (0.01 / inputStep) * 100,
+    materials: [
+      {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), targetStepSpec.targetStep);
+  assert.equal(!!(result.selection_trace && result.selection_trace.seed), true);
+  assert.equal(result.selection_trace.seed.kind, "seed_hit");
+}
+
+async function test_step_target_prefilter_window_hit_stops_before_expand_when_best_is_not_primary() {
   const rows = makeContextRefineRows();
   await withEnv({
     ENABLE_OVERSIZED_PREFILTER: "1",
     OVERSIZED_2_SHARDS_THRESHOLD: "20",
     OVERSIZED_4_SHARDS_THRESHOLD: "999",
-    SHARD_TOP_K: "18",
-    SHARD_EDGE_KEEP_PER_SIDE: "2",
-    EXPAND_SHARD_TOP_K: "28",
-    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHARD_TOP_K: "2",
+    SHARD_EDGE_KEEP_PER_SIDE: "0",
+    EXPAND_SHARD_TOP_K: "2",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "0",
     SHORTLIST_MIN: "22",
     SHORTLIST_PER_REQUIRED: "4",
     SHORTLIST_HARD_MAX: "64"
@@ -985,13 +1427,6 @@ async function test_step_target_prefilter_window_hit_uses_context_refine_when_be
       approachMode: "below",
       wearOffsetPct: 100
     });
-    const slow = await runSelect({
-      rows,
-      targetWear,
-      enableFastCraftAssist: false,
-      wearOffsetPct: 100,
-      materials
-    });
     const fast = await runSelect({
       rows,
       targetWear,
@@ -1000,33 +1435,16 @@ async function test_step_target_prefilter_window_hit_uses_context_refine_when_be
       materials
     });
 
-    assert.equal(slow.ok, true);
     assert.equal(fast.ok, true);
-    assert.equal(fast.overall > slow.overall, true);
     assert.equal(Math.fround(fast.overall) >= targetWindow.lowerTargetStep, true);
     assert.equal(Math.fround(fast.overall) <= targetWindow.targetStep, true);
+    assert.notEqual(Math.fround(fast.overall), targetWindow.targetStep);
     assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
-    assert.equal(fast.selection_trace.prefilter.retryMode, "expand");
-    if (Math.fround(fast.overall) !== targetWindow.targetStep) {
-      assert.equal(!!fast.selection_trace.prefilter.contextRefine, true);
-      assert.equal(fast.selection_trace.prefilter.contextRefine.entered, true);
-      assert.equal(fast.selection_trace.prefilter.contextRefine.acceptedCount > 0, true);
-    }
+    assert.equal(fast.selection_trace.prefilter.retryMode, "base");
+    assert.equal(fast.selection_trace.prefilter.contextRefine, null);
     assert.deepEqual(
       fast.selection_trace.prefilter.phases.map((phase) => phase.phaseName),
-      ["prefilter/base", "prefilter/expand"]
-    );
-    assert.deepEqual(fast.selection_trace.prefilter.phases[0].prefilteredIndexes, [1, 2]);
-    assert.deepEqual(fast.selection_trace.prefilter.phases[1].prefilteredIndexes, [1, 2]);
-    assert.equal(
-      fast.selection_trace.prefilter.phases[1].groups[0].candidateCountAfter
-      > fast.selection_trace.prefilter.phases[0].groups[0].candidateCountAfter,
-      true
-    );
-    assert.equal(
-      fast.selection_trace.prefilter.phases[1].groups[1].candidateCountAfter
-      > fast.selection_trace.prefilter.phases[0].groups[1].candidateCountAfter,
-      true
+      ["prefilter/base"]
     );
   });
 }
@@ -1060,6 +1478,30 @@ async function test_step_target_solved_candidate_requires_exact_target_step_even
       legacyInfiniteSolved,
       0.3,
       "infinite"
+    ),
+    true
+  );
+}
+
+async function test_step_target_below_without_offset_candidate_accepts_any_result_under_original_target() {
+  const inputStep = Math.fround(0.27);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    approachMode: "below"
+  });
+  const belowStrictStepSolved = {
+    overall: prevFloat32(targetStepSpec.targetStep),
+    materialResults: [{selected: []}]
+  };
+
+  assert.equal(targetStepSpec.hasOffsetWindow, false);
+  assert.equal(belowStrictStepSolved.overall < inputStep, true);
+  assert.equal(
+    __test.isCraftAssistSolvedCandidate(
+      belowStrictStepSolved,
+      inputStep,
+      "below",
+      targetStepSpec
     ),
     true
   );
@@ -1103,6 +1545,476 @@ async function test_step_target_fast_base_hit_returns_before_expand_and_context_
       ["prefilter/base"]
     );
     assert.equal(fast.selection_trace.prefilter.contextRefine, null);
+  });
+}
+
+async function test_step_target_fast_base_window_hit_returns_before_expand_after_batch() {
+  const rows = makeContextRefineRows();
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "20",
+    OVERSIZED_4_SHARDS_THRESHOLD: "999",
+    SHARD_TOP_K: "2",
+    SHARD_EDGE_KEEP_PER_SIDE: "0",
+    EXPAND_SHARD_TOP_K: "2",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "0",
+    SHORTLIST_MIN: "22",
+    SHORTLIST_PER_REQUIRED: "4",
+    SHORTLIST_HARD_MAX: "64"
+  }, async () => {
+    const targetWear = inputStepForBelowTargetStep(0.2142);
+    const targetWindow = targetWindowSpecForTest({
+      inputStep: targetWear,
+      approachMode: "below",
+      wearOffsetPct: 100
+    });
+    const fast = await runSelect({
+      rows,
+      targetWear,
+      enableFastCraftAssist: true,
+      wearOffsetPct: 100,
+      materials: [
+        {name: "Main", names: ["Main"], role: "main", count: 2, wear_min: 0, wear_max: 1},
+        {name: "AuxA", names: ["AuxA"], role: "aux", count: 4, wear_min: 0, wear_max: 1},
+        {name: "AuxB", names: ["AuxB"], role: "aux", count: 4, wear_min: 0, wear_max: 1}
+      ]
+    });
+
+    assert.equal(fast.ok, true);
+    assert.equal(Math.fround(fast.overall) >= targetWindow.lowerTargetStep, true);
+    assert.equal(Math.fround(fast.overall) <= targetWindow.targetStep, true);
+    assert.notEqual(Math.fround(fast.overall), targetWindow.targetStep);
+    assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
+    assert.equal(fast.selection_trace.prefilter.retryMode, "base");
+    assert.deepEqual(
+      fast.selection_trace.prefilter.phases.map((phase) => phase.phaseName),
+      ["prefilter/base"]
+    );
+    assert.equal(fast.selection_trace.prefilter.contextRefine, null);
+  });
+}
+
+async function test_target_step_without_prefilter_does_not_rerun_full_baseline() {
+  const inputStep = Math.fround(0.5);
+  const targetWindow = targetWindowSpecForTest({
+    inputStep,
+    approachMode: "below",
+    wearOffsetPct: 1
+  });
+  const rows = makeUniformStepRows({
+    prefix: "full-no-prefilter",
+    name: "No Prefilter",
+    relative: targetWindow.lowerTargetStep,
+    count: 12
+  });
+  const searchCalls = [];
+  const service = loadCraftAssistServiceWithOverrides({
+    searchOverrides: {
+      searchCraftAssistSeed() {
+        return null;
+      },
+      searchCraftAssistBestSolution({groups, targetStepSpec}) {
+        const kind = classifyCraftAssistSearchGroups(groups);
+        assert.notEqual(kind, "unknown");
+        searchCalls.push(kind);
+        return makeSolvedFromGroups(groups, targetStepSpec.lowerTargetStep);
+      }
+    }
+  });
+
+  const result = await service.selectCraftAssistForRecipe({
+    rows,
+    targetWear: inputStep,
+    wearFilterMode: "relative",
+    wearApproachMode: "below",
+    wearOffsetPct: 1,
+    materials: [
+      uniformStepMaterial("No Prefilter")
+    ],
+    blockedIds: [],
+    includeCooling: false,
+    enableFastCraftAssist: false
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), targetWindow.lowerTargetStep);
+  assert.deepEqual(searchCalls, ["full"]);
+}
+
+async function test_service_passes_existing_wear_offset_as_search_entry_window() {
+  const targetWear = Math.fround(0.21);
+  const wearOffsetPct = 1;
+  const expectedEntryOffsetValue = Number(targetWear) * (wearOffsetPct / 100);
+  const targetWindow = targetWindowSpecForTest({
+    inputStep: targetWear,
+    inputRaw: "0.21",
+    approachMode: "below",
+    wearOffsetPct
+  });
+  const rows = makeUniformStepRows({
+    prefix: "entry-window-service",
+    name: "Entry Window Service",
+    relative: targetWindow.targetStep,
+    count: 12
+  });
+  const selectArgs = {
+    rows,
+    targetWear,
+    targetWearRaw: "0.21",
+    wearFilterMode: "relative",
+    wearApproachMode: "below",
+    wearOffsetPct,
+    enableFastCraftAssist: false,
+    materials: [
+      uniformStepMaterial("Entry Window Service")
+    ],
+    blockedIds: [],
+    includeCooling: false
+  };
+  assert.equal(Object.prototype.hasOwnProperty.call(selectArgs, "entryOffsetValue"), false);
+
+  const searchCalls = [];
+  const service = loadCraftAssistServiceWithOverrides({
+    searchOverrides: {
+      searchCraftAssistSeed() {
+        return null;
+      },
+      searchCraftAssistBestSolution(args = {}) {
+        searchCalls.push({
+          approachMode: String(args.approachMode || ""),
+          entryApproachMode: args.entryApproachMode == null ? null : String(args.entryApproachMode),
+          entryOffsetValue: args.entryOffsetValue
+        });
+        return makeSolvedFromGroups(args.groups, args.targetStepSpec.targetStep);
+      }
+    }
+  });
+  const result = await service.selectCraftAssistForRecipe(selectArgs);
+
+  assert.equal(result.ok, true);
+  assert.equal(searchCalls.length, 1);
+  assert.equal(searchCalls[0].approachMode, "infinite");
+  assert.equal(searchCalls[0].entryApproachMode, "below");
+  assert.equal(
+    Math.abs(Number(searchCalls[0].entryOffsetValue) - expectedEntryOffsetValue) < 1e-12,
+    true
+  );
+}
+
+async function test_target_step_rarity_full_prefilter_fallback_does_not_rerun_full_baseline() {
+  const inputStep = Math.fround(0.5);
+  const targetWindow = targetWindowSpecForTest({
+    inputStep,
+    approachMode: "below",
+    wearOffsetPct: 1
+  });
+  const rows = makeUniformStepRows({
+    prefix: "full-rarity-fallback",
+    name: "Rarity Fallback",
+    relative: targetWindow.lowerTargetStep,
+    count: 12
+  });
+  const searchCalls = [];
+  const service = loadCraftAssistServiceWithOverrides({
+    searchOverrides: {
+      searchCraftAssistSeed() {
+        return null;
+      },
+      searchCraftAssistBestSolution({groups, targetStepSpec, enableRawBelowTopKFastPath}) {
+        const kind = classifyCraftAssistSearchGroups(groups);
+        assert.notEqual(kind, "unknown");
+        searchCalls.push({
+          kind,
+          enableRawBelowTopKFastPath: enableRawBelowTopKFastPath === true
+        });
+        return makeSolvedFromGroups(groups, targetStepSpec.lowerTargetStep);
+      }
+    },
+    shardOverrides: {
+      resolvePrefilterOptions() {
+        return {enableOversizedPrefilter: true};
+      },
+      resolveShardCount() {
+        return 1;
+      },
+      async runPrefilterPhase({phaseName}) {
+        return {
+          kind: "phase_unavailable",
+          prefilterTrace: {phaseName}
+        };
+      }
+    }
+  });
+
+  const result = await service.selectCraftAssistForRecipe({
+    rows,
+    targetWear: inputStep,
+    wearFilterMode: "relative",
+    wearApproachMode: "below",
+    wearOffsetPct: 1,
+    materials: [
+      uniformStepMaterial("Rarity Fallback")
+    ],
+    blockedIds: [],
+    includeCooling: false,
+    enableFastCraftAssist: true
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), targetWindow.lowerTargetStep);
+  assert.deepEqual(searchCalls, [{
+    kind: "full",
+    enableRawBelowTopKFastPath: true
+  }]);
+  assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), true);
+  assert.equal(result.selection_trace.prefilter.retryMode, "rarity_full");
+  assert.equal(result.selection_trace.prefilter.usedRarityFullFallback, true);
+}
+
+async function test_target_step_base_window_hit_still_keeps_outer_full_fallback() {
+  const inputStep = Math.fround(0.5);
+  const targetWindow = targetWindowSpecForTest({
+    inputStep,
+    approachMode: "below",
+    wearOffsetPct: 1
+  });
+  const rows = makeUniformStepRows({
+    prefix: "full-base-window",
+    name: "Base Window",
+    relative: targetWindow.targetStep,
+    count: 12
+  });
+  const baseGroups = [{
+    index: 0,
+    material: {name: "Base Window", names: ["Base Window"], role: "main", count: 10, wear_min: 0, wear_max: 1},
+    candidates: Array.from({length: 10}, (_, index) => makeCandidate(
+      `base-window-${index + 1}`,
+      targetWindow.lowerTargetStep,
+      0,
+      "main"
+    ))
+  }];
+  const searchCalls = [];
+  const service = loadCraftAssistServiceWithOverrides({
+    searchOverrides: {
+      searchCraftAssistSeed() {
+        return null;
+      },
+      searchCraftAssistBestSolution({groups, targetStepSpec, enableRawBelowTopKFastPath}) {
+        const kind = classifyCraftAssistSearchGroups(groups);
+        assert.notEqual(kind, "unknown");
+        searchCalls.push({
+          kind,
+          enableRawBelowTopKFastPath: enableRawBelowTopKFastPath === true
+        });
+        if (kind === "base") {
+          return makeSolvedFromGroups(groups, targetStepSpec.lowerTargetStep);
+        }
+        return makeSolvedFromGroups(groups, targetStepSpec.targetStep);
+      }
+    },
+    shardOverrides: {
+      resolvePrefilterOptions() {
+        return {enableOversizedPrefilter: true};
+      },
+      resolveShardCount() {
+        return 1;
+      },
+      async runPrefilterPhase({phaseName}) {
+        return {
+          kind: phaseName === "prefilter/base" ? "phase_ready" : "phase_unavailable",
+          groups: phaseName === "prefilter/base" ? baseGroups : null,
+          prefilterTrace: {phaseName}
+        };
+      }
+    }
+  });
+
+  const result = await service.selectCraftAssistForRecipe({
+    rows,
+    targetWear: inputStep,
+    wearFilterMode: "relative",
+    wearApproachMode: "below",
+    wearOffsetPct: 1,
+    materials: [
+      uniformStepMaterial("Base Window")
+    ],
+    blockedIds: [],
+    includeCooling: false,
+    enableFastCraftAssist: true
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), targetWindow.targetStep);
+  assert.deepEqual(searchCalls, [
+    {kind: "base", enableRawBelowTopKFastPath: true},
+    {kind: "full", enableRawBelowTopKFastPath: true}
+  ]);
+  assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), true);
+  assert.equal(result.selection_trace.prefilter.retryMode, "base");
+  assert.equal(result.selection_trace.prefilter.usedRarityFullFallback, false);
+}
+
+async function test_target_step_expand_window_hit_still_keeps_outer_full_fallback() {
+  const inputStep = Math.fround(0.5);
+  const targetWindow = targetWindowSpecForTest({
+    inputStep,
+    approachMode: "below",
+    wearOffsetPct: 1
+  });
+  const belowWindowStep = prevFloat32(targetWindow.lowerTargetStep);
+  const rows = makeUniformStepRows({
+    prefix: "full-expand-window",
+    name: "Expand Window",
+    relative: targetWindow.targetStep,
+    count: 12
+  });
+  const baseGroups = [{
+    index: 0,
+    material: {name: "Expand Window", names: ["Expand Window"], role: "main", count: 10, wear_min: 0, wear_max: 1},
+    candidates: Array.from({length: 10}, (_, index) => makeCandidate(
+      `base-miss-${index + 1}`,
+      belowWindowStep,
+      0,
+      "main"
+    ))
+  }];
+  const expandGroups = [{
+    index: 0,
+    material: {name: "Expand Window", names: ["Expand Window"], role: "main", count: 10, wear_min: 0, wear_max: 1},
+    candidates: Array.from({length: 10}, (_, index) => makeCandidate(
+      `expand-window-${index + 1}`,
+      targetWindow.lowerTargetStep,
+      0,
+      "main"
+    ))
+  }];
+  const searchCalls = [];
+  const service = loadCraftAssistServiceWithOverrides({
+    searchOverrides: {
+      searchCraftAssistSeed() {
+        return null;
+      },
+      searchCraftAssistBestSolution({groups, targetStepSpec, enableRawBelowTopKFastPath}) {
+        const kind = classifyCraftAssistSearchGroups(groups);
+        assert.notEqual(kind, "unknown");
+        searchCalls.push({
+          kind,
+          enableRawBelowTopKFastPath: enableRawBelowTopKFastPath === true
+        });
+        if (kind === "base") {
+          return makeSolvedFromGroups(groups, belowWindowStep);
+        }
+        if (kind === "expand") {
+          return makeSolvedFromGroups(groups, targetStepSpec.lowerTargetStep);
+        }
+        return makeSolvedFromGroups(groups, targetStepSpec.targetStep);
+      }
+    },
+    shardOverrides: {
+      resolvePrefilterOptions() {
+        return {enableOversizedPrefilter: true};
+      },
+      resolveShardCount() {
+        return 1;
+      },
+      async runPrefilterPhase({phaseName}) {
+        if (phaseName === "prefilter/base") {
+          return {
+            kind: "phase_ready",
+            groups: baseGroups,
+            prefilterTrace: {phaseName}
+          };
+        }
+        return {
+          kind: "phase_ready",
+          groups: expandGroups,
+          prefilterTrace: {phaseName}
+        };
+      }
+    }
+  });
+
+  const result = await service.selectCraftAssistForRecipe({
+    rows,
+    targetWear: inputStep,
+    wearFilterMode: "relative",
+    wearApproachMode: "below",
+    wearOffsetPct: 1,
+    materials: [
+      uniformStepMaterial("Expand Window")
+    ],
+    blockedIds: [],
+    includeCooling: false,
+    enableFastCraftAssist: true
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall), targetWindow.targetStep);
+  assert.deepEqual(searchCalls, [
+    {kind: "base", enableRawBelowTopKFastPath: true},
+    {kind: "expand", enableRawBelowTopKFastPath: true},
+    {kind: "full", enableRawBelowTopKFastPath: true}
+  ]);
+  assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), true);
+  assert.equal(result.selection_trace.prefilter.retryMode, "expand");
+  assert.equal(result.selection_trace.prefilter.usedRarityFullFallback, false);
+}
+
+async function test_step_target_fast_expands_after_base_window_miss_and_stops_on_expand_window_hit() {
+  const inputStep = Math.fround(0.5);
+  const targetWindow = targetWindowSpecForTest({
+    inputStep,
+    approachMode: "below",
+    wearOffsetPct: 1
+  });
+  const rows = [
+    ...Array.from({length: 10}, (_, index) => makeRow({
+      id: `lower-${index + 1}`,
+      name: "Solo",
+      relative: targetWindow.lowerTargetStep
+    })),
+    ...Array.from({length: 60}, (_, index) => makeRow({
+      id: `below-${index + 1}`,
+      name: "Solo",
+      relative: Math.fround(targetWindow.lowerTargetStep - 0.03 - index * 0.0001)
+    }))
+  ];
+
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "10",
+    OVERSIZED_4_SHARDS_THRESHOLD: "999",
+    SHARD_TOP_K: "8",
+    SHARD_EDGE_KEEP_PER_SIDE: "4",
+    EXPAND_SHARD_TOP_K: "20",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHARD_CENTER_OVERLAP_MIN: "0",
+    SHARD_CENTER_OVERLAP_MAX: "0",
+    SHORTLIST_MIN: "10",
+    SHORTLIST_PER_REQUIRED: "1",
+    SHORTLIST_HARD_MAX: "30"
+  }, async () => {
+    const fast = await runSelect({
+      rows,
+      targetWear: inputStep,
+      enableFastCraftAssist: true,
+      wearOffsetPct: 1,
+      materials: [
+        {name: "Solo", names: ["Solo"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+      ]
+    });
+
+    assert.equal(fast.ok, true);
+    assert.equal(Math.fround(fast.overall) >= targetWindow.lowerTargetStep, true);
+    assert.equal(Math.fround(fast.overall) <= targetWindow.targetStep, true);
+    assert.notEqual(Math.fround(fast.overall), targetWindow.targetStep);
+    assert.equal(!!(fast.selection_trace && fast.selection_trace.prefilter), true);
+    assert.equal(fast.selection_trace.prefilter.retryMode, "expand");
+    assert.deepEqual(
+      fast.selection_trace.prefilter.phases.map((phase) => phase.phaseName),
+      ["prefilter/base", "prefilter/expand"]
+    );
   });
 }
 
@@ -1195,15 +2107,15 @@ async function test_prefilter_trace_uses_primary_name_projection_for_multi_item_
     ENABLE_OVERSIZED_PREFILTER: "1",
     OVERSIZED_2_SHARDS_THRESHOLD: "20",
     OVERSIZED_4_SHARDS_THRESHOLD: "999",
-    SHARD_TOP_K: "18",
-    SHARD_EDGE_KEEP_PER_SIDE: "2",
-    EXPAND_SHARD_TOP_K: "28",
-    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "4",
+    SHARD_TOP_K: "2",
+    SHARD_EDGE_KEEP_PER_SIDE: "0",
+    EXPAND_SHARD_TOP_K: "2",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "0",
     SHORTLIST_MIN: "22",
     SHORTLIST_PER_REQUIRED: "4",
     SHORTLIST_HARD_MAX: "64"
   }, async () => {
-    const result = await runSelect({
+    const request = {
       rows,
       targetWear: inputStepForBelowTargetStep(0.2142),
       enableFastCraftAssist: true,
@@ -1280,21 +2192,21 @@ async function test_prefilter_trace_uses_primary_name_projection_for_multi_item_
           ]
         }
       ]
-    });
-
-    assert.equal(result.ok, true);
-    assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), true);
-    assert.equal(result.selection_trace.prefilter.retryMode, "expand");
+    };
+    const result = await runSelect(request);
     const targetWindow = targetWindowSpecForTest({
-      inputStep: inputStepForBelowTargetStep(0.2142),
+      inputStep: request.targetWear,
       approachMode: "below",
       wearOffsetPct: 100
     });
-    if (Math.fround(result.overall) !== targetWindow.targetStep) {
-      assert.equal(!!result.selection_trace.prefilter.contextRefine, true);
-      assert.equal(result.selection_trace.prefilter.contextRefine.entered, true);
-      assert.equal(result.selection_trace.prefilter.contextRefine.acceptedCount > 0, true);
-    }
+
+    assert.equal(result.ok, true);
+    assert.equal(Math.fround(result.overall) >= targetWindow.lowerTargetStep, true);
+    assert.equal(Math.fround(result.overall) <= targetWindow.targetStep, true);
+    assert.notEqual(Math.fround(result.overall), targetWindow.targetStep);
+    assert.equal(!!(result.selection_trace && result.selection_trace.prefilter), true);
+    assert.equal(result.selection_trace.prefilter.retryMode, "base");
+    assert.equal(result.selection_trace.prefilter.contextRefine, null);
     const prefilterGroups = result.selection_trace.prefilter.phases.flatMap((phase) => phase.groups || []);
     const auxAGroup = prefilterGroups.find((group) => group && group.primary_name === "AuxA");
     assert.equal(!!auxAGroup, true);
@@ -1410,7 +2322,7 @@ async function test_step_target_rejects_below_zero_target() {
   assert.equal(result.code, "unreachable_below_target");
 }
 
-async function test_step_target_final_validation_requires_quantized_target_step() {
+async function test_step_target_final_validation_allows_below_result_under_original_target() {
   const q = Math.fround(0.27);
   const targetStepSpec = resolveCraftAssistTargetStepSpec({
     inputStep: q,
@@ -1424,7 +2336,7 @@ async function test_step_target_final_validation_requires_quantized_target_step(
     approachMode: "below",
     targetStepSpec
   });
-  const wrongStep = __test.validateCraftAssistFinalOverall({
+  const belowTargetStep = __test.validateCraftAssistFinalOverall({
     overall: prevFloat32(targetStepSpec.targetStep),
     targetValue: q,
     searchTargetValue: targetStepSpec.targetStep,
@@ -1435,8 +2347,7 @@ async function test_step_target_final_validation_requires_quantized_target_step(
   assert.equal(Math.fround(targetStepSpec.targetStep + Number.EPSILON), targetStepSpec.targetStep);
   assert.equal(Math.fround(prevFloat32(targetStepSpec.targetStep)), prevFloat32(targetStepSpec.targetStep));
   assert.deepEqual(onTarget, {ok: true});
-  assert.equal(wrongStep.ok, false);
-  assert.equal(wrongStep.code, "final_result_not_on_target_step");
+  assert.deepEqual(belowTargetStep, {ok: true});
 }
 
 async function test_step_target_final_validation_failure_log_includes_window_diagnostics() {
@@ -1493,12 +2404,23 @@ function uniformStepMaterial(name, count = 10) {
   return {name, names: [name], role: "main", count, wear_min: 0, wear_max: 1};
 }
 
-async function test_raw_aware_below_uses_input_step_when_float32_step_is_below_raw() {
+function makeSingleMaterialRowsFromValues({prefix, name, values}) {
+  return (Array.isArray(values) ? values : []).map((value, index) => (
+    makeRow({
+      id: `${prefix}-${index + 1}`,
+      name,
+      relative: Number(value)
+    })
+  ));
+}
+
+async function test_raw_aware_below_uses_one_tenth_micro_lower_target_when_float32_step_is_below_raw() {
   const raw = "0.21";
   const step = Math.fround(Number(raw));
+  const expectedTargetStep = Math.fround(Number(raw) - 0.0000001);
   assert.equal(step < Number(raw), true);
   const result = await runSelect({
-    rows: makeUniformStepRows({prefix: "raw-below-step", name: "Raw Below Step", relative: step}),
+    rows: makeUniformStepRows({prefix: "raw-below-step", name: "Raw Below Step", relative: expectedTargetStep}),
     targetWear: step,
     targetWearRaw: raw,
     wearApproachMode: "below",
@@ -1509,13 +2431,14 @@ async function test_raw_aware_below_uses_input_step_when_float32_step_is_below_r
   });
 
   assert.equal(result.ok, true);
-  assert.equal(Math.fround(result.overall), step);
+  assert.equal(Math.fround(result.overall), expectedTargetStep);
+  assert.equal(result.overall < Number(raw), true);
 }
 
-async function test_raw_aware_below_uses_previous_step_when_float32_step_is_above_raw() {
+async function test_raw_aware_below_uses_one_tenth_micro_lower_target_when_float32_step_is_above_raw() {
   const raw = "0.18";
   const step = Math.fround(Number(raw));
-  const targetStep = prevFloat32(step);
+  const targetStep = Math.fround(Number(raw) - 0.0000001);
   assert.equal(step > Number(raw), true);
   const result = await runSelect({
     rows: makeUniformStepRows({prefix: "raw-above-prev", name: "Raw Above Prev", relative: targetStep}),
@@ -1530,11 +2453,12 @@ async function test_raw_aware_below_uses_previous_step_when_float32_step_is_abov
 
   assert.equal(result.ok, true);
   assert.equal(Math.fround(result.overall), targetStep);
+  assert.equal(result.overall < Number(raw), true);
 }
 
-async function test_raw_aware_below_exact_step_raw_uses_previous_step() {
+async function test_raw_aware_below_exact_step_raw_uses_one_tenth_micro_lower_target() {
   const step = Math.fround(0.5);
-  const targetStep = prevFloat32(step);
+  const targetStep = Math.fround(Number(step) - 0.0000001);
   const result = await runSelect({
     rows: makeUniformStepRows({prefix: "raw-exact-prev", name: "Raw Exact Prev", relative: targetStep}),
     targetWear: step,
@@ -1548,22 +2472,25 @@ async function test_raw_aware_below_exact_step_raw_uses_previous_step() {
 
   assert.equal(result.ok, true);
   assert.equal(Math.fround(result.overall), targetStep);
+  assert.equal(result.overall < step, true);
 }
 
-async function test_raw_aware_below_zero_raw_rejects_unreachable_target() {
-  const result = await runSelect({
-    rows: makeUniformStepRows({prefix: "raw-zero", name: "Raw Zero", relative: 0}),
-    targetWear: Math.fround(0),
-    targetWearRaw: "0",
-    wearApproachMode: "below",
-    wearOffsetPct: 0,
-    materials: [
-      uniformStepMaterial("Raw Zero")
-    ]
-  });
+async function test_raw_aware_below_at_or_below_one_tenth_micro_raw_rejects_unreachable_target() {
+  for (const raw of ["0", "0.0000001"]) {
+    const result = await runSelect({
+      rows: makeUniformStepRows({prefix: `raw-unreachable-${raw}`, name: "Raw Unreachable", relative: Math.fround(Number(raw))}),
+      targetWear: Math.fround(Number(raw)),
+      targetWearRaw: raw,
+      wearApproachMode: "below",
+      wearOffsetPct: 0,
+      materials: [
+        uniformStepMaterial("Raw Unreachable")
+      ]
+    });
 
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "unreachable_below_target");
+    assert.equal(result.ok, false);
+    assert.equal(result.code, "unreachable_below_target");
+  }
 }
 
 async function test_raw_aware_infinite_uses_input_step() {
@@ -1588,8 +2515,9 @@ async function test_service_target_step_log_keeps_raw_input_text_separate_from_m
   const service = createCraftAssistService({logger: null});
   const raw = "0.2100001";
   const step = Math.fround(Number(raw));
+  const expectedTargetStep = Math.fround(Number(raw) - 0.0000001);
   const {result, logs} = await captureConsoleLogs(() => service.selectForRecipe({
-    rows: makeUniformStepRows({prefix: "raw-log", name: "Raw Log", relative: step}),
+    rows: makeUniformStepRows({prefix: "raw-log", name: "Raw Log", relative: expectedTargetStep}),
     targetWear: step,
     targetWearRaw: raw,
     wearFilterMode: "relative",
@@ -1607,7 +2535,7 @@ async function test_service_target_step_log_keeps_raw_input_text_separate_from_m
   assert.ok(targetStepLog, "expected target step log line");
   assert.match(targetStepLog, /raw=0\.2100001(\s|$)/);
   assert.match(targetStepLog, /input_step=0\.2100000977516174/);
-  assert.match(targetStepLog, /target_step=0\.2100000977516174/);
+  assert.equal(targetStepLog.includes(`target_step=${expectedTargetStep}`), true);
 }
 
 async function test_legacy_below_without_raw_keeps_step_only_previous_step_behavior() {
@@ -1630,6 +2558,7 @@ async function test_legacy_below_without_raw_keeps_step_only_previous_step_behav
 async function test_raw_aware_below_offset_keeps_window_semantics_while_primary_uses_raw() {
   const raw = "0.21";
   const step = Math.fround(Number(raw));
+  const expectedTargetStep = Math.fround(Number(raw) - 0.0000001);
   const rawAwareSpec = targetWindowSpecForTest({
     inputStep: step,
     inputRaw: raw,
@@ -1651,13 +2580,52 @@ async function test_raw_aware_below_offset_keeps_window_semantics_while_primary_
     ]
   });
 
-  assert.equal(rawAwareSpec.targetStep, step);
+  assert.equal(rawAwareSpec.targetStep, expectedTargetStep);
   assert.equal(rawAwareSpec.lowerTargetStep < rawAwareSpec.targetStep, true);
   assert.equal(result.ok, true);
   assert.equal(Math.fround(result.overall), rawAwareSpec.lowerTargetStep);
 }
 
-async function test_step_target_zero_offset_remains_single_step() {
+async function test_raw_aware_below_offset_keeps_final_quantized_result_at_or_below_primary_target() {
+  const raw = "0.27";
+  const step = Math.fround(Number(raw));
+  const rawAwareSpec = targetWindowSpecForTest({
+    inputStep: step,
+    inputRaw: raw,
+    approachMode: "below",
+    wearOffsetPct: 1
+  });
+  const upperSideStep = prevFloat32(step);
+  const result = await runSelect({
+    rows: [
+      ...makeUniformStepRows({
+        prefix: "raw-offset-lower-window",
+        name: "Raw Offset Window",
+        relative: rawAwareSpec.lowerTargetStep
+      }),
+      ...makeUniformStepRows({
+        prefix: "raw-offset-upper-window",
+        name: "Raw Offset Window",
+        relative: upperSideStep
+      })
+    ],
+    targetWear: step,
+    targetWearRaw: raw,
+    wearApproachMode: "below",
+    wearOffsetPct: 1,
+    materials: [
+      uniformStepMaterial("Raw Offset Window")
+    ]
+  });
+
+  assert.equal(step > Number(raw), true);
+  assert.equal(upperSideStep > rawAwareSpec.targetStep, true);
+  assert.equal(result.ok, true);
+  assert.equal(Math.fround(result.overall) <= rawAwareSpec.targetStep, true);
+  assert.notEqual(Math.fround(result.overall), upperSideStep, "final quantized result should not stay on upper-side step");
+}
+
+async function test_step_target_zero_offset_accepts_any_result_under_original_target() {
   const q = Math.fround(0.5);
   const targetStep = resolveCraftAssistTargetStepSpec({
     inputStep: q,
@@ -1691,9 +2659,63 @@ async function test_step_target_zero_offset_remains_single_step() {
     ]
   });
 
-  assert.equal(noOffset.ok, false);
+  assert.equal(noOffset.ok, true);
+  assert.equal(Math.fround(noOffset.overall), lowerStep);
   assert.equal(primaryOnly.ok, true);
   assert.equal(Math.fround(primaryOnly.overall), targetStep);
+}
+
+async function test_step_target_below_zero_offset_fast_public_flow_accepts_lower_off_step_result() {
+  const q = Math.fround(0.5);
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep: q,
+    approachMode: "below",
+    offsetValue: 0
+  });
+  const lowerOffStep = prevFloat32(targetStepSpec.targetStep);
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    rows.push(makeRow({id: `fallback-lower-${index}`, name: "Fallback Lower", relative: lowerOffStep}));
+  }
+  for (let index = 1; index <= 40; index += 1) {
+    rows.push(makeRow({
+      id: `fallback-high-${index}`,
+      name: "Fallback Lower",
+      relative: 0.8 + index * 0.0001
+    }));
+  }
+
+  await withEnv({
+    ENABLE_OVERSIZED_PREFILTER: "1",
+    OVERSIZED_2_SHARDS_THRESHOLD: "10",
+    OVERSIZED_4_SHARDS_THRESHOLD: "999",
+    SHARD_TOP_K: "10",
+    SHARD_EDGE_KEEP_PER_SIDE: "0",
+    EXPAND_SHARD_TOP_K: "10",
+    EXPAND_SHARD_EDGE_KEEP_PER_SIDE: "0",
+    SHARD_CENTER_OVERLAP_MIN: "1",
+    SHARD_CENTER_OVERLAP_MAX: "1",
+    SHORTLIST_MIN: "10",
+    SHORTLIST_PER_REQUIRED: "1",
+    SHORTLIST_HARD_MAX: "20"
+  }, async () => {
+    const result = await runSelect({
+      rows,
+      targetWear: q,
+      wearApproachMode: "below",
+      wearOffsetPct: 0,
+      enableFastCraftAssist: true,
+      materials: [
+        {name: "Fallback Lower", names: ["Fallback Lower"], role: "main", count: 10, wear_min: 0, wear_max: 1}
+      ]
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(Math.fround(result.overall), lowerOffStep);
+    assert.equal(lowerOffStep < targetStepSpec.targetStep, true);
+    assert.equal(result.overall < q, true);
+    assert.equal(rawPickedIds(result).every((id) => String(id).startsWith("fallback-lower-")), true);
+  });
 }
 
 async function test_step_target_below_offset_accepts_lower_allowed_step_when_primary_unavailable() {
@@ -1903,7 +2925,7 @@ async function test_step_target_context_refine_can_promote_non_primary_window_hi
   assert.equal(refined.summary.acceptedCount > 0, true);
 }
 
-async function test_final_validation_blocks_below_mode_when_result_crosses_safe_target() {
+async function test_final_validation_blocks_below_mode_when_result_crosses_original_target() {
   const result = __test.validateCraftAssistFinalOverall({
     overall: 0.27000001072883606,
     targetValue: 0.27,
@@ -1914,6 +2936,33 @@ async function test_final_validation_blocks_below_mode_when_result_crosses_safe_
   assert.equal(result.ok, false);
   assert.equal(result.code, "final_result_exceeds_target");
   assert.equal(result.overall, 0.27000001072883606);
+}
+
+async function test_final_validation_below_raw_rejects_normalized_overall_between_conservative_and_original_target() {
+  const rawTarget = 0.21;
+  const conservativeTarget = rawTarget - 0.0000001;
+  const normalizedOverall = 0.20999995;
+  const targetStepSpec = resolveCraftAssistTargetStepSpec({
+    inputStep: Math.fround(rawTarget),
+    inputRaw: rawTarget,
+    approachMode: "below"
+  });
+
+  assert.equal(normalizedOverall < rawTarget, true);
+  assert.equal(normalizedOverall > conservativeTarget, true);
+
+  const result = __test.validateCraftAssistFinalOverall({
+    overall: normalizedOverall,
+    targetValue: rawTarget,
+    searchTargetValue: conservativeTarget,
+    targetStepSpec,
+    approachMode: "below"
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "final_result_not_on_target_step");
+  assert.equal(result.quantized_overall, Math.fround(normalizedOverall));
+  assert.equal(result.target_step, targetStepSpec.targetStep);
 }
 
 async function test_final_validation_skips_infinite_mode_cross_target_guard() {
@@ -1965,22 +3014,25 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
   await test_step_target_infinite_accepts_raw_mean_on_target_float32_step();
   await test_step_target_rejects_non_float32_target();
   await test_step_target_rejects_below_zero_target();
-  await test_step_target_final_validation_requires_quantized_target_step();
+  await test_step_target_final_validation_allows_below_result_under_original_target();
   await test_step_target_final_validation_failure_log_includes_window_diagnostics();
-  await test_raw_aware_below_uses_input_step_when_float32_step_is_below_raw();
-  await test_raw_aware_below_uses_previous_step_when_float32_step_is_above_raw();
-  await test_raw_aware_below_exact_step_raw_uses_previous_step();
-  await test_raw_aware_below_zero_raw_rejects_unreachable_target();
+  await test_raw_aware_below_uses_one_tenth_micro_lower_target_when_float32_step_is_below_raw();
+  await test_raw_aware_below_uses_one_tenth_micro_lower_target_when_float32_step_is_above_raw();
+  await test_raw_aware_below_exact_step_raw_uses_one_tenth_micro_lower_target();
+  await test_raw_aware_below_at_or_below_one_tenth_micro_raw_rejects_unreachable_target();
   await test_raw_aware_infinite_uses_input_step();
   await test_service_target_step_log_keeps_raw_input_text_separate_from_machine_step();
   await test_legacy_below_without_raw_keeps_step_only_previous_step_behavior();
   await test_raw_aware_below_offset_keeps_window_semantics_while_primary_uses_raw();
-  await test_step_target_zero_offset_remains_single_step();
+  await test_raw_aware_below_offset_keeps_final_quantized_result_at_or_below_primary_target();
+  await test_step_target_zero_offset_accepts_any_result_under_original_target();
+  await test_step_target_below_zero_offset_fast_public_flow_accepts_lower_off_step_result();
   await test_step_target_below_offset_accepts_lower_allowed_step_when_primary_unavailable();
   await test_step_target_below_offset_rejects_result_below_lower_boundary();
   await test_step_target_infinite_offset_accepts_higher_side_step_when_input_and_lower_unavailable();
   await test_step_target_below_offset_keeps_non_primary_hit_as_fallback_across_rarities();
   await test_step_target_context_refine_can_promote_non_primary_window_hit_to_primary_step();
+  await test_step_target_below_without_offset_candidate_accepts_any_result_under_original_target();
   await test_over_target_prefers_squeezing_aux_before_main();
   await test_under_target_prioritizes_closer_overall_before_aux_low_bias();
   await test_under_target_allows_above_slot_target_when_it_is_the_only_legal_raise();
@@ -2003,13 +3055,29 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
   await test_quantity_shortfall_returns_blocked_code_when_only_blocked_items_fill_gap();
   await test_fast_flag_true_returns_after_expand_step_hit();
   await test_fast_flag_false_forces_old_logic_even_when_env_enabled();
-  await test_step_target_prefilter_window_hit_uses_context_refine_when_best_is_not_primary();
+  await test_fast_flag_true_enables_single_material_raw_below_top_k_fast_path();
+  await test_fast_flag_false_keeps_single_material_raw_below_top_k_fast_path_disabled();
+  await test_fast_flag_true_raw_below_top_k_falls_back_when_offset_window_exists();
+  await test_fast_flag_true_raw_below_top_k_falls_back_when_any_candidate_reaches_raw_ceiling();
+  await test_seed_relay_short_circuits_single_material_when_seed_proves_no_raw_solution();
+  await test_seed_relay_short_circuits_dual_material_when_seed_proves_no_raw_solution();
+  await test_seed_hit_attaches_seed_trace_on_single_material_success();
+  await test_seed_hit_keeps_target_step_handling_in_baseline();
+  await test_target_step_without_prefilter_does_not_rerun_full_baseline();
+  await test_service_passes_existing_wear_offset_as_search_entry_window();
+  await test_target_step_rarity_full_prefilter_fallback_does_not_rerun_full_baseline();
+  await test_target_step_base_window_hit_still_keeps_outer_full_fallback();
+  await test_target_step_expand_window_hit_still_keeps_outer_full_fallback();
+  await test_step_target_fast_expands_after_base_window_miss_and_stops_on_expand_window_hit();
+  await test_step_target_prefilter_window_hit_stops_before_expand_when_best_is_not_primary();
   await test_step_target_solved_candidate_requires_exact_target_step_even_in_infinite_mode();
   await test_step_target_fast_base_hit_returns_before_expand_and_context_refine();
+  await test_step_target_fast_base_window_hit_returns_before_expand_after_batch();
   await test_item_level_material_items_support_mixed_relative_absolute_filters_and_preserve_candidate_ordering();
   await test_prefilter_trace_uses_primary_name_projection_for_multi_item_materials();
   await test_duplicate_names_across_materials_fail_after_canonicalize_reduces_total_count();
-  await test_final_validation_blocks_below_mode_when_result_crosses_safe_target();
+  await test_final_validation_blocks_below_mode_when_result_crosses_original_target();
+  await test_final_validation_below_raw_rejects_normalized_overall_between_conservative_and_original_target();
   await test_final_validation_skips_infinite_mode_cross_target_guard();
   await test_failure_log_text_includes_final_validation_diagnostics();
   console.log("craftAssistService tests passed");

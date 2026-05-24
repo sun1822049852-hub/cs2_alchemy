@@ -86,7 +86,7 @@ function test_resolve_below_targets_previous_step() {
   assert.equal(spec.approachMode, "below");
 }
 
-function test_resolve_below_uses_raw_decimal_when_float32_step_is_already_below_raw() {
+function test_resolve_below_raw_decimal_uses_conservative_target_when_float32_step_is_below_raw() {
   const raw = 0.21;
   const inputStep = Math.fround(raw);
 
@@ -98,11 +98,27 @@ function test_resolve_below_uses_raw_decimal_when_float32_step_is_already_below_
     approachMode: "below"
   });
 
-  assert.equal(spec.targetStep, inputStep);
+  assert.equal(spec.targetStep, Math.fround(raw - 0.0000001));
   assert.equal(spec.approachMode, "below");
 }
 
-function test_resolve_below_uses_previous_step_when_float32_step_is_not_below_raw() {
+function test_resolve_below_raw_target_uses_one_tenth_micro_lower_conservative_target() {
+  const raw = 0.21;
+  const conservativeTarget = raw - 0.0000001;
+  const inputStep = Math.fround(raw);
+  const currentPreviousStep = prevFloat32(inputStep);
+
+  const spec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    inputRaw: raw,
+    approachMode: "below"
+  });
+
+  assert.equal(spec.targetStep, Math.fround(conservativeTarget));
+  assert.equal(spec.targetStep < currentPreviousStep, true);
+}
+
+function test_resolve_below_raw_decimal_uses_conservative_target_when_float32_step_is_above_raw() {
   const raw = 0.18;
   const inputStep = Math.fround(raw);
 
@@ -114,11 +130,11 @@ function test_resolve_below_uses_previous_step_when_float32_step_is_not_below_ra
     approachMode: "below"
   });
 
-  assert.equal(spec.targetStep, prevFloat32(inputStep));
+  assert.equal(spec.targetStep, Math.fround(raw - 0.0000001));
   assert.equal(spec.approachMode, "below");
 }
 
-function test_resolve_below_uses_previous_step_for_exact_float32_raw_text() {
+function test_resolve_below_raw_decimal_uses_conservative_target_for_exact_float32_raw_text() {
   const raw = 0.125;
   const inputStep = Math.fround(raw);
 
@@ -130,7 +146,7 @@ function test_resolve_below_uses_previous_step_for_exact_float32_raw_text() {
     approachMode: "below"
   });
 
-  assert.equal(spec.targetStep, prevFloat32(inputStep));
+  assert.equal(spec.targetStep, Math.fround(raw - 0.0000001));
   assert.equal(spec.approachMode, "below");
 }
 
@@ -142,21 +158,28 @@ function test_resolve_below_rejects_raw_zero() {
   }), "unreachable_below_target");
 }
 
-function test_resolve_below_keeps_zero_step_when_tiny_raw_underflows_to_zero() {
+function test_resolve_below_raw_at_or_below_one_tenth_micro_rejects_unreachable_target() {
+  for (const raw of [0.0000001, 0.00000009]) {
+    assertRejectsWithCode(() => resolveCraftAssistTargetStepSpec({
+      inputStep: Math.fround(raw),
+      inputRaw: raw,
+      approachMode: "below"
+    }), "unreachable_below_target");
+  }
+}
+
+function test_resolve_below_rejects_raw_that_is_not_above_one_tenth_micro_even_when_float32_underflows_to_zero() {
   const raw = Number.MIN_VALUE;
   const inputStep = Math.fround(raw);
 
   assert.equal(inputStep, 0);
   assert.equal(raw > 0, true);
 
-  const spec = resolveCraftAssistTargetStepSpec({
+  assertRejectsWithCode(() => resolveCraftAssistTargetStepSpec({
     inputStep,
     inputRaw: raw,
     approachMode: "below"
-  });
-
-  assert.equal(spec.targetStep, 0);
-  assert.equal(spec.approachMode, "below");
+  }), "unreachable_below_target");
 }
 
 function test_resolve_rejects_non_float32_input_step() {
@@ -272,7 +295,7 @@ function test_below_with_offset_targets_window_from_offset_step_to_previous_inpu
   assert.equal(spec.lowerTargetStep <= Math.fround(inputStep - offsetValue), true);
 }
 
-function test_below_with_offset_uses_raw_aware_primary_target_without_changing_window_rules() {
+function test_below_with_offset_uses_raw_aware_conservative_primary_target_without_changing_window_rules() {
   const raw = 0.21;
   const inputStep = Math.fround(raw);
   const offsetValue = 0.01;
@@ -285,9 +308,27 @@ function test_below_with_offset_uses_raw_aware_primary_target_without_changing_w
   });
 
   assert.equal(spec.hasOffsetWindow, true);
-  assert.equal(spec.targetStep, inputStep);
+  assert.equal(spec.targetStep, Math.fround(raw - 0.0000001));
   assert.equal(spec.upperTargetStep, spec.targetStep);
   assert.equal(spec.lowerTargetStep <= Math.fround(inputStep - offsetValue), true);
+}
+
+function test_below_with_offset_does_not_expand_raw_aware_upper_target_step_above_primary_target() {
+  const raw = 0.27;
+  const inputStep = Math.fround(raw);
+  const offsetValue = raw * 0.01;
+
+  const spec = resolveCraftAssistTargetStepSpec({
+    inputStep,
+    inputRaw: raw,
+    approachMode: "below",
+    offsetValue
+  });
+
+  assert.equal(inputStep > raw, true);
+  assert.equal(spec.targetStep, Math.fround(raw - 0.0000001));
+  assert.equal(prevFloat32(inputStep) > spec.targetStep, true);
+  assert.equal(spec.upperTargetStep, spec.targetStep);
 }
 
 function test_infinite_with_offset_includes_lower_and_upper_target_steps() {
@@ -388,7 +429,7 @@ function test_below_offset_range_helpers_keep_allowed_hits_ahead_of_outside_miss
   );
 }
 
-function test_below_offset_fallback_priority_uses_raw_gap_inside_same_step() {
+function test_below_offset_same_step_above_primary_target_is_not_on_target() {
   const raw = "0.214285";
   const inputStep = Math.fround(Number(raw));
   const spec = resolveCraftAssistTargetStepSpec({
@@ -401,18 +442,11 @@ function test_below_offset_fallback_priority_uses_raw_gap_inside_same_step() {
   const closerFallback = 0.21428491771221161;
 
   assert.equal(Math.fround(fartherFallback), Math.fround(closerFallback));
-  assert.equal(isMeanOnTargetStep(fartherFallback, spec), true);
-  assert.equal(isMeanOnTargetStep(closerFallback, spec), true);
+  assert.equal(isMeanOnTargetStep(fartherFallback, spec), false);
+  assert.equal(isMeanOnTargetStep(closerFallback, spec), false);
   assert.equal(isMeanOnPrimaryTargetStep(fartherFallback, spec), false);
   assert.equal(isMeanOnPrimaryTargetStep(closerFallback, spec), false);
-  assert.equal(Number(raw) - closerFallback < Number(raw) - fartherFallback, true);
-  assert.equal(
-    comparePriorityTuple(
-      targetStepPriorityTuple(closerFallback, spec),
-      targetStepPriorityTuple(fartherFallback, spec)
-    ) < 0,
-    true
-  );
+  assert.equal(Math.fround(closerFallback) > spec.targetStep, true);
 }
 
 function test_infinite_equal_distance_tie_prefers_lower_wear() {
@@ -439,11 +473,13 @@ test_to_float32_returns_math_fround_value();
 test_prev_and_next_float32_move_one_representable_step();
 test_resolve_infinite_targets_input_step();
 test_resolve_below_targets_previous_step();
-test_resolve_below_uses_raw_decimal_when_float32_step_is_already_below_raw();
-test_resolve_below_uses_previous_step_when_float32_step_is_not_below_raw();
-test_resolve_below_uses_previous_step_for_exact_float32_raw_text();
+test_resolve_below_raw_decimal_uses_conservative_target_when_float32_step_is_below_raw();
+test_resolve_below_raw_target_uses_one_tenth_micro_lower_conservative_target();
+test_resolve_below_raw_decimal_uses_conservative_target_when_float32_step_is_above_raw();
+test_resolve_below_raw_decimal_uses_conservative_target_for_exact_float32_raw_text();
 test_resolve_below_rejects_raw_zero();
-test_resolve_below_keeps_zero_step_when_tiny_raw_underflows_to_zero();
+test_resolve_below_raw_at_or_below_one_tenth_micro_rejects_unreachable_target();
+test_resolve_below_rejects_raw_that_is_not_above_one_tenth_micro_even_when_float32_underflows_to_zero();
 test_resolve_rejects_non_float32_input_step();
 test_resolve_below_at_zero_rejects_unreachable_below_target();
 test_resolve_infinite_keeps_float32_step_for_raw_aware_input();
@@ -452,12 +488,13 @@ test_resolve_infinite_accepts_string_target_wear_raw_when_step_matches();
 test_is_mean_on_target_step_uses_float32_authoritative_hit();
 test_distance_from_mean_to_target_range_is_zero_inside_preimage_and_positive_outside();
 test_below_with_offset_targets_window_from_offset_step_to_previous_input_step();
-test_below_with_offset_uses_raw_aware_primary_target_without_changing_window_rules();
+test_below_with_offset_uses_raw_aware_conservative_primary_target_without_changing_window_rules();
+test_below_with_offset_does_not_expand_raw_aware_upper_target_step_above_primary_target();
 test_infinite_with_offset_includes_lower_and_upper_target_steps();
 test_no_offset_spec_stays_single_step();
 test_below_no_offset_spec_stays_single_step();
 test_primary_step_priority_wins_over_offset_step_priority();
 test_below_offset_range_helpers_keep_allowed_hits_ahead_of_outside_misses();
-test_below_offset_fallback_priority_uses_raw_gap_inside_same_step();
+test_below_offset_same_step_above_primary_target_is_not_on_target();
 test_infinite_equal_distance_tie_prefers_lower_wear();
 console.log("craftAssistFloat32Step tests passed");

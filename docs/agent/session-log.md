@@ -1,5 +1,101 @@
 # Session Log
 
+## 2026-05-08
+- Task: 把 `seed` 作为统一前置入口接到 craft assist 主程序里，先做 raw 线判定，再决定是否继续 baseline。
+- Investigation:
+  - 用户明确把 `seed` 定位成 baseline 的前置入口 / 中继器，而不是独立最终搜索器。
+  - 用户明确业务范围只剩：单材料、双材料；当前这一轮只讨论 `below`。
+  - 用户明确契约：
+    - `seed` 先处理 raw ceiling 层
+    - 只要已经压到 `< rawCeiling`，就交给 baseline 继续处理 `offset window / target step`
+    - 如果 `seed` 已经证明“压到最小极限仍然 `>= rawCeiling`”，就直接在 seed 层终止，不再继续 baseline
+    - 单材料与双材料都要补齐，不再保留业务层面的 “seed 上不了场” 分支
+  - 只读核对主程序 live baseline 直接调用点后确认：
+    - `solveCraftAssistGroupsForRarity()` 内有 5 个 live baseline 调用点
+    - `runCraftAssistSelectionForRecipe()` 外层还有 `fallbackSolved`
+    - 因此统一前置入口不能只塞进 `solveCraftAssistGroupsForRarity()`，否则会漏外层兜底
+- Changes:
+  - 新增 [docs/superpowers/specs/2026-05-08-craft-assist-unified-seed-entry-design.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/specs/2026-05-08-craft-assist-unified-seed-entry-design.md)
+  - 新增 [docs/superpowers/plans/2026-05-08-craft-assist-unified-seed-entry.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/superpowers/plans/2026-05-08-craft-assist-unified-seed-entry.md)
+  - 更新 [node_sidecar/src/services/craftAssistSearch.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/craftAssistSearch.js)
+    - 修复 `resolveBelowTargetCeiling(...)` 在未传 `targetStepSpec` 时把 `null` 误判成 `0` 的问题
+    - 新增 seed 业务结果契约：
+      - `seed_hit`
+      - `seed_no_material`
+      - `seed_proved_no_raw_solution`
+    - 新增单材料 seed：
+      - 长度 10 的整体窗口
+      - 围绕 raw 线切初始窗口
+      - 如果整体仍高于 raw 线，就整体往小处滚
+      - 一旦低于 raw 线，做双侧交替贴线试探，直到两边都试不动
+    - 新增双材料 role-aware seed：
+      - 先整体下压到 raw 线以下
+      - 再按主/辅双侧交替贴线试探，直到两边都试不动
+  - 更新 [node_sidecar/src/services/craftAssistService.js](/C:/Users/18220/Desktop/cs2_alchemy/node_sidecar/src/services/craftAssistService.js)
+    - 新增统一前置入口 helper：`runCraftAssistBaselineRelay(...)`
+    - 行为：
+      - `seed_proved_no_raw_solution`：当前 baseline 调用点直接短路
+      - `seed_hit`：继续跑原 baseline 搜索器
+      - 当前先不缩小 baseline 搜索空间，只先接入前置判定和短路
+    - 给 `selection_trace` 增加精简 `seed` summary，便于验证和调试
+    - 将 `solveCraftAssistGroupsForRarity()` 内部 baseline 调用点和外层 `fallbackSolved` 都改为走统一 relay
+  - 更新 [tests/craftAssistSearch.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistSearch.test.js)
+    - 新增单材料与双材料 seed 聚焦测试
+    - 覆盖 `seed_no_material` / `seed_proved_no_raw_solution` / `seed_hit`
+    - 覆盖双材料双侧交替试探
+  - 更新 [tests/craftAssistService.test.js](/C:/Users/18220/Desktop/cs2_alchemy/tests/craftAssistService.test.js)
+    - 新增 baseline relay 聚焦测试
+    - 覆盖单材料和双材料的 seed 短路
+    - 覆盖 `seed_hit` 被挂到 `selection_trace`
+    - 覆盖 “最终 target step 仍由 baseline 负责”
+    - 更新一条旧断言：原先要求 `selection_trace === null`，现改成允许并断言 `selection_trace.seed`
+- Verification:
+  - `node tests/craftAssistSearch.test.js`
+    - PASS
+  - `node tests/craftAssistService.test.js`
+    - PASS
+- Notes:
+  - 这轮 service 接入采用保守策略：`seed_hit` 只作为统一前置判定和 trace summary，不直接缩小 baseline 搜索空间；先把短路逻辑接稳，不先引入结果回退风险
+  - 当前 root worktree 里的 `craftAssistSearch.js` / `craftAssistService.js` / 对应测试文件本来就有其他既有脏改动；本轮只顺着 seed 相关方向继续工作，没有回滚其他改动
+
+## 2026-05-07
+- Task: 为当前 `Sun` 账号的库存快照做一份稳定留证，供后续离线测试继续使用，避免运行态快照被覆盖或丢失。
+- Investigation:
+  - 只读核对 [accounts.json](/C:/Users/18220/Desktop/cs2_alchemy/accounts.json) 后确认：`Sun` 对应账号标识是 `1822049852`；另有 `Sun set -> 430158438`，但当前 active 不是它。
+  - 只读核对 [inventory_ui_state.json](/C:/Users/18220/Desktop/cs2_alchemy/inventory_ui_state.json) 后确认：当前 active / `last_selected_username` 都是 `1822049852`，其当前使用中的 `snapshot_path` 指向 `C:\Users\18220\Desktop\cs2_alchemy\logs\processed_inventory\inventory_processed_20260507_222947.json`，`fetch_time=2026-05-07 22:29:47`。
+  - 只读核对 `backup/processed_inventory` 后确认：仓库里已有一份旧的 Sun preserved 基线 `inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json`，但它对应的是旧快照 `20260506_122717`，不是当前正在使用的 `20260507_222947`，因此这次仍需要为“当前 Sun 快照”单独留证。
+- Changes:
+  - 新增稳定副本：`C:\Users\18220\Desktop\cs2_alchemy\backup\processed_inventory\inventory_processed_20260507_222947.preserved_for_sun_20260507_234212.json`
+  - 源路径：`C:\Users\18220\Desktop\cs2_alchemy\logs\processed_inventory\inventory_processed_20260507_222947.json`
+  - SHA256：`FD832007B75EFD3F5E96583424843B60ED3550A7757F8263DC63CEF117FDCC26`
+  - 用途：作为当前 `Sun` 账号库存现场的稳定留证，供后续离线 benchmark / craft-assist 相关测试复用，不依赖运行态 `snapshot_path` 持续保留。
+- Verification:
+  - `Get-Item` 确认源快照文件存在，时间戳为 `2026-05-07 22:29:47`
+  - `Get-FileHash -Algorithm SHA256` 同时校验源文件与 preserved 副本，结果一致，`HashMatch=True`
+  - `backup/processed_inventory` 目录复核通过，当前已同时保留“旧 Sun benchmark 基线”和“这次当前 Sun 快照留证”
+- Follow-up:
+  - 这次只补留证与记录，不改 `memory.md`，也不触发真实 refresh、Steam 网络、UI/Electron 或其它运行态动作
+
+- Task: 临时禁用正式链里 `solveCraftAssistGroupsForRarity()` 的后置 `contextRefine`，对应离线实验里的 `completion_pass_1 / completion_pass_2`。
+- Investigation:
+  - 用户澄清：离线实验里的 `completion_pass_1 / completion_pass_2` 只是我这次在 `output/playwright/local-offline-anchor-rolling-compare.js` 里起的名字；正式主程序对应的是 `craftAssistService.js` 里 `solveCraftAssistGroupsForRarity()` 的可选 `contextRefine` 后置补算，两段分别是“逐个放开单组重搜”和“没改进时做一次 full_groups retry”。
+  - 代码现场确认：正式链里这段后置补算确实集中在 `node_sidecar/src/services/craftAssistService.js` 的单一路径，不在离线 runner。
+- Changes:
+  - `node_sidecar/src/services/craftAssistService.js`：
+    - 增加临时模块级开关 `TEMPORARY_BYPASS_CONTEXT_REFINE = true`
+    - 在 `solveCraftAssistGroupsForRarity()` 的 `contextRefine` 入口做临时旁路
+    - 为 raw-aware below 的终局/候选判定补了最小必要的兼容逻辑
+    - 增加只读测试辅助入口，供测试把公开 fast 结果和正式链中同一条诊断对齐
+  - `tests/craftAssistService.test.js`：
+    - 将两条正式 fast/prefilter 场景改成先对齐同一条 matched diagnostic，再断言旧逻辑本会进入 refine，但当前 `contextRefine` 为空只是因为 bypass
+    - 保留公开结果的 `selection_trace.prefilter.contextRefine === null` 断言，确保对外表现符合临时旁路
+- Verification:
+  - `node tests/craftAssistService.test.js`
+  - 结果：PASS，退出码 `0`，约 `138.4s`
+- Follow-up:
+  - 这次是临时旁路，不写入 `memory.md`
+  - 后续如果要恢复正式链的 `contextRefine`，只需回收 `TEMPORARY_BYPASS_CONTEXT_REFINE`
+
 ## 2026-04-30
 - Task: 修复 craft assist below 模式下实际产物超出用户目标磨损的精度问题
 - Investigation:
@@ -3532,3 +3628,1689 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
   - 记录恢复结果和用户实测结论。
   - 保留 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json` 作为本次可恢复来源。
   - 不提交被 `.gitignore` 忽略的当前运行态主文件 `inventory_ui_state.json`。
+
+## 2026-05-06 handoff - saved UI configs fixed, resume craft assist time optimization next
+
+- 当前状态:
+  - 上次误删的 12 个自动选材配置和 2 个汰换模拟配置已经恢复完成，并已提交。
+  - 提交结果: `4acdc64 docs: preserve restored UI config presets`。
+  - 用户已实测确认 UI 中账号正常、功能正常，因此不再回填整份 `accounts=11` 运行态结构。
+- 当前已完成内容:
+  - 从 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json` 恢复了 `craft_assist_presets` 和 `tradeup_simulation_presets`。
+  - 已把“这类 UI state 文件、运行态配置文件和备份快照属于用户数据，后续不得清理或覆盖删除”写入 `docs/agent/memory.md`。
+  - 已保留可恢复来源备份，不再对当前运行态主文件做整文件覆盖。
+- 当前未做/无需再做:
+  - 不要再回头修复这次配置恢复本身。
+  - 不要把 `inventory_ui_state.json` 的空 `accounts` 状态当成问题继续扩大处理，除非用户新明确要求。
+- 下一步第一刀:
+  - 下次直接回到选材时间优化，继续处理 `craft assist` 的性能/耗时问题。
+  - 先读最新 handoff、相关 plan、当前工作区状态和稳定约束，再复述当前目标和进度断点。
+  - 不重做已完成的配置恢复；若文档与现场冲突，先指出差异再收敛。
+- 验证状态:
+  - 恢复后的 `craft_assist_presets=12`、`tradeup_simulation_presets=2` 已核对。
+  - `node node_sidecar/tests/ui-state-store-auth-scope.test.js` 已通过。
+  - 本次 handoff 更新本身未额外跑测试，只是记录已确认事实和下一步方向。
+
+## 2026-05-06 checkpoint - Eight Sunset 0.2142 optimal-vs-optimized benchmark
+
+- 用户澄清:
+  - “忽略 `wear_offset_pct` 阈值”不是改产品 offset 语义，也不是关闭 service 校验。
+  - 本轮目标是先用慢速/完整 oracle 找当前候选池的 best below 标尺，再把优化后的快解与该标尺比较，量化快解离最优差多少。
+- 本轮只改验证产物:
+  - 新增/修改 `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js`。
+  - 未改生产代码、测试、数据库、账号、UI state 或 backup。
+- 使用数据:
+  - Eight/countsteam6 固定快照: `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`。
+  - SHA256 已匹配: `74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`。
+  - preset: `狩猎0.2142`，`target_wear_raw=0.214285`，单材料 10 件 `法玛斯 | 半袖式 (久经沙场)`。
+- 最新有效 artifact:
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T045538Z.json`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T045538Z.md`
+- 结果:
+  - oracle status: `optimal`。
+  - oracle type: `exact_top_k_all_candidates_below_raw`。
+  - 证明: 当前候选池 602 件材料全部单件相对磨损都低于 raw target，因此取相对磨损最高的 10 件即可证明全局 best below。
+  - `optimal_overall=0.19996105134487152`。
+  - `raw_gap_optimal=0.014323948655128482`。
+  - `candidate_count=602`，`pick_count=10`。
+  - optimized child 180000ms 超时，`optimized_status=timeout`，未得到 `optimized_overall`，因此 `gap_delta=null`。
+- 重要解释:
+  - 这个 Eight 快照下的 `狩猎0.2142` 候选池最高 10 件平均也只有约 `0.199961`，离目标 `0.214285` 差约 `0.014324`。
+  - 因此这不是旧 2026-05-03 大样本里能贴到 `2.5e-8` 的同口径候选池；不能拿它证明“快解可贴近 0.214285”。
+  - 当前 optimized 路径 180s 超时，且 search hook 没记录到 search event；下一步应先定位它是否卡在候选构建/服务前置流程/日志或 worker 子流程，而不是继续长跑。
+- 进程状态:
+  - 曾发现并停止残留 benchmark 父/子进程，只停止命令行包含 `eight-sunset-02142-optimal-vs-optimized-benchmark` 的明确 PID。
+  - 复查后没有该 benchmark 残留进程。
+- 未完成:
+  - 未取得 optimized 快解数字。
+  - 未对 `狩猎列车37 0.27` 做 oracle/optimized 对比。
+  - 未做 HTTP/UI runtime 复测。
+  - 未跑完整测试。
+
+## 2026-05-06 checkpoint - benchmark baseline accepted for speed optimization
+
+- 用户最新口径:
+  - 当前 Eight `狩猎0.2142` 样本不贴近 raw target 没关系。
+  - 直接把 oracle `optimal_overall=0.19996105134487152` 作为这批候选池的基准最优值。
+  - 后续提速优化只需要对比快解相对该基准偏移多少、耗时降低多少。
+- 下一步保护范围:
+  - 先只改 benchmark / 诊断脚本，用来保留 timeout 前阶段证据和基准偏移指标。
+  - 不改真实 Steam 执行、生产搜索逻辑、账号、数据库、UI state 或 backup。
+  - 仍不要把“忽略 `wear_offset_pct` 阈值”理解成产品 offset 语义变更。
+- 下一步第一刀:
+  - 让 benchmark 同时输出 `baseline_overall`、`optimized_vs_baseline_delta`、`optimized_slippage_abs`、`optimized_slippage_pct_of_raw_gap` 等字段。
+  - 让 optimized child 的阶段证据在 timeout 时也能落盘或出现在 stderr，避免只靠正常退出后的内存 hook。
+  - 优先短 timeout 复测，不继续无保护 180s 长跑。
+
+## 2026-05-06 final checkpoint - Eight 0.2142 baseline comparison fast path
+
+- 用户最终口径:
+  - 当前 Eight `狩猎0.2142` 候选池不贴近 raw target 也可以接受。
+  - 直接把 oracle `0.19996105134487152` 作为该候选池的 best-below 基准。
+  - 评估提速结果时忽略 `wear_offset_pct` window，只看快解相对该基准偏移多少；这不是产品 offset 语义变更。
+- 本轮改动:
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js`
+    - 增加 baseline comparison mode。
+    - artifact 同时保留原始 `payload` 与评估用 `optimized_payload`，后者 `wear_offset_pct=0`。
+    - 增加 `baseline_overall`、`optimized_vs_baseline_delta`、`optimized_vs_baseline_abs_delta`。
+    - 增加 stage jsonl / child result file，timeout 时也能看到 child 走到哪里。
+  - `node_sidecar/src/services/craftAssistSearch.js`
+    - 增加单材料 no-offset below fast path：当 `targetStepSpec` 为 below、无 offset window、单组单材料、所有候选单件值都严格低于 raw ceiling，直接取 value 最高的 count 件。
+    - 该条件下这组 top-k 可证明是全局 best below，因此不会骗过 oracle。
+    - 有 offset window、多材料、role-aware 场景不走该 fast path。
+  - `tests/craftAssistSearch.test.js`
+    - 增加单材料 602 候选全低于 raw 时直接返回 top 10 的测试。
+    - 增加 offset window 场景不命中 no-offset fast path 的边界测试。
+- 关键 benchmark:
+  - 最新 artifact:
+    - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T092552Z.json`
+    - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T092552Z.md`
+    - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T092552Z.stage.jsonl`
+  - `baseline_overall=0.19996105134487152`
+  - `optimized_overall=0.19996105134487152`
+  - `optimized_vs_baseline_delta=0`
+  - `optimized_vs_baseline_abs_delta=0`
+  - `item_ids_same=true`
+  - optimized child 内 `duration_ms=19.412`
+  - 对比此前同口径 `wear_offset_pct=0` 仍 30000ms timeout，当前已从 timeout 降到毫秒级返回。
+  - stage log 显示 child 进入两次 `search_enter/search_exit`，每次 search 约 `3.947ms` / `1.583ms`，最终 `child_result_written` 后正常退出。
+- 验证:
+  - `node --check output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js` PASS。
+  - `OPTIMIZED_CHILD_TIMEOUT_MS=30000 node output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js` PASS，生成上述 artifact。
+  - `node --test tests/craftAssistSearch.test.js` PASS，约 3.3s。
+  - `node --test tests/craftAssistService.test.js` PASS，约 45.2s。
+  - `node --test tests/craftAssistFloat32Step.test.js` PASS。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js docs/agent/session-log.md` 仅 LF/CRLF warning，无 whitespace error。
+  - 复查无命令行包含 benchmark / craftAssistSearch.test / craftAssistService.test 的残留 Node 进程。
+- 未验证 / 注意:
+  - 未跑全量测试。
+  - 未做 UI/Electron runtime 验证。
+  - 未检查其它 worktree。
+  - 当前工作区仍有大量前序未提交/运行态改动；本轮没有清理 `backup/ui_state/`、`backup/processed_inventory/` 或 `output/`。
+
+## 2026-05-06 final checkpoint - Eight 0.2142 opt-in fast path revalidated after disconnect
+
+- 当前目标:
+  - 继续用户断网前的方案 A：先补证据，再决定是否继续动下一刀代码。
+  - 对比基准固定为 `baseline_overall=0.19996105134487152`。
+  - 评估快解时忽略 `wear_offset_pct` window，只用于量化快解相对该基准偏移；这不是产品 offset 语义变更。
+- 断网后收敛:
+  - 仓库 handoff 旧记录停在 `20260506T092552Z`。
+  - 本地 artifact 和会话摘要显示后续已修成 opt-in fast path，并生成 `20260506T095228Z`。
+  - 已以当前 root worktree `C:/Users/18220/Desktop/cs2_alchemy` 的文件现场为准收敛；其它 worktree 未检查。
+- 代码语义审查结论:
+  - `node_sidecar/src/services/craftAssistSearch.js` 中 `enableRawBelowTopKFastPath` 默认值为 `false`。
+  - 只有调用方显式传 `enableRawBelowTopKFastPath: true`，且是 below、无 offset window、单材料单 group、候选值都严格低于 raw ceiling 时，才走 raw-below top-k fast path。
+  - 当前只在 benchmark 脚本和测试里显式传 true；未在正常产品 service/search 调用面看到开启。
+  - 之前“fast path 默认启用会改变产品语义”的 blocking 已解除。
+- 最新有效 benchmark:
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.json`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.md`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.stage.jsonl`
+  - `artifact.optimized.optimized_status=ok`
+  - `baseline_overall=0.19996105134487152`
+  - `optimized_overall=0.19996105134487152`
+  - `optimized_vs_baseline_delta=0`
+  - `optimized_vs_baseline_abs_delta=0`
+  - `item_ids_same=true`
+  - `duration_optimized_ms=30.032`
+  - stage log 中两次 search 分别约 `5.297ms` / `1.572ms`，`30.032ms` 是 child 总耗时。
+  - 原始 `payload.wear_offset_pct=1`；评估用 `optimized_payload.wear_offset_pct=0`，并标记 `optimized_evaluation_mode=ignore_wear_offset_pct_for_baseline_comparison`。
+- 断网前同口径证据:
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095228Z.json`
+  - `optimized_overall=0.19996105134487152`
+  - `optimized_vs_baseline_delta=0`
+  - `optimized_vs_baseline_abs_delta=0`
+  - `item_ids_same=true`
+  - `duration_optimized_ms=19.268`
+  - 两份 artifact 都支持“相对 `0.19996105134487152` 的快解偏移为 0”。
+- 断网后已跑验证:
+  - `node --check node_sidecar/src/services/craftAssistSearch.js` PASS。
+  - `node --check tests/craftAssistSearch.test.js` PASS。
+  - `node --check output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js` PASS。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js docs/agent/session-log.md` 只有 LF/CRLF warning，无 whitespace error。
+  - `node --test tests/craftAssistSearch.test.js` PASS，约 3.2s。
+  - `node --test tests/craftAssistService.test.js` PASS，约 48.6s。
+  - `node --test tests/craftAssistFloat32Step.test.js` PASS。
+  - `OPTIMIZED_CHILD_TIMEOUT_MS=30000 node output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js` PASS，生成 `20260506T095827Z`。
+  - 复查无命令行包含 benchmark / craftAssistSearch.test / craftAssistService.test / craftAssistFloat32Step.test 的残留 Node 进程。
+- 只读 subagent review:
+  - opt-in 语义 review：blocking 已解除；风险低；未做 UI runtime 和全链路运行态验证。
+  - artifact review：`095228Z` 自洽，支持偏移 0 / 约 19ms；同时提醒 `19ms` 是 child 总耗时，不是纯搜索核心耗时。
+- 未验证 / 注意:
+  - 未跑全量测试。
+  - 未做 UI/Electron runtime 验证。
+  - 未检查其它 worktree：`C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`。
+  - 当前工作区仍有大量前序未提交/运行态改动；不要把本轮 opt-in fast path、benchmark artifact 与旧的 UI/server/D 口径/backup 变更混成一个提交范围。
+  - 没有清理 `backup/ui_state/`、`backup/processed_inventory/` 或 `output/`。
+
+## 2026-05-06 checkpoint - train hunting 37 0.27 multi-material follow-up
+
+- 用户追问:
+  - 单材料 Eight `狩猎0.2142` 已测，但另一组多物品没有跑。
+  - 默认目标按之前 handoff 的 `狩猎列车37 0.27` 继续。
+- 结论白话:
+  - 本轮没有跑出可比较的多物品 baseline vs optimized 成功结果。
+  - 当前可用 Eight anchor snapshot 下，这个 preset 主料候选不足，baseline 和 fast-optin 都快速失败，没有进入真正 search。
+  - 因此不能给 `optimized - baseline` 偏移，也不能把几十毫秒失败当成多物品优化成功。
+- 只读审查结论:
+  - 历史上真正有效的多物品 Train 样本是 `output/playwright/train-hunting-037-027-offline-final-verify.js` 对应的旧快照口径。
+  - 最新有效历史 artifact 为 `train-hunting-037-027-offline-final-current-20260503T092400Z.*` 等。
+  - 该历史样本结果：`overall=0.2699999734759331`，`Math.fround(overall)=0.26999998092651367`，低于 raw。
+  - 最新有效历史耗时：current `9699.156ms`，no-role-sort-cache `9774.479ms`，结果和 item ids 一致。
+  - 该组是多物品 / 多材料，不满足 Eight 单材料 no-offset raw-below top-k fast path，不能套用刚才几十毫秒的单材料结论。
+- 当前复跑阻塞:
+  - 原有效脚本依赖的旧 snapshot 当前不在 root worktree:
+    - `logs/processed_inventory/inventory_processed_20260502_205953.json`
+    - `backup/processed_inventory/inventory_processed_20260502_201922...json`
+    - `backup/processed_inventory/inventory_processed_20260504_131128...json`
+  - 已尝试运行 `node output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-verify.js current`。
+  - 退出状态 `1`，artifact:
+    - `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-current-20260506T102756Z.json`
+    - `output/playwright/train-hunting-037-027-new-baseline-20260504_131128-offline-final-current-20260506T102756Z.md`
+  - 结果为 `BLOCKED`，原因是引用 snapshot 文件不存在。
+- 当前可用 anchor 快照尝试:
+  - 子 agent 新建临时脚本:
+    - `output/playwright/train-hunting-037-027-anchor-20260506_100641-fast-optin-offline-final-verify.js`
+  - 只放在 `output/playwright/`，没有改生产代码。
+  - baseline 命令:
+    - `node output/playwright/train-hunting-037-027-anchor-20260506_100641-fast-optin-offline-final-verify.js current`
+  - baseline artifact:
+    - `output/playwright/train-hunting-037-027-anchor-20260506_100641-fast-optin-offline-final-current-20260506T103158Z.json`
+  - baseline 结果:
+    - 退出状态 `1`
+    - `status=FAIL`
+    - `duration_ms=58.536`
+    - `service_duration_ms=14.971`
+    - `overall=null`
+    - `search_call_count=0`
+  - fast-optin 命令:
+    - `node output/playwright/train-hunting-037-027-anchor-20260506_100641-fast-optin-offline-final-verify.js fast-optin`
+  - fast-optin artifact:
+    - `output/playwright/train-hunting-037-027-anchor-20260506_100641-fast-optin-offline-final-fast-optin-20260506T103223Z.json`
+  - fast-optin 结果:
+    - 退出状态 `1`
+    - `status=FAIL`
+    - `duration_ms=49.415`
+    - `service_duration_ms=16.241`
+    - `overall=null`
+    - `search_call_count=0`
+  - 两次都没有 timeout；外层保护 timeout 为 `900000ms`，脚本内 timeout 口径为 `SHARD_JOB_TIMEOUT_MS=120000`、`PREFILTER_GROUP_TIMEOUT_MS=300000`、`PREFILTER_CALL_TIMEOUT_MS=600000`。
+- 失败原因:
+  - 当前可用 anchor snapshot 中，`狩猎列车37 0.27` 主料需要 `7` 件。
+  - 过滤后主料候选只有 `6` 件：AUG `4` 件，P90 `2` 件。
+  - 辅料候选约 `605` 件，但主料不足，无法组成目标配方。
+  - 因此 `search_call_count=0`，没有进入真正搜索；fast flag 打开也不能说明命中后续 fast search/prefilter 路径。
+- 未验证 / 下一步:
+  - 没有得到成功 solution，不能给 baseline/optimized overall 偏移。
+  - 未验证 HTTP route、uiServer auth、worker-pool timeout、UI/Electron runtime。
+  - 要复测真实多物品性能，需要找回历史有效 snapshot，或用当前真实库存生成一个主料候选足够的 `狩猎列车37 0.27` 快照后再跑。
+  - 当前只审了 root worktree `C:/Users/18220/Desktop/cs2_alchemy`；其它 worktree 未审。
+
+## 2026-05-06 checkpoint - train hunting 28 0.24 current-anchor benchmark
+
+- 用户最新口径:
+  - 旧 snapshot 已经找不回，不再尝试复原旧口径。
+  - 改用当前可用 snapshot 测 `狩猎列车28 0.24`。
+  - UI 中精确 preset 名为 `狩猎列车28      0.24`，脚本按空白归一化匹配 `狩猎列车28 0.24`。
+- preset / 快照:
+  - snapshot: `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`
+  - SHA256: `74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`
+  - preset id: `preset_1776867200612_56036`
+  - `target_wear_raw="0.24"`，`target_wear=0.23999999463558197`
+  - 材料构成:
+    - 主料 `count=8`: `AUG | 钢铁哨兵 (久经沙场)` + `P90 | 满昏作品 (久经沙场)`，relative range `0.23-0.26`
+    - 辅料 `count=2`: `法玛斯 | 半袖式 (久经沙场)`，relative range `0.15-0.38`
+  - 当前 anchor 下候选足够: 主料约 `336` 件，辅料约 `605` 件，会进入真实 search；这和 `狩猎列车37 0.27` 的主料不足快速失败不同。
+- 新增临时 benchmark:
+  - `output/playwright/train-hunting-028-024-anchor-20260506_100641-fast-optin-offline-final-verify.js`
+  - 只写在 `output/playwright/`，未改生产代码。
+  - route-equivalent 口径显式设 `include_component_items=true` / `use_component_items=true`。
+  - `wear_offset_pct=1`。
+  - timeout 口径:
+    - 脚本内 `SCRIPT_TIMEOUT_MS=900000`。
+    - 外层前台命令 timeout `960000ms`。
+    - service 内 `SHARD_JOB_TIMEOUT_MS=120000`、`PREFILTER_GROUP_TIMEOUT_MS=300000`、`PREFILTER_CALL_TIMEOUT_MS=600000`。
+- baseline / current:
+  - 命令:
+    - `CRAFT_ASSIST_BENCH_SCRIPT_TIMEOUT_MS=900000; CRAFT_ASSIST_BENCH_VARIANT=current; node output/playwright/train-hunting-028-024-anchor-20260506_100641-fast-optin-offline-final-verify.js current`
+  - 退出状态 `0`，`status=PASS`。
+  - artifact:
+    - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-final-current-20260506T105900Z.json`
+    - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-profile-current-20260506T105900Z.json`
+  - `overall=0.2399999052286148`
+  - `duration_ms=7813.582`
+  - `service_duration_ms=7777.789`
+  - `search duration=7761.851ms`
+  - `search_call_count=1`
+  - `total_candidate_attempts=3012909`
+  - `complete_score_attempts=10977`
+- fast-optin:
+  - 命令:
+    - `CRAFT_ASSIST_BENCH_SCRIPT_TIMEOUT_MS=900000; CRAFT_ASSIST_BENCH_VARIANT=fast-optin; node output/playwright/train-hunting-028-024-anchor-20260506_100641-fast-optin-offline-final-verify.js fast-optin`
+  - 退出状态 `0`，`status=PASS`。
+  - artifact:
+    - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-final-fast-optin-20260506T105923Z.json`
+    - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-profile-fast-optin-20260506T105923Z.json`
+  - `overall=0.2399999052286148`
+  - `duration_ms=14661.484`
+  - `service_duration_ms=14623.713`
+  - search 两次: `5509.139ms` 后得到 `0.23992135971784592`，再扩辅料候选后 `9005.279ms` 得到 `0.2399999052286148`
+  - `search_call_count=2`
+  - `total_candidate_attempts=4930728`
+  - `complete_score_attempts=19153`
+- 对比结论:
+  - `overall_delta=0`
+  - `abs_delta=0`
+  - `item_ids_same=true`
+  - `duration_delta_ms=6847.902`
+  - `service_delta_ms=6845.924`
+  - `candidate_attempts_delta=1917819`
+  - `complete_score_attempts_delta=8176`
+  - 这组不是优化后更快，而是 fast-optin 更慢；但结果没有偏移，选中 item ids 一致。
+  - raw single-material top-k fast path 没命中，因为这是 main+aux 多材料场景。
+  - fast-optin/prefilter 有生效迹象：aux candidates 从 `44` 扩到 `99`，但总耗时和尝试量都增加，不能算优化成功。
+- 已核对:
+  - 复查 artifact 字段和 profile summary，与子 agent 报告一致。
+  - `git diff --check -- docs/agent/session-log.md output/playwright/train-hunting-028-024-anchor-20260506_100641-fast-optin-offline-final-verify.js` 只有 LF/CRLF warning，无 whitespace error。
+  - 复查无命令行包含 train/eight benchmark 或 craftAssist test 的残留 Node 进程。
+- 未验证:
+  - 没走真实 HTTP / uiServer / worker / auth 链路。
+  - 没验证 Electron UI 里的 localStorage 偏好。
+  - 没跑 `include_component_items=false` 口径。
+  - 没检查其它 worktree。
+  - 没跑生产代码测试，也未提交。
+
+## 2026-05-06 handoff - craft assist time optimization evidence and next gap-guided expansion
+
+- 当前总目标:
+  - 继续优化 craft assist 自动选材耗时。
+  - 当前阶段不是继续盲目改代码，而是基于已补证据决定下一刀搜索策略。
+- 已确认事实:
+  - Eight `狩猎0.2142` 单材料样本:
+    - 基准 best-below 固定为 `0.19996105134487152`。
+    - opt-in raw-below top-k fast path 后偏移 `0`，item ids 相同。
+    - 最新重跑 `duration_optimized_ms=30.032`；断网前同口径 `19.268ms`。
+    - 这只覆盖单材料、no-offset、候选全低于 raw 的特例。
+  - `狩猎列车37 0.27`:
+    - 当前 anchor snapshot 下主料候选不足，baseline 和 fast-optin 都快速失败。
+    - `search_call_count=0`，不能当多材料性能证据。
+  - `狩猎列车28      0.24`:
+    - 当前 anchor snapshot 下候选足够，是有效多材料样本。
+    - baseline/current 成功: `overall=0.2399999052286148`，`duration_ms=7813.582`，`search=7761.851ms`。
+    - fast-optin 成功: `overall=0.2399999052286148`，`duration_ms=14661.484`。
+    - 偏移 `0`，item ids 相同，但 fast-optin 慢 `6847.902ms`。
+    - fast-optin 没命中单材料 top-k；它走的是 oversized prefilter，先用较小辅料候选跑出 `0.23992135971784592`，再扩大候选重跑才追平 baseline。
+- 原慢点定位:
+  - 慢点不在候选构建或 HTTP，而在 search 的 beam 组合扩展。
+  - `狩猎列车28 0.24` baseline profile:
+    - `total_candidate_attempts=3012909`
+    - `nextStates=2692376`
+    - `partialScoreAttempts=2384435`
+    - `partialPrunedStates=5226960`
+    - `completeScoreAttempts=10977`
+    - `no_complete_solution` 出现 `107` 次。
+    - 最终到 `windowExtra=57` 才命中 primary target step。
+  - 当前逐步扩窗是从小窗口一路 `extra=0...57` 线性试探，后段每个窗口约 `200ms+`。
+- 下一步推荐方案:
+  - 不建议继续默认扩大 fast-optin 到多材料；当前证据显示它对 `28 0.24` 是负优化。
+  - 下一刀应做 `gap-guided expansion` / 按偏移跳窗:
+    - 先用小窗口跑一次。
+    - 计算 `need_delta_sum = (target - overall) * total_count`。
+    - 根据当前组合偏低/偏高，定向打开最可能修正差值的一侧材料区间。
+    - 对 `8 main + 2 aux` 这类结构，可反推 `required_aux_sum = target * 10 - selected_main_sum`，再直接在辅料候选中找接近 `required_aux_sum / 2` 的区域。
+    - 如果定向跳窗没有命中或没有变好，回退当前逐步扩窗，保持正确性。
+- 已生成/修改的主要 evidence artifacts:
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260506T095827Z.json`
+  - `output/playwright/train-hunting-037-027-anchor-20260506_100641-fast-optin-offline-final-verify.js`
+  - `output/playwright/train-hunting-028-024-anchor-20260506_100641-fast-optin-offline-final-verify.js`
+  - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-final-current-20260506T105900Z.json`
+  - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-profile-current-20260506T105900Z.json`
+  - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-final-fast-optin-20260506T105923Z.json`
+  - `output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-profile-fast-optin-20260506T105923Z.json`
+- 已验证:
+  - `node --check node_sidecar/src/services/craftAssistSearch.js` PASS。
+  - `node --check tests/craftAssistSearch.test.js` PASS。
+  - `node --check output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark.js` PASS。
+  - `node --test tests/craftAssistSearch.test.js` PASS。
+  - `node --test tests/craftAssistService.test.js` PASS。
+  - `node --test tests/craftAssistFloat32Step.test.js` PASS。
+  - Eight benchmark 重跑 PASS，生成 `20260506T095827Z`。
+  - `git diff --check` 对相关文件只有 LF/CRLF warning，无 whitespace error。
+  - 最近复查无命令行包含 train/eight benchmark 或 craftAssist test 的残留 Node 进程。
+- 未验证:
+  - 未跑全量测试。
+  - 未做真实 HTTP / uiServer / worker / auth 链路验证。
+  - 未做 UI/Electron runtime。
+  - 未跑 `include_component_items=false` 口径。
+  - 未检查其它 worktree。
+- 当前现场:
+  - 当前 root worktree: `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 分支: `main`。
+  - 工作区仍有大量前序未提交/运行态改动，包括 `backup/ui_state/` 删除/新增、`output/` 新 artifact、UI/server/D 口径相关文件等。
+  - 不要清理 `backup/ui_state/`、`backup/processed_inventory/`、`output/`、`inventory_ui_state.json`。
+  - 不要把本轮 evidence artifacts、旧 UI/server/D 口径改动、运行态 backup 改动混成一个提交范围。
+- 下一步第一刀:
+  1. 先读本 handoff、`docs/agent/memory.md` 中 craft assist below / UI state 用户数据约束、当前 `git status --short --branch`。
+  2. 复述当前目标和断点：单材料 top-k 已验证，多材料慢点在逐步扩窗 beam search，`fast-optin` 对 `28 0.24` 是负优化。
+  3. 先写一个小规格方案，明确 `gap-guided expansion` 只作为 shortcut，不成功必须回退原逐步扩窗。
+  4. 用 `狩猎列车28 0.24` 当前 anchor artifact 作为主要验证样本，目标是减少 `extra=0...57` 的线性试探，同时保持 `overall=0.2399999052286148` 和 item ids 不偏移或明确量化偏移。
+  5. 修改后先跑 focused benchmark，再跑 `node --test tests/craftAssistSearch.test.js`、`node --test tests/craftAssistService.test.js`。
+
+## 2026-05-06 checkpoint - gap-guided expansion design review
+
+- 本轮恢复:
+  - 已按用户要求先读最新 handoff、`docs/agent/memory.md` 中 craft assist below / UI state 用户数据约束、`git status --short --branch` 和 `git worktree list --porcelain`。
+  - 当前只审当前 root worktree `C:/Users/18220/Desktop/cs2_alchemy`；其它 worktree 只列出路径，未检查内容。
+  - 当前目标仍是 craft assist 自动选材提速；单材料 top-k 已验证，多材料 `狩猎列车28 0.24` 慢点在逐步扩窗 beam search，`fast-optin` 对该样本是负优化。
+- 只读子 agent 结论:
+  - search 代码审查:
+    - 慢点在 `craftAssistSearch.js` 的外层 cap 扩张和内层 `extra=0..capExtra` 线性扩窗。
+    - 最小安全切入点建议放在 `searchCraftAssistBestSolution()` 中第一次小窗口 search 得到结果后、进入下一轮普通 cap 扩张前。
+    - shortcut 不应绕过原 beam scorer / raw ceiling / offset window / scoreTuple 判断；失败、不优或不确定必须回退原逐步扩窗。
+  - artifact/profile 审查:
+    - `狩猎列车28 0.24` current: `overall=0.2399999052286148`、`duration_ms=7813.582`、`search_call_count=1`、`total_candidate_attempts=3012909`。
+    - fast-optin: 结果与 item ids 一致，但 `duration_ms=14661.484`、`search_call_count=2`、`total_candidate_attempts=4930728`，是负优化。
+    - profile 支持逐步扩窗慢点：current 最终到 `windowExtra=57` 才命中，`no_complete_solution=107`，后段每步约 `187ms~250ms`。
+- 小规格待用户批准:
+  - `gap-guided expansion` 只作为 opt-in 内部 shortcut，不复用/扩大当前 `enable_fast_craft_assist` 的多材料语义。
+  - 只先覆盖 below + 多材料，优先 `8 main + 2 aux` 这类可反推辅料目标均值的结构。
+  - 先跑小窗口，基于当前 best 的 raw gap 估算需要补的 sum，再在辅料 value-sorted 视图附近打开少量候选窗口；最终候选仍交给原 search/score/validation 接受。
+  - 若 shortcut 没找到、找到但不合法、没有比当前 best 更好、或不能证明可按原停止条件提前结束，则继续原逐步扩窗。
+  - 验收以 `狩猎列车28 0.24` current artifact 为主：结果必须低于 raw `0.24`，目标结果应保持 `overall=0.2399999052286148` 和 item ids 一致或明确量化偏移；性能看 attempts / stopReason / windowExtra 序列，不只看毫秒。
+- 未验证:
+  - 本轮尚未改代码，未跑测试或 benchmark。
+  - 未做真实 HTTP / uiServer / worker / auth / Electron UI。
+  - 未跑 `include_component_items=false`。
+  - 未检查其它 worktree 内容。
+
+## 2026-05-06 checkpoint - sliding anchor helper salvaged, not wired into product search
+
+- 本轮用户算法收敛:
+  - 用户确认 sliding anchor 的方向定义：往右滑等于往更小磨损方向滑；后续文档/代码应使用 `toward lower wear` / `toward higher wear`，不要依赖左右图示。
+  - 用户确认动态步长策略：先根据 gap 一次滑多个候选；如果越界，再逐格回滚到“当前合法且再往回一格会越界/不合法”的贴边窗口。
+- 本轮落盘设计/计划:
+  - `docs/superpowers/specs/2026-05-06-craft-assist-sliding-anchor-design.md`
+  - `docs/superpowers/plans/2026-05-06-craft-assist-sliding-anchor.md`
+  - 设计把该问题对标为 sorted boundary search / galloping search + linear rollback，不作为自造最终求解器。
+- 子 agent 实现与审查:
+  - Nash 首轮实现 BLOCKED:
+    - 写了 RED 测试，但半成品 shortcut 会直接替代原 prefix search 返回结果，且选中 ids / overall 与 prefix baseline 不一致。
+    - 未达到 GREEN，未跑 benchmark。
+  - gpt-5.4 只读审查确认两个 P0:
+    - shortcut 直返绕过原 solver/fallback，不满足“失败必须回退逐步扩窗”。
+    - rollback 实现是遇到第一个合法点就停，不是“先越界再回滚到贴边合法点”。
+  - Carson salvage:
+    - 已摘掉 `searchCraftAssistBestSolution` 主路径里的 sliding-anchor 直返。
+    - 已删除/隔离未验证的 local beam refinement 半成品。
+    - 当前保留 `searchSlidingAnchorDiagnostic` 旁路 helper，只用于测试/诊断 sliding anchor 计算性质，不参与产品主路径。
+  - 第二轮 gpt-5.4 只读审查:
+    - 当前 `enableSlidingAnchorSearch` 在主入口是空开关，未被消费；所以不会改变最终结果，也不会绕过 prefix fallback。
+    - 这意味着当前测试只能证明“旁路 helper 的性质”和“主路径未接入时结果不变”，不能证明未来接入后的 fallback 安全。
+- 当前验证:
+  - `node --test tests/craftAssistSearch.test.js` PASS，约 3.0s。
+  - `node --test tests/craftAssistService.test.js` PASS，约 35.7s。
+  - `node --test tests/craftAssistFloat32Step.test.js` PASS，约 0.1s。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js tests/craftAssistService.test.js tests/craftAssistFloat32Step.test.js docs/agent/session-log.md docs/superpowers/specs/2026-05-06-craft-assist-sliding-anchor-design.md docs/superpowers/plans/2026-05-06-craft-assist-sliding-anchor.md` 只有 LF/CRLF warning，无 whitespace error。
+- 当前结论白话:
+  - 已把不安全的“直接返回 shortcut 结果”撤掉。
+  - 现在只是把用户的动态步长滑动窗口算法做成可测试的旁路 helper。
+  - 当前产品搜索结果不会因为 sliding anchor 改变；因此也还没有得到 28/0.24 的提速结果。
+- 未验证 / 风险:
+  - 未跑 28/0.24 benchmark，因为 sliding anchor 还没接入产品 search。
+  - 未做真实 HTTP / uiServer / worker / auth / Electron UI。
+  - 未跑 `include_component_items=false`。
+  - 未跑全量测试。
+  - 未检查其它 worktree 内容。
+  - 当前 `backup/ui_state/inventory_ui_state.backup_20260506_101909_213.json` 在 `git status` 中显示删除且本地文件不存在；本轮未清理 backup 目录，未恢复该文件，需用户单独确认是否要恢复这些运行态/备份现场。
+
+## 2026-05-06 handoff - sliding anchor helper only, no real benchmark yet
+
+- 用户最新确认:
+  - 用户登录账号后程序更新了库存；这些程序自己的运行态增删改本轮不用处理。
+  - 已只读核对 preserved Eight anchor 原始库存数据仍在:
+    - `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`
+    - SHA256 `74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`
+    - 文件大小 `2593827` bytes。
+  - 这份测试基准库存快照未丢失。
+- 当前目标:
+  - 继续 craft assist 自动选材提速。
+  - 当前方案名: dynamic-step sliding anchor / target-line sliding anchor。
+  - 目标算法: 用 value-sorted main/aux 双轴窗口，根据 gap 动态大步滑动；越界后逐格回滚到“当前合法且再回一格会越界/不合法”的贴边窗口；后续只作为搜索 anchor，不作为最终解。
+- 真实进度:
+  - 已完成:
+    - 写入设计文档 `docs/superpowers/specs/2026-05-06-craft-assist-sliding-anchor-design.md`。
+    - 写入实施计划 `docs/superpowers/plans/2026-05-06-craft-assist-sliding-anchor.md`。
+    - 子 agent 首轮错误实现已被识别并收窄：不安全的 shortcut 直返已经撤掉。
+    - 当前保留 `searchSlidingAnchorDiagnostic` 旁路 helper，只用于测试/诊断 sliding anchor 计算性质。
+    - `searchCraftAssistBestSolution` 中 `enableSlidingAnchorSearch` 目前是空开关，不消费、不改变最终结果、不跑 sliding anchor。
+  - 未完成:
+    - sliding anchor 没有接入产品 search。
+    - 没有跑 `狩猎列车28 0.24` benchmark。
+    - 没有得到任何 28/0.24 提速结果。
+    - 没有证明“接入后会正确 fallback”，目前只证明“旁路 helper 的性质”和“主路径未接入时结果不变”。
+- 已失败/需避免:
+  - Nash 首轮实现把 sliding anchor 结果直接返回，绕过原 prefix search/fallback；该路线被 gpt-5.4 review 判定为 P0，不要继续。
+  - Nash 的 rollback 是遇到第一个合法点就停，不符合用户要的“先大步越界，再回滚到贴边合法窗口”；不要复用该逻辑。
+  - 测试中不要把 helper 层的 anchor ids 强行要求等于 prefix baseline；这个断言只适合最终产品返回结果，不适合 anchor helper。
+- 当前代码/文件现场:
+  - 当前 root worktree: `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 分支: `main`。
+  - 本轮相关新增/修改:
+    - `node_sidecar/src/services/craftAssistSearch.js`
+    - `tests/craftAssistSearch.test.js`
+    - `docs/superpowers/specs/2026-05-06-craft-assist-sliding-anchor-design.md`
+    - `docs/superpowers/plans/2026-05-06-craft-assist-sliding-anchor.md`
+    - `docs/agent/session-log.md`
+  - 工作区仍有大量前序未提交/运行态改动，不要混成一个提交范围。
+  - 不要清理 `backup/ui_state/`、`backup/processed_inventory/`、`output/`、`inventory_ui_state.json`。
+- 已验证:
+  - `node --test tests/craftAssistSearch.test.js` PASS，约 3.0s。
+  - `node --test tests/craftAssistService.test.js` PASS，约 35.7s。
+  - `node --test tests/craftAssistFloat32Step.test.js` PASS，约 0.1s。
+  - `git diff --check -- node_sidecar/src/services/craftAssistSearch.js tests/craftAssistSearch.test.js tests/craftAssistService.test.js tests/craftAssistFloat32Step.test.js docs/agent/session-log.md docs/superpowers/specs/2026-05-06-craft-assist-sliding-anchor-design.md docs/superpowers/plans/2026-05-06-craft-assist-sliding-anchor.md` 只有 LF/CRLF warning，无 whitespace error。
+- 未验证:
+  - 未跑 28/0.24 benchmark。
+  - 未做真实 HTTP / uiServer / worker / auth / Electron UI。
+  - 未跑 `include_component_items=false`。
+  - 未跑全量测试。
+  - 未检查其它 worktree 内容。
+- 下一步第一刀:
+  1. 下个会话先读本 handoff、`docs/agent/memory.md` 中 craft assist below / UI state 用户数据约束、设计和计划文件、当前 `git status --short --branch`。
+  2. 先复述: 当前 sliding anchor 只是旁路 helper，未接入产品 search，未做 28/0.24 实测。
+  3. 下一步不要直接 benchmark；先决定接入策略:
+     - 方案 A: 把 sliding anchor 只用来生成一个 local beam 窗口，但最终仍由原 scorer/validation 返回，并且结果必须和 baseline 一致或不劣。
+     - 方案 B: 先扩展 diagnostic 在真实 28/0.24 artifact payload 上只读计算 anchor 区间，不改变 search，确认 anchor 是否接近 `windowExtra=57` 命中区域。
+  4. 推荐先做方案 B：对 28/0.24 当前 anchor 数据做只读 diagnostic，输出 main/aux start、boundaryProbe、overall、是否接近 baseline 命中区域；成功后再谈接入搜索。
+  5. 做完后立刻跑 `node --test tests/craftAssistSearch.test.js`，再视接入范围跑 service/float32 focused tests。
+- 给下个会话的启动指令:
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md 中 craft assist below / UI state 用户数据约束、docs/superpowers/specs/2026-05-06-craft-assist-sliding-anchor-design.md、docs/superpowers/plans/2026-05-06-craft-assist-sliding-anchor.md，再看 git status --short --branch。先复述：当前目标是 craft assist 提速；sliding anchor 目前只是旁路 diagnostic helper，未接入产品 search，未跑 28/0.24 benchmark；preserved Eight anchor 原始库存快照仍在且 hash 为 74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461。下一步第一刀优先做 28/0.24 的只读 diagnostic anchor 区间验证，不要直接把 helper 接成最终解，不要清理 backup/ui_state、backup/processed_inventory、output 或运行态配置。
+  ```
+
+## 2026-05-06 Sliding Anchor 28/0.24 diagnostic review checkpoint
+
+- 当前目标：只验证 `狩猎列车28 0.24` 的 sliding anchor diagnostic，不接入正式 search。
+- 已完成：文档审计、git/worktree 审计、JSONL 审计、reviewer 边界审查、worker diagnostic、baseline 坐标核对、helper 数据流根因排查、最后闭环 probe。
+- 核心结论：
+  - `searchSlidingAnchorDiagnostic` 对 28/0.24 返回 `null`。
+  - baseline 正常命中 `overall=0.2399999052286148`、`windowExtra=57`。
+  - `windowExtra=57` 是 target-priority 前缀扩窗量，不是 sliding anchor 坐标。
+- 关键证据：
+  - baseline aux ids `49852518812` / `49647138034` 的 `target_order_index=53/58`、`value_order_index=549/544`。
+  - diagnostic seed 用 aux value 升序，`raw=0.24`、`lowerBound=602`、`seed auxStart=600`。
+  - seed aux ids `49647135189` / `49566142095`，`target_order_index=1/0`、`value_order_index=600/601`。
+- 根因判断：当前 helper 用 value 升序坐标和 raw 线附近起点；baseline 用 target-priority 前缀窗口。这两个不是同一套坐标系。对 8 main + 2 aux 的场景，aux 不能简单从 raw 线附近取。
+- 风险/不能说明：
+  - `seedOverall=0.23230558931827544` 只能算弱证据，因为 main 候选重建不一致。
+  - 不能说明已提速，不能说明接入正式搜索安全，也不能说明 UI / HTTP / Electron 正常。
+- 下一步建议：
+  - 不要接入正式 search。
+  - 先设计并经用户批准一个最小 diagnostic-only 改动：让 helper/diagnostic 输出 baseline 对照坐标，或只改 diagnostic 起点策略。
+  - 改动前必须明确保持 scorer、raw ceiling、offset、fallback 不变。
+- 未检查范围：其它 worktree 只查了 status，没审 diff；未跑完整 benchmark；未启动 UI；未更新产品路径。
+
+## 2026-05-06 ID bridge validation freeze checkpoint
+
+- 当前冻结点：用户指出主 agent 遇到问题时没有先问用户意见，而是默认让子 agent 长时间展开调查；这是一条通用协作规则问题。
+- 处理方式：这个通用规则不在本对话继续展开，用户会另外开一个对话解决；本会话只继续当前技术任务。
+- 当前技术任务下一步：继续做 `狩猎列车28 0.24` 的 item-id 桥接验证，用稳定物品 id 连接 baseline 结果和 diagnostic seed/窗口，不再把不同排序坐标直接互比。
+- 必须保持不变：不接入正式 search，不改 scorer/raw ceiling/offset/fallback，不提交，不清理 output/backup，不启动 UI，不把 diagnostic 当提速结论。
+- 已知关键事实：baseline aux ids `49852518812`、`49647138034`；diagnostic seed aux ids `49647135189`、`49566142095`；需要验证的是这些 id 在 baseline target-priority 排序、value 升序排序、diagnostic seed/窗口中的交集和距离。
+- 下一步第一刀：派子 agent 做最小只读 ID join probe，输出 ids、两套排序位置、是否交集、距离，不追完整系统语义。
+
+## 2026-05-07 Sliding Anchor ID-bridge full-flow comparison checkpoint
+
+- 当前用户目标：对比原流程和新增 `sliding anchor -> item-id bridge 补齐/refinement -> baseline` 后的流程。
+- 用户强调：新增的补齐/refinement 必须用 item id 做桥，否则不能可靠从锚点生成筛后候选池。
+- 本轮范围：只做实验版对比，不接正式产品 search，不提交，不清理 output/backup，不启动 UI。
+- 已知当前状态：diagnostic-only 修复已让 `28/0.24` 返回非 null；之前单次结果为 `mainStart=0 / auxStart=563 / overall=0.2399985373020172`；之前简单筛后 baseline 用 main `0..32`、aux `539..589`、pad `24` 找回 baseline 最优，约 `7862ms -> 4639ms`。
+- 下一步第一刀：子 agent 跑完整对比实验，明确原流程、anchor、ID 桥补齐、筛后 baseline 每一步耗时、候选数、candidateAttempts、结果质量；并分析为什么 diagnostic 单独比 baseline 差。
+- 未完成：正式接入、完整 benchmark、UI/HTTP/Electron 验证、其它 worktree 审查。
+
+## 2026-05-07 Sliding Anchor ID-bridge full-flow comparison result
+
+- 用户目标：对比原流程 A 与新增流程 B：`sliding anchor diagnostic -> item-id bridge 补齐/refinement -> 筛后 baseline search`。
+- 本轮性质：只读实验版对比，不接正式产品 search，不提交，不清理 output/backup，不启动 UI。
+- 流程 A 原 baseline：
+  - overall `0.2399999052286148`。
+  - distance below raw 0.24 为 `9.477e-8`。
+  - windowExtra `57`，windowSizes `[42,59]`。
+  - candidateAttempts `3,012,909`。
+  - A search `7978.643ms`。
+  - A total 含构建 `8008.766ms`。
+- 流程 B：
+  - 原候选 main `42` / aux `605`。
+  - diagnostic 单独 overall `0.2399985373020172`，mainStart `0`，auxStart `563`。
+  - item-id bridge + pad=24 筛后池 main `32` / aux `64`。
+  - 筛后 baseline overall `0.2399999052286148`，windowExtra `57`，windowSizes `[32,59]`。
+  - candidateAttempts `2,630,199`。
+  - B anchor `2.788ms`，ID 映射 `0.294ms`，建池 `0.640ms`。
+  - 筛后 baseline search `7119.582ms`。
+  - B total 含构建 `7153.427ms`。
+- 对比结论：本次单次观察 B 找回原 baseline 完全相同 selected ids/values；candidateAttempts 从 `3,012,909` 降到 `2,630,199`；总耗时从 `8008.766ms` 降到 `7153.427ms`，少约 `855ms`，约 `10.7%`。这不是正式 benchmark。
+- 为什么 diagnostic 单独差：diagnostic 少拿 main id `50494932156=0.25327491760253906`，多拿 `50922135355=0.2508988380432129`；aux 多拿 `49848553961=0.19639326632022858`、`49580411102=0.19639597833156586`，少拿 baseline aux `49647138034=0.19509413838386536`、`49852518812=0.19533270597457886`。本质是 diagnostic 停在低 main + 高 aux 的局部边界，baseline 用更高 main + 更低 aux 的跨组补偿更贴近 raw。
+- ID-bridge 补齐事实：pad=24 生成 main value-order/target-prefix `0..31`，aux value-order `539..588`，aux target-prefix `0..63`；未用 baseline ids 生成池，只在事后验证 baseline final ids 全部保留。
+- refinement 事实：A 和 B 筛后 search 都直接命中 primary target step，所以没有触发 post-search refinement；这点仍未验证。
+- 未验证范围：没有完整多轮 benchmark，没有正式接入，没有 UI/HTTP/Electron/worker 验证，没有其它 worktree diff 审查。
+- 下一步第一刀：如果继续，先决定是做实验脚本化 benchmark，还是先把 ID-bridge 补齐策略设计成正式 diagnostic-only plan；不能直接把这次单次结果当最终性能结论。
+
+## 2026-05-07 Sliding Anchor refinement-before-ID-bridge comparison result
+
+- 用户纠正：上一轮漏了“sliding anchor 第一波候选后先做 refinement 补齐，再用 item id 做桥建池”的步骤；上一轮 B 不能算用户要求的完整新增流程。
+- 本轮纠正版流程：候选构建 -> sliding anchor -> refinement 补齐 -> 用 refinement 后 selected item ids 做主锚点 ID bridge（diagnostic ids 只作保守补充）-> pad=24 建筛后池 -> 筛后 baseline search。
+- 结果 A：原 full baseline overall `0.2399999052286148`，candidateAttempts `3,012,909`，windowSizes `[42,59]`，A search `7118.559ms`，A total `7151.052ms`。
+- 结果 B：纠正版 overall `0.2399999052286148`，candidateAttempts `2,630,199`，windowSizes `[32,59]`，B anchor `1.619ms`，B refinement `65.655ms`，B ID mapping `1.002ms`，B build pool `0.295ms`，B filtered baseline search `6140.317ms`，B total `6241.381ms`。
+- refinement 事实：确实执行，traceStepCount `1`；anchor overall `0.2399985373020172`，refinement 后 `0.23999905586242676`，更接近 raw `0.24`，靠近量约 `5.18560409557e-7`。
+- 筛后池：main `32/42`，aux `80/605`；A selected ids 全部保留在 B 池；B 找回 A 完全相同 overall/selected result。
+- 节省：本次单次观察 total 约少 `909.671ms`，约 `12.7%`；candidateAttempts 少 `382,710`，约 `12.7%`。这不是正式 benchmark。
+- 未验证：正式接入、完整多轮 benchmark、UI/HTTP/Electron/worker、post-search refinement 触发场景、其它 worktree diff。
+- 下一步第一刀：如果继续，需要把该实验流程脚本化为可重复 benchmark，或进入 diagnostic-only plan 设计；不要再引用上一轮漏 refinement 的结果当最终流程。
+
+## 2026-05-07 Sliding Anchor distance-vs-baseline-time handoff
+
+- 当前用户问题：这次实验结果是否说明“只要进入得更靠近，baseline 耗时就更少”。
+- 当前已验证事实：本次纠正版流程是 `anchor -> refinement -> item-id bridge -> pad=24 筛后池 -> baseline`；A 原流程 overall `0.2399999052286148`、candidateAttempts `3,012,909`、A total `7151.052ms`；B 纠正版 overall 同样 `0.2399999052286148`、candidateAttempts `2,630,199`、B total `6241.381ms`；refinement 后 anchor 更接近 `0.24`，且筛后池保住 A 的最终 ids。
+- 结论边界：这次实验支持“更靠近且保留关键 id 的筛后池，可以让 baseline 更快”，但不能推广成“只要更靠近 baseline 就一定更快”；还要看筛后池大小、保留的 id、和补齐策略。
+- 未验证：没有正式 benchmark，没有 UI/HTTP/Electron，没有其它 worktree diff，没有 post-search refinement 触发路径。
+- 下一步建议：如果继续，只能把这个关系当成实验结论写进对比说明；不要把它当绝对规则。
+
+## 2026-05-07 Single-material fast path hit-rate boundary
+
+- 当前用户提出的边界：单材料场景下，如果优化那一轮没命中，是否等于没优化；以及能否保证每次命中。
+- 只读审查结论：不能保证每次命中。fast path 命中时会直接返回；返回 `null` 时继续走原 exact / beam / fallback refinement 主流程，不会直接失败。这一轮 shortcut 没吃到省时，只多一点前置判断成本。
+- 关键触发条件：`enableRawBelowTopKFastPath === true`、`single_material`、只有 1 组、有效 `targetStepSpec`、below 模式、无 offset window、候选数量足够、所有候选 `value` 都低于 raw ceiling、scorer 接受。
+- 关键边界：只要候选池里有任意候选不低于 raw ceiling，当前 fast path 就返回 `null`；不是只要求 top K 低于 raw。
+- 现有测试：覆盖全候选低于 raw 命中、未 opt-in 继续 cap、offset window 跳过 fast path；`node --test tests/craftAssistSearch.test.js` 通过，由只读审查子 agent 跑过。
+- 性能口径：只能说命中时省时，不能说单材料每次都会省时；未命中时结果安全回原流程，但没有实质加速。
+- 未验证：service/UI 是否传入 `enableRawBelowTopKFastPath`；真实全量 benchmark；其它 worktree。
+
+## 2026-05-07 resume checkpoint - refine optimization and single-material fallback review dispatch
+
+- 当前目标：承接上一轮 handoff，本轮主要只读审查两件事：一是 `sliding anchor -> refinement -> item-id bridge -> filtered baseline` 这条实验流程里的 refinement / 初筛算法还有没有低风险优化点；二是单材料 fast path 没命中时是否安全回退，以及当前命中边界是否过窄。
+- 真实进度：当前仍是实验 / diagnostic 阶段；`sliding anchor` 未接入正式产品 search；上一轮纠正版单次实验显示 B 流程找回 A 的相同结果，总耗时约 `7151.052ms -> 6241.381ms`，但不是正式 benchmark。
+- 必须保持不变：不接正式 search，不改 scorer/raw ceiling/offset/fallback 语义，不清理 `backup/`、`output/`、`inventory_ui_state.json`，不提交，不启动 UI，不把单次实验当正式性能结论。
+- 已核对现场：当前 root worktree 为 `C:/Users/18220/Desktop/cs2_alchemy`，分支 `main`，工作区已有大量前序/运行态脏文件；其它 worktree 只通过 `git worktree list --porcelain` 列出，未审内容。
+- 本轮派工计划：并行派只读 review agent，一个看 mixed-material refinement / 初筛优化空间，一个看 single-material fast path 未命中后的回退链路与可放宽条件。主 agent 只做结果审查和最终裁决。
+- 未完成：尚未读取本轮子 agent 返回结果，尚未跑新的测试或 benchmark。
+
+## 2026-05-07 review result - refine optimization and single-material fallback
+
+- 本轮模式：按用户要求，具体代码审查交给两个只读子 agent；主 agent 只做恢复、派工、结果审查和裁决。两个子 agent 均已返回最终结果并关闭，释放名额。
+- mixed-material refinement / 初筛结论：
+  - 未发现阻塞问题；正式 search 当前没有被 `sliding anchor` 污染，`enableSlidingAnchorSearch` 仍未实际参与主路径。
+  - 最稳的低风险优化点不是把 `sliding anchor` 立刻接入，而是先优化 refinement 内部：`refineRoleAwareMaterialResults(...)` 中 `available` 不变，但候选排序存在重复构建空间，可考虑单次调用内复用 asc/desc 排序。
+  - 第二优先级是 `findClosestCandidate(...)` 的固定 `maxProbe=8`：可能错过第 9/10 个才合法的邻近候选，但这会改变 refinement 命中面，必须先写反例测试。
+  - `sliding anchor` 步长常量、`pad=24`、item-id bridge 建池策略都只能先视为 diagnostic-only 实验经验；不能直接当正式规则。
+  - 当前 raw ceiling / below 合法性有 helper 与 service 双层保护；offset window、接入后 fallback、实验流里的 post-search refinement、item-id bridge 不删关键候选仍未完整验证。
+- single-material fast path / 回退结论：
+  - fast path 命中才直接返回；返回 `null` 时会继续走原 beam / fallback refinement 主流程，本身不会造成直接失败。
+  - 真正失败只可能是后续整条原搜索链也找不到解。
+  - 当前最大命中瓶颈是 fast path 要求这一组所有有效候选都低于 raw ceiling；不能简单放宽成“只看 below top K”，因为 raw 上方候选 + raw 下方候选的整体均值可能比纯 below top K 更优。
+  - 子 agent 给出反例：`raw=0.25`、`count=2`、候选 `[0.26, 0.24, 0.20]` 时，完整搜索可选 `0.26 + 0.20` 得到 `0.23`，而只看 below top K 会早退到 `0.24 + 0.20` 得到 `0.22`，更差。
+  - 当前 UI/service 主路径看起来还没有把 `enableRawBelowTopKFastPath` 真接到 search；现有 `enableFastCraftAssist` 主要接到 oversized prefilter。这是下一步最安全、最有实际意义的接入点，但默认仍应保持关闭，并保留 miss 回原流程。
+- 主 agent 裁决：
+  - 不建议现在正式接入 `sliding anchor -> item-id bridge -> filtered baseline`。
+  - 如果要做实现，优先级建议为：
+    1. 先给单材料 raw fast path 补 route/service/worker flag wiring 与命中/未命中测试，默认关闭，证明 UI 开关能真正触达该 fast path。
+    2. 再做 refinement 排序复用这种不改变结果语义的内部优化，并用现有 focused tests 加一个多 iteration trace 不变测试。
+    3. 对 `maxProbe=8` 扩探只做有反例测试保护的后续项。
+    4. `pad=24` / bridge / sliding anchor 步长继续停留在 diagnostic-only benchmark 设计，不作为产品路径规则。
+- 本轮验证证据：
+  - Wegener 子 agent 报告运行 `node --test tests/craftAssistSearch.test.js` PASS，`node --test tests/craftAssistService.test.js` PASS。
+  - Pascal 子 agent 报告运行 `node --test tests/craftAssistSearch.test.js tests/craftAssistService.test.js` PASS。
+  - 主 agent 本轮未重跑测试；上述测试结果按子 agent 报告记录，不扩写成全量验证结论。
+- 未验证范围：未跑全量测试，未做 UI/Electron/HTTP runtime，未做 benchmark，未检查其它 worktree 内容，未审 `output/backup` artifact。
+
+## 2026-05-07 benchmark sample-scan dispatch checkpoint
+
+- 当前用户确认：项目里还有很多账号，尤其材料多的账号都可以拿来作为算法样本；先讨论完算法和样本证据，再一次性接正式实现。
+- 本轮目标：只读梳理账号/库存快照样本库和现有 offline benchmark 入口，设计后续 `baseline vs anchor/rolling prefilter + filtered baseline + fallback` 的多样本验证规格。
+- 必须保持不变：不触发 Steam 网络操作，不执行真实炼金/取出/上架等账号操作，不改账号状态，不清理 `backup/`、`output/`、`inventory_ui_state.json`，不接正式产品路径，不提交。
+- 样本使用原则：账号只作为本地库存快照样本来源；优先复用 `backup/processed_inventory/`、`logs/processed_inventory/`、运行态已落盘快照和已保存 craft assist presets；先建立候选规模索引，再挑代表样本。
+- 待派工：
+  - 子 agent A 只读查账号/库存快照来源、每类样本可如何枚举、如何判断材料多/单材料/多材料/边界样本。
+  - 子 agent B 只读查现有 offline benchmark / route-equivalent 脚本和 service 入口，给出最小可复用 harness 方案。
+- 未完成：尚未写 benchmark 脚本，尚未跑多样本 benchmark，尚未做 UI/Electron/HTTP runtime。
+
+## 2026-05-07 benchmark sample-scan result
+
+- 本轮模式：只读调查样本来源和 benchmark 入口；两个子 agent 均已返回并关闭。未跑 benchmark，未启动 UI/Electron，未发网络请求，未改账号状态。
+- 样本库结论：
+  - 当前主工作区足够支撑首轮多样本离线 benchmark。
+  - 可读 `processed_inventory` 快照共 `29` 份：`logs/processed_inventory` 里 `28` 份，`backup/processed_inventory` 里固定保留 Eight 基准 `1` 份。
+  - 其中约 `19` 份是千条级样本；当前 UI state 有 `12` 个 craft assist presets 和 `2` 个 tradeup presets。
+  - 当前能直接指向现存快照的账号优先是：
+    - `1822049852/Sun -> inventory_processed_20260506_122717.json`，快照约 `3353` 条、组件内约 `2384`。
+    - `countsteam6/Eight -> inventory_processed_20260506_214336.json`，快照约 `1979` 条、组件内约 `983`。
+    - `countsteam6/Eight` preserved 快照 `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`，约 `1979` 条，是稳定 baseline 锚点。
+- 首轮建议样本：
+  - Eight preserved 单材料：`狩猎0.2142`、`列车0.18`、`列车0.21`、`列车0.24`、`列车 0.27`，当前可用池约 `602 / 127 / 191 / 220 / 311`。
+  - Eight preserved 多材料：`狩猎列车28 0.24`、`狩猎列车28 0.21`、`狩猎列车19 0.27`、`狩猎列车37 0.27`，覆盖约 `main 189-336`、`aux 602-605`。
+  - Sun 当前快照：`狩猎0.2142`、`列车0.24`、`狩猎列车28 0.24`、`狩猎列车38 0.21`，用于更大候选池，单材料最高约 `884`，多材料约 `main 250-502`、`aux 833-903`。
+  - 边界派生样本只在内存收窄材料范围，不改文件：例如 preserved Eight 中 `法玛斯 | 半袖式` 收窄到约 `12` 候选和 `8` 候选，`AUG/P90` 主料也构造 `12` 候选和 `8` 候选，用于验证刚够/不足 fallback。
+- benchmark 入口结论：
+  - 现有 `output/playwright/*offline-final-verify.js` 能复用思路，但仍是硬编码单样本脚本，不是通用 harness。
+  - 最适合复用的离线路由等价入口是 `createCraftAssistService().selectForRecipe(...)`；它能返回 `item_ids`、`overall`、`selection_trace` 等。
+  - 后续 harness 应输入 `sample_index[]`，逐样本解析 `username / preset_name / snapshot_path / snapshot_sha / payload`，然后跑 baseline、prefilter trial、fallback 判定，并输出 JSON/MD 汇总。
+  - 当前不要把 `anchor/rolling` 直接塞进 harness 主流程，因为它还没有正式 route-equivalent prefilter helper；先用现有 `enableFastCraftAssist` 作为最小 prefilter trial，等 anchor/rolling 暴露成安全 helper 后再插入。
+- 必须记录的指标：
+  - 样本信息：`sample_index`、`username`、`preset_name`、`snapshot_path`、`snapshot_sha256`、`target_wear_raw`、`materials_digest`。
+  - baseline / prefilter：`ok`、`overall`、`item_ids`、`windowExtra`、`service_duration_ms`、`search_call_count`、`candidateAttempts`。
+  - 判定：`quality_status`、`fallback_triggered`、`fallback_reason`、`final_source`、`duration_delta_ms`、`speedup_ratio`。
+- 实现前测试清单：
+  - 样本解析测试：sample index 能稳定解析到 payload/snapshot/user/preset。
+  - route-equivalent 组装测试：离线 payload 与 `/api/craft/assist-select` 正规化语义一致。
+  - 指标提取测试：能抽出 `overall / item_ids / windowExtra / candidateAttempts / duration`。
+  - 判定测试：完全一致 accepted；有效但更差 fallback_needed；无效/超时/异常 fallback_needed。
+  - 结果落盘测试：JSON schema 和 MD 表头稳定。
+  - golden fixture 解析测试：用现有 `028 current`、`028 fast-optin`、`eight-sunset` 产物验证解析器。
+- 风险：
+  - 现有 `028/037 offline-final-verify.js` 和 `eight-sunset` 脚本都会写 artifact；`eight-sunset` 还会 spawn 子进程并强行开 `enableRawBelowTopKFastPath`，不能当中立通用 A/B harness。
+  - `no-role-sort-cache` 变体会在内存里改 search 模块，只能当历史对照，不应混进新 A/B 主口径。
+  - `028` 单次实验不能包装成正式 benchmark；已有 fast-optin 单次样本反而更慢。
+- 下一步第一刀：
+  - 写一个独立实现计划，目标是新增“多样本离线 benchmark harness”，先只做样本索引、golden 解析、baseline/prefilter/fallback 判定和结果表。
+  - 仍不接正式产品算法、不触发 Steam 操作、不清理运行态文件。
+
+## 2026-05-07 benchmark harness worker checkpoint
+
+- 本轮范围：worker 按 `2026-05-07-craft-assist-multi-sample-benchmark.md` 实现 P1-P3；P4 只做 dry-run，不跑真实多样本 benchmark。
+- 已改文件：
+  - `tools/craftAssistMultiSampleBenchmark.js`
+  - `tests/craftAssistMultiSampleBenchmark.test.js`
+  - `output/playwright/craft-assist-multi-sample-benchmark-samples.json`
+  - `docs/agent/session-log.md`
+- 已实现：
+  - CommonJS benchmark CLI / importable helper。
+  - 样本索引校验、preset/snapshot 解析、baseline vs prefilter fake-adapter runner、分类器、JSON/Markdown formatter、CLI 参数 `--samples / --limit / --only / --dry-run / --timeout-ms`。
+  - 首批 data-only 样本：Eight preserved 单材料/多材料和 Sun current 样本，共 13 条。
+- 当前验证：
+  - `node --test tests/craftAssistMultiSampleBenchmark.test.js` exit code `0`。
+  - `node tools/craftAssistMultiSampleBenchmark.js --dry-run --limit 3` exit code `0`，只打印 3 个 planned samples。
+- 未验证/未执行：
+  - 未跑真实 `--limit 1` benchmark；原因是本轮交付重点是 harness 和 dry-run 安全外壳，避免在 worker 环节引入耗时 artifact。
+  - 未启动 UI/Electron/HTTP；未触发 Steam 网络或真实账号操作；未接正式产品 search；未提交。
+
+## 2026-05-07 benchmark harness resume and fix dispatch checkpoint
+
+- 当前目标：继续离线多样本 benchmark harness，先把单样本真实运行的 timeout / fallback 记录做稳，用于后续验证 `anchor/rolling` 初筛能否减少 baseline 耗时。
+- 真实进度：已有 `tools/craftAssistMultiSampleBenchmark.js`、`tests/craftAssistMultiSampleBenchmark.test.js` 和 13 条样本索引；dry-run 曾通过；真实 `--limit 1` 曾因 CPU 密集搜索阻塞 event loop 卡住，后续半修为 worker pool 路径但文件仍需收敛。
+- 当前必须保持不变：不接正式产品 search，不触发 Steam 网络或真实账号操作，不清理 `backup/`、`output/`、`inventory_ui_state.json`、`csgo_skins.db`，不回滚已有运行态脏文件，不提交。
+- 已核对现场：当前 root worktree 为 `C:/Users/18220/Desktop/cs2_alchemy`，分支 `main`；其它 worktree 仅通过 `git worktree list --porcelain` 列出，未审内容。
+- 下一步第一刀：派 worker 只负责修 `tools/craftAssistMultiSampleBenchmark.js` 与 `tests/craftAssistMultiSampleBenchmark.test.js`，重点修 `runBenchmark()` 半改状态、单样本 timeout 记录、service error 不中断整批、baseline 不可用分类，以及无 `selection_trace.profile` 时不崩。
+- 预期验证：先跑 `node --test tests/craftAssistMultiSampleBenchmark.test.js`、两个 `node --check`、`--dry-run --limit 3`；再跑 `--limit 1 --timeout-ms 10000` 确认不会卡死且能输出清晰报告。
+
+## 2026-05-07 benchmark harness timeout/fallback verification result
+
+- 当前目标：把多账号/多库存离线 benchmark harness 先做成可靠 diagnostic 工具，用来验证 `anchor/rolling` 作为初筛器是否能减少 baseline 耗时；仍不接正式产品 search。
+- 本轮完成：
+  - 修复真实短跑卡住风险：默认真实运行走 `craftAssistWorkerPool`，单次 baseline/trial timeout 在 sample record 内记录，CLI 外层 hard timeout 不再和单次 timeout 抢跑。
+  - 修复 `overall: null` 被 `Number(null)` 误写成 `0` 的分类问题。
+  - 修复 baseline 不可用时的分类优先级：只要 baseline 失败或 timeout，记录为 `baseline_unavailable / baseline_no_result / final_source=none`。
+  - 修复 review blocking：`include_component_items/use_component_items` 不再在 candidate context/service args 中硬编码为 true；来源顺序为 sample 显式字段、preset 字段、最后 `default_true`，并在 payload 写 `component_items_source`。
+  - 修复失败样本性能字段：timeout/error/fallback/baseline_unavailable 时 `duration_delta_ms` 和 `speedup_ratio` 均为 `null`，避免把失败样本误读成性能信号。
+  - Markdown 报告新增 `fallback_reason` 与 `final_source` 列。
+- 本轮子 agent：
+  - Zeno worker 修 timeout/error/classification；已返回并关闭。
+  - Newton gpt-5.4 只读 review 找到两个 blocking：component flag 硬编码、失败样本仍输出 speedup；已返回并关闭。
+  - Schrodinger worker 修 review blocking；已返回并关闭。
+- 主 agent 复验命令：
+  - `node --test tests/craftAssistMultiSampleBenchmark.test.js` PASS，21/21。
+  - `node --check tools/craftAssistMultiSampleBenchmark.js` PASS。
+  - `node --check tests/craftAssistMultiSampleBenchmark.test.js` PASS。
+  - `node tools/craftAssistMultiSampleBenchmark.js --dry-run --limit 3` PASS，planned_count=3。
+  - `node tools/craftAssistMultiSampleBenchmark.js --limit 1 --timeout-ms 10000` PASS，生成 `output/playwright/craft-assist-multi-sample-benchmark-20260507T031425Z.json` 和 `.md`。
+  - 残留进程检查无匹配 `craftAssistMultiSampleBenchmark` 的 Node 进程。
+- 最新真实短跑结果：
+  - 样本：`eight-preserved-hunting-02142` / `狩猎0.2142`。
+  - baseline 和 trial 都按 10s 单次 timeout 记录。
+  - classification 为 `baseline_unavailable`，`fallback_reason=baseline_no_result`，`final_source=none`。
+  - `baseline_overall=null`、`trial_overall=null`、`duration_delta_ms=null`、`speedup_ratio=null`。
+  - payload 中 component flag 为 `true`，来源 `component_items_source=default_true`。
+- 算法结论边界：
+  - 当前 harness 已能安全承接多样本离线测试，但这次 `--limit 1 --timeout-ms 10000` 不是性能 benchmark，只证明短 timeout 时能落报告、不误写 speedup。
+  - 之前单样本 `anchor -> refinement -> item-id bridge -> filtered baseline` 只支持“初筛可能减少 baseline 耗时”的猜想，不足以正式接入产品路径。
+  - 单材料也可以走“多材料式初筛/滚动窗口/回 baseline”的思路做 diagnostic，但必须保留 miss 回原流程；不能保证每次命中，也不能把失败样本当省时样本。
+- 未验证范围：
+  - 未跑全 13 样本真实 benchmark。
+  - 未跑成功 `exact_match` 的真实性能样本；成功性能字段目前由 fake adapter 单测覆盖。
+  - 未接入 `anchor/rolling` diagnostic helper 到 harness。
+  - 未启动 UI/Electron/HTTP runtime，未触发 Steam 网络或真实账号操作。
+  - 未审其它 worktree 内容。
+- 下一步第一刀：
+  - 先选一个更长 timeout 的小批次，例如 `--only eight-preserved-hunting-train-28-024 --timeout-ms 120000` 或 2-3 个样本，确认能产出至少一个成功 baseline 对比记录。
+  - 再把 `anchor/rolling` 以 diagnostic trial helper 接进 harness，而不是接正式产品 search；统计 exact/acceptable/fallback/baseline_unavailable 分布后再讨论正式接入。
+
+## 2026-05-07 small-batch benchmark dispatch checkpoint
+
+- 当前目标：用户确认继续后，先跑离线小批量真实样本，拿到 baseline/trial 成功或 timeout 的真实分布；这一步只验证 benchmark harness 和现有 `enableFastCraftAssist` trial，不接 `anchor/rolling` 正式路径。
+- 本次保护范围：不触发 Steam 网络，不执行真实 craft/tradeup/withdraw/listing，不改账号状态，不清理 `backup/`、`output/`、`inventory_ui_state.json`、`csgo_skins.db`，不提交。
+- 执行方式：避免并行跑 benchmark 污染 CPU 耗时；派单个 worker 串行运行 `node tools/craftAssistMultiSampleBenchmark.js --only eight-preserved-hunting-train-28-024 --timeout-ms 120000`。
+- 预期产物：新的 `output/playwright/craft-assist-multi-sample-benchmark-*.json/md`，主 agent 审查 classification、fallback_reason、duration_delta_ms、speedup_ratio、payload component flag 来源和残留 Node 进程。
+- 下一步第一刀：worker 完成后先只审这一个多材料样本；若成功且耗时可控，再决定是否追加 1-2 个样本。
+
+## 2026-05-07 small-batch benchmark evidence result
+
+- 当前目标：用已修稳的离线 harness 跑小批量真实样本，先拿 baseline/trial 结果分布；仍未接 `anchor/rolling` 正式路径。
+- 执行方式：两个样本均由 worker 串行运行，主 agent 读取 JSON/MD 复核并检查残留进程；没有触发 Steam 网络或真实账号操作，没有执行 craft/tradeup/withdraw/listing，没有提交。
+- 样本 1：`eight-preserved-hunting-train-28-024` / `狩猎列车28 0.24`
+  - 命令：`node tools/craftAssistMultiSampleBenchmark.js --only eight-preserved-hunting-train-28-024 --timeout-ms 120000`
+  - 报告：`output/playwright/craft-assist-multi-sample-benchmark-20260507T033739Z.json` 和 `.md`
+  - baseline：ok，overall `0.2399999052286148`，duration `8174.036ms`
+  - trial：ok，overall `0.2399999052286148`，duration `14039.608ms`
+  - classification：`exact_match`，同 10 个 item ids，`duration_delta_ms=-5865.572`，`speedup_ratio=0.582`
+  - 解释：当前 harness 的 trial 是现有 `enableFastCraftAssist`，不是我们讨论的 `anchor/rolling` 初筛；这个样本说明现有 trial 在该多材料样本上结果一致但更慢，不能用来支持 anchor/rolling 猜想。
+- 样本 2：`sun-current-hunting-train-28-024` / `狩猎列车28 0.24`
+  - 命令：`node tools/craftAssistMultiSampleBenchmark.js --only sun-current-hunting-train-28-024 --timeout-ms 60000`
+  - 报告：`output/playwright/craft-assist-multi-sample-benchmark-20260507T034346Z.json` 和 `.md`
+  - baseline：timeout，duration `60009.396ms`
+  - trial：timeout，duration `60008.094ms`
+  - classification：`baseline_unavailable`，`fallback_reason=baseline_no_result`，`final_source=none`，`duration_delta_ms=null`，`speedup_ratio=null`
+  - 解释：材料更多的 Sun 当前快照已进入 60s 以上慢路径，是后续初筛优化最需要覆盖的样本；harness 正确没有把失败样本写成性能对比。
+- 两个样本的共同事实：
+  - `candidateAttempts/search_call_count/windowExtra` 目前为空；现有 service/worker 返回没有这些 top-level/profile 字段，后续如果要分析“为什么省时”，需要在 diagnostic harness 或 profile hook 里补指标。
+  - payload component flag 均为 `use_component_items=true/include_component_items=true`，来源 `component_items_source=default_true`。
+  - 残留进程检查均无匹配 `craftAssistMultiSampleBenchmark` Node 进程。
+- 当前算法判断：
+  - 继续批量跑现有 `enableFastCraftAssist` 不是优先方向；它在 Eight 28/0.24 上反而更慢，在 Sun 28/0.24 上 60s 内无结果。
+  - 我们真正要验证的是 `anchor/rolling -> filtered baseline -> miss fallback`，所以下一步应把该路线作为 diagnostic trial 接进 harness，而不是继续把当前 `enableFastCraftAssist` 当作代表。
+  - 单材料可以走多材料式的初筛/滚动路线，并且 miss 回 baseline 更自然；但仍必须通过样本证明命中率、候选池缩减和失败回退，不可只凭直觉接正式产品路径。
+- 未验证范围：
+  - 未跑全 13 样本。
+  - 未接入 `anchor/rolling` diagnostic trial。
+  - 未启动 UI/Electron/HTTP runtime。
+  - 未审其它 worktree 内容。
+  - 未补 candidateAttempts/search_call_count/windowExtra 的真实指标。
+- 下一步第一刀：
+  - 写一个小计划：在 harness 中新增 diagnostic trial 类型，先支持 `baseline`、现有 `enableFastCraftAssist`、后续 `anchor/rolling filtered baseline` 并明确每条 trial 的语义。
+  - 优先把 `anchor/rolling` 暴露为只读 diagnostic helper，不改正式 `selectForRecipe` 主路径；跑 Eight 28/0.24 和 Sun 28/0.24 两个样本做 A/B。
+
+## 2026-05-07 Sun sample freeze and anchor/rolling pipeline plan
+
+- 当前用户要求：先固定 Sun 样本，避免后续运行态快照刷新导致样本丢失；后续自研 `anchor/rolling` 初筛必须按 `初筛 -> 原 baseline 后的两次补全 -> filtered baseline -> miss fallback` 顺序设计。
+- 已固定 Sun 快照：
+  - 源文件：`logs/processed_inventory/inventory_processed_20260506_122717.json`
+  - preserved 文件：`backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json`
+  - SHA256：`608BA8F6FEBDA433F7AC20EFD065A43F30917AEAFE81388614809B0439865AD6`
+  - 文件大小：`4398586` bytes
+- 已更新样本索引：
+  - `output/playwright/craft-assist-multi-sample-benchmark-samples.json` 中 4 条 `sun-current-*` 样本已全部改指向 preserved 文件。
+  - 样本 id 和 preset 名保持不变。
+- 已新增 follow-up plan：
+  - `docs/superpowers/plans/2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md`
+  - 计划明确 diagnostic trial 必须是：
+    1. `anchor/rolling initial filter`
+    2. `baseline completion pass 1`
+    3. `baseline completion pass 2`
+    4. `filtered baseline`
+    5. `miss fallback`
+  - 计划明确当前 `enableFastCraftAssist` 只是旧 trial，不能当作自研 `anchor/rolling` 的代表。
+- 已验证：
+  - `Get-FileHash -Algorithm SHA256 backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json` 返回 `608BA8F6FEBDA433F7AC20EFD065A43F30917AEAFE81388614809B0439865AD6`。
+  - `node tools/craftAssistMultiSampleBenchmark.js --dry-run --only sun-current-hunting-train-28-024` PASS，planned sample 指向 preserved 路径。
+  - `node --test tests/craftAssistMultiSampleBenchmark.test.js` PASS，21/21。
+- 已同步长期记忆：
+  - `docs/agent/memory.md` 已记录 Sun preserved benchmark 快照路径和 hash。
+- 未做：
+  - 未接 `anchor/rolling` 到 harness。
+  - 未改正式产品 search/service 路径。
+  - 未跑新的真实 benchmark。
+  - 未触发 Steam 网络或真实账号操作。
+- 下一步第一刀：
+  - 按 `2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md` 的 P1 开始实现：先加 sample path guard 和 trial variant label，确保后续报告不会再混淆 `current_fast_prefilter` 与 `anchor_rolling_filtered_baseline`。
+
+## 2026-05-07 handoff - Sun preserved sample and anchor/rolling diagnostic plan
+
+- 当前总目标：
+  - 用离线多样本 benchmark 验证 craft assist 自研 `anchor/rolling` 初筛是否能减少 baseline 耗时，同时保证结果不差、miss 时可见 fallback。
+  - 当前仍是 diagnostic-only；不接正式产品 search，不启动 UI/Electron，不触发 Steam 网络，不执行真实 craft/tradeup/withdraw/listing。
+- 当前方案 / plan：
+  - 已完成基础 harness：`tools/craftAssistMultiSampleBenchmark.js`
+  - 已完成 follow-up plan：`docs/superpowers/plans/2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md`
+  - 该 plan 的关键 pipeline 必须保持为：`anchor/rolling initial filter -> baseline completion pass 1 -> baseline completion pass 2 -> filtered baseline -> miss fallback`
+  - 不能简化成“anchor/rolling 初筛后直接 filtered baseline”。
+- 已完成内容：
+  - Sun 当前快照已固定为 preserved benchmark 样本：
+    - `backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json`
+    - SHA256 `608BA8F6FEBDA433F7AC20EFD065A43F30917AEAFE81388614809B0439865AD6`
+  - `output/playwright/craft-assist-multi-sample-benchmark-samples.json` 中 4 条 `sun-current-*` 样本已全部改指向该 preserved 文件。
+  - `docs/agent/memory.md` 已记录 Sun preserved 快照路径和 hash，作为后续稳定约束。
+  - 已跑基础 harness 小批量样本：
+    - Eight `狩猎列车28 0.24`：baseline `8174.036ms`，current fast trial `14039.608ms`，exact match 但 trial 更慢。
+    - Sun `狩猎列车28 0.24`：baseline/trial 均 60s timeout，正确记录 `baseline_unavailable`，speedup 字段为 `null`。
+  - 已确认当前 `enableFastCraftAssist` 只是旧 trial，不能代表自研 `anchor/rolling`。
+- 已验证：
+  - `Get-FileHash -Algorithm SHA256 backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json` 返回 `608BA8F6FEBDA433F7AC20EFD065A43F30917AEAFE81388614809B0439865AD6`。
+  - `node tools/craftAssistMultiSampleBenchmark.js --dry-run --only sun-current-hunting-train-28-024` PASS，planned sample 指向 preserved 路径。
+  - `node --test tests/craftAssistMultiSampleBenchmark.test.js` PASS，21/21。
+- 当前工作区状态：
+  - 当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 当前分支：`main`
+  - 工作区已有大量前序/运行态脏文件；不要擅自回滚或清理。
+  - 相关本轮文件包括：
+    - `backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json`
+    - `output/playwright/craft-assist-multi-sample-benchmark-samples.json`
+    - `docs/superpowers/plans/2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md`
+    - `docs/agent/session-log.md`
+    - `docs/agent/memory.md`
+    - `tools/craftAssistMultiSampleBenchmark.js`
+    - `tests/craftAssistMultiSampleBenchmark.test.js`
+- 必须保持不变：
+  - 不接正式产品 search。
+  - 不改 scorer / raw ceiling / offset / final validation / production fallback 语义。
+  - 不触发 Steam 网络或真实账号操作。
+  - 不清理 `backup/`、`output/`、`inventory_ui_state.json`、`csgo_skins.db`。
+  - 不把 current `enableFastCraftAssist` benchmark 结果当成自研 `anchor/rolling` 结论。
+  - Sun 样本必须继续使用 preserved snapshot，不要改回 `logs/processed_inventory/...`。
+- 未完成：
+  - 未实现 `--trial anchor_rolling_filtered_baseline`。
+  - 未把 `anchor/rolling` diagnostic helper 接进 harness。
+  - 未实现 baseline completion pass 1 / pass 2 的 benchmark trace。
+  - 未跑 anchor/rolling 的 Eight/Sun A/B。
+  - 未补 `candidateAttempts/search_call_count/windowExtra` 等 profiling 指标。
+- 下一步第一刀：
+  1. 按 `docs/superpowers/plans/2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md` 的 P1 开始。
+  2. 先加 sample path guard 测试：所有 `sun-current-*` 必须指向 preserved Sun snapshot。
+  3. 再加 trial variant label：baseline 为 `full_baseline`，当前旧 trial 为 `current_fast_prefilter`，后续新 trial 为 `anchor_rolling_filtered_baseline`。
+  4. 先跑 `node --test tests/craftAssistMultiSampleBenchmark.test.js`，不急着跑真实 benchmark。
+- 给下个会话的启动指令：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md 中 Sun preserved benchmark 快照约束、docs/superpowers/plans/2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md、output/playwright/craft-assist-multi-sample-benchmark-samples.json，再看 git status --short --branch。先复述：当前目标是 diagnostic-only 验证自研 anchor/rolling 初筛；Sun 样本已固定到 backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json，hash 为 608BA8F6FEBDA433F7AC20EFD065A43F30917AEAFE81388614809B0439865AD6；下一步第一刀是按 plan P1 加 sample path guard 和 trial variant label。不得接正式产品 search，不得把 pipeline 简化成初筛后直接 filtered baseline，必须保留 baseline completion pass 1 和 pass 2。
+  ```
+
+## 2026-05-07 P1 worker - preserve sample and trial labels
+
+- 范围：只做 diagnostic-only benchmark P1；未进入 P2/P3/P4。
+- 已做：补了 Sun `sun-current-*` preserved snapshot path guard；为 benchmark report record 增加稳定 `variant` 字段。
+- 当前标签：baseline 为 `full_baseline`，当前旧 fast trial 为 `current_fast_prefilter`，后续诊断 trial 保留 `anchor_rolling_filtered_baseline` 名称常量。
+- TDD 结果：新增路径 guard 因现有样本已经固定而直接 PASS；新增 variant 合约先 RED，随后最小实现后 GREEN。
+- 已验证：`node --test tests/craftAssistMultiSampleBenchmark.test.js` PASS，23/23。
+- 未做：未启动 UI/Electron，未跑真实 benchmark，未接正式 `/api/craft/assist-select`，未改 scorer/raw ceiling/offset/fallback/final validation/service semantics。
+
+2026-05-07 P1 review-follow-up：补强最终 JSON report 测试，直接断言 `records[0].baseline.variant === "full_baseline"` 与 `records[0].trial.variant === "current_fast_prefilter"`；验证 `node --test tests/craftAssistMultiSampleBenchmark.test.js` PASS，23/23。
+
+2026-05-07 P2.M1 seed trace worker：只做 Diagnostic Anchor/Rolling Trial 的 Build Seed Stage，未进入 P2.M2/P3/P4。新增 `--trial anchor_rolling_filtered_baseline` 的 benchmark-only seed trace 分支；默认旧 trial 仍是 `current_fast_prefilter`。新增成功 seed contract 测试和失败 seed 负向测试，seed 成功时 `trial.diagnostic.seed.item_ids` 来自诊断 helper 的真实 selected ids，失败时保持空数组并记录 reason。RED：`node --test tests/craftAssistMultiSampleBenchmark.test.js` 先失败 23/25，失败点为新 trial 未接入。GREEN：同命令后 PASS，25/25。未改 `node_sidecar/src/services/craftAssistSearch.js`，所以未跑 `tests/craftAssistSearch.test.js`；未启动 UI/Electron，未跑真实 benchmark，未接正式 `/api/craft/assist-select`，未改 scorer/raw ceiling/offset/fallback/final validation/service semantics。
+
+2026-05-07 P2.M1 blocking-fix worker：只修 seed stage 审查阻断项，未进入 P2.M2/P3/P4。`anchor_rolling_filtered_baseline` 真实 benchmark/CLI 路径现在会在多材料时从离线 payload/materials 组候选，并调用已导出的 `searchSlidingAnchorDiagnostic(...)` 生成 seed；`trace.mode: "sliding_anchor"` 映射为 report `mode: "anchor"`。单材料真实 seed 暂不伪造成功，返回 `rolling_seed_not_implemented`。`seed.ok` 现在必须同时有真实 ids 且 raw ceiling 通过；ids 但 raw ceiling 不通过会返回 `ok:false`、`reason:"raw_ceiling"`、空成功 ids。新增不注入 `diagnosticSeedHelper` 的真实入口测试和 raw ceiling 负向测试。RED：`node --test tests/craftAssistMultiSampleBenchmark.test.js` 先失败 25/27，失败点为真实入口无 seed、raw ceiling 失败仍 ok。GREEN：`node --test tests/craftAssistMultiSampleBenchmark.test.js` PASS 27/27；`node --test tests/craftAssistSearch.test.js` PASS 1/1。未改正式 `/api/craft/assist-select`，未启动 UI/Electron，未跑真实 benchmark，未触发 Steam 网络或真实 craft/tradeup/withdraw/listing，未改 scorer/raw ceiling/offset/fallback/final validation/production service semantics。
+
+2026-05-07 P2.M1 duplicate-candidate semantic-fix worker：只修 benchmark-only 多材料 seed candidate assembly / seed diagnostic 语义，未进入 P2.M2/P3/P4。新增重复候选语义测试：当两个 material candidate pool 有重复 item id 但仍有足够不同物品时，seed 不再被普通打成 `seed_helper_no_result`，并断言最终 `item_ids` 不重复；当重复 id 无法安全分配时，`seed.ok:false` 且 `reason:"duplicate_candidate_ids_across_materials"`。实现方式是在 `tools/craftAssistMultiSampleBenchmark.js` 调用真实 `searchSlidingAnchorDiagnostic(...)` 前，按 rarity 对跨组重复 id 做确定性分配，每个重复 id 只保留在一个 material 组；可安全分配时继续调用真实 helper，不伪造 seed；不可分配时返回明确 duplicate reason。report seed diagnostic 仅新增小字段 `duplicate_candidate_ids` / `deduped_candidate_ids`。RED：`node --test tests/craftAssistMultiSampleBenchmark.test.js` 先失败 27/29，失败点为安全重复样本 `seed.ok` 仍为 false、不可分配样本仍是 `seed_helper_no_result`。GREEN：同命令 PASS 29/29。未改 `node_sidecar/src/services/craftAssistSearch.js`，所以未跑 `tests/craftAssistSearch.test.js`；未启动 UI/Electron，未跑真实 benchmark，未触发 Steam 网络或真实 craft/tradeup/withdraw/listing，未改 scorer/raw ceiling/offset/fallback/final validation/production service semantics。
+
+2026-05-07 P2.M1 owner-map enumeration fix worker：只修 benchmark-only 多材料 seed candidate assembly / duplicate owner map enumeration，未进入 P2.M2/P3/P4。新增裁决反例测试：`main.count=1`、`aux.count=1`、target `0.5 below`，重复候选 `d1/d2` 的第一套安全 owner map 会让真实 `searchSlidingAnchorDiagnostic(...)` 返回 null，第二套安全 owner map 能得到真实 seed `m + d1`。实现方式是在同一 rarity 下按确定性顺序枚举可行 owner maps，每套 map 都满足各 material count，再逐套调用真实 helper；成功 seed 仍只来自 helper，不伪造。枚举上限为 256；若耗尽上限仍无 seed，返回 `owner_map_limit_hit` 并带 `owner_map_attempts` / `owner_map_limit_hit` / `owner_map_limit` metadata，不伪装成普通 `seed_helper_no_result`。若无任何安全分配，仍返回 `duplicate_candidate_ids_across_materials`。RED：`node --test tests/craftAssistMultiSampleBenchmark.test.js` 先失败 29/30，失败点为新反例 `seed.ok` 仍为 false。GREEN：同命令 PASS 30/30。未改 `node_sidecar/src/services/craftAssistSearch.js`，所以未跑 `tests/craftAssistSearch.test.js`；未启动 UI/Electron，未跑真实 benchmark，未触发 Steam 网络或真实 craft/tradeup/withdraw/listing，未改 scorer/raw ceiling/offset/fallback/final validation/production service semantics；默认旧 trial `current_fast_prefilter` 未改变。
+
+2026-05-07 P2.M1 limit-hit semantics fix worker：只收口 `owner_map_limit_hit` 语义，未进入 P2.M2/P3/P4。最终语义：`owner_map_limit_hit` 是失败原因标记，只在 `trial.diagnostic.seed.ok === false` 且 `reason === "owner_map_limit_hit"` 时出现；成功 seed 即使内部枚举曾截断，也不再外露这个看起来像失败原因的 flag。新增两个测试：一个确认成功 seed 不带 `owner_map_limit_hit`；一个用 9 个跨材料重复 id 真实触发 256 owner-map 枚举上限耗尽，断言 `reason === "owner_map_limit_hit"`、`owner_map_limit_hit === true`、`owner_map_limit === 256`、`owner_map_attempts` 有值，并确认这些 owner-map 字段只出现在 `trial.diagnostic.seed`。RED：`node --test tests/craftAssistMultiSampleBenchmark.test.js` 先失败，最终有效 RED 为 31/32，失败点是成功 seed 仍带 `owner_map_limit_hit`；构造上限样本时曾先被 target step 拦截，已调整为合法 `0.5 below` target 和不可成功的 `0.9` 候选。GREEN：同命令 PASS 32/32。未改 `node_sidecar/src/services/craftAssistSearch.js`，所以未跑 `tests/craftAssistSearch.test.js`；未启动 UI/Electron，未跑真实 benchmark，未触发 Steam 网络或真实 craft/tradeup/withdraw/listing，未接正式 `/api/craft/assist-select`，未改 scorer/raw ceiling/offset/fallback/final validation/production service semantics；默认旧 trial `current_fast_prefilter` 未改变。
+
+## 2026-05-07 handoff - real-account comparison correction
+
+- 当前用户要的真实目标：
+  - 用真实账号固定快照和真实保存配方做延迟/结果对比。
+  - 对比对象是 `baseline` vs 我们的优化算法口径 `anchor/rolling filtered baseline`，必要时带 oracle 校验。
+  - 不是假数据单元测试，也不是把 `enableFastCraftAssist=true` 当作优化算法。
+  - 优化算法顺序必须保留：`anchor/rolling initial filter -> baseline completion pass 1 -> baseline completion pass 2 -> filtered baseline -> miss fallback`。
+- 本轮已确认的错误理解：
+  - 先前子 agent `Bernoulli` 跑的是现有单元测试假配方，不是用户要的真实账号配方；这些结果只能说明单元测试耗时，不能作为真实账号 benchmark。
+  - 主 agent 后来把“优化算法”误读成 `enableFastCraftAssist` 开关，并做了 `false/true` 对比；这不是用户要的对比。
+  - 旧 `sunset-hunting-02142-offline-final-verify.js` 使用的是更早的旧路径 `logs/processed_inventory/inventory_processed_20260502_205953.json`，不能代表后来固定的 Sun preserved 快照。
+- 当前真实数据事实：
+  - Sun preserved 快照存在：
+    - `backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json`
+    - SHA256：`608BA8F6FEBDA433F7AC20EFD065A43F30917AEAFE81388614809B0439865AD6`
+    - `output/playwright/craft-assist-multi-sample-benchmark-samples.json` 里有 `sun-current-hunting-02142`、`sun-current-train-024`、`sun-current-hunting-train-28-024`、`sun-current-hunting-train-38-021`，都指向该 preserved 快照。
+  - Eight preserved 快照存在：
+    - `backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`
+    - SHA256：`74F6FE8FE252C9268BB53008A5FBE7CE52EAB918AC532102D9FAD4B6A094E461`
+  - 当前 `inventory_ui_state.json` 里 `app_users.dev_local.craft_assist_presets` 仍包含真实 preset `狩猎0.2142`，材料是 main x10 `法玛斯 | 半袖式 (久经沙场)`，relative wear `0.15-0.24`，target raw `0.214285`。
+- 当前工作区冲突：
+  - 本文件较早 handoff 里写过 `tools/craftAssistMultiSampleBenchmark.js` 和 `tests/craftAssistMultiSampleBenchmark.test.js` 存在且已有 P1/P2 进展。
+  - 但当前主工作区实际检查结果是这两个文件都不存在：`Test-Path` 均为 `False`。
+  - 原因背景：用户后来明确要求“之前的工具直接删了 / 谁让你写工具链的”，所以旧 benchmark 入口已被删除。下个会话不要按旧 handoff 幻想这个工具还存在。
+  - 当前只能确认主工作区 `C:/Users/18220/Desktop/cs2_alchemy`；`git worktree list --porcelain` 还列出其它 worktree，但本轮没有审查那些 worktree 的文件状态。
+- 本轮真实账号已跑/已查结果：
+  - `Hypatia` 用现有 Eight 离线脚本跑了 `Eight / 狩猎0.2142`：
+    - 报告：`output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260507T064541Z.md`
+    - candidate_count `602`
+    - optimized/service 段 `20.792ms`
+    - oracle `0.378ms`
+    - item ids 与 oracle 一致
+    - 注意：这个 one-off 脚本叫 `optimal-vs-optimized`，但仍要核实它是否等价于用户现在要求的 `anchor/rolling -> two baseline completion passes -> filtered baseline -> miss fallback`，不能直接当最终答案。
+  - `Hypatia` 跑旧 Sun verify 脚本失败：
+    - 报告：`output/playwright/sunset-hunting-02142-offline-final-20260507T064528Z.md`
+    - 原因：缺少旧路径 `logs/processed_inventory/inventory_processed_20260502_205953.json`
+    - 这不说明 Sun preserved 快照缺失，只说明旧脚本入口错。
+  - 主 agent 用一次性 `node -` 命令直接读 Sun preserved 快照和当前 preset，调用现有 service 跑了 `Sun / 狩猎0.2142`：
+    - `enableFastCraftAssist=false`：ok，candidate_rows `2450`，overall `0.2142849937081337`，service `3902.411ms`，total `3918.901ms`
+    - `enableFastCraftAssist=true`：ok，同一 overall，同一组 item ids，service `4591.654ms`，total `4604.612ms`
+    - 这个对比是错误口径，只能作为“当前 fast 开关没有更快”的旁证，不能当用户要的优化算法对比。
+  - 历史旧 Sun set 结果：
+    - `output/playwright/sunset-hunting-02142-offline-final-20260503T092400Z.json`
+    - 账号 `430158438`，旧快照 `logs/processed_inventory/inventory_processed_20260502_205953.json`
+    - total `12433.883ms`，service `11901.298ms`
+    - 这是另一个账号/旧快照/旧入口，不要直接和 Sun preserved `1822049852` 当前结果混作同一数据对比。
+- 本轮新增/生成的 output 文件：
+  - `output/playwright/sunset-hunting-02142-offline-final-20260507T064528Z.json`
+  - `output/playwright/sunset-hunting-02142-offline-final-20260507T064528Z.md`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260507T064541Z.json`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260507T064541Z.md`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260507T064541Z.stage.jsonl`
+  - `output/playwright/eight-sunset-02142-optimal-vs-optimized-benchmark-20260507T064541Z.child-result.json`
+  - 一次性 `node -` Sun preserved 结果只打印到终端，没有落 output 文件。
+- 当前 root 工作区状态：
+  - cwd：`C:/Users/18220/Desktop/cs2_alchemy`
+  - branch：`main`
+  - `git status --short --branch --untracked-files=all` 显示大量既有 modified/deleted/untracked 项，包括运行态 `backup/ui_state`、`output/playwright`、业务源码和测试改动；不要擅自回滚、清理或提交。
+  - 运行态文件如 `inventory_ui_state.json`、`backup/ui_state/`、`output/playwright/` 可能持续变化，不能单独据此判断异常。
+- 必须保持不变：
+  - 不触发 Steam、真实账号登录、真实交易、真实网络 refresh。
+  - 不启动 UI/Electron/长期 HTTP 服务，除非用户明确批准。
+  - 不恢复大工具链，不擅自新建长期 benchmark 工具文件。
+  - 不把 `enableFastCraftAssist` 当作本次“优化算法”。
+  - 不把旧 Sun set `430158438 / logs/...205953` 和当前 Sun preserved `1822049852 / backup/...preserved_for_sun_benchmark...` 混成同一个对比。
+  - 不删除/清理 `backup/processed_inventory`、`backup/ui_state`、`output/playwright`、`inventory_ui_state.json`、`csgo_skins.db`。
+- 下一步第一刀：
+  - 先读 `docs/superpowers/plans/2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md` 和当前 `node_sidecar/src/services/craftAssistSearch.js`，确认 `searchSlidingAnchorDiagnostic` / completion pass / filtered baseline / miss fallback 现在实际在代码里暴露到什么程度。
+  - 然后只在用户批准后，用一次性 `node -` 命令或用户批准的最小临时 runner，对固定 Sun/Eight 快照执行同口径对比：`full_baseline` vs `anchor_rolling_filtered_baseline`。
+  - 对每个样本至少记录：sample id、snapshot path、preset、candidate rows、baseline ok/overall/ms、optimized ok/overall/ms、item ids 是否一致、是否 fallback、fallback reason、是否经过两次 baseline completion pass。
+  - 优先样本：`sun-current-hunting-02142` 和 `eight-preserved-hunting-02142`；若要测多材料，再测 `sun-current-hunting-train-28-024` / `eight-preserved-hunting-train-28-024`。
+- 下个会话启动指令：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、docs/superpowers/plans/2026-05-07-craft-assist-anchor-rolling-diagnostic-benchmark.md、output/playwright/craft-assist-multi-sample-benchmark-samples.json，并看当前 git status。先复述断点并等用户批准：当前目标是用真实账号固定快照补 baseline vs anchor/rolling filtered baseline 的同口径对比；不是跑假单元测试，也不是比较 enableFastCraftAssist。当前主工作区里 tools/craftAssistMultiSampleBenchmark.js 和 tests/craftAssistMultiSampleBenchmark.test.js 不存在，不要按旧 handoff 误以为它们还在。Sun preserved 快照路径是 backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json，hash 608BA8F6FEBDA433F7AC20EFD065A43F30917AEAFE81388614809B0439865AD6。下一步第一刀是确认当前 anchor/rolling 优化算法入口，然后在用户批准后用一次性命令或最小批准 runner 做 full_baseline vs anchor_rolling_filtered_baseline 对比。未获批准前不要改代码、不要新建工具、不要跑会写入/启动服务/联网的命令。
+  ```
+
+## 2026-05-07 handoff - local runner result and temporary disable next step
+
+- 当前总目标：
+  - 用真实本地快照和真实 preset 验证 `anchor/rolling` 前置加速链在不改正式语义的前提下是否真的有价值。
+  - 当前用户下个会话的明确目标已切到：先在主程序中**暂时禁用后置 `completion_pass_1 / completion_pass_2`**，然后由用户手动跑其它真实结果验证。
+- 当前方案 / 相关文件：
+  - 最小本地离线 runner：
+    - `output/playwright/local-offline-anchor-rolling-compare.js`
+    - `tests/local-offline-anchor-rolling-compare.test.js`
+  - 当前 runner 只支持一个样本：`eight-preserved-hunting-train-28-024`。
+  - runner 当前会输出：
+    - baseline 最终结果与耗时
+    - accelerated path 试跑结果与总耗时
+    - `seed_ms` / `completion_pass_1_ms` / `completion_pass_2_ms` / `filtered_baseline_ms`
+    - `fallback` / `fallback_reason` / `final_source`
+- 已完成内容：
+  - Eight preserved 多材料样本本地 runner 已跑通并做过 fresh 复核。
+  - latest verified artifact：
+    - `output/playwright/local-offline-anchor-rolling-compare-eight-preserved-hunting-train-28-024-20260507T100212Z.json`
+  - Eight 28/0.24 fresh 结果（主 agent 复核过）：
+    - baseline：`ok=true`，`overall=0.2399999052286148`，`ms=7146.993`
+    - accelerated trial：`ok=true`，`overall=0.2399999052286148`
+    - 分段耗时：`seed_ms=2.127`，`completion_pass_1_ms=122727.22`，`completion_pass_2_ms=116669.289`，`filtered_baseline_ms=5229.664`，`total_ms=244629.165`
+    - trial 与 baseline 顺序结果不一致，`item_ids_same=false`
+    - 最终：`fallback=true`，`fallback_reason=accelerated_path_result_mismatch`，`final_source=baseline`
+  - 结论：这条链在 Eight 28/0.24 上没有加速，且后置 completion 很重。
+  - Sun 真实 preset 勘察已完成：
+    - `inventory_ui_state.json` 中确认存在 `狩猎列车19 0.27`、`列车 0.27`、`狩猎列车28 0.27`、`狩猎列车37 0.27`
+    - Sun 应统一继续使用 preserved snapshot：
+      `backup/processed_inventory/inventory_processed_20260506_122717.preserved_for_sun_benchmark_20260507_120614.json`
+  - Sun `狩猎列车19 0.27` 的两类实验已完成：
+    - 派生子样本实验：
+      - 仅用于观察 `pass1/pass2` 是否经常不生效，不是 full-pool 结论
+      - 5 组里 `pass1` 最终有效 `0/5`，`pass2` 最终有效 `0/5`
+    - full-pool 长时实验（执行子 agent 跑完）：
+      - snapshot：Sun preserved
+      - preset：`狩猎列车19 0.27`
+      - 选中 rarity：`2`
+      - `filtered baseline 前`：`ok=true`，`overall=0.2699005454778671`，`ms=2.239`
+      - `filtered baseline`：`ok=true`，`overall=0.26999851167201994`，`ms=2943.378`
+      - `completion_pass_1 后`：`ok=true`，`overall=0.26999851167201994`，`improved=false`，`reason=no_improvement`，`ms=74155.184`
+      - `completion_pass_2 后`：`ok=true`，`overall=0.26999851167201994`，`improved=false`，`reason=full_groups_no_improvement`，`ms=1211336.236`
+      - 最终：`ok=true`，`overall=0.26999851167201994`，`total_ms=1288437.037`
+      - 实验总耗时约 `21.5` 分钟
+      - 结论：在 **Sun / 狩猎列车19 0.27 / full-pool** 上，`filtered baseline` 一旦拿到结果，后置 `completion_pass_1 / completion_pass_2` 都没有改最终结果。
+- 当前工作区 / 现场状态：
+  - cwd：`C:/Users/18220/Desktop/cs2_alchemy`
+  - branch：`main`
+  - HEAD：`4acdc64`
+  - 工作区仍有大量既有 modified / deleted / untracked；不要擅自回滚或清理。
+  - 本轮相关未提交文件主要是：
+    - `output/playwright/local-offline-anchor-rolling-compare.js`
+    - `tests/local-offline-anchor-rolling-compare.test.js`
+    - `docs/superpowers/plans/2026-05-07-local-anchor-rolling-runner.md`
+- 必须保持不变：
+  - 不触发 Steam 网络、真实登录、真实交易、真实 refresh。
+  - 不启动 UI/Electron/长期 HTTP 服务，除非用户明确批准。
+  - 不把 `enableFastCraftAssist` 当作这次的优化算法。
+  - 不恢复大 benchmark 工具链。
+  - 不删除/清理 `backup/processed_inventory`、`backup/ui_state`、`output/playwright`、`inventory_ui_state.json`、`csgo_skins.db`。
+  - 下个会话如果要改主程序，只做“**暂时禁用后置 `completion_pass_1 / completion_pass_2`**”这一刀，不要顺手扩成其它架构改造。
+- 验证状态：
+  - 已执行：
+    - `node --test tests/local-offline-anchor-rolling-compare.test.js` latest fresh result：`8/8 PASS`
+    - `node output/playwright/local-offline-anchor-rolling-compare.js --only eight-preserved-hunting-train-28-024` latest fresh result：PASS，并生成 `...20260507T100212Z.json`
+    - Sun `狩猎列车19 0.27` full-pool 长时实验由执行子 agent 跑完，给出上面的阶段耗时与结论
+  - 未覆盖：
+    - 尚未在主程序正式路径里真正禁用后置 `completion_pass_1 / completion_pass_2`
+    - 尚未让用户在主程序里手动跑更多真实样本确认禁用后的主观体感与其它结果
+- 下一步第一刀：
+  - 下个会话先在主程序中找到后置 `completion_pass_1 / completion_pass_2` 所在位置，做**临时禁用**，不要改 seed、filtered baseline、本地 raw/below 判定或最终 baseline 语义。
+  - 改完后，优先让用户手动在主程序里复跑：
+    - `Sun / 狩猎列车19 0.27`
+    - 再选 1-2 个其它真实 preset 做手动验证
+  - 立刻记录：
+    - 是否仍能出合法结果
+    - 用户体感耗时是否明显下降
+    - 是否出现结果退化或异常
+- 给下个会话的启动指令：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、git status --short --branch，并确认当前 root worktree 仍是 C:/Users/18220/Desktop/cs2_alchemy。先复述：当前已有本地离线 runner 结论；最关键的新事实是 Sun preserved snapshot + `狩猎列车19 0.27` full-pool 实验里，filtered baseline 一旦拿到结果，后置 `completion_pass_1 / completion_pass_2` 都没有改最终结果，只额外耗时（pass1 约 74s，pass2 约 1211s）。本会话目标不是再扩实验，而是先在主程序里暂时禁用这两个后置步骤，让用户手动跑其它真实结果。先做最小一刀：定位并临时禁用后置 pass1/pass2，不改 seed、filtered baseline、baseline 最终语义。改后继续更新 docs/agent/session-log.md，记录用户手动验证反馈和任何结果差异。
+  ```
+
+## 2026-05-10 handoff - fast path expand stop condition realignment
+
+- 当前目标：
+  - 把“继续放开搜”的判断口径改清楚，供下个会话直接接着改。
+  - 这次新的产品/实现方向只有一条：**只要结果已经落在允许范围内，就不要再为了追 `primary target step` 继续放开搜索；只有结果还没落在允许范围内，才继续放开搜。**
+- 当前真实代码口径：
+  - 现在开 `offset window` 时，主程序 fast 路的提前停止条件还是旧口径。
+  - 也就是：fast 路会按“**没命中 `primary target step` 就继续 prefilter / expand**”来走，而不是按“**没落在允许范围内才继续**”来走。
+  - 换句话说，即使当前候选已经落在允许范围内，只要它不是 `primary target step`，现在的 fast 路仍可能继续放开搜索。
+- 用户新要求：
+  - 新口径改成：**只要已经落在允许范围内，就直接停，不要继续放开搜。**
+  - **只有还没落在允许范围内时，才允许继续 prefilter / expand。**
+  - 重点不是“尽量追到 `primary target step`”，而是“先看是否已经落在允许范围内”。
+- 影响层级 / 边界：
+  - 这次要改的是 **主程序 fast 路 / prefilter base-expand 的提前停止条件**。
+  - 不影响 `seed` 的 `rawCeiling` 判定口径。
+  - 不影响最终 baseline 对 `target-step / offset` 合法性的终局校验。
+  - 也就是说，这次不是改 seed 入口，也不是改最终 baseline 兜底语义，而是改 fast 路里“是否还要继续放开搜”的那道门槛。
+- 当前现场相关状态：
+  - `seed` 已经作为统一前置入口接入。
+  - 但目前 `seed_hit` 还**没有**拿来缩 baseline 搜索空间。
+  - 它当前只负责：前置判定、短路、以及 `trace summary`。
+- 下一步第一刀建议：
+  - 先定位 fast 路里“base 命中即停 / expand 继续”的判断条件。
+  - 把当前由 `isMeanOnPrimaryTargetStep(...)` 驱动的提前停止，改成“**是否已经落在允许范围内**”驱动的提前停止。
+  - 同时补 focused 测试，至少覆盖这一条：**已经落在允许范围内、但不是 `primary target step` 时，不再继续 expand。**
+- 必须不变项：
+  - 不要顺手改 `seed` 契约。
+  - 不要恢复 `contextRefine`。
+  - 不要改 UI 契约。
+  - 不要把 baseline 最终 `target-step / offset` 校验删掉。
+- 验证建议：
+  - 至少点名并更新 `tests/craftAssistService.test.js` 里 fast / prefilter 相关测试口径。
+  - 验证重点不是“有没有命中 `primary target step`”，而是“在允许范围内时是否已经停止继续 expand”。
+
+## 2026-05-10 handoff - fast path batch stop realignment implemented
+
+- 当前目标：
+  - 已接上 fast 选材的重置断点，并按用户后续更正后的口径完成实现与审查。
+  - 更正后的口径不是“批内一进入允许范围就立刻停”，而是：**每一批内部仍优先逼近 `primary target step`；这一批跑完后，如果最终结果已经落在允许范围内就停；如果没落在允许范围内，才放开下一批，然后重复。**
+- 已完成内容：
+  - 主程序 fast / prefilter 的批末停止判断已从“必须命中 `primary target step` 才停”改成“批末结果是否落在允许 step/window 内”。
+  - 也就是：
+    - `base` 批末命中 primary：停在 `base`。
+    - `base` 批末没命中 primary、但已经在允许范围内：停在 `base`。
+    - `base` 批末没进允许范围：继续放开到 `expand`。
+    - `expand` 批末没命中 primary、但已经在允许范围内：停在 `expand`。
+  - 已清理补测时产生的重复测试调用，只保留一次。
+- 主要改动文件：
+  - `node_sidecar/src/services/craftAssistService.js`
+  - `tests/craftAssistService.test.js`
+- 子 agent / review 结果：
+  - 实现子 agent 完成初版后，主 agent 复跑单文件测试通过。
+  - `gpt-5.4` review 子 agent 指出缺少“base miss -> expand window hit -> stop expand”的 focused 测试。
+  - 后续补测时先出现重复调用和一次失败；调试子 agent 定位到当时生产 helper 仍只认 primary，最终改成按 `isMeanOnTargetStep(...)` 做批末停止判断。
+  - 最终 `gpt-5.4` review 子 agent 结论：`Approved`，未发现 blocking issue。
+- 验证状态：
+  - 主 agent 最新复跑：
+    - `node --test tests/craftAssistService.test.js`
+    - 结果：`pass 1 / fail 0`，最后输出 `craftAssistService tests passed`
+    - 耗时约 `60s`
+  - 未覆盖：
+    - 没启动 UI / Electron。
+    - 没触发 Steam、真实账号或真实刷新。
+    - 没检查其它 worktree。
+    - 没做全项目测试，只跑了直接相关的 `tests/craftAssistService.test.js`。
+- 必须保持不变：
+  - 不改 `seed` 契约。
+  - 不恢复 `contextRefine`。
+  - 不改 UI / API 契约。
+  - 不删除最终 `target-step / offset` 合法性校验。
+  - 不清理 `backup/`、`output/`、`inventory_ui_state.json`、`csgo_skins.db` 等运行态产物。
+- 下一步第一刀：
+  - 如果继续本线，先让用户在主程序真实 UI 里跑 fast 选材样例，确认体感和结果是否符合预期。
+  - 若再改代码，先复读本条 handoff，避免回到旧误解：**批内 primary 优先，批末按允许范围决定是否继续放开。**
+- 给下个会话的启动指令：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、git status --short --branch，并确认当前 root worktree 仍是 C:/Users/18220/Desktop/cs2_alchemy。先复述：fast 选材重置已按更正口径实现，核心规则是“批内 primary target step 优先，批末结果落在允许范围内就停，没落在允许范围内才继续 expand”。已跑 `node --test tests/craftAssistService.test.js` 且通过；未跑 UI/Electron、真实账号和全项目测试。不要重做已完成实现；如继续验证，优先让用户在真实 UI 跑 fast 选材样例。
+  ```
+
+## 2026-05-10 handoff - craft assist speedup review backlog
+
+- 当前目标：
+  - 本条 handoff 用来把“fast 选材 / craft assist 还能不能继续提速”的只读审视结果落盘。
+  - 用户要求：这些问题下个会话一一解决；本会话只写 handoff，不继续改代码。
+- 当前真实进度：
+  - fast 选材批末停止逻辑已经完成并通过单文件验证。
+  - 后续只读性能审视已经完成，未改代码、未跑新 benchmark、未启动 UI / Electron、未触发 Steam / 真实账号。
+  - 四个 `gpt-5.4` 只读子 agent 分别审视了：
+    - prefilter / base / expand 重算与候选集构造。
+    - `searchCraftAssistBestSolution(...)` 组合搜索核心。
+    - `seed`、短路、候选缓存、输入准备。
+    - 现有 session-log / benchmark / artifact 里的性能证据。
+- 当前工作区状态：
+  - cwd：`C:/Users/18220/Desktop/cs2_alchemy`
+  - branch：`main`
+  - HEAD：`4acdc6473cfffd1b3765fc1cfc51986964fdaa0b`
+  - 当前 root worktree 已检查；其它 worktree 只列出未检查：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+  - 工作区仍有大量既有 modified / deleted / untracked，包括运行态产物；不要擅自清理或回滚。
+  - 和当前 fast / performance 线直接相关的已知文件主要是：
+    - `node_sidecar/src/services/craftAssistService.js`
+    - `node_sidecar/src/services/craftAssistSearch.js`
+    - `node_sidecar/src/services/craftAssistShardPrefilter.js`
+    - `tests/craftAssistService.test.js`
+    - `tests/craftAssistSearch.test.js`
+    - `docs/agent/session-log.md`
+    - `docs/agent/memory.md`
+- 已确认的性能事实：
+  - 历史最重的慢点是后置 `completion_pass_1 / completion_pass_2` / `contextRefine`，但当前代码里 `TEMPORARY_BYPASS_CONTEXT_REFINE = true`，这条已经被临时旁路；不要把它当当前 active 第一刀。
+  - 当前 active 路径里，最像主瓶颈的是组合搜索本体，尤其是 candidate expansion / `nextStates` 生成、beam state clone、partial / complete score 重算。
+  - 有 artifact 显示 prefilter 本身只有几十毫秒，而两次 search call 到数秒级，并出现数百万级 `candidateAttempts` / `nextStates`。
+  - `base -> expand` 现在不是增量关系：`expand` 会从原始 groups 重新构造更宽候选集，再重新跑一次搜索；base 里算过的组合如果还在 expand 池里，可能再次被算。
+  - `seed` 当前只是 raw ceiling 前置判定器，不是能证明全局最优的最终搜索器；`seed_hit` 不适合直接硬裁 baseline 搜索空间。
+  - 现有缓存主要是候选列表缓存，不是组合结果缓存；而且 `candidateCache` 与 `blockedIds` 存在潜在污染风险，扩大缓存前必须先处理。
+- 下个会话建议逐项解决顺序：
+  - `P1`：先做最小、低风险去重：去掉 target-step 路径里可能重复跑的 full baseline。
+    - 目的：避免同口径 full groups 已经跑过后，外层 fallback 再跑一遍。
+    - 风险：低到中；必须保持 `prefilterSummary === null`、`usedRarityFullFallback === true`、正常 `base/expand` fallback 语义。
+    - 验证：新增 focused test，跑 `node --test tests/craftAssistService.test.js`。
+  - `P2`：接入已有窄场景 `rawBelowTopK` fast path。
+    - 适用场景：单材料、`below`、无 offset、所有候选都 `< raw`。
+    - 原则：命中严格门槛才走快路，任何不满足都自动回旧路。
+    - 风险：中；必须补 route-equivalent / search test，覆盖 offset window、多 group、非 below、有候选 `>= raw` 都回旧路。
+  - `P3`：优化 beam / nextStates 主循环。
+    - 方向：减少 state clone、减少 `Set/Array/string key` 创建、缓存 canonical key、给 state 带增量统计，减少 `scorePartialState` / complete score 全量重算。
+    - 风险：高；必须严测排序、tie-break、合法性和 item id 结果不漂。
+    - 验证：先 focused test 证明结果不变且 `nextStates` / candidateAttempts 明显下降；再回放 `sunset-hunting-02142`、`train-hunting-037-027` 等大样本。
+  - `P4`：做 `base/expand` phase 中间产物复用。
+    - 低风险优先项：复用 `orderedCandidates`、`traceMaterial`、center window / shards 等只依赖原始 group 的产物；延迟 trace / prefilter summary 包装到最终胜者确定后。
+    - 暂不直接做“base + expand extras”真增量，除非先写清“expand 是否必须包含 base”的正确性合同。
+  - `P5`：整理 service 侧输入准备和候选缓存。
+    - 小项：清掉未使用的 `estimate/estimateDiff`，减少重复排序。
+    - 大项：候选缓存分层，先缓存 unblocked 候选池，再按 target 做排序视图。
+    - 前置风险：必须先解决 `candidateCache` 与 `blockedIds` 的污染风险。
+- 暂时不要做的事：
+  - 不要把 `seed_hit` 当成“只保留这几个 id / 这个窗口就够了”。
+  - 不要把“已经落在允许 window 里”偷换成“已经是最终最优”。
+  - 不要恢复 `contextRefine` 或把它当第一优先级优化。
+  - 不要把 `enableSlidingAnchorSearch` 直接接成生产 fast path；当前仍是诊断性质。
+  - 不要削弱 selection context 的强失效检查；现有测试在保护 rows 原地变更和 candidateRows 同 id 但内容变化。
+  - 不要改变 merged shortlist 的顺序语义；当前按原始 `orderedIndex` 回正序，对后续 search 很敏感。
+  - 不要为了提速拆掉 prefilter worker timeout / invalid shard / duplicate ID 的兜底。
+- 已执行验证：
+  - 本轮 fast 批末停止逻辑完成后，主 agent 最新复跑：
+    - `node --test tests/craftAssistService.test.js`
+    - 结果：`pass 1 / fail 0`，最后输出 `craftAssistService tests passed`
+    - 耗时约 `60s`
+- 未覆盖：
+  - 性能审视后没有跑新 benchmark。
+  - 没启动 UI / Electron。
+  - 没触发 Steam、真实账号或真实刷新。
+  - 没检查其它 worktree。
+  - 没做全项目测试。
+- 下个会话第一刀：
+  - 先只读恢复：读本 handoff、`docs/agent/memory.md`、`git status --short --branch`、必要时看 `git diff` 的相关文件。
+  - 先复述：fast 批末停止逻辑已完成；当前新目标是按上面 `P1 -> P5` 逐项处理性能问题；不要重做已完成 fast 逻辑。
+  - 第一项实现建议从 `P1` 开始：定位 target-step 路径里重复 full baseline 的调用，写 focused failing test，再做最小去重。
+- 给下个会话的启动指令：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、git status --short --branch，并确认当前 root worktree 仍是 C:/Users/18220/Desktop/cs2_alchemy。先复述：fast 选材批末停止逻辑已完成并通过 `node --test tests/craftAssistService.test.js`；接下来目标是逐项处理 craft assist 提速 backlog，优先顺序是 P1 去掉 target-step 重复 full baseline，P2 接窄场景 rawBelowTopK fast path，P3 优化 beam / nextStates，P4 复用 base/expand phase 中间产物，P5 整理输入准备和候选缓存。不要恢复 contextRefine，不要把 seed_hit 硬裁 baseline，不要削弱最终 target-step/offset 校验，不要清理运行态文件。实现前先写 focused failing test，改后至少跑相关单文件测试并更新 session-log。
+  ```
+
+## 2026-05-11 checkpoint - P3 second cut incremental partial stats
+
+- 当前目标：
+  - 承接 `P3` 第二小刀，只给 beam state 增加增量统计，减少 `scorePartialState(...)` 对 `selected` 的全量扫描。
+- 本轮已完成：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+    - 新增内部 `partialStats` 聚合：`count / sum / sumSquares / radiusToSearchTarget / absDistanceSumToSearchTarget / aboveCount / belowCount / mainCount / mainSum / auxCount / auxSum / mainBelowCount / auxAboveCount`。
+    - `runBeamSearchWithinCap(...)` 在 state 初始化和每次扩展时增量维护 `partialStats`。
+    - `scorePartialState(...)` 优先读取 `partialStats`；缺失时仍回退旧的 `selected` 扫描逻辑。
+  - `tests/craftAssistSearch.test.js`
+    - 新增 getter 计数测试，证明有 `partialStats` 时不再重扫 `selected.value`。
+    - 新增 4 条代表性分支测试，验证从 `buildEmptyPartialStats()` + `extendPartialStats(...)` 实时累出的 stats 与慢路径在容差内等价：
+      - `single_material + infinite`
+      - `multi_material_role + infinite`
+      - `single_material + targetStepSpec`
+      - `multi_material_role + targetStepSpec`
+    - 新增 variance 容差测试，明确 `calcVarianceFromPartialStats(...)` 是容差等价，不追求位级完全相同。
+- 关键结论：
+  - 这轮不改 scorer 语义、tie-break、target-step 优先级、最终合法性判断，也不改 profile payload shape。
+  - 两个 `gpt-5.4` reviewer 最终都通过；其中一个 reviewer要求把“真实增量生成 stats 的证明链”补齐，已补完。
+- 已执行验证：
+  - `node --test tests/craftAssistSearch.test.js`
+  - 结果：`pass 1 / fail 0`，最后输出 `craftAssistSearch tests passed`
+  - 耗时约 `2.7s`
+- 未覆盖：
+  - 没跑 `service` / `route` / `worker` 单测。
+  - 没回放 `sunset-hunting-02142`、`train-hunting-037-027` 等大样本。
+  - 没跑 UI / Electron / 真实账号。
+  - 没检查其它 worktree。
+- 下一步建议：
+  - 若继续 `P3`，优先先做真实大样本 replay，确认前两小刀在重样本上至少不退化，再决定要不要继续做更高风险的 beam/score 深挖。
+
+## 2026-05-11 checkpoint - pure baseline preserved replay
+
+- 当前目标：
+  - 继续使用历史 preserved 快照，但改用 pure baseline route-equivalent replay，不再混 `oracle`、`anchor_rolling` 或 optimized 对比链路。
+- 本轮已完成：
+  - 新增最小 runner：
+    - `output/playwright/craft-assist-baseline-replay.js`
+    - `tests/craftAssistBaselineReplay.test.js`
+  - runner 当前行为：
+    - 只支持 3 个样本：
+      - `eight-preserved-hunting-02142`
+      - `eight-preserved-hunting-train-37-027`
+      - `eight-preserved-hunting-train-28-024`
+    - 冻结输入改为历史 artifact 的 `payload + target_step_spec + snapshot_path`
+    - `snapshot_path` 必须同时满足：
+      - sample index 与 frozen artifact 一致
+      - 路径命中 preserved 快照
+    - baseline 调用固定 `enableFastCraftAssist: false`
+    - 输出字段改为 `beam_profile_summary`，避免误读成完整 search profile
+    - 修复同进程 preload 后 profile hook 漏挂；runner 结束时会清相关 require cache
+  - fresh 验证：
+    - `node --test tests/craftAssistBaselineReplay.test.js`
+    - 结果：`pass 1 / fail 0`，`9/9` 后又补到 `10/10`，最终最新 fresh 结果为 `10/10 PASS`
+- 真实 preserved replay 结果：
+  - `eight-preserved-hunting-02142`
+    - 命令：`node output/playwright/craft-assist-baseline-replay.js --only eight-preserved-hunting-02142`
+    - 结果：baseline `ok=false`，`overall=0`
+    - 耗时：总 `1082939.003ms`，service `1082915.14ms`
+    - `target_step_spec_source=recomputed_from_frozen_payload`
+    - `beam_profile_summary`: `search_call_count=1`、`event_count=6`
+    - artifact:
+      - `output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-02142-20260511T055923Z.json`
+      - `output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-02142-20260511T055923Z.md`
+    - 结论：这不是脚本脏入口问题，而是当前 pure baseline 在该 preserved 样本上真实跑了约 `18` 分钟后仍失败。
+  - `eight-preserved-hunting-train-37-027`
+    - 命令：`node output/playwright/craft-assist-baseline-replay.js --only eight-preserved-hunting-train-37-027`
+    - 结果：baseline `ok=false`，`overall=null`
+    - 耗时：总 `33.184ms`，service `13.162ms`
+    - `beam_profile_summary`: `search_call_count=0`、`event_count=0`
+    - artifact:
+      - `output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-train-37-027-20260511T060015Z.json`
+      - `output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-train-37-027-20260511T060015Z.md`
+    - 结论：当前 Eight preserved 快照下主材料数量不足（需 `7`，仅 `6`），未进入实际搜索，不能拿来判断 P3 是否退化。
+  - `eight-preserved-hunting-train-28-024`
+    - 命令：`node output/playwright/craft-assist-baseline-replay.js --only eight-preserved-hunting-train-28-024`
+    - 结果：baseline `ok=true`，`overall=0.2399999052286148`
+    - 耗时：总 `6862.878ms`，service `6842.07ms`
+    - `beam_profile_summary`: `search_call_count=1`、`event_count=3`
+    - artifact:
+      - `output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-train-28-024-20260511T060102Z.json`
+      - `output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-train-28-024-20260511T060102Z.md`
+    - 结论：这是当前最干净、可直接用来观察 P3 变动的 preserved baseline 样本。
+- 当前判断：
+  - 这批 pure baseline replay 没有给出“P3 前两小刀整体退化”的统一结论。
+  - 原因：
+    - `02142` 真正跑进 baseline，但极慢且失败；
+    - `37/0.27` 因样本本身材料不足，不进搜索；
+    - 只有 `28/0.24` 是可直接比较的成功 baseline 样本。
+- 未覆盖：
+  - 没检查其它 worktree。
+  - 没做新的多样本统计汇总。
+  - 没跑 UI / Electron / 真实账号。
+
+## 2026-05-11 checkpoint - baseline replay runner finalized
+
+- 本轮已完成：
+  - 新 runner `output/playwright/craft-assist-baseline-replay.js` 经两轮 review 收口，最终行为：
+    - 只支持 3 个 sample id
+    - 冻结输入来源为历史 artifact 的 `payload + snapshot_path + target_step_spec`
+    - 若 frozen artifact 缺 `target_step_spec`，允许只用冻结 payload 兼容重算，并输出 `target_step_spec_source`
+    - baseline 调用固定 `enableFastCraftAssist: false`
+    - profile 输出字段名收窄为 `beam_profile_summary`
+    - 结束时会清相关 require cache，避免同进程污染
+  - fresh 单测：
+    - `node --test tests/craftAssistBaselineReplay.test.js`
+    - 结果：`10/10 PASS`
+- 真实 replay 最终版结果：
+  - `eight-preserved-hunting-02142`
+    - 最新有效真实运行：`output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-02142-20260511T055923Z.json/.md`
+    - 结果：baseline `ok=false`，`overall=0`
+    - 耗时：总 `1082939.003ms`，service `1082915.14ms`
+    - `target_step_spec_source=recomputed_from_frozen_payload`
+    - `beam_profile_summary`: `search_call_count=1`，`event_count=6`
+    - 说明：最后几次 runner 修补只动脚本层来源/校验/cache 清理，没有改 baseline 路径本身，因此未再重跑这一条约 `18min` 的样本。
+  - `eight-preserved-hunting-train-37-027`
+    - fresh 最终版：`output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-train-37-027-20260511T060326Z.json/.md`
+    - 结果：baseline `ok=false`，`overall=null`
+    - 耗时：总 `35.137ms`，service `13.118ms`
+    - `beam_profile_summary`: `search_call_count=0`，`event_count=0`
+    - 说明：当前 Eight preserved 快照下主材料数量不足，未进入实际搜索。
+  - `eight-preserved-hunting-train-28-024`
+    - fresh 最终版：`output/playwright/craft-assist-baseline-replay-eight-preserved-hunting-train-28-024-20260511T060333Z.json/.md`
+    - 结果：baseline `ok=true`，`overall=0.2399999052286148`
+    - 耗时：总 `6971.377ms`，service `6949.445ms`
+    - `beam_profile_summary`: `search_call_count=1`，`event_count=3`
+    - 说明：这是当前最干净、可直接作为 P3 对比基线的 preserved 样本。
+
+## 2026-05-11 note - baseline fixed time and fast+5 compare
+
+- 当前记录约定：
+  - `eight-preserved-hunting-train-28-024` 的 pure baseline route-equivalent 时间固定记为：
+    - total `6971.377ms`
+    - service `6949.445ms`
+  - 后续同轮对比不再重复重跑这条 pure baseline，直接拿这组时间做基准。
+- 本轮 fast+5 单次测量：
+  - 输入样本：`eight-preserved-hunting-train-28-024`
+  - preserved snapshot：`backup/processed_inventory/inventory_processed_20260506_100641.preserved_for_eight_anchor_20260506_100912.json`
+  - 冻结 payload 来源：`output/playwright/train-hunting-028-024-anchor-20260506_100641-preset-028-024-fast-optin-offline-final-current-20260506T105900Z.json`
+  - 变更项仅：
+    - `wear_offset_pct=5`
+    - `enable_fast_craft_assist=true`
+  - 结果：
+    - `ok=true`
+    - `overall=0.2399999052286148`
+    - `below_raw=true`
+    - `item_ids` 与 pure baseline 相同
+    - `selection_trace.mode=null`
+    - `selection_trace.prefilter.retryMode="base"`
+    - `recipe_ok=true`
+  - 耗时：
+    - total `9648.93ms`
+    - service `9642.139ms`
+  - 对比 pure baseline：
+    - total `+2677.553ms`
+    - service `+2692.694ms`
+    - 相对 pure baseline 总耗时约 `+38.4%`
+  - 结论：
+    - 当前这组样本里，开 fast 且偏移改成 `5%` 没有改变最终结果，但比 pure baseline 更慢。
+
+## 2026-05-11 handoff - P3 baseline replay and fast semantics
+
+- 当前目标：
+  - 当前主线已经从 `P1/P2/P3` 实现，转入“验证哪些优化真实有效”阶段。
+  - 眼下最需要记住的不是再改代码，而是区分：
+    - pure baseline route-equivalent 表现
+    - `enableFastCraftAssist=true` 后的真实表现
+- 当前真实进度：
+  - `P1` 已完成：target-step 外层重复 full baseline 已去重。
+  - `P2` 已完成：现有 `enableFastCraftAssist` 已接到单材料 `rawBelowTopK` 快路；同时保留多材料 oversized prefilter 语义。
+  - `P3` 第一小刀已完成：generation-time canonical dedup + cached canonical key。
+  - `P3` 第二小刀已完成：state 增量 `partialStats`，减少 `scorePartialState(...)` 全量扫描。
+  - pure baseline replay runner 已完成并过单测，路径：`output/playwright/craft-assist-baseline-replay.js`
+- 最后一个已落盘动作：
+  - 已把 pure baseline replay、runner 修补、`fast+5` 对比结果写进 [docs/agent/session-log.md](/C:/Users/18220/Desktop/cs2_alchemy/docs/agent/session-log.md) 最新几节。
+- 关键已确认事实：
+  - 现在的 `fast` 不是单一算法，而是两层语义叠加：
+    - 多材料 / oversized group：走 prefilter
+    - 很窄的单材料场景：额外可能命中 `rawBelowTopK`
+  - `fast` 没有“变成只适用于单材料”；多材料 fast 还在，但它吃的是 prefilter，不是 `rawBelowTopK`。
+  - 对 `eight-preserved-hunting-train-28-024`：
+    - pure baseline 固定时间记为：
+      - total `6971.377ms`
+      - service `6949.445ms`
+    - 后续这条 baseline 不再重复重跑，直接拿这组时间当基准。
+    - `enable_fast_craft_assist=true` + `wear_offset_pct=5` 时：
+      - 结果不变：`overall=0.2399999052286148`
+      - `item_ids` 不变
+      - 但 total `9648.93ms`、service `9642.139ms`
+      - 相比 pure baseline 约慢 `38.4%`
+      - `selection_trace.prefilter.retryMode="base"`
+      - `selection_trace.mode=null`
+- 当前 preserved 样本 replay 结论：
+  - `eight-preserved-hunting-02142`
+    - pure baseline 真跑进去了，但约 `18min` 后失败；不是脚本脏入口。
+  - `eight-preserved-hunting-train-37-027`
+    - 当前 Eight preserved 快照下主材料数量不足，未进入搜索；不能拿它评估 P3 是否退化。
+  - `eight-preserved-hunting-train-28-024`
+    - 当前唯一干净、可直接用于 P3 纯 baseline / fast 对比的 preserved 样本。
+- 必须保持不变：
+  - 不把 `enableFastCraftAssist` 简化理解成单材料快路；它现在仍同时承载 prefilter + rawBelowTopK 两层语义。
+  - 不恢复 `contextRefine`。
+  - 不改 `seed` 契约。
+  - 不改最终 `target-step / offset` 合法性校验。
+  - 不清理 `backup/`、`output/`、`inventory_ui_state.json`、`csgo_skins.db`。
+- 未覆盖：
+  - 没检查其它 worktree。
+  - 没跑 UI / Electron / 真实账号。
+  - 没做新的多样本统计汇总。
+  - `eight-preserved-hunting-train-37-027` 当前样本无效，`eight-preserved-hunting-02142` 当前 baseline 代价太高，不适合频繁复跑。
+- 下一步第一刀：
+  - 如果继续验证，不要再重跑 `28/0.24` 的 pure baseline。
+  - 优先做同一 preserved 样本 `eight-preserved-hunting-train-28-024` 的**单变量对比**，例如：
+    - 固定 `enable_fast_craft_assist=true`
+    - 分别测 `wear_offset_pct=1/5`
+    - 看结果是否相同、耗时是否变化、`prefilter.retryMode` 是否从 `expand` 变成 `base`
+  - 如果要继续优化代码，先别动 `fast`，优先继续 baseline 核心搜索本体。
+- 下个会话启动指令：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、git status --short --branch，并确认当前 root worktree 仍是 C:/Users/18220/Desktop/cs2_alchemy。先复述：P1/P2/P3 前两小刀都已完成；当前重点转为验证。特别记住 `eight-preserved-hunting-train-28-024` 的 pure baseline 固定时间 total=6971.377ms、service=6949.445ms，不要再重跑它。当前 fast 不是单一算法，而是 prefilter + 窄场景 rawBelowTopK 两层语义；在 `28/0.24` 上，fast+5 结果没变但更慢。若继续，优先做同样本单变量 replay，对比 `wear_offset_pct=1/5` 或继续 baseline 核心搜索验证；不要清理运行态文件，不要重回 UI preset 读 payload。
+  ```
+
+## 2026-05-11 handoff correction - baseline optimization remains the mainline
+
+- 这条更正是为了解决上一条 handoff 写偏的问题：
+  - 上一条 handoff 的价值是把“纯 baseline 固定时间、fast 当前语义、哪些 preserved 样本可用”这些现场事实钉住。
+  - 但它把“验证”写得过重，容易让下个会话误以为下一步主线还是继续围着 fast/replay 打转。
+- 正确主线：
+  - 下一步仍然应该继续看 **baseline 核心搜索还能怎么优化**。
+  - `fast` / replay 现在更多是已知现场约束，不是下一刀的主攻方向。
+- 当前对 baseline 优化最有用的已确认事实：
+  - `P3` 第一小刀（generation-time canonical dedup + cached canonical key）已完成并通过 search 单测。
+  - `P3` 第二小刀（state 增量 `partialStats`，减少 `scorePartialState(...)` 全量扫描）已完成并通过 search 单测。
+  - `eight-preserved-hunting-train-28-024` 的 pure baseline 已固定：
+    - total `6971.377ms`
+    - service `6949.445ms`
+    - 这条后续不再重跑，可直接拿来对比。
+  - 当前 `fast+5` 在同一样本上结果不变但更慢，因此不要把 fast 当成当前主优化方向。
+- 下一步第一刀（更正版）：
+  - 回到 baseline 搜索本体，继续找“同样的结果，能不能再少算几遍账”。
+  - 优先方向：
+    - 继续清理 baseline 核心搜索里的重复劳动
+    - 重点看 `complete score` 和 role-aware 细化路径是否还在重复扫描/重复构造
+    - 不优先继续折腾 `fast`
+  - 做完后先跑直接相关单测，再决定是否需要新的大样本 replay。
+- 下个会话启动指令（更正版）：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、git status --short --branch，并确认当前 root worktree 仍是 C:/Users/18220/Desktop/cs2_alchemy。先复述：P1/P2/P3 前两小刀都已完成；`eight-preserved-hunting-train-28-024` 的 pure baseline 固定时间 total=6971.377ms、service=6949.445ms，不再重跑。fast 当前不是主优化方向；下一步主线是继续 baseline 核心搜索优化，优先看 complete score / role-aware 细化路径里的剩余重复劳动。不要清理运行态文件，不要重回 UI preset 读 payload。
+  ```
+
+## 2026-05-24 handoff - craft assist entry window spec and plan
+
+- 当前目标：
+  - 为辅助选材新增“入场窗口”规则做准备。
+  - 规则只改变候选组合能不能进入后续比较，例如 `bestBelow` / scoring；不改变最终校验。
+- 当前方案：
+  - Spec：`docs/superpowers/specs/2026-05-24-craft-assist-entry-window-design.md`
+  - Plan：`docs/superpowers/plans/2026-05-24-craft-assist-entry-window.md`
+- 已完成内容：
+  - 已确认用户要的“范围”是由目标磨损 `target` 和现有偏移值 `offset` 组成。
+  - 已确认 `below` 入场窗口：
+    - `[target - offset, target]`
+    - 闭区间，等于边界不丢弃。
+  - 已确认 `infinite / 逼近` 入场窗口：
+    - `[target - offset, target + offset]`
+    - 闭区间，等于边界不丢弃。
+  - 已写入 spec，明确“只改入场条件，不改最终校验”。
+  - 已写入 implementation plan，按 TDD 拆成：
+    - `P1` 锁定 helper 语义；
+    - `P2` 接入 single-material `balanced_center_push`；
+    - `P3` 接入 generic / infinite scoring；
+    - `P4` 从 service 层传现有 `offsetValue` 到 search；
+    - `P5` focused verification。
+- 最后一个已落盘动作：
+  - 新增 `docs/superpowers/plans/2026-05-24-craft-assist-entry-window.md`。
+  - 本条 handoff 正在追加到 `docs/agent/session-log.md`。
+- 当前现场状态：
+  - 当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 当前分支：`main`
+  - 已检查 `git worktree list --porcelain`，存在其它 worktree：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+  - 本轮只检查和写入当前 root worktree，没有检查其它 worktree 的代码状态。
+  - 工作区本来已经有大量未提交改动和运行态/备份文件变化；不要把这些都归因于本轮。
+  - 本轮新增的主要文件：
+    - `docs/superpowers/specs/2026-05-24-craft-assist-entry-window-design.md`
+    - `docs/superpowers/plans/2026-05-24-craft-assist-entry-window.md`
+  - 本轮没有实现业务代码。
+- 必须保持不变：
+  - 不改最终校验。入场窗口通过不等于最终成功。
+  - 不改 UI 控件、API 字段、请求结构或响应结构。
+  - 不改材料候选池、库存过滤、blocked id、可炼金判断。
+  - 不改 fast prefilter 策略。
+  - 不改 `target_wear`、`target_wear_raw`、float32 target-step 校验。
+  - 不引入价格、收益、概率、目标皮肤逻辑。
+  - 不把 `targetStepSpec.lowerTargetStep / upperTargetStep` 当作入场窗口的唯一来源；计划推荐显式传 `entryOffsetValue`，避免把“入场窗口”和“最终校验窗口”混在一起。
+  - 不提交，除非用户明确要求。
+- 已验证内容：
+  - 已只读核对相关代码位置：
+    - `node_sidecar/src/services/craftAssistSearch.js`
+    - `node_sidecar/src/services/craftAssistService.js`
+    - `tests/craftAssistSearch.test.js`
+  - 已确认 `tests/craftAssistSearch.test.js` 有 vm internals loader，可用于测试 search 内部 helper。
+  - 已确认 service 层已经计算 `offsetValue`，但 search 层当前没有显式 entry window 参数。
+  - 已确认 plan 文件和 spec 文件可用 `Get-Content -Encoding UTF8` 正常读取。
+- 未验证 / 未完成：
+  - 未实现代码。
+  - 未写 RED tests。
+  - 未运行 `node tests/craftAssistSearch.test.js` 或 `node tests/craftAssistService.test.js`。
+  - 未启动 Electron、本地服务或真实账号动作。
+  - 未检查其它 worktree 的相关分支是否也有同类改动。
+- 下一步第一刀：
+  - 先读：
+    - `docs/superpowers/specs/2026-05-24-craft-assist-entry-window-design.md`
+    - `docs/superpowers/plans/2026-05-24-craft-assist-entry-window.md`
+    - `docs/agent/memory.md`
+    - 当前 `git status --short --branch`
+  - 先复述断点并等待用户批准，不要自动实现。
+  - 获批后从 plan 的 `P1.M1.T1.S1` 开始：
+    - 在 `tests/craftAssistSearch.test.js` 给 pure entry-window helper 写 RED tests。
+    - 用现有 vm internals loader 暴露待实现 helper。
+    - 跑 `node tests/craftAssistSearch.test.js`，预期先失败。
+  - 然后按 plan 顺序实现最小 helper，再跑 focused tests。
+- 下个会话启动指令：
+  ```text
+  不要依赖内置 resume。先读 docs/agent/session-log.md 最新 handoff、docs/agent/memory.md、docs/superpowers/specs/2026-05-24-craft-assist-entry-window-design.md、docs/superpowers/plans/2026-05-24-craft-assist-entry-window.md，并查看 git status --short --branch 和 git worktree list --porcelain。先复述：当前目标是实现 craft assist entry window；已完成 spec/plan，未实现代码、未跑测试；本规则只改入场条件，不改最终校验。下一步第一刀是从 plan 的 P1.M1.T1.S1 写 RED tests。复述后停住，等待用户明确批准再实现；不要自动派实现 agent，不要改业务代码，不要提交，不要清理运行态文件。
+  ```
+
+## 2026-05-24 handoff - craft assist entry window second-round fix
+
+- 当前目标：
+  - 继续第一轮 worker 的 craft assist entry-window 实现，只做窄范围修复。
+  - 修复 `test_step_target_infinite_offset_accepts_higher_side_step_when_input_and_lower_unavailable` 最后红测。
+- 本轮完成：
+  - 已复现第一轮红测：`node tests/craftAssistService.test.js` 失败在 `tests/craftAssistService.test.js:2807`，`false !== true`。
+  - 已核对 spec / plan：
+    - `below` 入场窗口是 `[target - offset, target]`，闭区间。
+    - `infinite` 入场窗口是 `[target - offset, target + offset]`，闭区间。
+    - 窗口的 `target` 来自用户原始输入目标，即 `targetValue` / `targetStepSpec.inputStep`，不是 search target / `targetStepSpec.targetStep`。
+  - 已修复 search 层 entry-window 在 target-step 场景下的入场中心：
+    - 有 `targetStepSpec.inputStep` 时，用它作为 entry-window 的原始输入 target。
+    - 有 offset window 的 target-step 场景，沿用 `targetStepSpec.lowerTargetStep / upperTargetStep` 作为 float32 闭区间端点，避免合法边界台阶被十进制 `target +/- offset` 误挡。
+    - 修正 `lowerBound` / `upperBound` 显式传 `null` 时被 `Number(null)` 误当作 `0` 的问题。
+  - 未改最终校验、UI/API、候选池、库存过滤、blocked id、可炼金判断、fast prefilter、target_wear / target_wear_raw / float32 target-step 校验、价格/收益/概率/目标皮肤逻辑。
+- 修改文件：
+  - 本轮实际编辑：`node_sidecar/src/services/craftAssistSearch.js`
+  - 本轮记录：`docs/agent/session-log.md`
+  - 第一轮已有脏改动仍存在于 `node_sidecar/src/services/craftAssistService.js`、`tests/craftAssistSearch.test.js`、`tests/craftAssistService.test.js`、`tests/craftAssistFloat32Step.test.js` 等；本轮未回退、未清理。
+- 验证：
+  - `node tests/craftAssistService.test.js`
+    - exit code: 0
+    - 关键结果：`craftAssistService tests passed`
+    - RED->GREEN：同一命令先复现 `tests/craftAssistService.test.js:2807 false !== true`，修复后通过。
+  - `node tests/craftAssistSearch.test.js`
+    - exit code: 0
+    - 关键结果：`craftAssistSearch tests passed`
+  - `node tests/craftAssistFloat32Step.test.js`
+    - exit code: 0
+    - 关键结果：`craftAssistFloat32Step tests passed`
+- Diff / 状态检查：
+  - 已运行限定状态检查，`backup/`、`output/` 仍有既有运行态/备份变动；本轮没有清理或回退这些文件。
+  - `git diff --name-only -- ... backup output` 仍列出既有 backup/output 变动；这些不属于本轮业务修复。
+  - 未提交 git。
+- 未检查范围 / 风险：
+  - 本轮只检查当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 未检查其它 worktree。
+  - 未启动 Electron、本地服务或真实 UI。
+  - 没有做全仓库测试，只跑了用户指定三条 Node 测试。
+
+## 2026-05-24 handoff - craft assist entry window third-round zero-offset fix
+
+- 当前目标：
+  - 处理 gpt-5.4 review 的 non-blocking concern：底层 direct search 里 `entryOffsetValue: 0` 不应开启 entry-window。
+  - 只修 search 底层合同，不改 service、UI/API、最终校验、候选池、fast prefilter、float32 target-step、价格/收益/概率/目标皮肤逻辑。
+- 本轮完成：
+  - 已只读核对：
+    - `node_sidecar/src/services/craftAssistSearch.js`
+    - `tests/craftAssistSearch.test.js`
+    - `docs/superpowers/specs/2026-05-24-craft-assist-entry-window-design.md`
+    - `docs/superpowers/plans/2026-05-24-craft-assist-entry-window.md`
+  - 已确认根因：`hasCraftAssistEntryOffsetValue(...)` 过去把任意有限数当成有效 offset，导致显式传 `entryOffsetValue: 0` 时底层 search 仍启用 entry-window。
+  - 已按 TDD 先新增 direct search 回归测试：`test_entry_window_zero_offset_preserves_direct_search_legacy_behavior()`。
+  - 已最小修改 search 底层判断：只有有限且 `> 0` 的 `entryOffsetValue` 才启用 entry-window；`0`、`null`、`undefined`、空字符串都等价于未提供 offset。
+- RED evidence：
+  - 命令：`node tests/craftAssistSearch.test.js`
+  - exit code：1
+  - 关键失败：
+    - `AssertionError [ERR_ASSERTION]: entryOffsetValue: 0 should not enable the closed target-boundary entry window`
+    - 失败点：`tests/craftAssistSearch.test.js:380`
+    - 现象：`entryOffsetValue: 0` 返回了 `overall: 0.21` 的 target-boundary 组合，而未传 offset 的 legacy strict-below 结果是 `null`。
+- GREEN / verification：
+  - `node tests/craftAssistSearch.test.js`
+    - exit code：0
+    - 关键结果：`craftAssistSearch tests passed`
+  - `node tests/craftAssistService.test.js`
+    - exit code：0
+    - 关键结果：`craftAssistService tests passed`
+    - 说明：输出里有既有预期的验证拒绝 WARN，但进程通过。
+  - `node tests/craftAssistFloat32Step.test.js`
+    - exit code：0
+    - 关键结果：`craftAssistFloat32Step tests passed`
+- 修改文件：
+  - `node_sidecar/src/services/craftAssistSearch.js`
+    - 本轮只改 `hasCraftAssistEntryOffsetValue(...)` 的有效 offset 判断。
+  - `tests/craftAssistSearch.test.js`
+    - 本轮只加 zero-offset direct search regression test 和对应调用。
+  - `docs/agent/session-log.md`
+    - 追加本轮小修记录。
+- 需求覆盖：
+  - `entryOffsetValue: 0` 已在底层 direct search 中等价于未传 `entryOffsetValue`。
+  - below target 边界不会因为显式 `0` offset 被闭区间 entry-window 放行。
+  - infinite direct search 不会因为显式 `0` offset 被收窄到 exact target。
+- 保护范围：
+  - 未改最终校验。
+  - 未改 UI 控件、API 字段、请求结构、响应结构。
+  - 未改材料候选池、库存过滤、blocked id、可炼金判断。
+  - 未改 fast prefilter 策略。
+  - 未改 `target_wear` / `target_wear_raw` / float32 target-step 校验。
+  - 未引入价格、收益、概率、目标皮肤逻辑。
+  - 未清理 `backup/`、`output/`、`inventory_ui_state.json`、`csgo_skins.db`。
+  - 未提交 git。
+- 现场状态 / 未检查范围：
+  - 本轮只检查当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`。
+  - 未检查其它 worktree。
+  - 当前 root worktree 在本轮前已有大量未提交改动和运行态/备份文件变化；本轮不回退、不清理这些既有内容。
+  - 未启动 Electron、本地服务或真实 UI。
+  - 没有跑全仓库测试，只跑了用户指定三条 Node 测试。

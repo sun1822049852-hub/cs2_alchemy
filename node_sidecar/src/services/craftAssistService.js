@@ -1,5 +1,5 @@
 const {asString} = require("../utils");
-const {compareScoreTuples, searchCraftAssistBestSolution} = require("./craftAssistSearch");
+const {compareScoreTuples, searchCraftAssistBestSolution, searchCraftAssistSeed} = require("./craftAssistSearch");
 const {resolvePrefilterOptions, resolveShardCount, runPrefilterPhase} = require("./craftAssistShardPrefilter");
 const {
   resolveCraftAssistTargetStepSpec,
@@ -20,6 +20,7 @@ const craftAssistLogger = new DedupLogger({windowMs: 800});
 const WEAR_INPUT_DECIMALS = 16;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
 const EPSILON = 1e-14;
+const TEMPORARY_BYPASS_CONTEXT_REFINE = true;
 const RARITY_MAP = {
   1: "Consumer",
   2: "Industrial",
@@ -69,6 +70,40 @@ function formatCraftAssistRawLogValue(targetWearRaw, targetValue) {
   return `legacy_step:${numberTextTrunc(targetValue, WEAR_INPUT_DECIMALS)}`;
 }
 
+function formatCraftAssistStepLogValue(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(n) : "-";
+}
+
+function resolveCraftAssistBelowTargetCeiling(targetValue, targetStepSpec = null) {
+  const rawInput = targetStepSpec && typeof targetStepSpec === "object"
+    ? (targetStepSpec.inputRaw ?? targetStepSpec.targetWearRaw)
+    : null;
+  const raw = rawInput === null || rawInput === undefined || rawInput === ""
+    ? NaN
+    : Number(rawInput);
+  if (Number.isFinite(raw)) return raw;
+
+  const inputStep = Number(targetStepSpec && targetStepSpec.inputStep);
+  if (Number.isFinite(inputStep)) return inputStep;
+  return Number(targetValue);
+}
+
+function isCraftAssistBelowTargetStepSpec(targetStepSpec) {
+  return !!(
+    targetStepSpec
+    && typeof targetStepSpec === "object"
+    && normalizeCraftAssistApproachMode(targetStepSpec.approachMode) === "below"
+  );
+}
+
+function hasCraftAssistRawTargetInput(targetStepSpec) {
+  if (!targetStepSpec || typeof targetStepSpec !== "object") return false;
+  const rawInput = targetStepSpec.inputRaw ?? targetStepSpec.targetWearRaw;
+  if (rawInput === null || rawInput === undefined || rawInput === "") return false;
+  return Number.isFinite(Number(rawInput));
+}
+
 function validateCraftAssistFinalOverall({
   overall,
   targetValue,
@@ -101,7 +136,14 @@ function validateCraftAssistFinalOverall({
     const lowerTargetStep = Number(targetStepSpec.lowerTargetStep);
     const upperTargetStep = Number(targetStepSpec.upperTargetStep);
     const quantizedOverall = quantizeMeanToTargetDomain(numericOverall);
-    const passed = isMeanOnTargetStep(numericOverall, targetStepSpec);
+    const isBelowStepSpec = isCraftAssistBelowTargetStepSpec(targetStepSpec);
+    const hasRawTargetInput = hasCraftAssistRawTargetInput(targetStepSpec);
+    const belowTargetCeiling = resolveCraftAssistBelowTargetCeiling(numericTarget, targetStepSpec);
+    const onTargetStep = isMeanOnTargetStep(numericOverall, targetStepSpec);
+    const hasOffsetWindow = targetStepSpec.hasOffsetWindow === true;
+    const passed = isBelowStepSpec
+      ? numericOverall < belowTargetCeiling && ((hasRawTargetInput || hasOffsetWindow) ? onTargetStep : true)
+      : onTargetStep;
 
     craftAssistLogger.infoAlways(
       "craft_assist",
@@ -110,6 +152,30 @@ function validateCraftAssistFinalOverall({
 
     if (passed) {
       return {ok: true};
+    }
+
+    if (isBelowStepSpec && numericOverall >= belowTargetCeiling) {
+      craftAssistLogger.warnAlways(
+        "craft_assist",
+        `验证拒绝: overall=${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)} >= target=${numberTextTrunc(belowTargetCeiling, WEAR_INPUT_DECIMALS)} item_ids=${normalizedItemIds.join(',')}`
+      );
+
+      return {
+        ok: false,
+        code: "final_result_exceeds_target",
+        overall: numericOverall,
+        quantized_overall: quantizedOverall,
+        target: belowTargetCeiling,
+        input_step: inputStep,
+        target_step: targetStep,
+        lower_target_step: lowerTargetStep,
+        upper_target_step: upperTargetStep,
+        safe_target: numericSearchTarget,
+        approach_mode: normalizedApproachMode,
+        item_ids: normalizedItemIds,
+        selected_items: normalizedSelectedItems,
+        message: `终局校验拦截超过目标磨损：当前 ${numberTextTrunc(numericOverall, WEAR_INPUT_DECIMALS)}，目标 ${numberTextTrunc(belowTargetCeiling, WEAR_INPUT_DECIMALS)}`
+      };
     }
 
     craftAssistLogger.warnAlways(
@@ -1375,6 +1441,14 @@ function isCraftAssistSolvedCandidate(solved, targetValue, approachMode = "below
   );
   if (!hasValidCandidate) return false;
   if (targetStepSpec && typeof targetStepSpec === "object") {
+    if (isCraftAssistBelowTargetStepSpec(targetStepSpec)) {
+      return (
+        Number(solved.overall) < resolveCraftAssistBelowTargetCeiling(targetValue, targetStepSpec)
+        && ((hasCraftAssistRawTargetInput(targetStepSpec) || targetStepSpec.hasOffsetWindow === true)
+          ? isMeanOnTargetStep(solved.overall, targetStepSpec)
+          : true)
+      );
+    }
     return isMeanOnTargetStep(solved.overall, targetStepSpec);
   }
   const normalizedApproachMode = normalizeCraftAssistApproachMode(approachMode);
@@ -1435,6 +1509,11 @@ function shouldRunCraftAssistContextRefine({
     return true;
   }
   return didCraftAssistSolvedCandidateImprove(baseSolved, expandSolved);
+}
+
+function shouldStopCraftAssistPrefilterAfterBatch(solved, targetStepSpec = null) {
+  if (!targetStepSpec || typeof targetStepSpec !== "object" || !solved) return false;
+  return isMeanOnTargetStep(solved.overall, targetStepSpec);
 }
 
 function cloneCraftAssistCandidateForSearch(candidate) {
@@ -1620,6 +1699,35 @@ function buildCraftAssistPrefilterSummary({phaseTraces, retryMode, usedRarityFul
   };
 }
 
+function summarizeCraftAssistSeedResult(seedResult) {
+  if (!seedResult || typeof seedResult !== "object") return null;
+  return {
+    kind: asString(seedResult.kind || "").trim() || "unknown",
+    mode: asString(seedResult.mode || "").trim() || "unknown",
+    rawCeiling: Number.isFinite(Number(seedResult.rawCeiling)) ? Number(seedResult.rawCeiling) : null,
+    overall: Number.isFinite(Number(seedResult.overall)) ? Number(seedResult.overall) : null
+  };
+}
+
+function attachCraftAssistSeedTrace(selectionTrace, seedSummary) {
+  if (!seedSummary || typeof seedSummary !== "object") {
+    return selectionTrace || null;
+  }
+  if (selectionTrace && typeof selectionTrace === "object") {
+    return {
+      ...selectionTrace,
+      seed: {
+        ...(selectionTrace.seed && typeof selectionTrace.seed === "object" ? selectionTrace.seed : {}),
+        ...seedSummary
+      }
+    };
+  }
+  return {
+    steps: [],
+    seed: seedSummary
+  };
+}
+
 function attachCraftAssistPrefilterTrace(selectionTrace, prefilterSummary) {
   if (!prefilterSummary) {
     return selectionTrace || null;
@@ -1636,13 +1744,63 @@ function attachCraftAssistPrefilterTrace(selectionTrace, prefilterSummary) {
   };
 }
 
+function shouldRunTargetStepFullBaselineFallback(prefilterSummary) {
+  if (!prefilterSummary) {
+    return false;
+  }
+  return prefilterSummary.usedRarityFullFallback !== true;
+}
+
+function runCraftAssistBaselineRelay({
+  groups,
+  targetValue,
+  approachMode = "below",
+  targetStepSpec = null,
+  baselineApproachMode = approachMode,
+  entryOffsetValue = null,
+  enableRawBelowTopKFastPath = false
+} = {}) {
+  const seedResult = searchCraftAssistSeed({
+    groups,
+    targetValue,
+    targetStepSpec,
+    approachMode
+  });
+  if (seedResult && asString(seedResult.kind || "").trim() === "seed_proved_no_raw_solution") {
+    return {
+      solved: null,
+      seedSummary: summarizeCraftAssistSeedResult(seedResult)
+    };
+  }
+  if (seedResult && asString(seedResult.kind || "").trim() === "seed_no_material") {
+    return {
+      solved: null,
+      seedSummary: summarizeCraftAssistSeedResult(seedResult)
+    };
+  }
+  return {
+    solved: searchCraftAssistBestSolution({
+      groups,
+      targetValue,
+      targetStepSpec,
+      approachMode: baselineApproachMode,
+      entryOffsetValue,
+      entryApproachMode: approachMode,
+      enableRawBelowTopKFastPath: enableRawBelowTopKFastPath === true
+    }),
+    seedSummary: summarizeCraftAssistSeedResult(seedResult)
+  };
+}
+
 async function solveCraftAssistGroupsForRarity({
   groups,
   targetValue,
   approachMode = "below",
   targetStepSpec = null,
+  entryOffsetValue = null,
   recipeContext,
-  prefilterOptionsOverride = null
+  prefilterOptionsOverride = null,
+  enableRawBelowTopKFastPath = false
 }) {
   const searchApproachMode = targetStepSpec ? "infinite" : approachMode;
   const prefilterOptions = resolvePrefilterOptions(
@@ -1651,14 +1809,19 @@ async function solveCraftAssistGroupsForRarity({
       : {}
   );
   if (!prefilterOptions.enableOversizedPrefilter || !hasOversizedCraftAssistGroup(groups, prefilterOptions)) {
+    const {solved, seedSummary} = runCraftAssistBaselineRelay({
+      groups,
+      targetValue,
+      approachMode,
+      targetStepSpec,
+      baselineApproachMode: searchApproachMode,
+      entryOffsetValue,
+      enableRawBelowTopKFastPath
+    });
     return {
-      solved: searchCraftAssistBestSolution({
-        groups,
-        targetValue,
-        targetStepSpec,
-        approachMode: searchApproachMode
-      }),
-      prefilterSummary: null
+      solved,
+      prefilterSummary: null,
+      seedSummary
     };
   }
 
@@ -1673,37 +1836,47 @@ async function solveCraftAssistGroupsForRarity({
   });
   phaseTraces.push(basePhase.prefilterTrace);
   if (basePhase.kind !== "phase_ready") {
+    const fallbackPrefilterSummary = buildCraftAssistPrefilterSummary({
+      phaseTraces,
+      retryMode: "rarity_full",
+      usedRarityFullFallback: true
+    });
+    const {solved, seedSummary} = runCraftAssistBaselineRelay({
+      groups,
+      targetValue,
+      approachMode,
+      targetStepSpec,
+      baselineApproachMode: searchApproachMode,
+      entryOffsetValue,
+      enableRawBelowTopKFastPath
+    });
     return {
-      solved: searchCraftAssistBestSolution({
-        groups,
-        targetValue,
-        targetStepSpec,
-        approachMode: searchApproachMode
-      }),
-      prefilterSummary: buildCraftAssistPrefilterSummary({
-        phaseTraces,
-        retryMode: "rarity_full",
-        usedRarityFullFallback: true
-      })
+      solved,
+      prefilterSummary: fallbackPrefilterSummary,
+      seedSummary
     };
   }
-  const baseSolvedCandidate = searchCraftAssistBestSolution({
+  const {solved: baseSolvedCandidate, seedSummary: baseSeedSummary} = runCraftAssistBaselineRelay({
     groups: basePhase.groups,
     targetValue,
     targetStepSpec,
-    approachMode: searchApproachMode
+    approachMode,
+    baselineApproachMode: searchApproachMode,
+    entryOffsetValue,
+    enableRawBelowTopKFastPath
   });
   const baseSolved = isCraftAssistSolvedCandidate(baseSolvedCandidate, targetValue, approachMode, targetStepSpec)
     ? baseSolvedCandidate
     : null;
-  if (targetStepSpec && baseSolved && isMeanOnPrimaryTargetStep(baseSolved.overall, targetStepSpec)) {
+  if (shouldStopCraftAssistPrefilterAfterBatch(baseSolved, targetStepSpec)) {
     return {
       solved: baseSolved,
       prefilterSummary: buildCraftAssistPrefilterSummary({
         phaseTraces,
         retryMode: "base",
         usedRarityFullFallback: false
-      })
+      }),
+      seedSummary: baseSeedSummary
     };
   }
 
@@ -1717,23 +1890,27 @@ async function solveCraftAssistGroupsForRarity({
   });
   phaseTraces.push(expandPhase.prefilterTrace);
   if (expandPhase.kind === "phase_ready") {
-    const expandSolvedCandidate = searchCraftAssistBestSolution({
+    const {solved: expandSolvedCandidate, seedSummary: expandSeedSummary} = runCraftAssistBaselineRelay({
       groups: expandPhase.groups,
       targetValue,
       targetStepSpec,
-      approachMode: searchApproachMode
+      approachMode,
+      baselineApproachMode: searchApproachMode,
+      entryOffsetValue,
+      enableRawBelowTopKFastPath
     });
     const expandSolved = isCraftAssistSolvedCandidate(expandSolvedCandidate, targetValue, approachMode, targetStepSpec)
       ? expandSolvedCandidate
       : null;
-    if (targetStepSpec && expandSolved && isMeanOnPrimaryTargetStep(expandSolved.overall, targetStepSpec)) {
+    if (shouldStopCraftAssistPrefilterAfterBatch(expandSolved, targetStepSpec)) {
       return {
         solved: expandSolved,
         prefilterSummary: buildCraftAssistPrefilterSummary({
           phaseTraces,
           retryMode: "expand",
           usedRarityFullFallback: false
-        })
+        }),
+        seedSummary: expandSeedSummary
       };
     }
     let bestPrefilterSolved = targetStepSpec
@@ -1741,7 +1918,8 @@ async function solveCraftAssistGroupsForRarity({
       : pickBetterCraftAssistSolvedCandidate(baseSolved, expandSolved);
     if (bestPrefilterSolved) {
       let contextRefineSummary = null;
-      if (shouldRunCraftAssistContextRefine({
+      // Temporary bypass: skip formal-path post-expand context refine, including single-group re-search and full-groups retry.
+      if (!TEMPORARY_BYPASS_CONTEXT_REFINE && shouldRunCraftAssistContextRefine({
         baseSolved,
         expandSolved,
         bestPrefilterSolved,
@@ -1767,23 +1945,302 @@ async function solveCraftAssistGroupsForRarity({
           retryMode: "expand",
           usedRarityFullFallback: false,
           contextRefineSummary
-        })
+        }),
+        seedSummary: bestPrefilterSolved === expandSolved ? expandSeedSummary : baseSeedSummary
+      };
+    }
+  }
+
+  const rarityFullPrefilterSummary = buildCraftAssistPrefilterSummary({
+    phaseTraces,
+    retryMode: "rarity_full",
+    usedRarityFullFallback: true
+  });
+  const {solved, seedSummary} = runCraftAssistBaselineRelay({
+    groups,
+    targetValue,
+    approachMode,
+    targetStepSpec,
+    baselineApproachMode: searchApproachMode,
+    entryOffsetValue,
+    enableRawBelowTopKFastPath
+  });
+  return {
+    solved,
+    prefilterSummary: rarityFullPrefilterSummary,
+    seedSummary
+  };
+}
+
+async function inspectCraftAssistContextRefineEligibilityForGroups({
+  groups,
+  targetValue,
+  approachMode = "below",
+  targetStepSpec = null,
+  recipeContext,
+  prefilterOptionsOverride = null
+}) {
+  const searchApproachMode = targetStepSpec ? "infinite" : approachMode;
+  const prefilterOptions = resolvePrefilterOptions(
+    prefilterOptionsOverride && typeof prefilterOptionsOverride === "object"
+      ? prefilterOptionsOverride
+      : {}
+  );
+  const result = {
+    prefilterOptions,
+    searchApproachMode,
+    basePhaseKind: null,
+    expandPhaseKind: null,
+    baseSolved: null,
+    expandSolved: null,
+    bestPrefilterSolved: null,
+    baseHitsPrimaryTargetStep: false,
+    expandHitsPrimaryTargetStep: false,
+    bestPrefilterHitsPrimaryTargetStep: false,
+    shouldRunContextRefine: false
+  };
+  if (!prefilterOptions.enableOversizedPrefilter || !hasOversizedCraftAssistGroup(groups, prefilterOptions)) {
+    return result;
+  }
+
+  const basePhase = await runPrefilterPhase({
+    groups,
+    targetValue,
+    targetStepSpec,
+    recipeContext,
+    phaseName: "prefilter/base",
+    options: prefilterOptions
+  });
+  result.basePhaseKind = basePhase.kind;
+  if (basePhase.kind !== "phase_ready") {
+    return result;
+  }
+
+  const baseSolvedCandidate = searchCraftAssistBestSolution({
+    groups: basePhase.groups,
+    targetValue,
+    targetStepSpec,
+    approachMode: searchApproachMode
+  });
+  const baseSolved = isCraftAssistSolvedCandidate(baseSolvedCandidate, targetValue, approachMode, targetStepSpec)
+    ? baseSolvedCandidate
+    : null;
+  result.baseSolved = baseSolved;
+  result.baseHitsPrimaryTargetStep = !!(
+    targetStepSpec
+    && baseSolved
+    && isMeanOnPrimaryTargetStep(baseSolved.overall, targetStepSpec)
+  );
+
+  const expandPhase = await runPrefilterPhase({
+    groups,
+    targetValue,
+    targetStepSpec,
+    recipeContext,
+    phaseName: "prefilter/expand",
+    options: prefilterOptions
+  });
+  result.expandPhaseKind = expandPhase.kind;
+  if (expandPhase.kind !== "phase_ready") {
+    return result;
+  }
+
+  const expandSolvedCandidate = searchCraftAssistBestSolution({
+    groups: expandPhase.groups,
+    targetValue,
+    targetStepSpec,
+    approachMode: searchApproachMode
+  });
+  const expandSolved = isCraftAssistSolvedCandidate(expandSolvedCandidate, targetValue, approachMode, targetStepSpec)
+    ? expandSolvedCandidate
+    : null;
+  result.expandSolved = expandSolved;
+  result.expandHitsPrimaryTargetStep = !!(
+    targetStepSpec
+    && expandSolved
+    && isMeanOnPrimaryTargetStep(expandSolved.overall, targetStepSpec)
+  );
+
+  const bestPrefilterSolved = targetStepSpec
+    ? pickBetterCraftAssistTargetStepSolvedCandidate(baseSolved, expandSolved, targetStepSpec)
+    : pickBetterCraftAssistSolvedCandidate(baseSolved, expandSolved);
+  result.bestPrefilterSolved = bestPrefilterSolved;
+  result.bestPrefilterHitsPrimaryTargetStep = !!(
+    targetStepSpec
+    && bestPrefilterSolved
+    && isMeanOnPrimaryTargetStep(bestPrefilterSolved.overall, targetStepSpec)
+  );
+  result.shouldRunContextRefine = !!(bestPrefilterSolved && shouldRunCraftAssistContextRefine({
+    baseSolved,
+    expandSolved,
+    bestPrefilterSolved,
+    targetStepSpec
+  }));
+  return result;
+}
+
+async function inspectCraftAssistContextRefineMatchForSelection({
+  rows,
+  selectionContext,
+  candidateRows,
+  targetWear,
+  targetWearRaw,
+  wearFilterMode,
+  wearApproachMode,
+  materials,
+  blockedIds,
+  includeCooling,
+  wearOffsetPct,
+  enableFastCraftAssist,
+  matchedRarity,
+  matchedOverall
+} = {}) {
+  const targetValue = parseOptionalWear01(targetWear);
+  if (targetValue == null) {
+    return {ok: false, message: "请先输入目标相对磨损"};
+  }
+
+  const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
+  const normalizedWearOffsetPct = normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+  const offsetValue = getCraftAssistWearOffsetByTarget(targetValue, normalizedWearOffsetPct);
+  let targetStepSpec = null;
+  try {
+    targetStepSpec = resolveCraftAssistTargetStepSpec({
+      inputStep: targetValue,
+      inputRaw: targetWearRaw,
+      approachMode,
+      offsetValue
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "invalid_target_step",
+      message: err && err.message ? err.message : "目标磨损必须是 [0,1] 内的 exact float32 台阶"
+    };
+  }
+
+  const context = resolveCraftAssistSelectionContext({
+    selectionContext,
+    rows,
+    candidateRows,
+    includeCooling: !!includeCooling
+  });
+  const contextCandidateRows = Array.isArray(context.candidateRows) ? context.candidateRows : [];
+  if (!contextCandidateRows.length) {
+    return {ok: false, message: "主库存无可选炼金物品"};
+  }
+  const normalizedMaterials = normalizeCraftAssistMaterialsForRun(materials, {
+    rows: contextCandidateRows,
+    legacyWearFilterMode: normalizeCraftAssistFilterMode(wearFilterMode)
+  });
+  if (!normalizedMaterials.length) {
+    return {ok: false, message: "请先添加父类材料并设置数量"};
+  }
+  const requiredCount = resolveCraftAssistRequiredCount();
+  const totalCount = normalizedMaterials.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  if (totalCount !== requiredCount) {
+    return {ok: false, message: `材料数量之和必须等于 ${requiredCount}，当前 ${totalCount}`};
+  }
+
+  const rowsByName = context.rowsByName instanceof Map ? context.rowsByName : buildCraftAssistRowsByName(contextCandidateRows);
+  const blocked = new Set(normalizeCraftRecipeItemIds(blockedIds));
+  const searchTargetValue = targetStepSpec && Number.isFinite(Number(targetStepSpec.targetStep))
+    ? Number(targetStepSpec.targetStep)
+    : Number(targetValue);
+  const useRelativeFilter = normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute";
+  const candidateCache = context.candidateCache instanceof Map ? context.candidateCache : null;
+  const prepared = normalizedMaterials.map((material) => ({
+    material,
+    candidates: collectCraftAssistCandidatesForMaterial(material, rowsByName, blocked, searchTargetValue, {
+      useRelativeFilter,
+      candidateCache
+    })
+  }));
+
+  let sharedRaritySet = null;
+  for (const item of prepared) {
+    const countByRarity = new Map();
+    for (const candidate of item.candidates) {
+      const rarity = craftRarityValue(candidate.row);
+      if (rarity <= 0) continue;
+      countByRarity.set(rarity, (countByRarity.get(rarity) || 0) + 1);
+    }
+    const feasible = new Set(
+      [...countByRarity.entries()]
+        .filter((entry) => entry[1] >= Number(item.material && item.material.count || 0))
+        .map((entry) => entry[0])
+    );
+    if (!feasible.size) {
+      return {ok: false, message: "父类材料在当前条件下无法满足同稀有度数量要求"};
+    }
+    if (sharedRaritySet == null) {
+      sharedRaritySet = feasible;
+      continue;
+    }
+    sharedRaritySet = new Set([...sharedRaritySet].filter((rarity) => feasible.has(rarity)));
+  }
+  if (!sharedRaritySet || !sharedRaritySet.size) {
+    return {ok: false, message: "父类材料稀有度不一致，单个配方必须使用同一稀有度材料"};
+  }
+
+  const expectedRarity = Number(matchedRarity);
+  const expectedOverall = Number(matchedOverall);
+  if (!Number.isFinite(expectedRarity) || !Number.isFinite(expectedOverall)) {
+    return {ok: false, message: "context refine 取证需要 matchedRarity 和 matchedOverall"};
+  }
+  const prefilterOptionsOverride = typeof enableFastCraftAssist === "boolean"
+    ? {enableOversizedPrefilter: enableFastCraftAssist}
+    : null;
+  const rarities = [...sharedRaritySet]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  for (const rarity of rarities) {
+    const groups = prepared.map((item, index) => ({
+      index,
+      material: item.material,
+      candidates: item.candidates.filter((candidate) => craftRarityValue(candidate.row) === rarity)
+    }));
+    if (groups.some((group) => group.candidates.length < Number(group.material && group.material.count || 0))) continue;
+    const inspection = await inspectCraftAssistContextRefineEligibilityForGroups({
+      groups,
+      targetValue: searchTargetValue,
+      approachMode,
+      targetStepSpec,
+      recipeContext: {
+        recipeNo: 1,
+        rarity,
+        modeHint: resolveCraftAssistSearchModeHint(groups),
+        sourceText: "craft_assist_test"
+      },
+      prefilterOptionsOverride
+    });
+    if (
+      rarity === expectedRarity
+      && inspection.bestPrefilterSolved
+      && Math.fround(inspection.bestPrefilterSolved.overall) === Math.fround(expectedOverall)
+    ) {
+      return {
+        ok: true,
+        rarity,
+        groups,
+        searchTargetValue,
+        approachMode,
+        targetStepSpec,
+        prefilterOptions: inspection.prefilterOptions,
+        bestPrefilterSolved: inspection.bestPrefilterSolved,
+        baseHitsPrimaryTargetStep: inspection.baseHitsPrimaryTargetStep,
+        expandHitsPrimaryTargetStep: inspection.expandHitsPrimaryTargetStep,
+        bestPrefilterHitsPrimaryTargetStep: inspection.bestPrefilterHitsPrimaryTargetStep,
+        shouldRunContextRefine: inspection.shouldRunContextRefine
       };
     }
   }
 
   return {
-    solved: searchCraftAssistBestSolution({
-      groups,
-      targetValue,
-      targetStepSpec,
-      approachMode: searchApproachMode
-    }),
-    prefilterSummary: buildCraftAssistPrefilterSummary({
-      phaseTraces,
-      retryMode: "rarity_full",
-      usedRarityFullFallback: true
-    })
+    ok: false,
+    code: "context_refine_match_not_found",
+    message: "未找到与公开 fast 结果对齐的 context refine 诊断"
   };
 }
 
@@ -1794,10 +2251,12 @@ async function runCraftAssistSelectionForRecipe({
   targetValue,
   targetStepSpec = null,
   wearApproachMode = "below",
+  entryOffsetValue = null,
   useRelativeFilter = true,
   wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
   candidateCache = null,
   prefilterOptions = null,
+  enableRawBelowTopKFastPath = false,
   includeCooling = false,
   allRows = null
 }) {
@@ -1882,7 +2341,7 @@ async function runCraftAssistSelectionForRecipe({
       candidates: item.candidates.filter((cand) => craftRarityValue(cand.row) === rarity)
     }));
     if (groups.some((group) => group.candidates.length < Number(group.material && group.material.count || 0))) continue;
-    const {solved, prefilterSummary} = await solveCraftAssistGroupsForRarity({
+    const {solved, prefilterSummary, seedSummary} = await solveCraftAssistGroupsForRarity({
       groups,
       targetValue: searchTargetValue,
       approachMode,
@@ -1893,17 +2352,22 @@ async function runCraftAssistSelectionForRecipe({
         modeHint: resolveCraftAssistSearchModeHint(groups),
         sourceText: "craft_assist"
       },
-      prefilterOptionsOverride: prefilterOptions
+      prefilterOptionsOverride: prefilterOptions,
+      entryOffsetValue,
+      enableRawBelowTopKFastPath
     });
     if (!solved || !Array.isArray(solved.materialResults) || solved.overall == null) continue;
     if (targetStepSpec) {
-      if (isMeanOnTargetStep(solved.overall, targetStepSpec)) {
+      if (isCraftAssistSolvedCandidate(solved, targetValue, approachMode, targetStepSpec)) {
         const solvedCandidate = {
           rarity: Number(rarity),
           materialResults: solved.materialResults,
           overall: Number(solved.overall),
           scoreTuple: solved.scoreTuple,
-          trace: attachCraftAssistPrefilterTrace(solved.trace || null, prefilterSummary)
+          trace: attachCraftAssistSeedTrace(
+            attachCraftAssistPrefilterTrace(solved.trace || null, prefilterSummary),
+            seedSummary
+          )
         };
         if (isMeanOnPrimaryTargetStep(solved.overall, targetStepSpec)) {
           bestSolved = solvedCandidate;
@@ -1915,33 +2379,41 @@ async function runCraftAssistSelectionForRecipe({
           targetStepSpec
         );
       }
-      const fallbackSolved = searchCraftAssistBestSolution({
-        groups,
-        targetValue: searchTargetValue,
-        targetStepSpec,
-        approachMode: "infinite"
-      });
-      if (
-        fallbackSolved
-        && Array.isArray(fallbackSolved.materialResults)
-        && isMeanOnTargetStep(fallbackSolved.overall, targetStepSpec)
-      ) {
-        const fallbackCandidate = {
-          rarity: Number(rarity),
-          materialResults: fallbackSolved.materialResults,
-          overall: Number(fallbackSolved.overall),
-          scoreTuple: fallbackSolved.scoreTuple,
-          trace: attachCraftAssistPrefilterTrace(fallbackSolved.trace || null, prefilterSummary)
-        };
-        if (isMeanOnPrimaryTargetStep(fallbackSolved.overall, targetStepSpec)) {
-          bestSolved = fallbackCandidate;
-          break;
+      if (shouldRunTargetStepFullBaselineFallback(prefilterSummary)) {
+        const {solved: fallbackSolved, seedSummary: fallbackSeedSummary} = runCraftAssistBaselineRelay({
+          groups,
+          targetValue: searchTargetValue,
+          targetStepSpec,
+          approachMode,
+          baselineApproachMode: "infinite",
+          entryOffsetValue,
+          enableRawBelowTopKFastPath
+        });
+        if (
+          fallbackSolved
+          && Array.isArray(fallbackSolved.materialResults)
+          && isCraftAssistSolvedCandidate(fallbackSolved, targetValue, approachMode, targetStepSpec)
+        ) {
+          const fallbackCandidate = {
+            rarity: Number(rarity),
+            materialResults: fallbackSolved.materialResults,
+            overall: Number(fallbackSolved.overall),
+            scoreTuple: fallbackSolved.scoreTuple,
+            trace: attachCraftAssistSeedTrace(
+              attachCraftAssistPrefilterTrace(fallbackSolved.trace || null, prefilterSummary),
+              fallbackSeedSummary
+            )
+          };
+          if (isMeanOnPrimaryTargetStep(fallbackSolved.overall, targetStepSpec)) {
+            bestSolved = fallbackCandidate;
+            break;
+          }
+          bestSolved = pickBetterCraftAssistTargetStepSolvedCandidate(
+            bestSolved,
+            fallbackCandidate,
+            targetStepSpec
+          );
         }
-        bestSolved = pickBetterCraftAssistTargetStepSolvedCandidate(
-          bestSolved,
-          fallbackCandidate,
-          targetStepSpec
-        );
       }
       continue;
     }
@@ -1956,7 +2428,10 @@ async function runCraftAssistSelectionForRecipe({
         materialResults: solved.materialResults,
         overall: Number(solved.overall),
         scoreTuple: solved.scoreTuple,
-        trace: attachCraftAssistPrefilterTrace(solved.trace || null, prefilterSummary)
+        trace: attachCraftAssistSeedTrace(
+          attachCraftAssistPrefilterTrace(solved.trace || null, prefilterSummary),
+          seedSummary
+        )
       };
     }
   }
@@ -2131,7 +2606,7 @@ async function selectCraftAssistForRecipe({
   }
   craftAssistLogger.info(
     "craft_assist",
-    `目标台阶: raw=${formatCraftAssistRawLogValue(targetWearRaw, targetValue)} input_step=${numberTextTrunc(targetStepSpec.inputStep, WEAR_INPUT_DECIMALS)} target_step=${numberTextTrunc(targetStepSpec.targetStep, WEAR_INPUT_DECIMALS)} approach_mode=${approachMode}`
+    `目标台阶: raw=${formatCraftAssistRawLogValue(targetWearRaw, targetValue)} input_step=${formatCraftAssistStepLogValue(targetStepSpec.inputStep)} target_step=${formatCraftAssistStepLogValue(targetStepSpec.targetStep)} approach_mode=${approachMode}`
   );
 
   const context = resolveCraftAssistSelectionContext({
@@ -2165,11 +2640,13 @@ async function selectCraftAssistForRecipe({
     targetValue,
     targetStepSpec,
     wearApproachMode: approachMode,
+    entryOffsetValue: Number(offsetValue) > 0 ? offsetValue : null,
     useRelativeFilter: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
     wearOffsetPct: normalizedWearOffsetPct,
     candidateCache: context.candidateCache instanceof Map ? context.candidateCache : null,
     includeCooling: !!includeCooling,
     allRows: Array.isArray(rows) ? rows : null,
+    enableRawBelowTopKFastPath: enableFastCraftAssist === true,
     prefilterOptions: typeof enableFastCraftAssist === "boolean"
       ? {enableOversizedPrefilter: enableFastCraftAssist}
       : null
@@ -2252,7 +2729,9 @@ module.exports = {
   buildCraftAssistSelectionContextFromCandidateRows,
   __test: {
     isCraftAssistSolvedCandidate,
+    inspectCraftAssistContextRefineMatchForSelection,
     runCraftAssistContextRefine,
+    runCraftAssistBaselineRelay,
     shouldRunCraftAssistContextRefine,
     validateCraftAssistFinalOverall,
     buildCraftAssistFailureLogText

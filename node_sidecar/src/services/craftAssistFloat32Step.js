@@ -2,6 +2,7 @@ const FLOAT32_BUFFER = new ArrayBuffer(4);
 const FLOAT32_VIEW = new DataView(FLOAT32_BUFFER);
 const MIN_FLOAT32_SUBNORMAL_BITS = 0x00000001;
 const MAX_FLOAT32_BITS = 0x7f7fffff;
+const BELOW_TARGET_SAFE_OFFSET = 0.0000001;
 
 function toFloat32(value) {
   return Math.fround(value);
@@ -114,23 +115,25 @@ function resolveWindowEndpoint(value, fallbackStep, direction) {
 }
 
 function resolveBelowTargetStep(inputStep, inputRaw) {
-  if (inputRaw !== null) {
-    if (inputRaw === 0) {
-      throw makeCraftAssistStepError(
-        "unreachable_below_target",
-        "Craft assist cannot target a float32 step below zero."
-      );
-    }
-    return Number(inputStep) < inputRaw ? inputStep : prevFloat32(inputStep);
-  }
-
-  if (inputStep === 0) {
+  const target = inputRaw !== null ? Number(inputRaw) : Number(inputStep);
+  if (target - BELOW_TARGET_SAFE_OFFSET <= 0) {
     throw makeCraftAssistStepError(
       "unreachable_below_target",
       "Craft assist cannot target a float32 step below zero."
     );
   }
+
+  if (inputRaw !== null) {
+    return Math.fround(target - BELOW_TARGET_SAFE_OFFSET);
+  }
+
   return prevFloat32(inputStep);
+}
+
+function resolveRangeUpperTargetStep(spec) {
+  const upperTargetStep = Number(spec && spec.upperTargetStep);
+  if (Number.isFinite(upperTargetStep)) return upperTargetStep;
+  return Number(spec && spec.targetStep);
 }
 
 function assertTargetStepMatchesRaw(inputStep, inputRaw) {
@@ -186,7 +189,7 @@ function quantizeMeanToTargetDomain(mean) {
 function isMeanOnTargetStep(mean, spec) {
   const quantizedMean = quantizeMeanToTargetDomain(mean);
   const lowerTargetStep = Number(spec && spec.lowerTargetStep);
-  const upperTargetStep = Number(spec && spec.upperTargetStep);
+  const upperTargetStep = resolveRangeUpperTargetStep(spec);
   const targetStep = Number(spec && spec.targetStep);
 
   if (Number.isFinite(lowerTargetStep) && Number.isFinite(upperTargetStep)) {
@@ -225,7 +228,7 @@ function targetStepPriorityTuple(mean, spec) {
 function compareMeanToTargetRange(mean, spec) {
   const quantizedMean = quantizeMeanToTargetDomain(mean);
   const lowerTargetStep = Number(spec && spec.lowerTargetStep);
-  const upperTargetStep = Number(spec && spec.upperTargetStep);
+  const upperTargetStep = resolveRangeUpperTargetStep(spec);
   const targetStep = Number(spec && spec.targetStep);
   const lower = Number.isFinite(lowerTargetStep) ? lowerTargetStep : targetStep;
   const upper = Number.isFinite(upperTargetStep) ? upperTargetStep : targetStep;

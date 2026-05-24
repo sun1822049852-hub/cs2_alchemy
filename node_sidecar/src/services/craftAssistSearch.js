@@ -10,6 +10,7 @@ const {
 
 const EPSILON = 1e-14;
 const INITIAL_WINDOW_EXTRA_CAP = 24;
+const SEED_WINDOW_SIZE = 10;
 const WINDOW_BOUNDARY_MARGIN = 4;
 
 function normalizeRole(role) {
@@ -53,12 +54,92 @@ function resolveBelowTargetCeiling(targetValue, targetStepSpec = null) {
     ? NaN
     : Number(rawInput);
   if (Number.isFinite(raw)) return raw;
-  const inputStep = Number(targetStepSpec && targetStepSpec.inputStep);
+  const inputStepRaw = targetStepSpec && targetStepSpec.inputStep;
+  const inputStep = inputStepRaw === null || inputStepRaw === undefined || inputStepRaw === ""
+    ? NaN
+    : Number(inputStepRaw);
   if (Number.isFinite(inputStep)) return inputStep;
   return Number(targetValue);
 }
 
-function buildApproachTuplePrefix(overall, targetValue, approachMode, targetStepSpec = null) {
+function classifyCraftAssistEntryWindow({
+  overall,
+  targetValue,
+  approachMode = "below",
+  offsetValue = 0,
+  lowerBound = null,
+  upperBound = null
+} = {}) {
+  const value = Number(overall);
+  const target = Number(targetValue);
+  const offset = Math.max(0, Number(offsetValue) || 0);
+  if (!Number.isFinite(value) || !Number.isFinite(target)) return "entry_window_invalid";
+  const explicitLower = lowerBound === null || lowerBound === undefined || lowerBound === ""
+    ? NaN
+    : Number(lowerBound);
+  const explicitUpper = upperBound === null || upperBound === undefined || upperBound === ""
+    ? NaN
+    : Number(upperBound);
+  const lower = Number.isFinite(explicitLower) ? explicitLower : target - offset;
+  const upper = Number.isFinite(explicitUpper)
+    ? explicitUpper
+    : (
+      normalizeApproachMode(approachMode) === "infinite"
+        ? target + offset
+        : target
+    );
+  if (value < lower - EPSILON) return "entry_window_low";
+  if (value > upper + EPSILON) return "entry_window_high";
+  return "entry";
+}
+
+function resolveCraftAssistEntryTargetValue(targetValue, targetStepSpec = null) {
+  if (hasTargetStepSpec(targetStepSpec)) {
+    const inputStep = Number(targetStepSpec && targetStepSpec.inputStep);
+    if (Number.isFinite(inputStep)) return inputStep;
+  }
+  return Number(targetValue);
+}
+
+function resolveCraftAssistEntryWindowBounds(targetStepSpec = null, approachMode = "below") {
+  if (!hasTargetStepSpec(targetStepSpec) || targetStepSpec.hasOffsetWindow !== true) {
+    return {};
+  }
+  const lowerTargetStep = Number(targetStepSpec.lowerTargetStep);
+  const upperTargetStep = Number(targetStepSpec.upperTargetStep);
+  return {
+    lowerBound: Number.isFinite(lowerTargetStep) ? lowerTargetStep : null,
+    upperBound: normalizeApproachMode(approachMode) === "infinite" && Number.isFinite(upperTargetStep)
+      ? upperTargetStep
+      : null
+  };
+}
+
+function hasCraftAssistEntryOffsetValue(entryOffsetValue) {
+  if (entryOffsetValue === null || entryOffsetValue === undefined || entryOffsetValue === "") return false;
+  const numericOffsetValue = Number(entryOffsetValue);
+  return Number.isFinite(numericOffsetValue) && numericOffsetValue > 0;
+}
+
+function resolveCraftAssistEntryApproachMode(approachMode, entryApproachMode = null) {
+  if (entryApproachMode === null || entryApproachMode === undefined || entryApproachMode === "") {
+    return normalizeApproachMode(approachMode);
+  }
+  return normalizeApproachMode(entryApproachMode);
+}
+
+function buildApproachTuplePrefix(overall, targetValue, approachMode, targetStepSpec = null, entryOffsetValue = null, entryApproachMode = null) {
+  if (hasCraftAssistEntryOffsetValue(entryOffsetValue)) {
+    const resolvedEntryApproachMode = resolveCraftAssistEntryApproachMode(approachMode, entryApproachMode);
+    const entryWindow = classifyCraftAssistEntryWindow({
+      overall,
+      targetValue: resolveCraftAssistEntryTargetValue(targetValue, targetStepSpec),
+      approachMode: resolvedEntryApproachMode,
+      offsetValue: entryOffsetValue,
+      ...resolveCraftAssistEntryWindowBounds(targetStepSpec, resolvedEntryApproachMode)
+    });
+    if (entryWindow !== "entry") return null;
+  }
   if (hasTargetStepSpec(targetStepSpec)) {
     if (
       normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode) === "below"
@@ -98,6 +179,86 @@ function calcVariance(values) {
     const diff = Number(value || 0) - mean;
     return sum + diff * diff;
   }, 0) / list.length;
+}
+
+function buildEmptyPartialStats() {
+  return {
+    count: 0,
+    sum: 0,
+    sumSquares: 0,
+    radiusToSearchTarget: 0,
+    absDistanceSumToSearchTarget: 0,
+    aboveCount: 0,
+    belowCount: 0,
+    mainCount: 0,
+    mainSum: 0,
+    auxCount: 0,
+    auxSum: 0,
+    mainBelowCount: 0,
+    auxAboveCount: 0
+  };
+}
+
+function hasUsablePartialStats(partialStats) {
+  if (!partialStats || typeof partialStats !== "object") return false;
+  return [
+    "count",
+    "sum",
+    "sumSquares",
+    "radiusToSearchTarget",
+    "absDistanceSumToSearchTarget",
+    "aboveCount",
+    "belowCount",
+    "mainCount",
+    "mainSum",
+    "auxCount",
+    "auxSum",
+    "mainBelowCount",
+    "auxAboveCount"
+  ].every((key) => Number.isFinite(Number(partialStats[key])));
+}
+
+function extendPartialStats(partialStats, candidate, searchTarget) {
+  const base = hasUsablePartialStats(partialStats) ? partialStats : buildEmptyPartialStats();
+  const value = Number(candidate && candidate.value || 0);
+  const role = normalizeRole(candidate && candidate.role);
+  const distance = Math.abs(value - Number(searchTarget));
+  const above = value > Number(searchTarget) + EPSILON ? 1 : 0;
+  const below = value < Number(searchTarget) - EPSILON ? 1 : 0;
+  const next = {
+    count: Number(base.count || 0) + 1,
+    sum: Number(base.sum || 0) + value,
+    sumSquares: Number(base.sumSquares || 0) + value * value,
+    radiusToSearchTarget: Math.max(Number(base.radiusToSearchTarget || 0), distance),
+    absDistanceSumToSearchTarget: Number(base.absDistanceSumToSearchTarget || 0) + distance,
+    aboveCount: Number(base.aboveCount || 0) + above,
+    belowCount: Number(base.belowCount || 0) + below,
+    mainCount: Number(base.mainCount || 0),
+    mainSum: Number(base.mainSum || 0),
+    auxCount: Number(base.auxCount || 0),
+    auxSum: Number(base.auxSum || 0),
+    mainBelowCount: Number(base.mainBelowCount || 0),
+    auxAboveCount: Number(base.auxAboveCount || 0)
+  };
+  if (role === "aux") {
+    next.auxCount += 1;
+    next.auxSum += value;
+    next.auxAboveCount += above;
+  } else {
+    next.mainCount += 1;
+    next.mainSum += value;
+    next.mainBelowCount += below;
+  }
+  return next;
+}
+
+function calcVarianceFromPartialStats(partialStats) {
+  const count = Number(partialStats && partialStats.count || 0);
+  if (count <= 0) return 0;
+  const sum = Number(partialStats && partialStats.sum || 0);
+  const sumSquares = Number(partialStats && partialStats.sumSquares || 0);
+  const mean = sum / count;
+  return Math.max(0, sumSquares / count - mean * mean);
 }
 
 function resolveSearchMode(groups) {
@@ -220,7 +381,7 @@ function buildOrderedCandidates(group, targetValue, mode, targetStepSpec = null)
   }));
 }
 
-function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode = "below", targetStepSpec = null}) {
+function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode = "below", targetStepSpec = null, entryOffsetValue = null, entryApproachMode = null}) {
   const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -230,7 +391,7 @@ function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approach
   const below = values.filter((value) => value < searchTarget - EPSILON).length;
   const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length;
   if (hasTargetStepSpec(targetStepSpec)) {
-    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode);
     if (!prefix) return null;
     return {
       overall,
@@ -245,7 +406,17 @@ function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approach
     };
   }
   if (normalizeApproachMode(approachMode) === "below") {
-    if (!isBelowTarget(overall, targetValue)) return null;
+    if (hasCraftAssistEntryOffsetValue(entryOffsetValue)) {
+      const entryWindow = classifyCraftAssistEntryWindow({
+        overall,
+        targetValue,
+        approachMode: resolveCraftAssistEntryApproachMode(approachMode, entryApproachMode),
+        offsetValue: entryOffsetValue
+      });
+      if (entryWindow !== "entry") return null;
+    } else if (!isBelowTarget(overall, targetValue)) {
+      return null;
+    }
     return {
       overall,
       tuple: [
@@ -257,7 +428,7 @@ function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approach
       ]
     };
   }
-  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode);
+  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode, null, entryOffsetValue, entryApproachMode);
   if (!prefix) return null;
   return {
     overall,
@@ -271,7 +442,7 @@ function scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approach
   };
 }
 
-function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = "below", targetStepSpec = null}) {
+function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = "below", targetStepSpec = null, entryOffsetValue = null, entryApproachMode = null}) {
   const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -279,7 +450,7 @@ function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = 
   const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
   const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - searchTarget), 0) / values.length;
   if (hasTargetStepSpec(targetStepSpec)) {
-    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode);
     if (!prefix) return null;
     return {
       overall,
@@ -293,7 +464,17 @@ function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = 
     };
   }
   if (normalizeApproachMode(approachMode) === "below") {
-    if (!isBelowTarget(overall, targetValue)) return null;
+    if (hasCraftAssistEntryOffsetValue(entryOffsetValue)) {
+      const entryWindow = classifyCraftAssistEntryWindow({
+        overall,
+        targetValue,
+        approachMode: resolveCraftAssistEntryApproachMode(approachMode, entryApproachMode),
+        offsetValue: entryOffsetValue
+      });
+      if (entryWindow !== "entry") return null;
+    } else if (!isBelowTarget(overall, targetValue)) {
+      return null;
+    }
     return {
       overall,
       tuple: [
@@ -304,7 +485,7 @@ function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = 
       ]
     };
   }
-  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode);
+  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode, null, entryOffsetValue, entryApproachMode);
   if (!prefix) return null;
   return {
     overall,
@@ -317,7 +498,7 @@ function scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode = 
   };
 }
 
-function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode = "below", targetStepSpec = null}) {
+function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode = "below", targetStepSpec = null, entryOffsetValue = null, entryApproachMode = null}) {
   const list = Array.isArray(selected) ? selected : [];
   const values = list.map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
@@ -335,7 +516,7 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachM
   const auxMean = auxes.length ? auxes.reduce((sum, value) => sum + value, 0) / auxes.length : 0;
   const radius = Math.max(...values.map((value) => Math.abs(value - searchTarget)));
   if (hasTargetStepSpec(targetStepSpec)) {
-    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec);
+    const prefix = buildApproachTuplePrefix(overall, searchTarget, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode);
     if (!prefix) return null;
     return {
       overall,
@@ -350,7 +531,17 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachM
     };
   }
   if (normalizeApproachMode(approachMode) === "below") {
-    if (!isBelowTarget(overall, targetValue)) return null;
+    if (hasCraftAssistEntryOffsetValue(entryOffsetValue)) {
+      const entryWindow = classifyCraftAssistEntryWindow({
+        overall,
+        targetValue,
+        approachMode: resolveCraftAssistEntryApproachMode(approachMode, entryApproachMode),
+        offsetValue: entryOffsetValue
+      });
+      if (entryWindow !== "entry") return null;
+    } else if (!isBelowTarget(overall, targetValue)) {
+      return null;
+    }
     return {
       overall,
       tuple: [
@@ -362,7 +553,7 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachM
       ]
     };
   }
-  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode);
+  const prefix = buildApproachTuplePrefix(overall, targetValue, approachMode, null, entryOffsetValue, entryApproachMode);
   if (!prefix) return null;
   return {
     overall,
@@ -376,10 +567,10 @@ function scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachM
   };
 }
 
-function scoreCompleteSelection(selected, targetValue, mode, approachMode = "below", targetStepSpec = null) {
-  if (mode === "single_material") return scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode, targetStepSpec});
-  if (mode === "multi_material_role") return scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode, targetStepSpec});
-  return scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode, targetStepSpec});
+function scoreCompleteSelection(selected, targetValue, mode, approachMode = "below", targetStepSpec = null, entryOffsetValue = null, entryApproachMode = null) {
+  if (mode === "single_material") return scoreCraftAssistSolutionSingleMaterial({selected, targetValue, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode});
+  if (mode === "multi_material_role") return scoreCraftAssistSolutionMultiMaterial({selected, targetValue, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode});
+  return scoreCraftAssistSolutionNeutral({selected, targetValue, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode});
 }
 
 function compareByValueDesc(a, b) {
@@ -454,11 +645,21 @@ function countSingleMaterialSides(selected, targetValue) {
   return {belowCount, equalCount, aboveCount};
 }
 
-function scoreSingleMaterialSearchSelection({selected, targetValue}) {
+function scoreSingleMaterialSearchSelection({selected, targetValue, approachMode = "below", entryOffsetValue = null}) {
   const values = (Array.isArray(selected) ? selected : []).map((item) => Number(item && item.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  if (!(overall < Number(targetValue) - EPSILON)) return null;
+  if (hasCraftAssistEntryOffsetValue(entryOffsetValue)) {
+    const entryWindow = classifyCraftAssistEntryWindow({
+      overall,
+      targetValue,
+      approachMode,
+      offsetValue: entryOffsetValue
+    });
+    if (entryWindow !== "entry") return null;
+  } else if (!(overall < Number(targetValue) - EPSILON)) {
+    return null;
+  }
   const radius = Math.max(...values.map((value) => Math.abs(value - Number(targetValue))));
   const above = values.filter((value) => value > Number(targetValue) + EPSILON).length;
   const below = values.filter((value) => value < Number(targetValue) - EPSILON).length;
@@ -475,12 +676,12 @@ function scoreSingleMaterialSearchSelection({selected, targetValue}) {
   };
 }
 
-function scoreSingleMaterialPushState({below, upper, state, targetValue}) {
+function scoreSingleMaterialPushState({below, upper, state, targetValue, approachMode = "below", entryOffsetValue = null}) {
   const selected = buildSingleMaterialSelection({below, upper, state});
   const values = selected.map((candidate) => Number(candidate && candidate.value || 0));
   if (!values.length) return null;
   const overall = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const scored = scoreSingleMaterialSearchSelection({selected, targetValue});
+  const scored = scoreSingleMaterialSearchSelection({selected, targetValue, approachMode, entryOffsetValue});
   return {
     state,
     selected,
@@ -504,9 +705,9 @@ function calcSelectedMean(selected) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function refineSingleMaterialCompensation({selected, below, upper, targetValue, maxIterations = 2} = {}) {
+function refineSingleMaterialCompensation({selected, below, upper, targetValue, maxIterations = 2, approachMode = "below", entryOffsetValue = null} = {}) {
   let currentSelected = Array.isArray(selected) ? selected : [];
-  let currentScore = scoreSingleMaterialSearchSelection({selected: currentSelected, targetValue});
+  let currentScore = scoreSingleMaterialSearchSelection({selected: currentSelected, targetValue, approachMode, entryOffsetValue});
   if (!currentScore) return null;
   const traceSteps = [];
   const allCandidatesById = new Map();
@@ -557,7 +758,7 @@ function refineSingleMaterialCompensation({selected, below, upper, targetValue, 
         const singleSwapMap = new Map([[oldBelowUpId, newUpper]]);
         const singleSwapSelected = replaceSingleMaterialCandidates(currentSelected, singleSwapMap);
         const singleSwapOverall = calcSelectedMean(singleSwapSelected);
-        const singleSwapScore = scoreSingleMaterialSearchSelection({selected: singleSwapSelected, targetValue});
+        const singleSwapScore = scoreSingleMaterialSearchSelection({selected: singleSwapSelected, targetValue, approachMode, entryOffsetValue});
         const firstSwapAttempt = {
           firstSwap: {
             removedId: oldBelowUpId,
@@ -630,7 +831,7 @@ function refineSingleMaterialCompensation({selected, below, upper, targetValue, 
               new Map([[oldCandidateId, newCandidate]])
             );
             const nextOverall = calcSelectedMean(nextSelected);
-            const nextScore = scoreSingleMaterialSearchSelection({selected: nextSelected, targetValue});
+            const nextScore = scoreSingleMaterialSearchSelection({selected: nextSelected, targetValue, approachMode, entryOffsetValue});
             if (!nextScore) {
               firstSwapAttempt.secondSwap.rejected.over_target += 1;
               iterationDebug.summary.rejected.over_target += 1;
@@ -733,7 +934,7 @@ function pickBestSingleMaterialShift(candidates, targetValue, {keepBelow} = {}) 
   return bestSameSide || bestCrossSide;
 }
 
-function searchSingleMaterialExact({group, targetValue}) {
+function searchSingleMaterialExact({group, targetValue, approachMode = "below", entryOffsetValue = null}) {
   const material = group && group.material ? group.material : {};
   const count = Math.max(0, Number(material && material.count || 0));
   const candidates = Array.isArray(group && group.candidates) ? group.candidates : [];
@@ -777,7 +978,9 @@ function searchSingleMaterialExact({group, targetValue}) {
       upperStart: 0,
       upperCount
     },
-    targetValue
+    targetValue,
+    approachMode,
+    entryOffsetValue
   });
   if (!current) return null;
 
@@ -822,7 +1025,9 @@ function searchSingleMaterialExact({group, targetValue}) {
               ...current.state,
               upperStart: Number(current.state.upperStart) + 1
             },
-            targetValue
+            targetValue,
+            approachMode,
+            entryOffsetValue
           }),
           move: "upper_up"
         });
@@ -840,7 +1045,9 @@ function searchSingleMaterialExact({group, targetValue}) {
               belowCount: Number(current.state.belowCount) - 1,
               upperCount: Number(current.state.upperCount) + 1
             },
-            targetValue
+            targetValue,
+            approachMode,
+            entryOffsetValue
           }),
           move: "split_up"
         });
@@ -855,7 +1062,9 @@ function searchSingleMaterialExact({group, targetValue}) {
               ...current.state,
               belowStart: Number(current.state.belowStart) + 1
             },
-            targetValue
+            targetValue,
+            approachMode,
+            entryOffsetValue
           }),
           move: "below_down"
         });
@@ -873,7 +1082,9 @@ function searchSingleMaterialExact({group, targetValue}) {
               belowCount: Number(current.state.belowCount) + 1,
               upperCount: Number(current.state.upperCount) - 1
             },
-            targetValue
+            targetValue,
+            approachMode,
+            entryOffsetValue
           }),
           move: "split_down"
         });
@@ -924,7 +1135,9 @@ function searchSingleMaterialExact({group, targetValue}) {
     selected: bestBelow.selected,
     below,
     upper,
-    targetValue
+    targetValue,
+    approachMode,
+    entryOffsetValue
   });
   if (compensated && compareScoreTuples(compensated.scoreTuple, bestBelow.scoreTuple) < 0) {
     bestBelow = {
@@ -972,6 +1185,63 @@ function searchSingleMaterialExact({group, targetValue}) {
     scoreTuple: bestBelow.scoreTuple,
     windowExtra: 0,
     trace
+  };
+}
+
+function searchSingleMaterialRawBelowTopKFastPath({group, targetValue, targetStepSpec = null}) {
+  if (!hasTargetStepSpec(targetStepSpec)) return null;
+  if (normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode) !== "below") return null;
+  if (targetStepSpec && targetStepSpec.hasOffsetWindow === true) return null;
+
+  const material = group && group.material ? group.material : {};
+  const count = Math.max(0, Number(material && material.count || 0));
+  const candidates = Array.isArray(group && group.candidates) ? group.candidates : [];
+  if (count <= 0 || candidates.length < count) return null;
+
+  const rawCeiling = resolveBelowTargetCeiling(targetValue, targetStepSpec);
+  if (!Number.isFinite(Number(rawCeiling))) return null;
+
+  const prepared = candidates.filter((candidate) => Number.isFinite(Number(candidate && candidate.value)));
+  if (prepared.length < count) return null;
+  if (!prepared.every((candidate) => Number(candidate.value) < Number(rawCeiling) - EPSILON)) return null;
+
+  const selected = prepared.slice().sort(compareByValueDesc).slice(0, count);
+  const overall = calcSelectedMean(selected);
+  if (!Number.isFinite(Number(overall)) || !isBelowTarget(overall, rawCeiling)) return null;
+
+  const scored = scoreCraftAssistSolutionSingleMaterial({
+    selected,
+    targetValue,
+    approachMode: "below",
+    targetStepSpec
+  });
+  if (!scored || !Array.isArray(scored.tuple)) return null;
+
+  const materialResults = [{
+    material,
+    available: candidates,
+    selected
+  }];
+  return {
+    materialResults,
+    overall: Number(overall),
+    predictedStepMean: scored.predictedStepMean,
+    scoreTuple: scored.tuple,
+    windowExtra: 0,
+    trace: {
+      mode: "single_material_raw_below_top_k",
+      steps: [
+        makeSelectionTraceStep({
+          stage: "exact_top_k_all_below_raw",
+          materialResults,
+          overall,
+          extra: {
+            strategy: "top_k_all_candidates_below_raw",
+            raw_ceiling: Number(rawCeiling)
+          }
+        })
+      ]
+    }
   };
 }
 
@@ -1372,7 +1642,8 @@ function searchRoleAwarePushSolution({groups, targetValue} = {}) {
 
 function scorePartialState(state, totalSlots, targetValue, mode, approachMode = "below", targetStepSpec = null) {
   const selected = Array.isArray(state && state.selected) ? state.selected : [];
-  const count = selected.length;
+  const partialStats = hasUsablePartialStats(state && state.partialStats) ? state.partialStats : null;
+  const count = partialStats ? Number(partialStats.count || 0) : selected.length;
   const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
   if (count <= 0) {
     if (hasTargetStepSpec(targetStepSpec)) {
@@ -1389,6 +1660,109 @@ function scorePartialState(state, totalSlots, targetValue, mode, approachMode = 
     }
     if (mode === "single_material") return [0, Number(targetValue), 0, 0, 0];
     return [Number(targetValue), 0, 0, 0, 0];
+  }
+  if (partialStats) {
+    const projectedOverall = (
+      Number(partialStats.sum || 0)
+      + searchTarget * Math.max(0, totalSlots - count)
+    ) / totalSlots;
+    const radius = Number(partialStats.radiusToSearchTarget || 0);
+    const variance = calcVarianceFromPartialStats(partialStats);
+    const meanAbsDistance = Number(partialStats.absDistanceSumToSearchTarget || 0) / count;
+    if (hasTargetStepSpec(targetStepSpec)) {
+      const projectedPriority = targetStepPriorityTuple(projectedOverall, primaryOnlyTargetStepSpec(targetStepSpec));
+      if (mode === "single_material") {
+        return [
+          ...projectedPriority,
+          radius,
+          Math.abs(Number(partialStats.aboveCount || 0) - Number(partialStats.belowCount || 0)),
+          variance,
+          meanAbsDistance
+        ];
+      }
+      if (mode === "multi_material_role") {
+        const mainCount = Number(partialStats.mainCount || 0);
+        const auxCount = Number(partialStats.auxCount || 0);
+        const mainMean = mainCount ? Number(partialStats.mainSum || 0) / mainCount : 0;
+        const auxMean = auxCount ? Number(partialStats.auxSum || 0) / auxCount : 0;
+        return [
+          ...projectedPriority,
+          Number(partialStats.mainBelowCount || 0) + Number(partialStats.auxAboveCount || 0),
+          -mainMean,
+          auxMean,
+          radius
+        ];
+      }
+      return [
+        ...projectedPriority,
+        radius,
+        variance,
+        meanAbsDistance
+      ];
+    }
+    if (normalizeApproachMode(approachMode) === "infinite") {
+      const projectedGap = Math.abs(Number(targetValue) - projectedOverall);
+      const projectedAbovePenalty = projectedOverall > Number(targetValue) + EPSILON ? 1 : 0;
+      if (mode === "single_material") {
+        return [
+          projectedGap,
+          projectedAbovePenalty,
+          radius,
+          Math.abs(Number(partialStats.aboveCount || 0) - Number(partialStats.belowCount || 0)),
+          variance,
+          meanAbsDistance
+        ];
+      }
+      if (mode === "multi_material_role") {
+        const mainCount = Number(partialStats.mainCount || 0);
+        const auxCount = Number(partialStats.auxCount || 0);
+        const mainMean = mainCount ? Number(partialStats.mainSum || 0) / mainCount : 0;
+        const auxMean = auxCount ? Number(partialStats.auxSum || 0) / auxCount : 0;
+        return [
+          projectedGap,
+          projectedAbovePenalty,
+          Number(partialStats.mainBelowCount || 0) + Number(partialStats.auxAboveCount || 0),
+          -mainMean,
+          auxMean,
+          radius
+        ];
+      }
+      return [
+        projectedGap,
+        projectedAbovePenalty,
+        radius,
+        variance,
+        meanAbsDistance
+      ];
+    }
+    if (mode === "single_material") {
+      return [
+        radius,
+        Math.abs(Number(targetValue) - projectedOverall),
+        Math.abs(Number(partialStats.aboveCount || 0) - Number(partialStats.belowCount || 0)),
+        variance,
+        meanAbsDistance
+      ];
+    }
+    if (mode === "multi_material_role") {
+      const mainCount = Number(partialStats.mainCount || 0);
+      const auxCount = Number(partialStats.auxCount || 0);
+      const mainMean = mainCount ? Number(partialStats.mainSum || 0) / mainCount : 0;
+      const auxMean = auxCount ? Number(partialStats.auxSum || 0) / auxCount : 0;
+      return [
+        Math.abs(Number(targetValue) - projectedOverall),
+        Number(partialStats.mainBelowCount || 0) + Number(partialStats.auxAboveCount || 0),
+        -mainMean,
+        auxMean,
+        radius
+      ];
+    }
+    return [
+      Math.abs(Number(targetValue) - projectedOverall),
+      radius,
+      variance,
+      meanAbsDistance
+    ];
   }
   const values = selected.map((item) => Number(item && item.value || 0));
   const projectedOverall = (
@@ -1534,34 +1908,92 @@ function expandMaterialSlots(groups, windows) {
 }
 
 function buildCanonicalStateKey(state) {
+  if (state && typeof state.canonicalKey === "string" && state.canonicalKey) {
+    return state.canonicalKey;
+  }
   const slotIndex = Number(state && state.slotIndex || 0);
   const groups = Array.isArray(state && state.selectedIdsByGroup) ? state.selectedIdsByGroup : [];
   const groupKey = groups.map((ids) => (Array.isArray(ids) ? ids.join(",") : "")).join(";");
-  return `${slotIndex}|${groupKey}`;
+  const canonicalKey = `${slotIndex}|${groupKey}`;
+  if (state && typeof state === "object") {
+    state.canonicalKey = canonicalKey;
+  }
+  return canonicalKey;
 }
 
-function pruneBeam(states, beamWidth, totalSlots, targetValue, mode, approachMode = "below", targetStepSpec = null) {
-  const bestByKey = new Map();
-  for (const state of Array.isArray(states) ? states : []) {
-    const score = scorePartialState(state, totalSlots, targetValue, mode, approachMode, targetStepSpec);
-    const key = buildCanonicalStateKey(state);
-    const existing = bestByKey.get(key);
-    if (!existing || compareScoreTuples(score, existing.score) < 0) {
-      bestByKey.set(key, {state, score});
-    }
+function shouldCollapseSingleGroupPermutationStates({groupsWithOrdered, slots, mode, targetStepSpec}) {
+  const rawCeiling = targetStepSpec
+    ? (targetStepSpec.inputRaw ?? targetStepSpec.targetWearRaw)
+    : null;
+  if (mode !== "single_material") return false;
+  if (!hasTargetStepSpec(targetStepSpec)) return false;
+  if (normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode) !== "below") return false;
+  if (rawCeiling === null || rawCeiling === undefined || rawCeiling === "") return false;
+  if (!Number.isFinite(Number(rawCeiling))) return false;
+  if (!Array.isArray(groupsWithOrdered) || groupsWithOrdered.length !== 1) return false;
+  if (!Array.isArray(slots) || slots.length <= 1) return false;
+  return slots.every((slot) => Number(slot) === 0);
+}
+
+function buildSingleGroupPermutationCollapseKey(state, candidateId) {
+  const nextSlotIndex = Number(state && state.slotIndex || 0) + 1;
+  const selectedIdsByGroup = Array.isArray(state && state.selectedIdsByGroup)
+    ? state.selectedIdsByGroup
+    : [];
+  const nextGroupIds = Array.isArray(selectedIdsByGroup[0])
+    ? selectedIdsByGroup[0].slice()
+    : [];
+  nextGroupIds.push(candidateId);
+  nextGroupIds.sort();
+  return {
+    key: `${nextSlotIndex}|${nextGroupIds.join(",")}`,
+    nextGroupIds
+  };
+}
+
+function buildNextStateCanonicalMeta(state, groupIndex, candidateId, totalGroups) {
+  const nextSlotIndex = Number(state && state.slotIndex || 0) + 1;
+  const selectedIdsByGroup = Array.isArray(state && state.selectedIdsByGroup)
+    ? state.selectedIdsByGroup.map((ids) => (Array.isArray(ids) ? ids.slice() : []))
+    : Array.from({length: Math.max(0, Number(totalGroups) || 0)}, () => []);
+  if (!Array.isArray(selectedIdsByGroup[groupIndex])) {
+    selectedIdsByGroup[groupIndex] = [];
   }
-  const scored = [...bestByKey.values()];
+  selectedIdsByGroup[groupIndex].push(candidateId);
+  selectedIdsByGroup[groupIndex].sort();
+  return {
+    selectedIdsByGroup,
+    canonicalKey: `${nextSlotIndex}|${selectedIdsByGroup.map((ids) => ids.join(",")).join(";")}`
+  };
+}
+
+function pruneBeam(states, beamWidth, totalSlots, targetValue, mode, approachMode = "below", targetStepSpec = null, profileStats = null) {
+  const representativeByKey = new Map();
+  for (const state of Array.isArray(states) ? states : []) {
+    const key = buildCanonicalStateKey(state);
+    if (!representativeByKey.has(key)) representativeByKey.set(key, state);
+  }
+  const scored = [];
+  for (const state of representativeByKey.values()) {
+    if (profileStats && typeof profileStats === "object") {
+      profileStats.partialScoreAttempts = Number(profileStats.partialScoreAttempts || 0) + 1;
+    }
+    scored.push({
+      state,
+      score: scorePartialState(state, totalSlots, targetValue, mode, approachMode, targetStepSpec)
+    });
+  }
   scored.sort((a, b) => compareScoreTuples(a.score, b.score));
   return scored.slice(0, Math.max(1, Number(beamWidth) || 1)).map((entry) => entry.state);
 }
 
-function pickBestCompleteSolution(states, targetValue, mode, approachMode = "below", targetStepSpec = null, profileStats = null) {
+function pickBestCompleteSolution(states, targetValue, mode, approachMode = "below", targetStepSpec = null, entryOffsetValue = null, entryApproachMode = null, profileStats = null) {
   let best = null;
   for (const state of Array.isArray(states) ? states : []) {
     if (profileStats && typeof profileStats === "object") {
       profileStats.completeScoreAttempts = Number(profileStats.completeScoreAttempts || 0) + 1;
     }
-    const scored = scoreCompleteSelection(state.selected, targetValue, mode, approachMode, targetStepSpec);
+    const scored = scoreCompleteSelection(state.selected, targetValue, mode, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode);
     if (!scored) continue;
     const candidate = {
       selected: state.selected,
@@ -1767,8 +2199,9 @@ function shouldStopAfterBoundedTargetWindowFallback({best, solved, groupsWithOrd
   return !candidateTouchesCapBoundary(solved.selected, groupsWithOrdered, capExtra);
 }
 
-function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below", targetStepSpec = null, onSearchProfile = null, innerExtraResultCache = null}) {
+function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode, totalSlots, capExtra, approachMode = "below", targetStepSpec = null, entryOffsetValue = null, entryApproachMode = null, onSearchProfile = null, innerExtraResultCache = null}) {
   let best = null;
+  const searchTarget = resolveSearchTargetValue(targetValue, targetStepSpec);
   const profileEnabled = typeof onSearchProfile === "function";
   const capStartedAt = profileEnabled ? Date.now() : 0;
   const capProfile = profileEnabled
@@ -1871,6 +2304,12 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
       continue;
     }
     const slots = expandMaterialSlots(groupsWithOrdered, windows);
+    const collapseSingleGroupPermutations = shouldCollapseSingleGroupPermutationStates({
+      groupsWithOrdered,
+      slots,
+      mode,
+      targetStepSpec
+    });
     if (profileEnabled) {
       innerProfile.slotCount = slots.length;
     }
@@ -1879,10 +2318,13 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
       selected: [],
       usedIds: new Set(),
       selectedIdsByGroup: groupsWithOrdered.map(() => []),
-      sum: 0
+      sum: 0,
+      partialStats: buildEmptyPartialStats(),
+      canonicalKey: `0|${groupsWithOrdered.map(() => "").join(";")}`
     }];
     for (const groupIndex of slots) {
       const nextStates = [];
+      const generatedStateKeys = new Set();
       const window = windows[groupIndex];
       if (profileEnabled) {
         innerProfile.beamInputStates += beam.length;
@@ -1898,28 +2340,41 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
             }
             continue;
           }
+          let canonicalMeta = null;
+          if (generatedStateKeys) {
+            canonicalMeta = collapseSingleGroupPermutations
+              ? (() => {
+                const collapsed = buildSingleGroupPermutationCollapseKey(state, candidate.id);
+                return {
+                  selectedIdsByGroup: [collapsed.nextGroupIds],
+                  canonicalKey: collapsed.key
+                };
+              })()
+              : buildNextStateCanonicalMeta(state, groupIndex, candidate.id, groupsWithOrdered.length);
+            // Generation-collapsed permutations are skipped before nextStates, so prune counts never see them.
+            if (generatedStateKeys.has(canonicalMeta.canonicalKey)) continue;
+            generatedStateKeys.add(canonicalMeta.canonicalKey);
+          }
           const usedIds = new Set(state.usedIds);
           usedIds.add(candidate.id);
-          const selectedIdsByGroup = (Array.isArray(state.selectedIdsByGroup)
-            ? state.selectedIdsByGroup.map((ids) => [...ids])
-            : groupsWithOrdered.map(() => []));
-          selectedIdsByGroup[groupIndex].push(candidate.id);
-          selectedIdsByGroup[groupIndex].sort();
+          const nextPartialStats = extendPartialStats(state.partialStats, candidate, searchTarget);
           nextStates.push({
             slotIndex: Number(state.slotIndex || 0) + 1,
             selected: [...state.selected, candidate],
             usedIds,
-            selectedIdsByGroup,
-            sum: Number(state.sum || 0) + Number(candidate.value || 0)
+            selectedIdsByGroup: canonicalMeta.selectedIdsByGroup,
+            sum: Number(nextPartialStats.sum || 0),
+            partialStats: nextPartialStats,
+            canonicalKey: canonicalMeta.canonicalKey
           });
         }
       }
       if (profileEnabled) {
         innerProfile.nextStates += nextStates.length;
-        innerProfile.partialScoreAttempts += nextStates.length;
       }
-      beam = pruneBeam(nextStates, beamWidth, totalSlots, targetValue, mode, approachMode, targetStepSpec);
+      beam = pruneBeam(nextStates, beamWidth, totalSlots, targetValue, mode, approachMode, targetStepSpec, innerProfile);
       if (profileEnabled) {
+        // partialScoreAttempts counts scored unique canonical states; partialPrunedStates includes canonical merge and beam truncation.
         innerProfile.partialPrunedStates += Math.max(0, nextStates.length - beam.length);
         innerProfile.beamOutputStates += beam.length;
       }
@@ -1929,7 +2384,7 @@ function runBeamSearchWithinCap({groupsWithOrdered, targetValue, beamWidth, mode
       finishInnerProfile("beam_exhausted");
       continue;
     }
-    const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode, targetStepSpec, innerProfile);
+    const solved = pickBestCompleteSolution(beam, targetValue, mode, approachMode, targetStepSpec, entryOffsetValue, entryApproachMode, innerProfile);
     if (innerExtraResultCache) {
       innerExtraResultCache.set(cacheKey, {
         solved: cloneBeamSearchSolution(solved),
@@ -2131,6 +2586,697 @@ function scoreRoleAwareMaterialResults(materialResults, targetValue, approachMod
     overall: scored.overall,
     predictedStepMean: scored.predictedStepMean,
     scoreTuple: scored.tuple
+  };
+}
+
+function countDuplicateSelectedIds(materialResults) {
+  const seen = new Set();
+  for (const entry of Array.isArray(materialResults) ? materialResults : []) {
+    for (const candidate of Array.isArray(entry && entry.selected) ? entry.selected : []) {
+      const id = String(candidate && candidate.id || "");
+      if (!id) continue;
+      if (seen.has(id)) return true;
+      seen.add(id);
+    }
+  }
+  return false;
+}
+
+function makeCraftAssistSeedResult({
+  kind,
+  mode,
+  rawCeiling,
+  materialResults = null,
+  overall = null,
+  trace = null
+} = {}) {
+  return {
+    kind: String(kind || "").trim(),
+    mode: String(mode || "").trim(),
+    rawCeiling: Number(rawCeiling),
+    ...(Array.isArray(materialResults) ? {materialResults} : {}),
+    ...(Number.isFinite(Number(overall)) ? {overall: Number(overall)} : {}),
+    ...(trace && typeof trace === "object" ? {trace} : {})
+  };
+}
+
+function buildSeedTrace(mode, steps) {
+  return {
+    mode: String(mode || "").trim(),
+    steps: Array.isArray(steps) ? steps : []
+  };
+}
+
+function buildSeedOrderedGroups(groups, rawCeiling) {
+  return (Array.isArray(groups) ? groups : []).map((group, index) => {
+    const material = group && group.material ? group.material : {};
+    const role = normalizeRole(material && material.role);
+    const ordered = sortCandidatesByValueAsc(
+      (Array.isArray(group && group.candidates) ? group.candidates : [])
+        .map((candidate) => makeSearchCandidate({
+          candidate,
+          groupIndex: Number(group && group.index != null ? group.index : index),
+          role,
+          targetValue: rawCeiling
+        }))
+        .filter((candidate) => Number.isFinite(candidate.value))
+    );
+    return {
+      index: Number(group && group.index != null ? group.index : index),
+      material,
+      role,
+      count: Math.max(0, Number(material && material.count || 0)),
+      ordered
+    };
+  });
+}
+
+function hasDuplicateSeedCandidateIds(groups) {
+  const seen = new Set();
+  for (const group of Array.isArray(groups) ? groups : []) {
+    for (const candidate of Array.isArray(group && group.ordered) ? group.ordered : []) {
+      const id = String(candidate && candidate.id || "");
+      if (!id) continue;
+      if (seen.has(id)) return true;
+      seen.add(id);
+    }
+  }
+  return false;
+}
+
+function evaluateSingleMaterialSeedState({material, available, below, upper, state} = {}) {
+  const selected = buildSingleMaterialSelection({below, upper, state});
+  if (!selected.length) return null;
+  const overall = calcSelectedMean(selected);
+  if (!Number.isFinite(Number(overall))) return null;
+  return {
+    state: {
+      belowStart: Number(state && state.belowStart || 0),
+      belowCount: Number(state && state.belowCount || 0),
+      upperStart: Number(state && state.upperStart || 0),
+      upperCount: Number(state && state.upperCount || 0)
+    },
+    materialResults: [{
+      material,
+      available,
+      selected
+    }],
+    selected,
+    overall: Number(overall)
+  };
+}
+
+function nextSingleMaterialSeedDownState(state, below, upper) {
+  if (
+    Number(state && state.upperCount || 0) > 0
+    && Number(state && state.belowStart || 0) + Number(state && state.belowCount || 0) < (Array.isArray(below) ? below.length : 0)
+  ) {
+    return {
+      ...state,
+      belowCount: Number(state && state.belowCount || 0) + 1,
+      upperCount: Number(state && state.upperCount || 0) - 1
+    };
+  }
+  if (
+    Number(state && state.upperCount || 0) === 0
+    && Number(state && state.belowStart || 0) + Number(state && state.belowCount || 0) < (Array.isArray(below) ? below.length : 0)
+  ) {
+    return {
+      ...state,
+      belowStart: Number(state && state.belowStart || 0) + 1
+    };
+  }
+  return null;
+}
+
+function attemptSingleMaterialSeedProbe(current, side, below, upper, rawCeiling) {
+  const state = current && current.state ? current.state : {};
+  let nextState = null;
+  if (side === "below") {
+    if (Number(state.belowCount || 0) > 0 && Number(state.belowStart || 0) > 0) {
+      nextState = {
+        ...state,
+        belowStart: Number(state.belowStart || 0) - 1
+      };
+    }
+  } else if (
+    Number(state.upperCount || 0) > 0
+    && Number(state.upperStart || 0) + Number(state.upperCount || 0) < (Array.isArray(upper) ? upper.length : 0)
+  ) {
+    nextState = {
+      ...state,
+      upperStart: Number(state.upperStart || 0) + 1
+    };
+  }
+  if (!nextState) return null;
+  const candidate = evaluateSingleMaterialSeedState({
+    material: current.materialResults[0].material,
+    available: current.materialResults[0].available,
+    below,
+    upper,
+    state: nextState
+  });
+  if (!candidate) return null;
+  if (!isBelowTarget(candidate.overall, rawCeiling)) return null;
+  if (!(Number(candidate.overall) > Number(current.overall) + EPSILON)) return null;
+  return candidate;
+}
+
+function searchSingleMaterialSeed({group, rawCeiling} = {}) {
+  const material = group && group.material ? group.material : {};
+  const count = Math.max(0, Number(material && material.count || 0));
+  const windowSize = Math.max(SEED_WINDOW_SIZE, count);
+  const ordered = sortCandidatesByValueAsc(Array.isArray(group && group.ordered) ? group.ordered : []);
+  if (ordered.length < windowSize || windowSize <= 0) {
+    return makeCraftAssistSeedResult({
+      kind: "seed_no_material",
+      mode: "single_material",
+      rawCeiling
+    });
+  }
+
+  const below = ordered
+    .filter((candidate) => Number(candidate && candidate.value || 0) < Number(rawCeiling) - EPSILON)
+    .sort(compareByValueDesc);
+  const upper = ordered
+    .filter((candidate) => Number(candidate && candidate.value || 0) >= Number(rawCeiling) - EPSILON)
+    .sort(compareByValueAsc);
+
+  let belowCount = Math.min(Math.floor(windowSize / 2), below.length);
+  let upperCount = Math.min(windowSize - belowCount, upper.length);
+  if (belowCount + upperCount < windowSize) {
+    const extraBelow = Math.min(windowSize - belowCount - upperCount, Math.max(0, below.length - belowCount));
+    belowCount += extraBelow;
+  }
+  if (belowCount + upperCount < windowSize) {
+    const extraUpper = Math.min(windowSize - belowCount - upperCount, Math.max(0, upper.length - upperCount));
+    upperCount += extraUpper;
+  }
+  if (belowCount + upperCount !== windowSize) {
+    return makeCraftAssistSeedResult({
+      kind: "seed_no_material",
+      mode: "single_material",
+      rawCeiling
+    });
+  }
+
+  const traceSteps = [];
+  let current = evaluateSingleMaterialSeedState({
+    material,
+    available: ordered,
+    below,
+    upper,
+    state: {
+      belowStart: 0,
+      belowCount,
+      upperStart: 0,
+      upperCount
+    }
+  });
+  if (!current) return null;
+  traceSteps.push(makeSelectionTraceStep({
+    stage: "seed_initial",
+    materialResults: current.materialResults,
+    overall: current.overall
+  }));
+
+  while (!isBelowTarget(current.overall, rawCeiling)) {
+    const nextState = nextSingleMaterialSeedDownState(current.state, below, upper);
+    if (!nextState) {
+      traceSteps.push(makeSelectionTraceStep({
+        stage: "seed_exhausted",
+        materialResults: current.materialResults,
+        overall: current.overall
+      }));
+      return makeCraftAssistSeedResult({
+        kind: "seed_proved_no_raw_solution",
+        mode: "single_material",
+        rawCeiling,
+        materialResults: current.materialResults,
+        overall: current.overall,
+        trace: buildSeedTrace("single_material_seed", traceSteps)
+      });
+    }
+    current = evaluateSingleMaterialSeedState({
+      material,
+      available: ordered,
+      below,
+      upper,
+      state: nextState
+    });
+    if (!current) return null;
+    traceSteps.push(makeSelectionTraceStep({
+      stage: "seed_push_down",
+      materialResults: current.materialResults,
+      overall: current.overall
+    }));
+  }
+
+  let nextSide = "upper";
+  let stuckSides = new Set();
+  while (stuckSides.size < 2) {
+    const candidate = attemptSingleMaterialSeedProbe(current, nextSide, below, upper, rawCeiling);
+    traceSteps.push(makeSelectionTraceStep({
+      stage: "seed_probe_attempt",
+      materialResults: (candidate && candidate.materialResults) || current.materialResults,
+      overall: (candidate && candidate.overall) || current.overall,
+      extra: {
+        side: nextSide,
+        accepted: !!candidate
+      }
+    }));
+    if (candidate) {
+      current = candidate;
+      stuckSides = new Set();
+    } else {
+      stuckSides.add(nextSide);
+    }
+    nextSide = nextSide === "upper" ? "below" : "upper";
+  }
+
+  traceSteps.push(makeSelectionTraceStep({
+    stage: "seed_final",
+    materialResults: current.materialResults,
+    overall: current.overall
+  }));
+  return makeCraftAssistSeedResult({
+    kind: "seed_hit",
+    mode: "single_material",
+    rawCeiling,
+    materialResults: current.materialResults,
+    overall: current.overall,
+    trace: buildSeedTrace("single_material_seed", traceSteps)
+  });
+}
+
+function evaluateRoleAwareSeedPushGroups(pushGroups) {
+  const materialResults = materialResultsFromPushGroups(pushGroups);
+  if (countDuplicateSelectedIds(materialResults)) return null;
+  const overall = calcSelectedOverallFromMaterialResults(materialResults);
+  if (!Number.isFinite(Number(overall))) return null;
+  return {
+    pushGroups,
+    materialResults,
+    overall: Number(overall)
+  };
+}
+
+function attemptRoleAwareSeedProbe(current, groupIndex, rawCeiling) {
+  const currentGroup = Array.isArray(current && current.pushGroups) ? current.pushGroups[groupIndex] : null;
+  if (!canShiftPushGroup(currentGroup, "up")) return null;
+  const pushGroups = clonePushGroupsWithShift(current.pushGroups, groupIndex, "up");
+  const candidate = evaluateRoleAwareSeedPushGroups(pushGroups);
+  if (!candidate) return null;
+  if (!isBelowTarget(candidate.overall, rawCeiling)) return null;
+  if (!(Number(candidate.overall) > Number(current.overall) + EPSILON)) return null;
+  return candidate;
+}
+
+function searchRoleAwareSeed({groups, rawCeiling} = {}) {
+  const pushGroups = buildRoleAwarePushGroups(groups, rawCeiling);
+  if (!pushGroups.length || pushGroups.some((group) => group.valid === false)) {
+    return makeCraftAssistSeedResult({
+      kind: "seed_no_material",
+      mode: "multi_material_role",
+      rawCeiling
+    });
+  }
+  if (hasDuplicateSeedCandidateIds(pushGroups)) return null;
+
+  const mainIndex = pushGroups.findIndex((group) => normalizeRole(group && group.material && group.material.role) === "main");
+  const auxIndex = pushGroups.findIndex((group) => normalizeRole(group && group.material && group.material.role) === "aux");
+  if (mainIndex < 0 || auxIndex < 0) return null;
+
+  const traceSteps = [];
+  let current = evaluateRoleAwareSeedPushGroups(pushGroups);
+  if (!current) return null;
+  traceSteps.push(makeSelectionTraceStep({
+    stage: "seed_initial",
+    materialResults: current.materialResults,
+    overall: current.overall
+  }));
+
+  let lastMoveRole = null;
+  while (!isBelowTarget(current.overall, rawCeiling)) {
+    let moved = false;
+    for (const role of ["aux", "main"]) {
+      const index = role === "aux" ? auxIndex : mainIndex;
+      const nextGroup = current.pushGroups[index];
+      if (!canShiftPushGroup(nextGroup, "down")) continue;
+      const candidate = evaluateRoleAwareSeedPushGroups(
+        clonePushGroupsWithShift(current.pushGroups, index, "down")
+      );
+      if (!candidate) return null;
+      current = candidate;
+      lastMoveRole = role;
+      moved = true;
+      traceSteps.push(makeSelectionTraceStep({
+        stage: "seed_push_down",
+        materialResults: current.materialResults,
+        overall: current.overall,
+        extra: {
+          side: role
+        }
+      }));
+      break;
+    }
+    if (!moved) {
+      traceSteps.push(makeSelectionTraceStep({
+        stage: "seed_exhausted",
+        materialResults: current.materialResults,
+        overall: current.overall
+      }));
+      return makeCraftAssistSeedResult({
+        kind: "seed_proved_no_raw_solution",
+        mode: "multi_material_role",
+        rawCeiling,
+        materialResults: current.materialResults,
+        overall: current.overall,
+        trace: buildSeedTrace("multi_material_role_seed", traceSteps)
+      });
+    }
+  }
+
+  let nextRole = lastMoveRole === "main" ? "aux" : "main";
+  let stuckSides = new Set();
+  while (stuckSides.size < 2) {
+    const groupIndex = nextRole === "aux" ? auxIndex : mainIndex;
+    const candidate = attemptRoleAwareSeedProbe(current, groupIndex, rawCeiling);
+    traceSteps.push(makeSelectionTraceStep({
+      stage: "seed_probe_attempt",
+      materialResults: (candidate && candidate.materialResults) || current.materialResults,
+      overall: (candidate && candidate.overall) || current.overall,
+      extra: {
+        side: nextRole,
+        accepted: !!candidate
+      }
+    }));
+    if (candidate) {
+      current = candidate;
+      stuckSides = new Set();
+    } else {
+      stuckSides.add(nextRole);
+    }
+    nextRole = nextRole === "main" ? "aux" : "main";
+  }
+
+  traceSteps.push(makeSelectionTraceStep({
+    stage: "seed_final",
+    materialResults: current.materialResults,
+    overall: current.overall
+  }));
+  return makeCraftAssistSeedResult({
+    kind: "seed_hit",
+    mode: "multi_material_role",
+    rawCeiling,
+    materialResults: current.materialResults,
+    overall: current.overall,
+    trace: buildSeedTrace("multi_material_role_seed", traceSteps)
+  });
+}
+
+function searchCraftAssistSeed({groups, targetValue, targetStepSpec = null, approachMode = "below"} = {}) {
+  const sourceGroups = Array.isArray(groups) ? groups : [];
+  if (!sourceGroups.length) return null;
+  const normalizedApproachMode = hasTargetStepSpec(targetStepSpec)
+    ? normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode)
+    : normalizeApproachMode(approachMode);
+  if (normalizedApproachMode !== "below") return null;
+  const rawCeiling = resolveBelowTargetCeiling(targetValue, targetStepSpec);
+  if (!Number.isFinite(Number(rawCeiling))) return null;
+
+  const mode = resolveSearchMode(sourceGroups);
+  const orderedGroups = buildSeedOrderedGroups(sourceGroups, rawCeiling);
+  if (mode === "single_material" && orderedGroups.length === 1) {
+    return searchSingleMaterialSeed({
+      group: orderedGroups[0],
+      rawCeiling
+    });
+  }
+  if (mode === "multi_material_role" && orderedGroups.length === 2) {
+    return searchRoleAwareSeed({
+      groups: orderedGroups.map((group) => ({
+        index: group.index,
+        material: group.material,
+        candidates: group.ordered
+      })),
+      rawCeiling
+    });
+  }
+  return null;
+}
+
+function buildSlidingAnchorGroups(groupsWithOrdered, targetValue) {
+  const groups = (Array.isArray(groupsWithOrdered) ? groupsWithOrdered : []).map((group, index) => {
+    const material = group && group.material ? group.material : {};
+    const role = normalizeRole(material && material.role);
+    const count = Math.max(0, Number(material && material.count || 0));
+    const ordered = sortCandidatesByValueAsc(group && group.ordered || group && group.candidates || []);
+    return {
+      index,
+      material,
+      role,
+      count,
+      ordered,
+      start: 0
+    };
+  });
+  if (groups.length !== 2) return null;
+  const mainIndex = groups.findIndex((group) => group.role === "main");
+  const auxIndex = groups.findIndex((group) => group.role === "aux");
+  if (mainIndex < 0 || auxIndex < 0) return null;
+  for (const group of groups) {
+    if (group.count <= 0 || group.ordered.length < group.count) return null;
+    const split = lowerBoundByValueAsc(group.ordered, Number(targetValue));
+    const maxStart = Math.max(0, group.ordered.length - group.count);
+    if (group.role === "main") {
+      group.start = Math.min(maxStart, Math.max(0, split));
+    } else {
+      group.start = Math.min(maxStart, Math.max(0, split - group.count));
+    }
+  }
+  return {groups, mainIndex, auxIndex};
+}
+
+function materialResultsFromSlidingGroups(slidingGroups) {
+  return (Array.isArray(slidingGroups) ? slidingGroups : []).map((group) => ({
+    material: group.material,
+    available: group.ordered,
+    selected: group.ordered.slice(group.start, group.start + group.count)
+  }));
+}
+
+function slidingAnchorGapToStep(gap, group) {
+  const count = Math.max(1, Number(group && group.count || 1));
+  const size = Array.isArray(group && group.ordered) ? group.ordered.length : 0;
+  const room = Math.max(1, size - count);
+  const scaled = Math.ceil(Math.abs(Number(gap) || 0) * 800);
+  return Math.max(1, Math.min(32, room, scaled));
+}
+
+function classifySlidingAnchorOverall(overall, targetValue, targetStepSpec) {
+  if (!isBelowTarget(overall, resolveBelowTargetCeiling(targetValue, targetStepSpec))) {
+    return "high";
+  }
+  if (
+    targetStepSpec
+    && targetStepSpec.hasOffsetWindow === true
+    && compareMeanToTargetRange(overall, targetStepSpec) < 0
+  ) {
+    return "low";
+  }
+  return "legal";
+}
+
+function validateSlidingAnchorMaterialResults(materialResults, targetValue, targetStepSpec) {
+  const overall = calcSelectedOverallFromMaterialResults(materialResults);
+  if (overall == null) return {ok: false, reason: "empty"};
+  if (countDuplicateSelectedIds(materialResults)) return {ok: false, reason: "duplicate_id", overall};
+  if (!isBelowTarget(overall, resolveBelowTargetCeiling(targetValue, targetStepSpec))) {
+    return {ok: false, reason: "raw_ceiling", overall};
+  }
+  if (targetStepSpec && targetStepSpec.hasOffsetWindow === true && !isMeanOnTargetStep(overall, targetStepSpec)) {
+    return {ok: false, reason: "offset_window", overall};
+  }
+  const scored = scoreRoleAwareMaterialResults(materialResults, targetValue, "below", targetStepSpec);
+  if (!scored) return {ok: false, reason: "scorer_rejected", overall};
+  return {ok: true, overall: scored.overall, scoreTuple: scored.scoreTuple, predictedStepMean: scored.predictedStepMean};
+}
+
+function cloneSlidingAnchorCandidate(materialResults, validation, traceSteps, rolledBack, slidingGroups = []) {
+  return {
+    materialResults,
+    overall: Number(validation.overall),
+    predictedStepMean: validation.predictedStepMean,
+    scoreTuple: validation.scoreTuple,
+    traceSteps: Array.isArray(traceSteps) ? traceSteps.slice() : [],
+    rolledBack: !!rolledBack,
+    groupStarts: (Array.isArray(slidingGroups) ? slidingGroups : []).map((group) => Number(group && group.start || 0))
+  };
+}
+
+function searchSlidingAnchorDiagnostic({groupsWithOrdered, targetValue, targetStepSpec = null, mode} = {}) {
+  if (mode !== "multi_material_role") return null;
+  if (!hasTargetStepSpec(targetStepSpec)) return null;
+  if (normalizeApproachMode(targetStepSpec && targetStepSpec.approachMode) !== "below") return null;
+  const rawCeiling = resolveBelowTargetCeiling(targetValue, targetStepSpec);
+  if (!Number.isFinite(Number(rawCeiling))) return null;
+  const setup = buildSlidingAnchorGroups(groupsWithOrdered, rawCeiling);
+  if (!setup) return null;
+  const allIds = new Set();
+  for (const group of setup.groups) {
+    for (const candidate of group.ordered) {
+      const id = String(candidate && candidate.id || "");
+      if (!id) continue;
+      if (allIds.has(id)) {
+        return null;
+      }
+      allIds.add(id);
+    }
+  }
+
+  const totalCount = setup.groups.reduce((sum, group) => sum + group.count, 0);
+  const traceSteps = [];
+  let best = null;
+  let lastRejectReason = "";
+  let rolledBack = false;
+  let rawOvershootOverall = null;
+  let boundaryProbe = null;
+
+  function evaluate(stage) {
+    const materialResults = materialResultsFromSlidingGroups(setup.groups);
+    const validation = validateSlidingAnchorMaterialResults(materialResults, targetValue, targetStepSpec);
+    const overall = validation.overall != null ? validation.overall : calcSelectedOverallFromMaterialResults(materialResults);
+    traceSteps.push(makeSelectionTraceStep({
+      stage,
+      materialResults,
+      overall,
+      extra: {
+        mainStart: setup.groups[setup.mainIndex].start,
+        auxStart: setup.groups[setup.auxIndex].start
+      }
+    }));
+    if (!validation.ok) {
+      lastRejectReason = validation.reason;
+      return validation;
+    }
+    const candidate = cloneSlidingAnchorCandidate(materialResults, validation, traceSteps, rolledBack, setup.groups);
+    if (!best || compareScoreTuples(candidate.scoreTuple, best.scoreTuple) < 0) best = candidate;
+    return validation;
+  }
+
+  let validation = evaluate("sliding_anchor_seed");
+  const maxIterations = 128;
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const relation = classifySlidingAnchorOverall(
+      validation && validation.overall != null ? validation.overall : calcSelectedOverallFromMaterialResults(materialResultsFromSlidingGroups(setup.groups)),
+      targetValue,
+      targetStepSpec
+    );
+    if (relation === "legal") break;
+
+    const order = relation === "high"
+      ? [{index: setup.auxIndex, direction: -1}, {index: setup.mainIndex, direction: -1}]
+      : [{index: setup.mainIndex, direction: 1}, {index: setup.auxIndex, direction: 1}];
+    let moved = false;
+    for (const move of order) {
+      const group = setup.groups[move.index];
+      const oldStart = group.start;
+      const maxStart = Math.max(0, group.ordered.length - group.count);
+      const gap = Number(validation && validation.overall != null ? validation.overall : rawCeiling) - Number(rawCeiling);
+      const step = slidingAnchorGapToStep(Math.abs(gap) || (1 / Math.max(1, totalCount)), group);
+      const nextStart = Math.max(0, Math.min(maxStart, oldStart + move.direction * step));
+      if (nextStart === oldStart) continue;
+
+      group.start = nextStart;
+      const overshootValidation = evaluate("sliding_anchor_overshoot");
+      let lastLegal = overshootValidation && overshootValidation.ok
+        ? {start: nextStart, validation: overshootValidation}
+        : null;
+      if (!lastLegal) lastRejectReason = overshootValidation && overshootValidation.reason || lastRejectReason;
+      if (
+        !lastLegal
+        && move.direction < 0
+        && overshootValidation
+        && overshootValidation.reason === "raw_ceiling"
+      ) {
+        const rejectionOverall = overshootValidation.overall != null
+          ? Number(overshootValidation.overall)
+          : calcSelectedOverallFromMaterialResults(materialResultsFromSlidingGroups(setup.groups));
+        boundaryProbe = {
+          direction: "lower",
+          start: nextStart,
+          valid: false,
+          reason: overshootValidation.reason,
+          overall: rejectionOverall
+        };
+        rawOvershootOverall = rejectionOverall;
+        validation = overshootValidation;
+        moved = true;
+        break;
+      }
+
+      const rollbackDirection = -move.direction;
+      for (
+        let probe = nextStart + rollbackDirection;
+        rollbackDirection > 0 ? probe <= oldStart : probe >= oldStart;
+        probe += rollbackDirection
+      ) {
+        group.start = probe;
+        const probeValidation = validateSlidingAnchorMaterialResults(
+          materialResultsFromSlidingGroups(setup.groups),
+          targetValue,
+          targetStepSpec
+        );
+        if (!probeValidation.ok) {
+          lastRejectReason = probeValidation.reason;
+          boundaryProbe = {
+            direction: rollbackDirection > 0 ? "higher" : "lower",
+            start: probe,
+            valid: false,
+            reason: probeValidation.reason,
+            overall: probeValidation.overall != null
+              ? Number(probeValidation.overall)
+              : calcSelectedOverallFromMaterialResults(materialResultsFromSlidingGroups(setup.groups))
+          };
+          rawOvershootOverall = boundaryProbe.overall;
+          break;
+        }
+        lastLegal = {start: probe, validation: probeValidation};
+      }
+
+      if (lastLegal) {
+        group.start = lastLegal.start;
+        rolledBack = lastLegal.start !== nextStart;
+        validation = evaluate("sliding_anchor_rollback");
+      } else {
+        group.start = oldStart;
+        validation = evaluate("sliding_anchor_restore");
+      }
+      moved = true;
+      break;
+    }
+    if (!moved) break;
+  }
+
+  if (!best) {
+    return null;
+  }
+  return {
+    materialResults: best.materialResults,
+    overall: Number(best.overall),
+    predictedStepMean: best.predictedStepMean,
+    scoreTuple: best.scoreTuple,
+    windowExtra: 0,
+    rolledBack: best.rolledBack,
+    rawCeiling: Number(rawCeiling),
+    rawOvershootOverall,
+    boundaryProbe,
+    rejectReason: lastRejectReason || null,
+    trace: {
+      mode: "sliding_anchor",
+      steps: best.traceSteps
+    }
   };
 }
 
@@ -2562,7 +3708,7 @@ function refineRoleAwareMaterialResults({materialResults, targetValue, maxIterat
   };
 }
 
-function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = null, beamWidth = 200, approachMode = "below", onSearchProgress = null, onSearchProfile = null} = {}) {
+function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = null, beamWidth = 200, approachMode = "below", entryOffsetValue = null, entryApproachMode = null, onSearchProgress = null, onSearchProfile = null, enableRawBelowTopKFastPath = false, enableSlidingAnchorSearch = false} = {}) {
   const sourceGroups = Array.isArray(groups) ? groups : [];
   const mode = resolveSearchMode(sourceGroups);
   const searchTargetValue = resolveSearchTargetValue(targetValue, targetStepSpec);
@@ -2579,10 +3725,20 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
     candidates: buildOrderedCandidates({...group, index}, searchTargetValue, mode, targetStepSpec)
   }));
   if (!preparedGroups.length) return null;
+  if (enableRawBelowTopKFastPath === true && mode === "single_material" && preparedGroups.length === 1) {
+    const rawBelowFastPath = searchSingleMaterialRawBelowTopKFastPath({
+      group: preparedGroups[0],
+      targetValue: searchTargetValue,
+      targetStepSpec
+    });
+    if (rawBelowFastPath) return rawBelowFastPath;
+  }
   if (mode === "single_material" && preparedGroups.length === 1 && normalizedApproachMode === "below" && !hasTargetStepSpec(targetStepSpec)) {
     return searchSingleMaterialExact({
       group: preparedGroups[0],
-      targetValue: searchTargetValue
+      targetValue: searchTargetValue,
+      approachMode: normalizedApproachMode,
+      entryOffsetValue
     });
   }
   const groupsWithOrdered = preparedGroups.map((group) => ({
@@ -2633,6 +3789,8 @@ function searchCraftAssistBestSolution({groups, targetValue, targetStepSpec = nu
       capExtra,
       approachMode: normalizedApproachMode,
       targetStepSpec,
+      entryOffsetValue,
+      entryApproachMode,
       onSearchProfile,
       innerExtraResultCache
     });
@@ -2767,8 +3925,10 @@ module.exports = {
   compareScoreTuples,
   refineSingleMaterialCompensation,
   refineRoleAwareMaterialResults,
+  searchCraftAssistSeed,
   searchRoleAwarePushSolution,
   searchCraftAssistBestSolution,
+  searchSlidingAnchorDiagnostic,
   searchSingleMaterialExact,
   scoreCraftAssistSolutionSingleMaterial,
   scoreCraftAssistSolutionMultiMaterial
