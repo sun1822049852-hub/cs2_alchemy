@@ -8669,6 +8669,24 @@ body.theme-inkblue .batch-craft-clear-btn:hover {
   background: var(--ops-control-bg-hover);
   border-color: rgba(243, 199, 121, 0.24);
 }
+body.theme-inkblue .batch-craft-account-listbox {
+  background: var(--ops-surface-strong);
+  border-color: var(--ops-border-soft);
+  box-shadow: var(--ops-panel-shadow);
+}
+body.theme-inkblue .batch-craft-account-option {
+  background: transparent;
+  color: var(--ops-text-main);
+}
+body.theme-inkblue .batch-craft-account-option:hover:not(:disabled) {
+  background: rgba(243, 199, 121, 0.10);
+}
+body.theme-inkblue .batch-craft-account-option:focus-visible {
+  background: rgba(243, 199, 121, 0.10);
+}
+body.theme-inkblue .batch-craft-account-option.empty {
+  color: var(--ops-text-dim);
+}
 body.theme-inkblue .batch-craft-active-account {
   color: var(--ops-accent-strong);
 }
@@ -9076,6 +9094,52 @@ body.theme-inkblue #batchCraftPage :is(.batch-craft-preset-list, .batch-craft-qu
   position: absolute;
   z-index: 10;
 }
+.batch-craft-account-listbox {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  min-width: 180px;
+  max-width: min(280px, calc(100vw - 16px));
+  max-height: min(340px, calc(100vh - 16px));
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+.batch-craft-account-listbox.hidden {
+  display: none;
+}
+.batch-craft-account-option {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1f2937;
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.batch-craft-account-option:hover:not(:disabled),
+.batch-craft-account-option:focus-visible {
+  background: #eef3fb;
+  outline: none;
+}
+.batch-craft-account-option.empty {
+  cursor: default;
+  color: #6b7280;
+}
 .batch-craft-active-account {
   font-size: 12px;
   color: #4a6fa5;
@@ -9245,6 +9309,23 @@ body.theme-inkblue #batchCraftPage :is(.batch-craft-preset-list, .batch-craft-qu
   width: 56px;
   text-align: center;
 }
+#batchCraftPage .craft-settings-panel {
+  position: fixed;
+  right: auto;
+  top: auto;
+  z-index: 140;
+}
+#batchCraftPage .craft-settings-panel.hidden {
+  display: none;
+}
+#batchCraftPage .batch-craft-limit-label input[type="number"] {
+  width: 54px;
+  min-width: 54px;
+  max-width: 54px;
+  flex: 0 0 54px;
+  padding: 0 6px;
+  text-align: center;
+}
 /* preset item — 改为 flex 行，右侧放三角 */
 .batch-craft-preset-item {
   display: flex;
@@ -9375,6 +9456,9 @@ body.theme-inkblue #batchCraftPage :is(.batch-craft-preset-list, .batch-craft-qu
 }
 .batch-craft-popover-qty-input {
   width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  flex: 0 0 36px;
   height: 20px;
   text-align: center;
   border: 1px solid #d6dfeb;
@@ -9383,6 +9467,12 @@ body.theme-inkblue #batchCraftPage :is(.batch-craft-preset-list, .batch-craft-qu
   padding: 0;
   background: #fff;
   color: #1f2937;
+}
+#batchCraftPage .batch-craft-popover-qty-input {
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  flex: 0 0 36px;
 }
 .batch-craft-popover-qty-input:focus {
   outline: none;

@@ -671,8 +671,9 @@
           <div class="batch-craft-body">
             <!-- 上栏：账号选择（横排一行） -->
             <section class="batch-craft-account-bar">
-              <button id="batchCraftAddAccountBtn" class="batch-craft-add-btn" type="button" title="添加账号" aria-label="添加账号">+</button>
+              <button id="batchCraftAddAccountBtn" class="batch-craft-add-btn" type="button" title="添加账号" aria-label="添加账号" aria-haspopup="listbox" aria-expanded="false">+</button>
               <select id="batchCraftAccountPicker" class="batch-craft-account-picker hidden"></select>
+              <div id="batchCraftAccountListbox" class="batch-craft-account-listbox hidden" role="listbox" aria-labelledby="batchCraftAddAccountBtn" aria-hidden="true"></div>
               <button id="batchCraftClearAccountsBtn" class="batch-craft-clear-btn" type="button" title="清空所有账号" aria-label="清空所有账号">&#xd7;</button>
               <span id="batchCraftActiveAccountText" class="batch-craft-active-account"></span>
               <div id="batchCraftAccountCards" class="batch-craft-account-cards"></div>

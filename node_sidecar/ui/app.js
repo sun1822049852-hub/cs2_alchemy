@@ -84,6 +84,7 @@ const state = {
   batchCraftApproachMode: false,
   batchCraftWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
   batchCraftSettingsOpen: false,
+  batchCraftAccountPickerOpen: false,
   batchCraftPresetWidth: 200
 };
 
@@ -162,7 +163,7 @@ const ui = {
   simulationModeSavedBtn: document.getElementById("simulationModeSavedBtn"), simulationModeWorkspaceBtn: document.getElementById("simulationModeWorkspaceBtn"), simulationSavedPresets: document.getElementById("simulationSavedPresets"), simulationWorkspace: document.getElementById("simulationWorkspace"), simulationWorkspaceActionsBar: document.getElementById("simulationWorkspaceActionsBar"), simulationSavePresetBtn: document.getElementById("simulationSavePresetBtn"), simulationCancelEditBtn: document.getElementById("simulationCancelEditBtn"), simulationLayout: document.getElementById("simulationLayout"), simulationOutputPanel: document.getElementById("simulationOutputPanel"), simulationMaterialPanel: document.getElementById("simulationMaterialPanel"), simulationOutputRoleChooser: document.getElementById("simulationOutputRoleChooser"), simulationOutputRoleChooserText: document.getElementById("simulationOutputRoleChooserText"), simulationOutputRoleSplit: document.getElementById("simulationOutputRoleSplit"), simulationMaterialRoleChooser: document.getElementById("simulationMaterialRoleChooser"), simulationMaterialRoleChooserText: document.getElementById("simulationMaterialRoleChooserText"), simulationMaterialRoleSplit: document.getElementById("simulationMaterialRoleSplit"), simulationOutputLane: document.getElementById("simulationOutputLane"), simulationMaterialLane: document.getElementById("simulationMaterialLane"), simulationPickerModal: document.getElementById("simulationPickerModal"), simulationPickerTitle: document.getElementById("simulationPickerTitle"), simulationPickerRoleBadge: document.getElementById("simulationPickerRoleBadge"), simulationPickerHint: document.getElementById("simulationPickerHint"), simulationPickerMeta: document.getElementById("simulationPickerMeta"), simulationPickerSearchInput: document.getElementById("simulationPickerSearchInput"), simulationPickerSearchBtn: document.getElementById("simulationPickerSearchBtn"), simulationPickerSearchResults: document.getElementById("simulationPickerSearchResults"), simulationPickerClose: document.getElementById("simulationPickerClose"), simulationPickerCancelBtn: document.getElementById("simulationPickerCancelBtn"), simulationCardModal: document.getElementById("simulationCardModal"), simulationCardModalTitle: document.getElementById("simulationCardModalTitle"), simulationCardModalBody: document.getElementById("simulationCardModalBody"), simulationCardModalField: document.getElementById("simulationCardModalField"), simulationCardModalWearInput: document.getElementById("simulationCardModalWearInput"), simulationCardModalWearHint: document.getElementById("simulationCardModalWearHint"), simulationCardModalReadonlyNote: document.getElementById("simulationCardModalReadonlyNote"), simulationCardModalClose: document.getElementById("simulationCardModalClose"), simulationCardModalSaveBtn: document.getElementById("simulationCardModalSaveBtn"), simulationCardModalCancelBtn: document.getElementById("simulationCardModalCancelBtn"),
   simExportCraftModal: document.getElementById("simExportCraftModal"), simExportCraftModalTitle: document.getElementById("simExportCraftModalTitle"), simExportCraftModalClose: document.getElementById("simExportCraftModalClose"), simExportCraftMaterialList: document.getElementById("simExportCraftMaterialList"), simExportCraftAddBtn: document.getElementById("simExportCraftAddBtn"), simExportCraftSearchPanel: document.getElementById("simExportCraftSearchPanel"), simExportCraftSearchInput: document.getElementById("simExportCraftSearchInput"), simExportCraftSearchBtn: document.getElementById("simExportCraftSearchBtn"), simExportCraftSearchResults: document.getElementById("simExportCraftSearchResults"), simExportCraftName: document.getElementById("simExportCraftName"), simExportCraftTargetWear: document.getElementById("simExportCraftTargetWear"), simExportCraftMainCount: document.getElementById("simExportCraftMainCount"), simExportCraftAuxCount: document.getElementById("simExportCraftAuxCount"), simExportCraftAuxCountRow: document.getElementById("simExportCraftAuxCountRow"), simExportCraftWearMin: document.getElementById("simExportCraftWearMin"), simExportCraftWearMax: document.getElementById("simExportCraftWearMax"), simExportCraftConfirmBtn: document.getElementById("simExportCraftConfirmBtn"), simExportCraftCancelBtn: document.getElementById("simExportCraftCancelBtn"),
   batchCraftPage: document.getElementById("batchCraftPage"), navBatchCraft: document.getElementById("navBatchCraft"), batchCraftStatusText: document.getElementById("batchCraftStatusText"),
-  batchCraftAddAccountBtn: document.getElementById("batchCraftAddAccountBtn"), batchCraftAccountPicker: document.getElementById("batchCraftAccountPicker"), batchCraftClearAccountsBtn: document.getElementById("batchCraftClearAccountsBtn"),
+  batchCraftAddAccountBtn: document.getElementById("batchCraftAddAccountBtn"), batchCraftAccountPicker: document.getElementById("batchCraftAccountPicker"), batchCraftAccountListbox: document.getElementById("batchCraftAccountListbox"), batchCraftClearAccountsBtn: document.getElementById("batchCraftClearAccountsBtn"),
   batchCraftActiveAccountText: document.getElementById("batchCraftActiveAccountText"), batchCraftAccountCards: document.getElementById("batchCraftAccountCards"),
   batchCraftPresetPanel: document.getElementById("batchCraftPresetPanel"), batchCraftPresetList: document.getElementById("batchCraftPresetList"), batchCraftLimitInput: document.getElementById("batchCraftLimitInput"),
   batchCraftRunSelectBtn: document.getElementById("batchCraftRunSelectBtn"), batchCraftExecuteBtn: document.getElementById("batchCraftExecuteBtn"),
@@ -13873,17 +13874,130 @@ function renderBatchCraftAccountCards() {
   }
 }
 
+function getAvailableBatchCraftAccounts() {
+  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
+  const added = new Set(state.batchCraftAccounts);
+  return accounts.filter((a) => {
+    const username = String(a && a.username || "").trim();
+    return username && !added.has(username);
+  });
+}
+
+function placeBatchCraftAccountListbox() {
+  if (!state.batchCraftAccountPickerOpen || !ui.batchCraftAccountListbox || !ui.batchCraftAddAccountBtn) return;
+  const rect = ui.batchCraftAddAccountBtn.getBoundingClientRect();
+  const panel = ui.batchCraftAccountListbox;
+  const gap = 6;
+  const panelWidth = panel.offsetWidth || 180;
+  const panelHeight = panel.offsetHeight || 0;
+  const maxLeft = Math.max(8, window.innerWidth - panelWidth - 8);
+  const left = Math.max(8, Math.min(rect.left, maxLeft));
+  let top = rect.bottom + gap;
+  if (top + panelHeight > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - panelHeight - gap);
+  }
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function renderBatchCraftAccountListbox() {
+  if (!ui.batchCraftAccountListbox) return;
+  ui.batchCraftAccountListbox.replaceChildren();
+  const available = getAvailableBatchCraftAccounts();
+  if (!available.length) {
+    const empty = document.createElement("div");
+    empty.className = "batch-craft-account-option empty";
+    empty.setAttribute("role", "option");
+    empty.setAttribute("aria-disabled", "true");
+    empty.textContent = "无可添加账号";
+    ui.batchCraftAccountListbox.append(empty);
+    return;
+  }
+  for (const row of available) {
+    const username = String(row && row.username || "").trim();
+    if (!username) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "batch-craft-account-option";
+    btn.setAttribute("role", "option");
+    btn.dataset.username = username;
+    btn.textContent = displayAccountName(row) || username;
+    btn.title = username;
+    btn.disabled = !!state.batchCraftBusy;
+    btn.onclick = (evt) => {
+      evt.stopPropagation();
+      if (state.batchCraftBusy) return;
+      closeBatchCraftAccountPicker();
+      void addBatchCraftAccount(username);
+    };
+    ui.batchCraftAccountListbox.append(btn);
+  }
+}
+
+function setBatchCraftAccountPickerOpen(open) {
+  state.batchCraftAccountPickerOpen = !!open && !state.batchCraftBusy;
+  if (state.batchCraftAccountPickerOpen && state.batchCraftSettingsOpen) setBatchCraftSettingsPanelOpen(false);
+  if (state.batchCraftAccountPickerOpen) renderBatchCraftAccountPicker();
+  if (ui.batchCraftAccountPicker) ui.batchCraftAccountPicker.classList.add("hidden");
+  if (ui.batchCraftAccountListbox) {
+    ui.batchCraftAccountListbox.classList.toggle("hidden", !state.batchCraftAccountPickerOpen);
+    ui.batchCraftAccountListbox.setAttribute("aria-hidden", state.batchCraftAccountPickerOpen ? "false" : "true");
+    if (state.batchCraftAccountPickerOpen) {
+      placeBatchCraftAccountListbox();
+      const firstOption = ui.batchCraftAccountListbox.querySelector(".batch-craft-account-option:not(.empty)");
+      if (firstOption && typeof firstOption.focus === "function") firstOption.focus();
+    }
+  }
+  if (ui.batchCraftAddAccountBtn) {
+    ui.batchCraftAddAccountBtn.classList.toggle("active", state.batchCraftAccountPickerOpen);
+    ui.batchCraftAddAccountBtn.setAttribute("aria-expanded", state.batchCraftAccountPickerOpen ? "true" : "false");
+  }
+}
+
+function closeBatchCraftAccountPicker() {
+  setBatchCraftAccountPickerOpen(false);
+}
+
+function placeBatchCraftSettingsPanel() {
+  if (!state.batchCraftSettingsOpen || !ui.batchCraftSettingsPanel || !ui.batchCraftSettingsBtn) return;
+  const rect = ui.batchCraftSettingsBtn.getBoundingClientRect();
+  const panel = ui.batchCraftSettingsPanel;
+  const gap = 6;
+  const panelWidth = panel.offsetWidth || 220;
+  const panelHeight = panel.offsetHeight || 0;
+  const maxLeft = Math.max(8, window.innerWidth - panelWidth - 8);
+  const left = Math.max(8, Math.min(rect.right - panelWidth, maxLeft));
+  let top = rect.bottom + gap;
+  if (top + panelHeight > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - panelHeight - gap);
+  }
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function setBatchCraftSettingsPanelOpen(open) {
+  state.batchCraftSettingsOpen = !!open;
+  if (state.batchCraftSettingsOpen && state.batchCraftAccountPickerOpen) closeBatchCraftAccountPicker();
+  if (ui.batchCraftSettingsPanel) {
+    ui.batchCraftSettingsPanel.classList.toggle("hidden", !state.batchCraftSettingsOpen);
+    if (state.batchCraftSettingsOpen) {
+      syncBatchCraftSettingsControls();
+      placeBatchCraftSettingsPanel();
+    }
+  }
+  if (ui.batchCraftSettingsBtn) ui.batchCraftSettingsBtn.classList.toggle("active", state.batchCraftSettingsOpen);
+}
+
 function renderBatchCraftAccountPicker() {
   if (!ui.batchCraftAccountPicker) return;
   ui.batchCraftAccountPicker.replaceChildren();
-  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  const added = new Set(state.batchCraftAccounts);
-  const available = accounts.filter((a) => !added.has(String(a && a.username || "").trim()));
+  const available = getAvailableBatchCraftAccounts();
   if (!available.length) {
     const opt = document.createElement("option");
     opt.value = "";
     opt.textContent = "无可添加账号";
     ui.batchCraftAccountPicker.append(opt);
+    renderBatchCraftAccountListbox();
     return;
   }
   const placeholder = document.createElement("option");
@@ -13896,6 +14010,7 @@ function renderBatchCraftAccountPicker() {
     opt.textContent = displayAccountName(row) || String(row.username || "").trim();
     ui.batchCraftAccountPicker.append(opt);
   }
+  renderBatchCraftAccountListbox();
 }
 
 function renderBatchCraftPresetList() {
@@ -14185,6 +14300,7 @@ function syncBatchCraftSettingsControls() {
 
 function renderBatchCraftPage() {
   if (!ui.batchCraftPage) return;
+  if (state.batchCraftBusy && state.batchCraftAccountPickerOpen) closeBatchCraftAccountPicker();
   renderBatchCraftAccountCards();
   renderBatchCraftAccountPicker();
   renderBatchCraftPresetList();
@@ -14609,14 +14725,11 @@ async function runBatchCraftExecution() {
 
 function bindBatchCraftEvents() {
   if (ui.batchCraftAddAccountBtn) {
-    ui.batchCraftAddAccountBtn.onclick = () => {
+    ui.batchCraftAddAccountBtn.onclick = (evt) => {
+      evt.stopPropagation();
       if (state.batchCraftBusy) return;
-      if (!ui.batchCraftAccountPicker) return;
-      ui.batchCraftAccountPicker.classList.toggle("hidden");
-      if (!ui.batchCraftAccountPicker.classList.contains("hidden")) {
-        renderBatchCraftAccountPicker();
-        ui.batchCraftAccountPicker.focus();
-      }
+      if (!ui.batchCraftAccountListbox) return;
+      setBatchCraftAccountPickerOpen(!state.batchCraftAccountPickerOpen);
     };
   }
   if (ui.batchCraftAccountPicker) {
@@ -14625,6 +14738,7 @@ function bindBatchCraftEvents() {
       if (value) {
         void addBatchCraftAccount(value);
         ui.batchCraftAccountPicker.classList.add("hidden");
+        closeBatchCraftAccountPicker();
       }
     };
     ui.batchCraftAccountPicker.onblur = () => {
@@ -14659,11 +14773,9 @@ function bindBatchCraftEvents() {
   }
   // -- batch craft settings panel --
   if (ui.batchCraftSettingsBtn) {
-    ui.batchCraftSettingsBtn.onclick = () => {
-      state.batchCraftSettingsOpen = !state.batchCraftSettingsOpen;
-      if (ui.batchCraftSettingsPanel) ui.batchCraftSettingsPanel.classList.toggle("hidden", !state.batchCraftSettingsOpen);
-      if (ui.batchCraftSettingsBtn) ui.batchCraftSettingsBtn.classList.toggle("active", state.batchCraftSettingsOpen);
-      if (state.batchCraftSettingsOpen) syncBatchCraftSettingsControls();
+    ui.batchCraftSettingsBtn.onclick = (evt) => {
+      evt.stopPropagation();
+      setBatchCraftSettingsPanelOpen(!state.batchCraftSettingsOpen);
     };
   }
   if (ui.batchCraftUseComponentItems) {
@@ -14817,6 +14929,8 @@ function bindEvents() {
   });
   window.addEventListener("resize", () => {
     placeFilterDrawer();
+    placeBatchCraftAccountListbox();
+    placeBatchCraftSettingsPanel();
     applyCraftLayoutWidth();
     if (typeof fitCraftPredictorOutcomeNames === "function" && ui.craftPredictorList) {
       fitCraftPredictorOutcomeNames(ui.craftPredictorList);
@@ -14830,6 +14944,8 @@ function bindEvents() {
   });
   window.addEventListener("scroll", () => {
     placeFilterDrawer();
+    placeBatchCraftAccountListbox();
+    placeBatchCraftSettingsPanel();
     scheduleLazyLoadCheck();
   }, true);
   document.addEventListener("mousemove", (evt) => {
@@ -14870,9 +14986,14 @@ function bindEvents() {
       const bPanel = ui.batchCraftSettingsPanel;
       const bBtn = ui.batchCraftSettingsBtn;
       if ((!bPanel || !bPanel.contains(target)) && (!bBtn || !bBtn.contains(target))) {
-        state.batchCraftSettingsOpen = false;
-        if (ui.batchCraftSettingsPanel) ui.batchCraftSettingsPanel.classList.add("hidden");
-        if (ui.batchCraftSettingsBtn) ui.batchCraftSettingsBtn.classList.remove("active");
+        setBatchCraftSettingsPanelOpen(false);
+      }
+    }
+    if (state.batchCraftAccountPickerOpen) {
+      const bListbox = ui.batchCraftAccountListbox;
+      const bBtn = ui.batchCraftAddAccountBtn;
+      if ((!bListbox || !bListbox.contains(target)) && (!bBtn || !bBtn.contains(target))) {
+        closeBatchCraftAccountPicker();
       }
     }
     if (state.craftAssistPickerOpen || state.craftAssistRoleChooserOpen) {
@@ -15089,6 +15210,12 @@ function bindEvents() {
     setNavDrawerOpen(false);
   });
   document.addEventListener("keydown", (evt) => {
+    if (evt.key === "Escape" && state.batchCraftAccountPickerOpen) {
+      closeBatchCraftAccountPicker();
+    }
+    if (evt.key === "Escape" && state.batchCraftSettingsOpen) {
+      setBatchCraftSettingsPanelOpen(false);
+    }
     if (evt.key !== "Escape" || !state.navDrawerOpen) return;
     setNavDrawerOpen(false);
   });
