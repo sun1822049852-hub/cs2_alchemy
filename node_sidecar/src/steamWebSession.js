@@ -7,24 +7,11 @@ const https = require("https");
 const crypto = require("crypto");
 const {URL} = require("url");
 const {asString, withTimeout} = require("./utils");
-const {getProxyUrl} = require("./networkPrecheck");
 const {enhanceCookieString} = require("./steamHttpClient");
+const {createProxyAgentForUrl, getSteamSessionProxyOptions} = require("./proxyConfig");
 
 const TOKEN_REFRESH_TIMEOUT_MS = 15000;
 const STEAM_COUNTRY_COOKIE = "steamCountry=CN%7C0";
-
-function createProxyAgent() {
-  const proxyUrl = asString(getProxyUrl()).trim();
-  if (!proxyUrl) {
-    return null;
-  }
-  try {
-    const {HttpsProxyAgent} = require("https-proxy-agent");
-    return new HttpsProxyAgent(proxyUrl, {keepAlive: false});
-  } catch (_) {
-    return null;
-  }
-}
 
 function appendCookieIfMissing(cookieString, cookiePrefix, cookieValue) {
   if (new RegExp(`(?:^|;\\s*)${cookiePrefix}=`).test(cookieString)) {
@@ -87,7 +74,7 @@ async function getWebCookiesViaSteamSession({refreshToken, accessToken}) {
     throw new Error("refresh_token 为空");
   }
   const {LoginSession, EAuthTokenPlatformType} = require("steam-session");
-  const session = new LoginSession(EAuthTokenPlatformType.MobileApp);
+  const session = new LoginSession(EAuthTokenPlatformType.MobileApp, getSteamSessionProxyOptions());
   session.refreshToken = token;
   if (asString(accessToken).trim()) {
     session.accessToken = asString(accessToken).trim();
@@ -114,7 +101,7 @@ async function refreshAccessToken(refreshToken, steamId64) {
     ? `refresh_token=${encodeURIComponent(token)}&steamid=${encodeURIComponent(sid)}`
     : `refresh_token=${encodeURIComponent(token)}`;
   const url = new URL("https://api.steampowered.com/IAuthenticationService/GenerateAccessTokenForApp/v1/");
-  const proxyAgent = createProxyAgent();
+  const proxyAgent = createProxyAgentForUrl(url.toString());
 
   return withTimeout(new Promise((resolve, reject) => {
     const reqOptions = {

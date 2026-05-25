@@ -1,5 +1,12 @@
 const net = require("net");
+const https = require("https");
+const {URL} = require("url");
 const {asString} = require("./utils");
+const {
+  getProxyUrl: getConfiguredProxyUrl,
+  proxyHint: getConfiguredProxyHint,
+  createProxyAgentForUrl
+} = require("./proxyConfig");
 
 const AUTH_PRECHECK_URL =
   "https://api.steampowered.com/IAuthenticationService/GetPasswordRSAPublicKey/v1?account_name=precheck";
@@ -31,15 +38,7 @@ const authFailureCooldownByProxy = new Map();
 let cmProbeCache = null;
 
 function getProxyUrl() {
-  return asString(
-    process.env.HTTPS_PROXY ||
-      process.env.https_proxy ||
-      process.env.ALL_PROXY ||
-      process.env.all_proxy ||
-      process.env.HTTP_PROXY ||
-      process.env.http_proxy ||
-      ""
-  ).trim();
+  return asString(getConfiguredProxyUrl()).trim();
 }
 
 function authProxyKey() {
@@ -47,11 +46,45 @@ function authProxyKey() {
 }
 
 function proxyHint() {
-  const proxy = getProxyUrl();
-  if (proxy) {
-    return ` (proxy=${proxy})`;
-  }
-  return " (proxy env not detected)";
+  return getConfiguredProxyHint();
+}
+
+function requestAuthPrecheck({timeout}) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(AUTH_PRECHECK_URL);
+    const proxyAgent = createProxyAgentForUrl(AUTH_PRECHECK_URL);
+    const reqOptions = {
+      method: "GET",
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      headers: {
+        Accept: "application/json"
+      },
+      timeout
+    };
+    if (proxyAgent) {
+      reqOptions.agent = proxyAgent;
+    }
+
+    const req = https.request(reqOptions, (res) => {
+      let text = "";
+      res.on("data", (chunk) => {
+        text += String(chunk || "");
+      });
+      res.on("end", () => {
+        resolve({
+          ok: Number(res.statusCode || 0) >= 200 && Number(res.statusCode || 0) < 300,
+          status: Number(res.statusCode) || 0,
+          text
+        });
+      });
+    });
+    req.on("timeout", () => {
+      req.destroy(new Error(`timeout(${timeout}ms)`));
+    });
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 function shouldUseAuthCache(entry, force) {
@@ -98,11 +131,6 @@ async function precheckAuthApi({logger, force = false, timeoutMs = AUTH_PRECHECK
   }
 
   const timeout = Math.max(500, Number(timeoutMs) || AUTH_PRECHECK_TIMEOUT_MS);
-  const abortController = new AbortController();
-  const timer = setTimeout(() => {
-    abortController.abort();
-  }, timeout);
-
   let result = {
     ok: false,
     detail: "precheck_failed",
@@ -110,14 +138,8 @@ async function precheckAuthApi({logger, force = false, timeoutMs = AUTH_PRECHECK
   };
 
   try {
-    const response = await fetch(AUTH_PRECHECK_URL, {
-      method: "GET",
-      headers: {
-        Accept: "application/json"
-      },
-      signal: abortController.signal
-    });
-    const text = await response.text();
+    const response = await requestAuthPrecheck({timeout});
+    const text = response.text;
     let parsed = null;
     try {
       parsed = JSON.parse(text);
@@ -161,8 +183,6 @@ async function precheckAuthApi({logger, force = false, timeoutMs = AUTH_PRECHECK
     if (logger) {
       logger.warn("auth_precheck", `auth api precheck error: ${result.detail}${proxyHint()}`);
     }
-  } finally {
-    clearTimeout(timer);
   }
 
   authPrecheckCacheByProxy.set(key, {

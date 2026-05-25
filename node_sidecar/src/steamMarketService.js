@@ -10,6 +10,7 @@ const SteamCommunity = require("steamcommunity");
 const { generateConfirmationKey, getServerTime } = require("./maFileParser");
 const { withTimeout, sleep, asString } = require("./utils");
 const { enhanceCookieString, buildSteamHeaders, steamPost, steamGet } = require("./steamHttpClient");
+const { getSteamCommunityOptions } = require("./proxyConfig");
 
 // ─── 费率计算 ───────────────────────────────────────────
 
@@ -120,6 +121,10 @@ async function getPriceOverview({ marketHashName, currency }) {
 const MARKET_CONFIRM_TIMEOUT_MS = 15000;
 const MARKET_LISTING_TYPE = 3; // SteamCommunity confirmation type for MarketListing
 
+function createSteamCommunity() {
+  return new SteamCommunity(getSteamCommunityOptions());
+}
+
 /**
  * 获取所有待确认的市场上架项
  * @param {Object} opts
@@ -132,7 +137,7 @@ async function getMarketConfirmations({ cookieString, identitySecret }) {
     throw new Error("identity_secret 为空，无法获取市场确认");
   }
 
-  const community = new SteamCommunity();
+  const community = createSteamCommunity();
   const cookies = cookieString.split("; ").map((c) => c.trim()).filter(Boolean);
   community.setCookies(cookies);
 
@@ -186,7 +191,7 @@ async function confirmMarketListings({ cookieString, identitySecret, confirmatio
     return { results: [] };
   }
 
-  const community = new SteamCommunity();
+  const community = createSteamCommunity();
   const cookies = cookieString.split("; ").map((c) => c.trim()).filter(Boolean);
   community.setCookies(cookies);
 

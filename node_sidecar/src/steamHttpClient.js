@@ -5,6 +5,7 @@ const http = require("http");
 const zlib = require("zlib");
 const crypto = require("crypto");
 const { URL } = require("url");
+const {createProxyAgentForUrl} = require("./proxyConfig");
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Chrome 指纹常量 — 统一版本，三处一致
@@ -187,6 +188,16 @@ function _request({ method, url, body, headers, maxRetries = 3, retryDelayMs = 1
 
   const parsed = new URL(url);
   const transport = parsed.protocol === "https:" ? https : http;
+  let proxyAgent = null;
+  try {
+    proxyAgent = createProxyAgentForUrl(url);
+  } catch (err) {
+    return Promise.resolve({
+      statusCode: 0,
+      body: err && err.message ? err.message : "Invalid proxy configuration",
+      json: null
+    });
+  }
 
   const doRequest = (attempt) => new Promise((resolve) => {
     const reqOpts = {
@@ -200,6 +211,9 @@ function _request({ method, url, body, headers, maxRetries = 3, retryDelayMs = 1
 
     if (encodedBody && method === "POST") {
       reqOpts.headers["Content-Length"] = Buffer.byteLength(encodedBody);
+    }
+    if (proxyAgent) {
+      reqOpts.agent = proxyAgent;
     }
 
     const req = transport.request(reqOpts, (res) => {

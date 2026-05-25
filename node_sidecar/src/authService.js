@@ -1,6 +1,7 @@
 const {LoginSession, EAuthSessionGuardType, EAuthTokenPlatformType} = require("steam-session");
 const {asString, withTimeout} = require("./utils");
 const {ensureAuthApiReachable} = require("./networkPrecheck");
+const {getSteamSessionProxyOptions} = require("./proxyConfig");
 
 const GUARD_TYPE_NAMES = {
   [EAuthSessionGuardType.Unknown]: "Unknown",
@@ -204,7 +205,7 @@ async function loginAndSaveToken({
     throw err;
   }
 
-  const session = new LoginSession(EAuthTokenPlatformType.SteamClient);
+  const session = new LoginSession(EAuthTokenPlatformType.SteamClient, getSteamSessionProxyOptions());
   try {
     session.loginTimeout = timeout;
   } catch (_) {
@@ -358,7 +359,7 @@ async function startLoginSession({
     throw err;
   }
 
-  const session = new LoginSession(EAuthTokenPlatformType.SteamClient);
+  const session = new LoginSession(EAuthTokenPlatformType.SteamClient, getSteamSessionProxyOptions());
   try { session.loginTimeout = timeout; } catch (_) {}
 
   const waitAuth = waitForAuthenticated({session, accountName, logger});

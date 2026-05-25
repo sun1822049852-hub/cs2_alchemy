@@ -3,6 +3,29 @@ const EventEmitter = require("node:events");
 
 const {fetchFullInventory} = require("../src/inventoryService");
 
+function withProxyEnv(envValues, fn) {
+  const keys = ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"];
+  const original = {};
+  for (const key of keys) {
+    original[key] = process.env[key];
+    delete process.env[key];
+  }
+  for (const [key, value] of Object.entries(envValues || {})) {
+    process.env[key] = value;
+  }
+  try {
+    return fn();
+  } finally {
+    for (const key of keys) {
+      if (original[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = original[key];
+      }
+    }
+  }
+}
+
 function stubHttpsGet(responseFactory) {
   const https = require("https");
   const originalGet = https.get;
@@ -130,9 +153,37 @@ async function test_fetch_full_inventory_emits_error_trace_with_response_snippet
   }
 }
 
+async function test_fetch_full_inventory_injects_proxy_agent_when_configured() {
+  const httpsStub = stubHttpsGet(() => ({
+    statusCode: 200,
+    body: JSON.stringify({
+      assets: [],
+      descriptions: [],
+      more_items: 0,
+      last_assetid: ""
+    })
+  }));
+
+  try {
+    await withProxyEnv({HTTPS_PROXY: "http://127.0.0.1:8888"}, async () => {
+      const items = await fetchFullInventory({
+        steamId64: "76561198000000000",
+        cookieString: "sessionid=abcdef1234567890abcdef12; steamLoginSecure=fake"
+      });
+
+      assert.deepEqual(items, []);
+      assert.equal(httpsStub.requests.length, 1);
+      assert.ok(httpsStub.requests[0].agent, "inventory https.get should include proxy agent");
+    });
+  } finally {
+    httpsStub.restore();
+  }
+}
+
 async function main() {
   await test_fetch_full_inventory_emits_request_and_response_trace();
   await test_fetch_full_inventory_emits_error_trace_with_response_snippet();
+  await test_fetch_full_inventory_injects_proxy_agent_when_configured();
   console.log("inventory-service tests passed");
 }
 

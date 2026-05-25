@@ -6,11 +6,24 @@ const https = require("https");
 const SteamCommunity = require("steamcommunity");
 const {asString, sleep, withTimeout} = require("./utils");
 const {generateConfirmationKey, getServerTime} = require("./maFileParser");
+const {createProxyAgentForUrl, getSteamCommunityOptions} = require("./proxyConfig");
 
 const TRADE_SEND_TIMEOUT_MS = 20000;
 const CONFIRM_TIMEOUT_MS = 15000;
 const CONFIRM_RETRY_DELAY_MS = 3000;
 const CONFIRM_MAX_RETRIES = 3;
+
+function addProxyAgent(options, targetUrl) {
+  const proxyAgent = createProxyAgentForUrl(targetUrl);
+  if (proxyAgent) {
+    options.agent = proxyAgent;
+  }
+  return options;
+}
+
+function createSteamCommunity() {
+  return new SteamCommunity(getSteamCommunityOptions());
+}
 
 /**
  * 解析交易链接
@@ -80,9 +93,10 @@ async function sendTradeOffer({cookieString, sessionid, partnerSteamId64, partne
   const referer = `https://steamcommunity.com/tradeoffer/new/?partner=${asString(partnerId).trim()}&token=${asString(tradeToken).trim()}`;
 
   return withTimeout(new Promise((resolve, reject) => {
-    const req = https.request({
+    const requestPath = "/tradeoffer/new/send";
+    const req = https.request(addProxyAgent({
       hostname: "steamcommunity.com",
-      path: "/tradeoffer/new/send",
+      path: requestPath,
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -91,7 +105,7 @@ async function sendTradeOffer({cookieString, sessionid, partnerSteamId64, partne
         Referer: referer,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
       }
-    }, (res) => {
+    }, `https://steamcommunity.com${requestPath}`), (res) => {
       let body = "";
       res.on("data", (chunk) => { body += chunk; });
       res.on("end", () => {
@@ -127,7 +141,7 @@ async function confirmTradeOffer({cookieString, steamId64, identitySecret, trade
     throw new Error("identity_secret 为空，无法确认交易");
   }
 
-  const community = new SteamCommunity();
+  const community = createSteamCommunity();
 
   // 设置 Cookie
   const cookies = cookieString.split("; ").map((c) => c.trim()).filter(Boolean);
@@ -218,9 +232,10 @@ async function acceptTradeOffer({cookieString, sessionid, tradeofferId, partnerS
   const postBody = formData.toString();
 
   return withTimeout(new Promise((resolve, reject) => {
-    const req = https.request({
+    const requestPath = `/tradeoffer/${offerId}/accept`;
+    const req = https.request(addProxyAgent({
       hostname: "steamcommunity.com",
-      path: `/tradeoffer/${offerId}/accept`,
+      path: requestPath,
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -229,7 +244,7 @@ async function acceptTradeOffer({cookieString, sessionid, tradeofferId, partnerS
         Referer: `https://steamcommunity.com/tradeoffer/${offerId}/`,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
       }
-    }, (res) => {
+    }, `https://steamcommunity.com${requestPath}`), (res) => {
       let body = "";
       res.on("data", (chunk) => { body += chunk; });
       res.on("end", () => {
@@ -266,9 +281,10 @@ async function cancelTradeOffer({cookieString, sessionid, tradeofferId}) {
   const postBody = formData.toString();
 
   return withTimeout(new Promise((resolve, reject) => {
-    const req = https.request({
+    const requestPath = `/tradeoffer/${offerId}/cancel`;
+    const req = https.request(addProxyAgent({
       hostname: "steamcommunity.com",
-      path: `/tradeoffer/${offerId}/cancel`,
+      path: requestPath,
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -277,7 +293,7 @@ async function cancelTradeOffer({cookieString, sessionid, tradeofferId}) {
         Referer: `https://steamcommunity.com/tradeoffer/${offerId}/`,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
       }
-    }, (res) => {
+    }, `https://steamcommunity.com${requestPath}`), (res) => {
       let body = "";
       res.on("data", (chunk) => { body += chunk; });
       res.on("end", () => {

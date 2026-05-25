@@ -4,6 +4,7 @@
  */
 const https = require("https");
 const {asString, sleep} = require("./utils");
+const {createProxyAgentForUrl} = require("./proxyConfig");
 
 const INVENTORY_PAGE_SIZE = 200;
 const INVENTORY_TIMEOUT_MS = 15000;
@@ -131,7 +132,7 @@ function fetchInventoryPage({steamId64, cookieString, startAssetId, language, pa
       phase: "request",
       ...traceBase
     });
-    req = https.get({
+    const reqOptions = {
       hostname: parsedUrl.hostname,
       path: parsedUrl.pathname + parsedUrl.search,
       headers: {
@@ -140,7 +141,12 @@ function fetchInventoryPage({steamId64, cookieString, startAssetId, language, pa
         Accept: "application/json",
         Referer: `https://steamcommunity.com/profiles/${sid}/inventory/`
       }
-    }, (res) => {
+    };
+    const proxyAgent = createProxyAgentForUrl(url);
+    if (proxyAgent) {
+      reqOptions.agent = proxyAgent;
+    }
+    req = https.get(reqOptions, (res) => {
       let body = "";
       res.on("data", (chunk) => { body += chunk; });
       res.on("end", () => {

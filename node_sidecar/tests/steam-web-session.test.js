@@ -2,6 +2,29 @@ const assert = require("node:assert/strict");
 const EventEmitter = require("node:events");
 const path = require("node:path");
 
+async function withProxyEnv(envValues, fn) {
+  const keys = ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"];
+  const original = {};
+  for (const key of keys) {
+    original[key] = process.env[key];
+    delete process.env[key];
+  }
+  for (const [key, value] of Object.entries(envValues || {})) {
+    process.env[key] = value;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const key of keys) {
+      if (original[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = original[key];
+      }
+    }
+  }
+}
+
 function stubHttpsRequest({responseJson}) {
   const https = require("https");
   const originalRequest = https.request;
@@ -172,9 +195,60 @@ async function test_refresh_web_cookie_from_token_falls_back_when_steam_session_
   }
 }
 
+async function test_refresh_web_cookie_from_token_passes_proxy_to_refresh_and_steam_session() {
+  const httpsStub = stubHttpsRequest({
+    responseJson: {
+      response: {
+        access_token: "fresh_access_token"
+      }
+    }
+  });
+  const sessionInstances = [];
+  const sessionStub = loadSteamWebSessionWithSteamSessionStub({
+    EAuthTokenPlatformType: {
+      MobileApp: "mobile"
+    },
+    LoginSession: class FakeLoginSession {
+      constructor(platformType, options) {
+        this.platformType = platformType;
+        this.options = options || {};
+        this.refreshToken = "";
+        this.accessToken = "";
+        sessionInstances.push(this);
+      }
+
+      async getWebCookies() {
+        return [
+          "steamLoginSecure=upstream_cookie",
+          "sessionid=upstream_session"
+        ];
+      }
+    }
+  });
+  const {refreshWebCookieFromToken} = sessionStub.module;
+
+  try {
+    await withProxyEnv({HTTPS_PROXY: "http://127.0.0.1:8888"}, async () => {
+      const result = await refreshWebCookieFromToken("refresh.jwt", "76561198000000000");
+
+      assert.equal(result.accessToken, "fresh_access_token");
+      assert.equal(httpsStub.requests.length, 1);
+      assert.ok(httpsStub.requests[0].options.agent, "token refresh should include proxy agent");
+      assert.equal(sessionInstances.length, 1);
+      assert.deepEqual(sessionInstances[0].options, {
+        httpProxy: "http://127.0.0.1:8888"
+      });
+    });
+  } finally {
+    sessionStub.restore();
+    httpsStub.restore();
+  }
+}
+
 async function main() {
   await test_refresh_web_cookie_from_token_prefers_steam_session_and_enhances_cookie();
   await test_refresh_web_cookie_from_token_falls_back_when_steam_session_fails();
+  await test_refresh_web_cookie_from_token_passes_proxy_to_refresh_and_steam_session();
   console.log("steam-web-session tests passed");
 }
 
