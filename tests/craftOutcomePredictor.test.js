@@ -101,6 +101,7 @@ function buildCatalogFixtureDb() {
 
 function insertWearFamily(db, {
   base,
+  displayBase = base,
   collection,
   rarity,
   isstattrak = false,
@@ -116,11 +117,13 @@ function insertWearFamily(db, {
     ? Number(maxfloat) - Number(minfloat)
     : wearRange;
   for (const wearlevel of wearlevels) {
+    const marketBase = `${isstattrak ? "StatTrak™ " : ""}${base}`;
+    const displayMarketBase = `${isstattrak ? "StatTrak™ " : ""}${displayBase}`;
     insertSkinRow(db, {
-      markethashname: `${isstattrak ? "StatTrak™ " : ""}${base} (${wearlevel})`,
-      name: `${isstattrak ? "StatTrak™ " : ""}${base} (${wearlevel})`,
-      basemarkethashname: `${isstattrak ? "StatTrak™ " : ""}${base}`,
-      basename: `${isstattrak ? "StatTrak™ " : ""}${base}`,
+      markethashname: `${marketBase} (${wearlevel})`,
+      name: `${displayMarketBase} (${wearlevel})`,
+      basemarkethashname: marketBase,
+      basename: displayMarketBase,
       collection,
       rarity,
       wearlevel,
@@ -543,12 +546,12 @@ function test_outcome_catalog_excludes_inventory_display_only_rows() {
     wear_range: 1
   });
   insertSkinRow(db, {
-    markethashname: "Souvenir AK-47 | Ice Coaled (Factory New)",
-    basemarkethashname: "Souvenir AK-47 | Ice Coaled",
-    basename: "Souvenir AK-47 | Ice Coaled",
+    markethashname: "Sticker | Miami Stabbyfish",
+    basemarkethashname: "Sticker | Miami Stabbyfish",
+    basename: "Sticker | Miami Stabbyfish",
     collection: "Fracture Case",
     rarity: "受限",
-    wearlevel: "Factory New",
+    wearlevel: "Unknown",
     minfloat: 0,
     maxfloat: 1,
     wear_range: 1,
@@ -564,10 +567,155 @@ function test_outcome_catalog_excludes_inventory_display_only_rows() {
   assert.equal(bucket[0].base_name, "AK-47 | Ice Coaled");
 }
 
+function test_predictor_excludes_souvenir_outcomes_from_result_pool() {
+  const {dbPath, db} = createTempPredictorDb();
+  insertWearFamily(db, {
+    base: "AWP | Acheron",
+    collection: "2018 Nuke Collection",
+    rarity: "军规级"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir AWP | Acheron",
+    collection: "2018 Nuke Collection",
+    rarity: "军规级"
+  });
+  insertWearFamily(db, {
+    base: "M4A4 | Mainframe",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir M4A4 | Mainframe",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir P250 | Facility Draft",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  db.close();
+
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: 0.12,
+    input_rarity: "军规级",
+    stattrak: false,
+    groups: [{collection: "2018 Nuke Collection", count: 10}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.outcomes.map((item) => item.base_name), [
+    "M4A4 | Mainframe"
+  ]);
+  assert.deepEqual(result.outcomes.map((item) => item.probability), [1]);
+  const souvenirOnlyOutcome = result.outcomes.find((item) => item.base_name === "P250 | Facility Draft");
+  assert.equal(souvenirOnlyOutcome, undefined);
+  assert.equal(result.outcomes.some((item) => /^Souvenir\s+/i.test(item.base_name)), false);
+  assert.equal(result.outcomes.some((item) => /^Souvenir\s+/i.test(item.name)), false);
+  assert.equal(result.summary.probability_total, 1);
+}
+
+function test_predictor_preserves_localized_display_for_normal_outcomes() {
+  const {dbPath, db} = createTempPredictorDb();
+  insertWearFamily(db, {
+    base: "Glock-18 | Nuclear Garden",
+    displayBase: "格洛克18型 | 核子花园",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  db.close();
+
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: 0.12,
+    input_rarity: "军规级",
+    stattrak: false,
+    groups: [{collection: "2018 Nuke Collection", count: 10}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcomes.length, 1);
+  assert.equal(result.outcomes[0].base_name, "格洛克18型 | 核子花园");
+  assert.equal(result.outcomes[0].name, "格洛克18型 | 核子花园 (Minimal Wear)");
+  assert.equal(result.outcomes[0].markethashname, "Glock-18 | Nuclear Garden (Minimal Wear)");
+}
+
+function test_predictor_rejects_collection_when_only_souvenir_outcomes_exist() {
+  const {dbPath, db} = createTempPredictorDb();
+  insertWearFamily(db, {
+    base: "Souvenir P250 | Facility Draft",
+    displayBase: "纪念品 P250 | Facility Draft",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  db.close();
+
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: 0.12,
+    input_rarity: "军规级",
+    stattrak: false,
+    groups: [{collection: "2018 Nuke Collection", count: 10}]
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.invalid_reason, "collection_outcomes_missing");
+  assert.deepEqual(result.outcomes, []);
+}
+
+function test_predictor_ignores_parenthesized_souvenir_outcome_when_normal_display_exists() {
+  const {dbPath, db} = createTempPredictorDb();
+  insertWearFamily(db, {
+    base: "Glock-18 | Nuclear Garden",
+    displayBase: "格洛克18型 | 核子花园",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir Glock-18 | Nuclear Garden",
+    displayBase: "格洛克18型（纪念品） | 核子花园",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  db.close();
+
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const result = predictor.predict({
+    required_count: 10,
+    target_relative_wear: 0.12,
+    input_rarity: "军规级",
+    stattrak: false,
+    groups: [{collection: "2018 Nuke Collection", count: 10}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcomes.length, 1);
+  assert.equal(result.outcomes[0].base_name, "格洛克18型 | 核子花园");
+  assert.equal(result.outcomes[0].name, "格洛克18型 | 核子花园 (Minimal Wear)");
+  assert.equal(result.outcomes[0].markethashname, "Glock-18 | Nuclear Garden (Minimal Wear)");
+  assert.equal(/Souvenir|纪念品/.test(JSON.stringify(result.outcomes[0])), false);
+}
+
 function runTests() {
   test_shared_collection_and_rarity_helpers();
   test_outcome_catalog_scaffold_reads_base_buckets_and_wear_map();
   test_outcome_catalog_excludes_inventory_display_only_rows();
+  test_predictor_excludes_souvenir_outcomes_from_result_pool();
+  test_predictor_preserves_localized_display_for_normal_outcomes();
+  test_predictor_rejects_collection_when_only_souvenir_outcomes_exist();
+  test_predictor_ignores_parenthesized_souvenir_outcome_when_normal_display_exists();
   test_predictor_invalidates_top_rarity_and_missing_collections();
   test_predictor_returns_realtime_probabilities_for_partial_recipe();
   test_predictor_isolates_stattrak_pools_and_maps_wear();

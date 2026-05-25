@@ -76,6 +76,7 @@ function insertSkinRow(db, row) {
 
 function insertWearFamily(db, {
   base,
+  displayBase = base,
   collection,
   rarity,
   minfloat = 0,
@@ -88,11 +89,13 @@ function insertWearFamily(db, {
     ? Number(maxfloat) - Number(minfloat)
     : wearRange;
   for (const wearlevel of wearlevels) {
+    const marketBase = base;
+    const displayMarketBase = displayBase;
     insertSkinRow(db, {
-      markethashname: `${base} (${wearlevel})`,
-      name: `${base} (${wearlevel})`,
-      basemarkethashname: base,
-      basename: base,
+      markethashname: `${marketBase} (${wearlevel})`,
+      name: `${displayMarketBase} (${wearlevel})`,
+      basemarkethashname: marketBase,
+      basename: displayMarketBase,
       collection,
       rarity,
       wearlevel,
@@ -218,6 +221,85 @@ function buildMissingTargetBoundsFixtureDb() {
   return dbPath;
 }
 
+function buildSouvenirPoolFixtureDb() {
+  const {dbPath, db} = createTempSkinDb();
+  insertWearFamily(db, {
+    base: "AWP | Acheron",
+    collection: "2018 Nuke Collection",
+    rarity: "军规级"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir AWP | Acheron",
+    collection: "2018 Nuke Collection",
+    rarity: "军规级"
+  });
+  insertWearFamily(db, {
+    base: "M4A4 | Mainframe",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir M4A4 | Mainframe",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir P250 | Facility Draft",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  db.close();
+  return dbPath;
+}
+
+function buildLocalizedSouvenirPoolFixtureDb() {
+  const {dbPath, db} = createTempSkinDb();
+  insertWearFamily(db, {
+    base: "Souvenir AWP | Acheron",
+    displayBase: "纪念品 AWP | Acheron",
+    collection: "2018 Nuke Collection",
+    rarity: "军规级"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir P250 | Facility Draft",
+    displayBase: "纪念品 P250 | Facility Draft",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  db.close();
+  return dbPath;
+}
+
+function buildLocalizedDisplayPoolFixtureDb() {
+  const {dbPath, db} = createTempSkinDb();
+  insertWearFamily(db, {
+    base: "AWP | Acheron",
+    displayBase: "AWP | 阿刻戎",
+    collection: "2018 Nuke Collection",
+    rarity: "军规级"
+  });
+  insertWearFamily(db, {
+    base: "Glock-18 | Nuclear Garden",
+    displayBase: "格洛克18型 | 核子花园",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  insertWearFamily(db, {
+    base: "M4A4 | Mainframe",
+    displayBase: "M4A4 | 主机",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  insertWearFamily(db, {
+    base: "Souvenir M4A4 | Mainframe",
+    displayBase: "M4A4（纪念品） | 主机",
+    collection: "2018 Nuke Collection",
+    rarity: "受限"
+  });
+  db.close();
+  return dbPath;
+}
+
 function createFixtureService() {
   const dbPath = buildSimulationFixtureDb();
   const catalog = createTradeupSimulationCatalog({dbPath});
@@ -234,6 +316,27 @@ function createDPrecisionFixtureService() {
 
 function createMissingTargetBoundsFixtureService() {
   const dbPath = buildMissingTargetBoundsFixtureDb();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+  const outcomeCatalog = createCraftOutcomeCatalog({dbPath});
+  return createTradeupSimulationService({catalog, outcomeCatalog});
+}
+
+function createSouvenirPoolFixtureService() {
+  const dbPath = buildSouvenirPoolFixtureDb();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+  const outcomeCatalog = createCraftOutcomeCatalog({dbPath});
+  return createTradeupSimulationService({catalog, outcomeCatalog});
+}
+
+function createLocalizedSouvenirPoolFixtureService() {
+  const dbPath = buildLocalizedSouvenirPoolFixtureDb();
+  const catalog = createTradeupSimulationCatalog({dbPath});
+  const outcomeCatalog = createCraftOutcomeCatalog({dbPath});
+  return createTradeupSimulationService({catalog, outcomeCatalog});
+}
+
+function createLocalizedDisplayPoolFixtureService() {
+  const dbPath = buildLocalizedDisplayPoolFixtureDb();
   const catalog = createTradeupSimulationCatalog({dbPath});
   const outcomeCatalog = createCraftOutcomeCatalog({dbPath});
   return createTradeupSimulationService({catalog, outcomeCatalog});
@@ -366,6 +469,150 @@ function test_resolve_keeps_non_driver_target_wear_label_empty_when_bounds_missi
   assert.equal(result.target.wear_label, "");
 }
 
+function test_resolve_excludes_souvenir_outputs_but_keeps_souvenir_materials() {
+  const service = createSouvenirPoolFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "M4A4 | Mainframe (Minimal Wear)"},
+    active_driver_item: {markethashname: "M4A4 | Mainframe (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    result.rows[0].outputs.map((entry) => entry.base_name),
+    ["M4A4 | Mainframe"]
+  );
+  const souvenirOnlyOutput = result.rows[0].outputs.find((entry) => entry.base_name === "P250 | Facility Draft");
+  assert.equal(souvenirOnlyOutput, undefined);
+  assert.equal(result.rows[0].outputs.some((entry) => /^Souvenir\s+/i.test(entry.base_name)), false);
+  assert.deepEqual(
+    result.rows[0].materials.map((entry) => entry.base_name).sort(),
+    ["AWP | Acheron", "Souvenir AWP | Acheron"].sort()
+  );
+}
+
+function test_resolve_canonicalizes_souvenir_target_and_driver_as_normal_outputs() {
+  const service = createSouvenirPoolFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "Souvenir M4A4 | Mainframe (Minimal Wear)"},
+    active_driver_item: {markethashname: "Souvenir M4A4 | Mainframe (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.target.markethashname, "M4A4 | Mainframe (Minimal Wear)");
+  assert.equal(result.target.name, "M4A4 | Mainframe (Minimal Wear)");
+  assert.equal(result.target.basemarkethashname, "M4A4 | Mainframe");
+  assert.equal(result.target.basename, "M4A4 | Mainframe");
+  assert.equal(result.driver.markethashname, "M4A4 | Mainframe (Minimal Wear)");
+  assert.equal(result.driver.name, "M4A4 | Mainframe (Minimal Wear)");
+  assert.equal(result.driver.basemarkethashname, "M4A4 | Mainframe");
+  assert.equal(result.driver.basename, "M4A4 | Mainframe");
+  assert.equal(JSON.stringify(result.target).includes("Souvenir"), false);
+  assert.equal(JSON.stringify(result.driver).includes("Souvenir"), false);
+  assert.deepEqual(
+    result.rows[0].outputs.map((entry) => entry.base_name),
+    ["M4A4 | Mainframe"]
+  );
+  assert.deepEqual(
+    result.rows[0].materials.map((entry) => entry.base_name).sort(),
+    ["AWP | Acheron", "Souvenir AWP | Acheron"].sort()
+  );
+}
+
+function test_resolve_rejects_souvenir_target_when_normal_row_is_missing() {
+  const service = createSouvenirPoolFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "Souvenir P250 | Facility Draft (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.invalid_reason, "target_item_not_found");
+}
+
+function test_resolve_rejects_localized_souvenir_target_when_normal_row_is_missing() {
+  const service = createLocalizedSouvenirPoolFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "Souvenir P250 | Facility Draft (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.invalid_reason, "target_item_not_found");
+}
+
+function test_resolve_rejects_souvenir_driver_when_normal_row_is_missing() {
+  const service = createSouvenirPoolFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "M4A4 | Mainframe (Minimal Wear)"},
+    active_driver_item: {markethashname: "Souvenir P250 | Facility Draft (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.invalid_reason, "driver_item_not_found");
+}
+
+function test_resolve_preserves_localized_display_for_normal_top_level_and_outputs() {
+  const service = createLocalizedDisplayPoolFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "Glock-18 | Nuclear Garden (Minimal Wear)"},
+    active_driver_item: {markethashname: "Glock-18 | Nuclear Garden (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.target.markethashname, "Glock-18 | Nuclear Garden (Minimal Wear)");
+  assert.equal(result.target.name, "格洛克18型 | 核子花园 (Minimal Wear)");
+  assert.equal(result.target.basename, "格洛克18型 | 核子花园");
+  assert.equal(result.driver.name, "格洛克18型 | 核子花园 (Minimal Wear)");
+  const localizedOutput = result.rows[0].outputs.find(
+    (entry) => entry.markethashname === "Glock-18 | Nuclear Garden (Minimal Wear)"
+  );
+  assert.ok(localizedOutput);
+  assert.equal(localizedOutput.base_name, "格洛克18型 | 核子花园");
+  assert.equal(localizedOutput.name, "格洛克18型 | 核子花园 (Minimal Wear)");
+}
+
+function test_resolve_strips_parenthesized_souvenir_marker_without_losing_localized_display() {
+  const service = createLocalizedDisplayPoolFixtureService();
+
+  const result = service.resolve({
+    target_item: {markethashname: "Souvenir M4A4 | Mainframe (Minimal Wear)"},
+    active_driver_item: {markethashname: "Souvenir M4A4 | Mainframe (Minimal Wear)"},
+    active_driver_abs_wear: 0.12,
+    anchors: []
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.target.markethashname, "M4A4 | Mainframe (Minimal Wear)");
+  assert.equal(result.target.name, "M4A4 | 主机 (Minimal Wear)");
+  assert.equal(result.target.basename, "M4A4 | 主机");
+  assert.equal(result.driver.name, "M4A4 | 主机 (Minimal Wear)");
+  const localizedOutput = result.rows[0].outputs.find(
+    (entry) => entry.markethashname === "M4A4 | Mainframe (Minimal Wear)"
+  );
+  assert.ok(localizedOutput);
+  assert.equal(localizedOutput.base_name, "M4A4 | 主机");
+  assert.equal(localizedOutput.name, "M4A4 | 主机 (Minimal Wear)");
+  assert.equal(/Souvenir|纪念品/.test(JSON.stringify(result.target)), false);
+  assert.equal(/Souvenir|纪念品/.test(JSON.stringify(result.driver)), false);
+  assert.equal(/Souvenir|纪念品/.test(JSON.stringify(result.rows[0].outputs)), false);
+}
+
 function main() {
   test_resolve_builds_collection_row_with_outputs_and_locked_materials();
   test_resolve_rejects_out_of_range_driver_wear();
@@ -373,6 +620,13 @@ function main() {
   test_resolve_allows_cross_collection_driver_relative_wear();
   test_resolve_uses_float32_output_wear_chain_for_real_block_21_sample();
   test_resolve_keeps_non_driver_target_wear_label_empty_when_bounds_missing();
+  test_resolve_excludes_souvenir_outputs_but_keeps_souvenir_materials();
+  test_resolve_canonicalizes_souvenir_target_and_driver_as_normal_outputs();
+  test_resolve_rejects_souvenir_target_when_normal_row_is_missing();
+  test_resolve_rejects_localized_souvenir_target_when_normal_row_is_missing();
+  test_resolve_rejects_souvenir_driver_when_normal_row_is_missing();
+  test_resolve_preserves_localized_display_for_normal_top_level_and_outputs();
+  test_resolve_strips_parenthesized_souvenir_marker_without_losing_localized_display();
   console.log("tradeupSimulationService tests passed");
 }
 

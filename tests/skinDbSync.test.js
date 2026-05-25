@@ -324,7 +324,8 @@ async function runTests() {
   assert.equal(isImportableSkin({marketHashName: "Sticker Slab | Agent Select"}), false);
   assert.equal(isImportableSkin({marketHashName: "Special Agent Ava | FBI"}), false);
   assert.equal(isImportableSkin({marketHashName: "★ Butterfly Knife"}), false);
-  assert.equal(isImportableSkin({marketHashName: "Souvenir Glock-18 | Groundwater (Factory New)"}), false);
+  assert.equal(isImportableSkin({marketHashName: "Souvenir Glock-18 | Groundwater (Factory New)"}), true);
+  assert.equal(isImportableSkin({marketHashName: "Souvenir Charm | Austin 2025 Highlight | 1 Bullet"}), false);
 
   const alchemy = assignAlchemyTypes(
     [
@@ -345,7 +346,9 @@ async function runTests() {
       ('Autograph Capsule | Virtus.Pro | Cologne 2015', 'Autograph Capsule | Virtus.Pro | Cologne 2015', 'Autograph Capsule | Virtus.Pro | Cologne 2015', 'Autograph Capsule | Virtus.Pro | Cologne 2015', '', '', 'Unknown', 0, '1'),
       ('StatTrak™ Music Kit | Sasha, LNOE', 'StatTrak™ 音乐盒 | Sasha - 地球末夜', 'StatTrak™ Music Kit | Sasha, LNOE', 'StatTrak™ 音乐盒 | Sasha - 地球末夜', '', '', 'Unknown', 0, '2'),
       ('Special Agent Ava | FBI', '爱娃特工 | 联邦调查局（FBI）', 'Special Agent Ava | FBI', '爱娃特工 | 联邦调查局（FBI）', '', '', 'Unknown', 0, '3'),
-      ('★ Butterfly Knife', '蝴蝶刀（★）', '★ Butterfly Knife', '蝴蝶刀（★）', '', '', 'Unknown', 0, '4')
+      ('★ Butterfly Knife', '蝴蝶刀（★）', '★ Butterfly Knife', '蝴蝶刀（★）', '', '', 'Unknown', 0, '4'),
+      ('Glock-18 | Groundwater (Factory New)', 'Glock-18 | Groundwater (Factory New)', 'Glock-18 | Groundwater', 'Glock-18 | Groundwater', 'The Dust 2 Collection', '军规级', 'Factory New', 0, '5'),
+      ('Desert Eagle | Blaze (Factory New)', 'Desert Eagle | Blaze (Factory New)', 'Desert Eagle | Blaze', 'Desert Eagle | Blaze', 'The Dust 2 Collection', '受限', 'Factory New', 0, '6')
   `);
   db.close();
 
@@ -363,6 +366,21 @@ async function runTests() {
         platformList: [{name: "BUFF", itemId: "101"}]
       },
       {
+        name: "纪念品 Glock-18 | 地下水 (崭新出厂)",
+        marketHashName: "Souvenir Glock-18 | Groundwater (Factory New)",
+        platformList: [{name: "BUFF", itemId: "104"}]
+      },
+      {
+        name: "Souvenir Charm | Austin 2025 Highlight | 1 Bullet",
+        marketHashName: "Souvenir Charm | Austin 2025 Highlight | 1 Bullet",
+        platformList: [{name: "BUFF", itemId: "106"}]
+      },
+      {
+        name: "Desert Eagle | Blaze (Factory New)",
+        marketHashName: "Desert Eagle | Blaze (Factory New)",
+        platformList: [{name: "BUFF", itemId: "105"}]
+      },
+      {
         name: "Special Agent Ava | FBI",
         marketHashName: "Special Agent Ava | FBI",
         platformList: [{name: "BUFF", itemId: "102"}]
@@ -376,7 +394,11 @@ async function runTests() {
   });
 
   const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
-  const rows = verify.prepare("SELECT markethashname, inventory_display_only FROM skin ORDER BY markethashname").all();
+  const rows = verify.prepare(`
+    SELECT markethashname, inventory_display_only, alchemy_type
+    FROM skin
+    ORDER BY markethashname
+  `).all();
   const columns = verify.prepare("PRAGMA table_info(skin)").all().map((row) => row.name);
   verify.close();
 
@@ -395,6 +417,18 @@ async function runTests() {
         inventory_display_only: 1
       },
       {
+        markethashname: "Desert Eagle | Blaze (Factory New)",
+        inventory_display_only: 0
+      },
+      {
+        markethashname: "Souvenir Charm | Austin 2025 Highlight | 1 Bullet",
+        inventory_display_only: 1
+      },
+      {
+        markethashname: "Souvenir Glock-18 | Groundwater (Factory New)",
+        inventory_display_only: 0
+      },
+      {
         markethashname: "Special Agent Ava | FBI",
         inventory_display_only: 1
       },
@@ -404,6 +438,10 @@ async function runTests() {
       }
     ]
   );
+  const souvenirRow = rows.find((row) => row.markethashname === "Souvenir Glock-18 | Groundwater (Factory New)");
+  assert.equal(souvenirRow.alchemy_type, "10合1");
+  const souvenirCharmRow = rows.find((row) => row.markethashname === "Souvenir Charm | Austin 2025 Highlight | 1 Bullet");
+  assert.equal(souvenirCharmRow.alchemy_type, "不能炼金");
   assert(columns.includes("detail_status"));
   assert(columns.includes("detail_source"));
   assert(columns.includes("detail_checked_at"));

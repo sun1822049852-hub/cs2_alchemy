@@ -27,6 +27,63 @@ function skinHasColumn(db, columnName) {
   );
 }
 
+function stripSouvenirPrefix(value) {
+  return asString(value).trim().replace(/^(?:Souvenir|纪念品)\s+/i, "").trim();
+}
+
+function stripSouvenirDisplayMarkers(value) {
+  return asString(value)
+    .trim()
+    .replace(/^Souvenir\s+/i, "")
+    .replace(/^纪念品\s+/, "")
+    .replace(/\s*\(\s*(?:Souvenir|纪念品)\s*\)\s*/gi, " ")
+    .replace(/\s*（\s*(?:Souvenir|纪念品)\s*）\s*/gi, " ")
+    .replace(/\s*\|\s*/g, " | ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function hasSouvenirMarker(value) {
+  const text = asString(value).trim();
+  return /^(?:Souvenir|纪念品)\s+/i.test(text)
+    || /\(\s*(?:Souvenir|纪念品)\s*\)/i.test(text)
+    || /（\s*(?:Souvenir|纪念品)\s*）/i.test(text);
+}
+
+function isSouvenirSkinRow(row) {
+  return hasSouvenirMarker(row && row.markethashname)
+    || hasSouvenirMarker(row && row.basemarkethashname)
+    || hasSouvenirMarker(row && row.name)
+    || hasSouvenirMarker(row && row.basename);
+}
+
+function stripWearSuffix(value) {
+  return asString(value).trim().replace(/\s+\([^)]+\)\s*$/, "").trim();
+}
+
+function normalizeOutcomeMarketHashName(row) {
+  return stripSouvenirPrefix(row && row.markethashname);
+}
+
+function normalizeOutcomeBaseMarketHashName(row, normalMarketHashName) {
+  return stripSouvenirPrefix(row && row.basemarkethashname)
+    || stripWearSuffix(normalMarketHashName);
+}
+
+function normalizeOutcomeIdentity(row) {
+  const markethashname = normalizeOutcomeMarketHashName(row);
+  const basemarkethashname = normalizeOutcomeBaseMarketHashName(row, markethashname);
+  const basename = stripSouvenirDisplayMarkers(row && row.basename);
+  const name = stripSouvenirDisplayMarkers(row && row.name);
+  return {
+    ...row,
+    basemarkethashname,
+    basename: basename || basemarkethashname,
+    markethashname,
+    name: name || markethashname
+  };
+}
+
 function mergeBaseOutcome(existing, row, collectionKey, rarityRank, stattrak) {
   const minfloat = row.minfloat == null ? existing && existing.minfloat : row.minfloat;
   const maxfloat = row.maxfloat == null ? existing && existing.maxfloat : row.maxfloat;
@@ -48,6 +105,22 @@ function mergeBaseOutcome(existing, row, collectionKey, rarityRank, stattrak) {
   };
 }
 
+function upsertBucketRow(bucketMaps, bucketKey, baseKey, row, collectionKey, rarityRank, stattrak) {
+  if (!bucketMaps.has(bucketKey)) {
+    bucketMaps.set(bucketKey, new Map());
+  }
+  const bucket = bucketMaps.get(bucketKey);
+  bucket.set(baseKey, mergeBaseOutcome(bucket.get(baseKey) || null, row, collectionKey, rarityRank, stattrak));
+}
+
+function freezeBuckets(bucketMaps) {
+  const buckets = new Map();
+  for (const [bucketKey, bucket] of bucketMaps.entries()) {
+    buckets.set(bucketKey, [...bucket.values()]);
+  }
+  return buckets;
+}
+
 function buildSnapshot(dbPath) {
   const db = new DatabaseSync(dbPath, {open: true, readOnly: true});
   try {
@@ -63,10 +136,13 @@ function buildSnapshot(dbPath) {
       ORDER BY id
     `).all();
     const baseBucketMaps = new Map();
+    const outcomeBucketMaps = new Map();
     const wearMap = new Map();
+    const outcomeWearMap = new Map();
     for (const row of rows) {
       const baseKey = asString(row.basemarkethashname).trim();
       const wearlevel = asString(row.wearlevel).trim();
+      const isSouvenirRow = isSouvenirSkinRow(row);
       if (baseKey && wearlevel) {
         if (!wearMap.has(baseKey)) {
           wearMap.set(baseKey, new Map());
@@ -78,6 +154,23 @@ function buildSnapshot(dbPath) {
           basename: asString(row.basename).trim(),
           wearlevel
         });
+
+        if (!isSouvenirRow) {
+          const outcomeRow = normalizeOutcomeIdentity(row);
+          const outcomeBaseKey = asString(outcomeRow.basemarkethashname).trim();
+          if (outcomeBaseKey) {
+            if (!outcomeWearMap.has(outcomeBaseKey)) {
+              outcomeWearMap.set(outcomeBaseKey, new Map());
+            }
+            outcomeWearMap.get(outcomeBaseKey).set(wearlevel, {
+              markethashname: asString(outcomeRow.markethashname).trim(),
+              name: asString(outcomeRow.name).trim(),
+              basemarkethashname: outcomeBaseKey,
+              basename: asString(outcomeRow.basename).trim(),
+              wearlevel
+            });
+          }
+        }
       }
 
       const rarityRank = normalizeRarityRank(row.rarity);
@@ -92,24 +185,25 @@ function buildSnapshot(dbPath) {
           continue;
         }
         const bucketKey = `${collectionKey}|${rarityRank}|${stattrak}`;
-        if (!baseBucketMaps.has(bucketKey)) {
-          baseBucketMaps.set(bucketKey, new Map());
+        upsertBucketRow(baseBucketMaps, bucketKey, baseKey, row, collectionKey, rarityRank, stattrak);
+        if (!isSouvenirRow) {
+          const outcomeRow = normalizeOutcomeIdentity(row);
+          const outcomeBaseKey = asString(outcomeRow.basemarkethashname).trim();
+          upsertBucketRow(outcomeBucketMaps, bucketKey, outcomeBaseKey, outcomeRow, collectionKey, rarityRank, stattrak);
         }
-        const bucket = baseBucketMaps.get(bucketKey);
-        bucket.set(baseKey, mergeBaseOutcome(bucket.get(baseKey) || null, row, collectionKey, rarityRank, stattrak));
       }
     }
 
-    const baseBuckets = new Map();
-    for (const [bucketKey, bucket] of baseBucketMaps.entries()) {
-      baseBuckets.set(bucketKey, [...bucket.values()]);
-    }
+    const baseBuckets = freezeBuckets(baseBucketMaps);
+    const outcomeBuckets = freezeBuckets(outcomeBucketMaps);
 
     return {
       dbPath,
       loadedAtMs: Date.now(),
       mtimeMs: Number(fs.statSync(dbPath).mtimeMs) || 0,
       baseBuckets,
+      outcomeBuckets,
+      outcomeWearMap,
       wearMap
     };
   } finally {

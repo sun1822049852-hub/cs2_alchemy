@@ -144,9 +144,6 @@ function isImportableSkin(item) {
   if (!marketHashName) {
     return false;
   }
-  if (/^Souvenir\s/i.test(marketHashName)) {
-    return false;
-  }
   const wearlevel = detectWearLevel(displayName, marketHashName);
   if (wearlevel === "Unknown") {
     return false;

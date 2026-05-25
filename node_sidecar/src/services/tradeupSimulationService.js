@@ -54,7 +54,64 @@ function normalizeWarning(type, message, extra = {}) {
   };
 }
 
-function buildResolvedItemEntry(candidate, {absoluteWear, editable, role, snapshot, warnings}) {
+function stripSouvenirPrefix(value) {
+  return asString(value).trim().replace(/^(?:Souvenir|纪念品)\s+/i, "").trim();
+}
+
+function stripSouvenirDisplayMarkers(value) {
+  return asString(value)
+    .trim()
+    .replace(/^Souvenir\s+/i, "")
+    .replace(/^纪念品\s+/, "")
+    .replace(/\s*\(\s*(?:Souvenir|纪念品)\s*\)\s*/gi, " ")
+    .replace(/\s*（\s*(?:Souvenir|纪念品)\s*）\s*/gi, " ")
+    .replace(/\s*\|\s*/g, " | ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function hasSouvenirMarker(value) {
+  const text = asString(value).trim();
+  return /^(?:Souvenir|纪念品)\s+/i.test(text)
+    || /\(\s*(?:Souvenir|纪念品)\s*\)/i.test(text)
+    || /（\s*(?:Souvenir|纪念品)\s*）/i.test(text);
+}
+
+function isSouvenirItem(item) {
+  return hasSouvenirMarker(item && item.markethashname)
+    || hasSouvenirMarker(item && item.basemarkethashname)
+    || hasSouvenirMarker(item && item.name)
+    || hasSouvenirMarker(item && item.basename);
+}
+
+function stripWearSuffix(value) {
+  return asString(value).trim().replace(/\s+\([^)]+\)\s*$/, "").trim();
+}
+
+function canonicalizeOutputSideItem(item, catalog) {
+  if (!item) {
+    return item;
+  }
+  const normalMarketHashName = stripSouvenirPrefix(item.markethashname);
+  const normalBaseMarketHashName = stripSouvenirPrefix(item.basemarkethashname)
+    || stripWearSuffix(normalMarketHashName);
+  if (isSouvenirItem(item)) {
+    const normalItem = catalog.getItemByMarketHashName(normalMarketHashName);
+    if (normalItem) {
+      return normalItem;
+    }
+    return null;
+  }
+  return {
+    ...item,
+    markethashname: normalMarketHashName,
+    name: stripSouvenirDisplayMarkers(item.name) || normalMarketHashName || normalBaseMarketHashName,
+    basemarkethashname: normalBaseMarketHashName,
+    basename: stripSouvenirDisplayMarkers(item.basename) || normalBaseMarketHashName
+  };
+}
+
+function buildResolvedItemEntry(candidate, {absoluteWear, editable, role, snapshot, warnings, wearMapOverride}) {
   const baseKey = asString(candidate && candidate.basemarkethashname).trim();
   const entry = {
     role: asString(role).trim() || "item",
@@ -86,7 +143,11 @@ function buildResolvedItemEntry(candidate, {absoluteWear, editable, role, snapsh
     return entry;
   }
 
-  const wearMap = snapshot && snapshot.wearMap instanceof Map ? snapshot.wearMap : null;
+  const wearMap = wearMapOverride instanceof Map
+    ? wearMapOverride
+    : snapshot && snapshot.wearMap instanceof Map
+      ? snapshot.wearMap
+      : null;
   const concrete = wearMap && baseKey ? wearMap.get(baseKey)?.get(entry.wear_label) : null;
   if (concrete) {
     entry.markethashname = asString(concrete.markethashname).trim();
@@ -126,14 +187,23 @@ function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = 
       if (!targetKey) {
         return invalidResult("missing_target_item", "缺少目标产物");
       }
-      const target = catalog.getItemByMarketHashName(targetKey);
+      const rawTarget = catalog.getItemByMarketHashName(targetKey);
+      if (!rawTarget) {
+        return invalidResult("target_item_not_found", `找不到目标产物：${targetKey}`);
+      }
+      const target = canonicalizeOutputSideItem(rawTarget, catalog);
       if (!target) {
         return invalidResult("target_item_not_found", `找不到目标产物：${targetKey}`);
       }
 
       const driverKey = asString(payload && payload.active_driver_item && payload.active_driver_item.markethashname).trim()
-        || target.markethashname;
-      const driver = catalog.getItemByMarketHashName(driverKey);
+        || asString(rawTarget.markethashname).trim()
+        || targetKey;
+      const rawDriver = catalog.getItemByMarketHashName(driverKey);
+      if (!rawDriver) {
+        return invalidResult("driver_item_not_found", `找不到驱动产物：${driverKey}`);
+      }
+      const driver = canonicalizeOutputSideItem(rawDriver, catalog);
       if (!driver) {
         return invalidResult("driver_item_not_found", `找不到驱动产物：${driverKey}`);
       }
@@ -173,7 +243,8 @@ function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = 
 
       const snapshot = outcomeCatalog.getSnapshot();
       const stattrak = Number(target.isstattrak) ? 1 : 0;
-      const outputs = snapshot.baseBuckets.get(`${targetCollection}|${outputRarityRank}|${stattrak}`) || [];
+      const outcomeBuckets = snapshot.outcomeBuckets || snapshot.baseBuckets;
+      const outputs = outcomeBuckets.get(`${targetCollection}|${outputRarityRank}|${stattrak}`) || [];
       const materials = snapshot.baseBuckets.get(`${targetCollection}|${inputRarityRank}|${stattrak}`) || [];
       if (!outputs.length) {
         return invalidResult("output_collection_missing", "目标收藏品下未找到同级产物");
@@ -183,6 +254,7 @@ function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = 
         (activeDriverAbsWear - Number(driver.minfloat)) / (Number(driver.maxfloat) - Number(driver.minfloat))
       );
       const warnings = [];
+      const outputWearMap = snapshot.outcomeWearMap instanceof Map ? snapshot.outcomeWearMap : snapshot.wearMap;
 
       const resolvedOutputs = outputs.map((candidate) => {
         const absoluteWear = resolveOutputAbsoluteWear(candidate, sharedRelativeWear);
@@ -191,7 +263,14 @@ function createTradeupSimulationService({catalog, outcomeCatalog, rarityOrder = 
           : asString(candidate && candidate.basemarkethashname).trim() === asString(driver.basemarkethashname).trim()
             ? "driver"
             : "output";
-        return buildResolvedItemEntry(candidate, {absoluteWear, editable: true, role, snapshot, warnings});
+        return buildResolvedItemEntry(candidate, {
+          absoluteWear,
+          editable: true,
+          role,
+          snapshot,
+          warnings,
+          wearMapOverride: outputWearMap
+        });
       });
 
       const resolvedMaterials = materials.map((candidate) => {

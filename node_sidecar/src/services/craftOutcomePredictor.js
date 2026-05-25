@@ -153,10 +153,12 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
 
       const stattrak = !!payload.stattrak;
       const snapshot = catalog.getSnapshot();
+      const outcomeBuckets = snapshot.outcomeBuckets || snapshot.baseBuckets;
+      const outcomeWearMap = snapshot.outcomeWearMap || snapshot.wearMap;
       const outcomes = [];
       for (const group of normalizedGroups) {
         const bucketKey = `${group.collection_key}|${outputRarityRank}|${stattrak ? 1 : 0}`;
-        const candidates = snapshot.baseBuckets.get(bucketKey) || [];
+        const candidates = outcomeBuckets.get(bucketKey) || [];
         if (!candidates.length) {
           return invalidResult({
             invalid_reason: "collection_outcomes_missing",
@@ -195,7 +197,7 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
             outputWearFromRelativeFloat32(quantizedRelativeWear, candidate.minfloat, candidate.maxfloat)
           );
           const wearlevel = predictedWearLevel(predictedFloat);
-          const concrete = snapshot.wearMap.get(candidate.basemarkethashname)?.get(wearlevel) || null;
+          const concrete = outcomeWearMap.get(candidate.basemarkethashname)?.get(wearlevel) || null;
           baseOutcome.predicted_float = predictedFloat;
           baseOutcome.predicted_wearlevel = wearlevel;
           if (concrete) {
