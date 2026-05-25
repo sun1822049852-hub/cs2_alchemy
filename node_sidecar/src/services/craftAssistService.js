@@ -18,7 +18,7 @@ const {DedupLogger} = require("../logger");
 const craftAssistLogger = new DedupLogger({windowMs: 800});
 
 const WEAR_INPUT_DECIMALS = 16;
-const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
+const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET = 0.00001;
 const EPSILON = 1e-14;
 const TEMPORARY_BYPASS_CONTEXT_REFINE = true;
 const RARITY_MAP = {
@@ -377,32 +377,42 @@ function normalizeCraftAssistApproachMode(mode) {
   return asString(mode).trim() === "infinite" ? "infinite" : "below";
 }
 
-function normalizeCraftAssistWearOffsetPct(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT) {
+function normalizeCraftAssistWearOffset(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET) {
   const fallbackNum = Number(fallback);
   const safeFallback = Number.isFinite(fallbackNum)
-    ? Math.max(0, Math.min(100, fallbackNum))
-    : DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT;
+    ? Math.max(0, Math.min(1, fallbackNum))
+    : DEFAULT_CRAFT_ASSIST_WEAR_OFFSET;
   const n = Number(value);
   if (!Number.isFinite(n)) return safeFallback;
-  const clamped = Math.max(0, Math.min(100, n));
-  return Math.round(clamped * 100) / 100;
+  return Math.max(0, Math.min(1, n));
 }
 
-function craftAssistWearOffsetPctText(value) {
-  const n = normalizeCraftAssistWearOffsetPct(value, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  return Number.isInteger(n) ? String(n) : String(n.toFixed(2)).replace(/\.?0+$/, "");
+function normalizeLegacyCraftAssistWearOffsetPct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, n));
 }
 
-function getCraftAssistWearOffsetByTarget(targetValue, wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT) {
-  const pct = normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+function resolveCraftAssistWearOffset({targetValue, wearOffset, wearOffsetPct, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET} = {}) {
+  if (Number.isFinite(Number(wearOffset))) {
+    return normalizeCraftAssistWearOffset(wearOffset, fallback);
+  }
+  const pct = normalizeLegacyCraftAssistWearOffsetPct(wearOffsetPct);
   const target = Number(targetValue);
-  if (!Number.isFinite(target) || target <= 0 || pct <= 0) return 0;
-  return target * (pct / 100);
+  if (pct !== null && Number.isFinite(target) && target > 0) {
+    return normalizeCraftAssistWearOffset(target * (pct / 100), fallback);
+  }
+  return normalizeCraftAssistWearOffset(fallback, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
 }
 
-function getCraftAssistOffsetSettingHintText(wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT) {
-  const pctText = craftAssistWearOffsetPctText(wearOffsetPct);
-  return `当前产物偏移阈值 ${pctText}%（可在炼金设置中调整）`;
+function craftAssistWearOffsetText(value) {
+  const n = normalizeCraftAssistWearOffset(value, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
+  return n.toFixed(8).replace(/\.?0+$/, "");
+}
+
+function getCraftAssistOffsetSettingHintText(wearOffset = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET) {
+  const offsetText = craftAssistWearOffsetText(wearOffset);
+  return `当前产物偏移阈值 ${offsetText}（可在炼金设置中调整）`;
 }
 
 function craftAssistMaterialLabel(material) {
@@ -2090,6 +2100,7 @@ async function inspectCraftAssistContextRefineMatchForSelection({
   materials,
   blockedIds,
   includeCooling,
+  wearOffset,
   wearOffsetPct,
   enableFastCraftAssist,
   matchedRarity,
@@ -2101,8 +2112,7 @@ async function inspectCraftAssistContextRefineMatchForSelection({
   }
 
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
-  const normalizedWearOffsetPct = normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  const offsetValue = getCraftAssistWearOffsetByTarget(targetValue, normalizedWearOffsetPct);
+  const offsetValue = resolveCraftAssistWearOffset({targetValue, wearOffset, wearOffsetPct});
   let targetStepSpec = null;
   try {
     targetStepSpec = resolveCraftAssistTargetStepSpec({
@@ -2253,7 +2263,7 @@ async function runCraftAssistSelectionForRecipe({
   wearApproachMode = "below",
   entryOffsetValue = null,
   useRelativeFilter = true,
-  wearOffsetPct = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+  wearOffset = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET,
   candidateCache = null,
   prefilterOptions = null,
   enableRawBelowTopKFastPath = false,
@@ -2262,7 +2272,7 @@ async function runCraftAssistSelectionForRecipe({
 }) {
   const blocked = blockedIds instanceof Set ? blockedIds : new Set();
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
-  const offsetHintText = getCraftAssistOffsetSettingHintText(wearOffsetPct);
+  const offsetHintText = getCraftAssistOffsetSettingHintText(wearOffset);
   const searchTargetValue = targetStepSpec && Number.isFinite(Number(targetStepSpec.targetStep))
     ? Number(targetStepSpec.targetStep)
     : Number(targetValue);
@@ -2578,6 +2588,7 @@ async function selectCraftAssistForRecipe({
   materials,
   blockedIds,
   includeCooling,
+  wearOffset,
   wearOffsetPct,
   enableFastCraftAssist
 } = {}) {
@@ -2587,8 +2598,8 @@ async function selectCraftAssistForRecipe({
   }
 
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
-  const normalizedWearOffsetPct = normalizeCraftAssistWearOffsetPct(wearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  const offsetValue = getCraftAssistWearOffsetByTarget(targetValue, normalizedWearOffsetPct);
+  const normalizedWearOffset = resolveCraftAssistWearOffset({targetValue, wearOffset, wearOffsetPct});
+  const offsetValue = normalizedWearOffset;
   let targetStepSpec = null;
   try {
     targetStepSpec = resolveCraftAssistTargetStepSpec({
@@ -2642,7 +2653,7 @@ async function selectCraftAssistForRecipe({
     wearApproachMode: approachMode,
     entryOffsetValue: Number(offsetValue) > 0 ? offsetValue : null,
     useRelativeFilter: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
-    wearOffsetPct: normalizedWearOffsetPct,
+    wearOffset: normalizedWearOffset,
     candidateCache: context.candidateCache instanceof Map ? context.candidateCache : null,
     includeCooling: !!includeCooling,
     allRows: Array.isArray(rows) ? rows : null,

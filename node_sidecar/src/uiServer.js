@@ -896,6 +896,7 @@ function buildCraftAssistSelectRoutePayload(body, {rows = []} = {}) {
       selectedItemIds: effectiveSelectedItemIds,
       includeComponentItems,
       includeCooling,
+      wearOffset: body && body.wear_offset,
       wearOffsetPct: body && body.wear_offset_pct,
       enableFastCraftAssist
     },
@@ -1226,6 +1227,7 @@ function normalizeCraftAssistFailure(input, {defaultStatus = 400, defaultCode = 
     "目标磨损必须",
     "float32",
     "wear_filter_mode",
+    "wear_offset",
     "wear_offset_pct",
     "enable_fast_craft_assist",
     "use_component_items",

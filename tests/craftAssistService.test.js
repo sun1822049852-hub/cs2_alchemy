@@ -15,7 +15,17 @@ const {
   resolveCraftAssistTargetStepSpec
 } = require("../node_sidecar/src/services/craftAssistFloat32Step");
 
-const RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 5;
+const RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET = 0.00001;
+
+function defaultWearOffsetArgs(extraArgs = {}) {
+  if (
+    Object.prototype.hasOwnProperty.call(extraArgs, "wearOffset")
+    || Object.prototype.hasOwnProperty.call(extraArgs, "wearOffsetPct")
+  ) {
+    return {};
+  }
+  return {wearOffset: RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET};
+}
 
 function makeRow({
   id,
@@ -68,7 +78,7 @@ function runSelect({rows, targetWear, materials, ...extraArgs}) {
     materials,
     blockedIds: [],
     includeCooling: false,
-    wearOffsetPct: RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+    ...defaultWearOffsetArgs(extraArgs),
     ...extraArgs
   });
 }
@@ -81,7 +91,7 @@ function runSelectWithContext({selectionContext, targetWear, materials, blockedI
     materials,
     blockedIds,
     includeCooling: false,
-    wearOffsetPct: RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+    ...defaultWearOffsetArgs(extraArgs),
     ...extraArgs
   });
 }
@@ -94,7 +104,7 @@ async function inspectMatchedContextRefine({fastResult, targetWear, rows, materi
     materials,
     blockedIds: [],
     includeCooling: false,
-    wearOffsetPct: RUNTIME_DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+    ...defaultWearOffsetArgs(extraArgs),
     matchedRarity: fastResult && fastResult.rarity,
     matchedOverall: fastResult && fastResult.overall,
     ...extraArgs
@@ -1701,6 +1711,55 @@ async function test_service_passes_existing_wear_offset_as_search_entry_window()
   );
 }
 
+async function test_service_treats_wear_offset_as_fixed_value() {
+  const targetWear = Math.fround(0.21);
+  const fixedWearOffset = 0.01;
+  const targetWindow = resolveCraftAssistTargetStepSpec({
+    inputStep: targetWear,
+    inputRaw: "0.21",
+    approachMode: "below",
+    offsetValue: fixedWearOffset
+  });
+  const searchCalls = [];
+  const service = loadCraftAssistServiceWithOverrides({
+    searchOverrides: {
+      searchCraftAssistSeed() {
+        return null;
+      },
+      searchCraftAssistBestSolution(args = {}) {
+        searchCalls.push({
+          entryOffsetValue: args.entryOffsetValue
+        });
+        return makeSolvedFromGroups(args.groups, args.targetStepSpec.targetStep);
+      }
+    }
+  });
+
+  const result = await service.selectCraftAssistForRecipe({
+    rows: makeUniformStepRows({
+      prefix: "fixed-entry-window-service",
+      name: "Fixed Entry Window Service",
+      relative: targetWindow.targetStep,
+      count: 12
+    }),
+    targetWear,
+    targetWearRaw: "0.21",
+    wearFilterMode: "relative",
+    wearApproachMode: "below",
+    wearOffset: fixedWearOffset,
+    enableFastCraftAssist: false,
+    materials: [
+      uniformStepMaterial("Fixed Entry Window Service")
+    ],
+    blockedIds: [],
+    includeCooling: false
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(searchCalls.length, 1);
+  assert.equal(searchCalls[0].entryOffsetValue, fixedWearOffset);
+}
+
 async function test_target_step_rarity_full_prefilter_fallback_does_not_rerun_full_baseline() {
   const inputStep = Math.fround(0.5);
   const targetWindow = targetWindowSpecForTest({
@@ -3065,6 +3124,7 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
   await test_seed_hit_keeps_target_step_handling_in_baseline();
   await test_target_step_without_prefilter_does_not_rerun_full_baseline();
   await test_service_passes_existing_wear_offset_as_search_entry_window();
+  await test_service_treats_wear_offset_as_fixed_value();
   await test_target_step_rarity_full_prefilter_fallback_does_not_rerun_full_baseline();
   await test_target_step_base_window_hit_still_keeps_outer_full_fallback();
   await test_target_step_expand_window_hit_still_keeps_outer_full_fallback();

@@ -22,7 +22,7 @@ function extractBlock(startMarker, endMarker) {
 
 function loadCraftAssistAccountStateFns(initialState = {}) {
   const source = [
-    extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT"),
+    extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET"),
     extractBlock("function createDefaultCraftAssistRuntimeState(", "function clearCraftCandidateState(")
   ].join("\n");
   const context = {

@@ -11,7 +11,7 @@ const WEAR_INPUT_DECIMALS = 16;
 const TRADEUP_SIMULATION_WEAR_DECIMALS = 16;
 const TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS = 4;
 const TRADEUP_SIMULATION_RANGE_DECIMALS = 4;
-const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT = 1;
+const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET = 0.00001;
 const CRAFT_ASSIST_PRESET_MIN_WIDTH = 186;
 const SNAPSHOT_REUSE_WINDOW_MS = 10 * 60 * 1000;
 const WEAR_SUFFIX_RANGES = [
@@ -35,7 +35,7 @@ const state = {
   renderInitialSize: 180, renderBatchSize: 240, renderWindowKey: "", renderVisibleCount: 0, renderVisibleTotal: 0,
   craftSelectedItemIds: new Set(), craftBusy: false, craftPauseRequested: false, craftPaused: false, craftAssistSelecting: false, craftAssistPendingUiAction: "", craftAssistPendingPresetId: "", craftAssistRunToken: "", craftStatusText: "", craftStatusError: false, craftUseComponentItems: false, craftIncludeCooling: false, craftShowSeed: false, craftShowFullWear: false, craftShowCoolingTime: false, craftHideCollection: false, craftHideQuantity: false, craftSettingsOpen: false, craftRecipeQueue: [], craftActiveRecipeId: "", craftCandidateRows: [], craftCandidateStats: null, craftCandidateLoading: false, craftCandidateRequestKey: "", craftCandidateLoadedKey: "", craftCandidateRequestSeq: 0, craftRightPanelWidth: 0,
   craftProgressEnabled: false, craftProgressVisible: false, craftProgressTitle: "", craftProgressDetail: "", craftProgressMode: "", craftProgressPercent: 0, craftProgressPercentTarget: 0,
-  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistTargetWearRaw: "", craftAssistWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT, craftAssistFastMode: false, craftAssistApproachMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
+  craftAssistOpen: false, craftAssistPickerOpen: false, craftAssistPickerTargetMaterialId: "", craftAssistRoleChooserOpen: false, craftAssistPickRole: "main", craftAssistUseAbsoluteWear: false, craftAssistTargetWear: null, craftAssistTargetWearRaw: "", craftAssistWearOffset: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET, craftAssistFastMode: false, craftAssistApproachMode: false, craftAssistMainCount: 5, craftAssistAuxCount: 5, craftAssistOverlayHeight: 0, craftAssistPresetWidth: 0, craftAssistMaterials: [], craftAssistPresets: [], craftAssistPresetApplyCountMap: {}, craftAssistPresetEditingId: "", craftAssistPresetEditingName: "", craftAssistPresetEditingBackup: null, craftAssistPresetEditingInitialSnapshot: null, craftPredictorOpen: false, craftPredictorContextType: "", craftPredictorContextId: "", craftPredictorContextLabel: "", craftPredictorAutoOpenMuted: false, craftPredictorLoading: false, craftPredictorError: "", craftPredictorResponse: null, craftPredictorRequestKey: "", craftPredictorLoadedKey: "", craftPredictorRequestSeq: 0, craftPredictorPreferredRowsContextKey: "", craftPredictorPreferredRowsById: null,
   simulationViewMode: "workspace", simulationOutputRole: "primary_output", simulationMaterialRole: "main_material", simulationOutputChooserOpen: false, simulationMaterialChooserOpen: false, simulationPresets: [], simulationActivePresetId: "", simulationWorkspacePreset: null, simulationWorkspaceSourcePresetId: "", simulationPickerOpen: false, simulationPickerMode: "", simulationPickerTitle: "", simulationPickerQuery: "", simulationPickerResults: [], simulationPickerError: "", simulationLoading: false, simulationPersisting: false, simulationSearchLoading: false, simulationRequestSeq: 0, simulationSearchSeq: 0, simulationModalOpen: false, simulationModalMode: "", simulationModalPresetId: "", simulationModalSlot: "", simulationModalItemType: "", simulationModalItemSnapshot: null,
   expandedGroups: new Set(), selectedComponentId: "", showComponentItems: false, selectedComponentItemIds: new Set(), componentOpBusy: false, componentOpBusyAction: "",
   componentTaskQueue: {running: null, queued: []}, selectedQueueJobId: "", componentTaskProgressMap: {},
@@ -82,7 +82,7 @@ const state = {
   batchCraftIncludeCooling: false,
   batchCraftFastMode: false,
   batchCraftApproachMode: false,
-  batchCraftWearOffsetPct: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT,
+  batchCraftWearOffset: DEFAULT_CRAFT_ASSIST_WEAR_OFFSET,
   batchCraftSettingsOpen: false,
   batchCraftAccountPickerOpen: false,
   batchCraftPresetWidth: 200
@@ -1902,7 +1902,7 @@ function saveCraftUiPrefs() {
         craft_hide_quantity: !!state.craftHideQuantity,
         craft_assist_fast_mode: !!state.craftAssistFastMode,
         craft_assist_approach_mode: !!state.craftAssistApproachMode,
-        craft_assist_wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT),
+        craft_assist_wear_offset: normalizeCraftAssistWearOffset(state.craftAssistWearOffset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET),
         craft_right_width: clampCraftRightPanelWidth(state.craftRightPanelWidth),
         craft_assist_overlay_height: Number.isFinite(overlayHeight) ? overlayHeight : 0,
         craft_assist_preset_width: Number(state.craftAssistPresetWidth) || 240
@@ -1927,8 +1927,10 @@ function loadCraftUiPrefs() {
     if (typeof prefs.craft_hide_quantity === "boolean") state.craftHideQuantity = prefs.craft_hide_quantity;
     if (typeof prefs.craft_assist_fast_mode === "boolean") state.craftAssistFastMode = prefs.craft_assist_fast_mode;
     if (typeof prefs.craft_assist_approach_mode === "boolean") state.craftAssistApproachMode = prefs.craft_assist_approach_mode;
-    if (Number.isFinite(Number(prefs.craft_assist_wear_offset_pct))) {
-      state.craftAssistWearOffsetPct = normalizeCraftAssistWearOffsetPct(prefs.craft_assist_wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+    if (Number.isFinite(Number(prefs.craft_assist_wear_offset))) {
+      state.craftAssistWearOffset = normalizeCraftAssistWearOffset(prefs.craft_assist_wear_offset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
+    } else if (Number.isFinite(Number(prefs.craft_assist_wear_offset_pct))) {
+      state.craftAssistWearOffset = normalizeLegacyCraftAssistWearOffsetPct(prefs.craft_assist_wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
     }
     if (Number.isFinite(Number(prefs.craft_right_width))) state.craftRightPanelWidth = Number(prefs.craft_right_width);
     if (Number.isFinite(Number(prefs.craft_assist_overlay_height))) {
@@ -1949,7 +1951,7 @@ function saveBatchCraftUiPrefs() {
       include_cooling: !!state.batchCraftIncludeCooling,
       fast_mode: !!state.batchCraftFastMode,
       approach_mode: !!state.batchCraftApproachMode,
-      wear_offset_pct: normalizeCraftAssistWearOffsetPct(state.batchCraftWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT)
+      wear_offset: normalizeCraftAssistWearOffset(state.batchCraftWearOffset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET)
     }));
   } catch (_) {}
 }
@@ -1963,8 +1965,10 @@ function loadBatchCraftUiPrefs() {
     if (typeof p.include_cooling === "boolean") state.batchCraftIncludeCooling = p.include_cooling;
     if (typeof p.fast_mode === "boolean") state.batchCraftFastMode = p.fast_mode;
     if (typeof p.approach_mode === "boolean") state.batchCraftApproachMode = p.approach_mode;
-    if (Number.isFinite(Number(p.wear_offset_pct))) {
-      state.batchCraftWearOffsetPct = normalizeCraftAssistWearOffsetPct(p.wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+    if (Number.isFinite(Number(p.wear_offset))) {
+      state.batchCraftWearOffset = normalizeCraftAssistWearOffset(p.wear_offset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
+    } else if (Number.isFinite(Number(p.wear_offset_pct))) {
+      state.batchCraftWearOffset = normalizeLegacyCraftAssistWearOffsetPct(p.wear_offset_pct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
     }
   } catch (_) {}
 }
@@ -5589,12 +5593,12 @@ function syncCraftSettingsControls(allCraftRows = null) {
   if (ui.craftShowCoolingTime) ui.craftShowCoolingTime.checked = showCoolingTime;
   if (ui.componentCraftShowCoolingTime) ui.componentCraftShowCoolingTime.checked = showCoolingTime;
   const fastMode = !!state.craftAssistFastMode;
-  const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  state.craftAssistWearOffsetPct = wearOffsetPct;
+  const wearOffset = normalizeCraftAssistWearOffset(state.craftAssistWearOffset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
+  state.craftAssistWearOffset = wearOffset;
   if (ui.craftAssistFastMode) ui.craftAssistFastMode.checked = fastMode;
   if (ui.craftAssistApproachMode) ui.craftAssistApproachMode.checked = !!state.craftAssistApproachMode;
   if (ui.craftAssistWearOffsetPct && document.activeElement !== ui.craftAssistWearOffsetPct) {
-    ui.craftAssistWearOffsetPct.value = craftAssistWearOffsetPctText(wearOffsetPct);
+    ui.craftAssistWearOffsetPct.value = craftAssistWearOffsetText(wearOffset);
   }
   const hideCollection = !!state.craftHideCollection;
   const hideQuantity = !!state.craftHideQuantity;
@@ -5644,25 +5648,23 @@ function normalizeCraftAssistApplyCount(value, fallback = 1) {
   if (!Number.isFinite(n)) return Math.max(1, Math.min(100, Math.trunc(Number(fallback) || 1)));
   return Math.max(1, Math.min(100, n));
 }
-function normalizeCraftAssistWearOffsetPct(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT) {
+function normalizeCraftAssistWearOffset(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET) {
   const fallbackNum = Number(fallback);
   const safeFallback = Number.isFinite(fallbackNum)
-    ? Math.max(0, Math.min(100, fallbackNum))
-    : DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT;
+    ? Math.max(0, Math.min(1, fallbackNum))
+    : DEFAULT_CRAFT_ASSIST_WEAR_OFFSET;
   const n = Number(value);
   if (!Number.isFinite(n)) return safeFallback;
-  const clamped = Math.max(0, Math.min(100, n));
-  return Math.round(clamped * 100) / 100;
+  return Math.max(0, Math.min(1, n));
 }
-function craftAssistWearOffsetPctText(value) {
-  const n = normalizeCraftAssistWearOffsetPct(value, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  return Number.isInteger(n) ? String(n) : String(n.toFixed(2)).replace(/\.?0+$/, "");
+function normalizeLegacyCraftAssistWearOffsetPct(value, fallback = DEFAULT_CRAFT_ASSIST_WEAR_OFFSET) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return normalizeCraftAssistWearOffset(fallback, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
+  return normalizeCraftAssistWearOffset(n / 100, fallback);
 }
-function getCraftAssistWearOffsetByTarget(targetValue) {
-  const pct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  const target = Number(targetValue);
-  if (!Number.isFinite(target) || target <= 0 || pct <= 0) return 0;
-  return target * (pct / 100);
+function craftAssistWearOffsetText(value) {
+  const n = normalizeCraftAssistWearOffset(value, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
+  return n.toFixed(8).replace(/\.?0+$/, "");
 }
 function setCraftAssistPendingUiState(action = "", presetId = "") {
   state.craftAssistPendingUiAction = String(action || "").trim();
@@ -5685,8 +5687,8 @@ function rejectCraftAssistBusyUiAction() {
   return true;
 }
 function getCraftAssistOffsetSettingHintText() {
-  const pctText = craftAssistWearOffsetPctText(state.craftAssistWearOffsetPct);
-  return `当前产物偏移阈值 ${pctText}%（可在炼金设置中调整）`;
+  const offsetText = craftAssistWearOffsetText(state.craftAssistWearOffset);
+  return `当前产物偏移阈值 ${offsetText}（可在炼金设置中调整）`;
 }
 function normalizeCraftAssistFilterMode(mode) {
   return String(mode || "").trim() === "absolute" ? "absolute" : "relative";
@@ -8652,7 +8654,7 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
       }
     }
 
-    const wearOffsetPct = normalizeCraftAssistWearOffsetPct(state.craftAssistWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
+    const wearOffset = normalizeCraftAssistWearOffset(state.craftAssistWearOffset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
     const summarizeDebugMaterials = (list) => {
       return (Array.isArray(list) ? list : []).map((material) => {
         const base = material && typeof material === "object" ? material : {};
@@ -8711,7 +8713,7 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
           use_component_items: !!state.craftUseComponentItems,
           blocked_ids: [...blockedIds],
           include_cooling: !!state.craftIncludeCooling,
-          wear_offset_pct: wearOffsetPct,
+          wear_offset: wearOffset,
           enable_fast_craft_assist: !!state.craftAssistFastMode
         })
       });
@@ -8722,7 +8724,7 @@ async function applyCraftAssistAutoSelection({accountUsername = "", sourcePreset
         target_wear: targetValue,
         target_wear_raw: targetWearRaw,
         wear_approach_mode: state.craftAssistApproachMode ? "infinite" : "below",
-        wear_offset_pct: wearOffsetPct,
+        wear_offset: wearOffset,
         enable_fast_craft_assist: !!state.craftAssistFastMode,
         use_component_items: !!state.craftUseComponentItems,
         include_cooling: !!state.craftIncludeCooling,
@@ -14291,10 +14293,10 @@ function syncBatchCraftSettingsControls() {
   if (ui.batchCraftIncludeCooling) ui.batchCraftIncludeCooling.checked = !!state.batchCraftIncludeCooling;
   if (ui.batchCraftFastMode) ui.batchCraftFastMode.checked = !!state.batchCraftFastMode;
   if (ui.batchCraftApproachMode) ui.batchCraftApproachMode.checked = !!state.batchCraftApproachMode;
-  const wop = normalizeCraftAssistWearOffsetPct(state.batchCraftWearOffsetPct, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT);
-  state.batchCraftWearOffsetPct = wop;
+  const wearOffset = normalizeCraftAssistWearOffset(state.batchCraftWearOffset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET);
+  state.batchCraftWearOffset = wearOffset;
   if (ui.batchCraftWearOffsetPct && document.activeElement !== ui.batchCraftWearOffsetPct) {
-    ui.batchCraftWearOffsetPct.value = craftAssistWearOffsetPctText(wop);
+    ui.batchCraftWearOffsetPct.value = craftAssistWearOffsetText(wearOffset);
   }
 }
 
@@ -14383,7 +14385,7 @@ async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, exi
     materials,
     use_component_items: !!state.batchCraftUseComponentItems,
     include_cooling: !!state.batchCraftIncludeCooling,
-    wear_offset_pct: state.batchCraftWearOffsetPct,
+    wear_offset: normalizeCraftAssistWearOffset(state.batchCraftWearOffset, DEFAULT_CRAFT_ASSIST_WEAR_OFFSET),
     blocked_ids: normalizeCraftRecipeItemIds(existingItemIds),
     enable_fast_craft_assist: !!state.batchCraftFastMode
   };
@@ -14412,7 +14414,7 @@ async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, exi
       target_wear: targetValue,
       target_wear_raw: targetWearRaw,
       wear_approach_mode: payload.wear_approach_mode,
-      wear_offset_pct: payload.wear_offset_pct,
+      wear_offset: payload.wear_offset,
       enable_fast_craft_assist: payload.enable_fast_craft_assist,
       use_component_items: payload.use_component_items,
       include_cooling: payload.include_cooling,
@@ -14805,12 +14807,12 @@ function bindBatchCraftEvents() {
   if (ui.batchCraftWearOffsetPct) {
     ui.batchCraftWearOffsetPct.onfocus = () => { ui.batchCraftWearOffsetPct.select(); };
     ui.batchCraftWearOffsetPct.oninput = () => {
-      state.batchCraftWearOffsetPct = normalizeCraftAssistWearOffsetPct(ui.batchCraftWearOffsetPct.value, state.batchCraftWearOffsetPct);
+      state.batchCraftWearOffset = normalizeCraftAssistWearOffset(ui.batchCraftWearOffsetPct.value, state.batchCraftWearOffset);
     };
     const applyBatchWearOffset = () => {
-      const v = normalizeCraftAssistWearOffsetPct(ui.batchCraftWearOffsetPct.value, state.batchCraftWearOffsetPct);
-      state.batchCraftWearOffsetPct = v;
-      ui.batchCraftWearOffsetPct.value = craftAssistWearOffsetPctText(v);
+      const v = normalizeCraftAssistWearOffset(ui.batchCraftWearOffsetPct.value, state.batchCraftWearOffset);
+      state.batchCraftWearOffset = v;
+      ui.batchCraftWearOffsetPct.value = craftAssistWearOffsetText(v);
       saveBatchCraftUiPrefs();
     };
     ui.batchCraftWearOffsetPct.onchange = applyBatchWearOffset;
@@ -15892,11 +15894,11 @@ function bindEvents() {
       applyCraftAssistApproachMode(ui.craftAssistApproachMode.checked);
     };
   }
-  const applyCraftAssistWearOffsetPct = (inputNode) => {
+  const applyCraftAssistWearOffset = (inputNode) => {
     if (!inputNode) return;
-    const nextValue = normalizeCraftAssistWearOffsetPct(inputNode.value, state.craftAssistWearOffsetPct);
-    state.craftAssistWearOffsetPct = nextValue;
-    inputNode.value = craftAssistWearOffsetPctText(nextValue);
+    const nextValue = normalizeCraftAssistWearOffset(inputNode.value, state.craftAssistWearOffset);
+    state.craftAssistWearOffset = nextValue;
+    inputNode.value = craftAssistWearOffsetText(nextValue);
     saveCraftUiPrefs();
     syncCraftSettingsControls();
   };
@@ -15905,21 +15907,21 @@ function bindEvents() {
       ui.craftAssistWearOffsetPct.select();
     };
     ui.craftAssistWearOffsetPct.oninput = () => {
-      state.craftAssistWearOffsetPct = normalizeCraftAssistWearOffsetPct(
+      state.craftAssistWearOffset = normalizeCraftAssistWearOffset(
         ui.craftAssistWearOffsetPct.value,
-        state.craftAssistWearOffsetPct
+        state.craftAssistWearOffset
       );
     };
     ui.craftAssistWearOffsetPct.onchange = () => {
-      applyCraftAssistWearOffsetPct(ui.craftAssistWearOffsetPct);
+      applyCraftAssistWearOffset(ui.craftAssistWearOffsetPct);
     };
     ui.craftAssistWearOffsetPct.onblur = () => {
-      applyCraftAssistWearOffsetPct(ui.craftAssistWearOffsetPct);
+      applyCraftAssistWearOffset(ui.craftAssistWearOffsetPct);
     };
     ui.craftAssistWearOffsetPct.onkeydown = (evt) => {
       if (evt.key !== "Enter") return;
       evt.preventDefault();
-      applyCraftAssistWearOffsetPct(ui.craftAssistWearOffsetPct);
+      applyCraftAssistWearOffset(ui.craftAssistWearOffsetPct);
       ui.craftAssistWearOffsetPct.blur();
     };
   }

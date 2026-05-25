@@ -31,6 +31,7 @@ function loadBatchCraftAssistSelect(overrides = {}) {
     Boolean,
     Array,
     JSON,
+    DEFAULT_CRAFT_ASSIST_WEAR_OFFSET: 0.00001,
     Date: overrides.Date || Date,
     state: overrides.state,
     getCraftRowsForAccount: overrides.getCraftRowsForAccount,
@@ -39,6 +40,10 @@ function loadBatchCraftAssistSelect(overrides = {}) {
     normalizeCraftAssistTargetWearStep: overrides.normalizeCraftAssistTargetWearStep || ((value) => {
       const parsed = overrides.parseOptionalWear01 ? overrides.parseOptionalWear01(value) : Number(value);
       return parsed == null || !Number.isFinite(Number(parsed)) ? null : Math.fround(Math.max(0, Math.min(1, Number(parsed))));
+    }),
+    normalizeCraftAssistWearOffset: overrides.normalizeCraftAssistWearOffset || ((value, fallback = 0.00001) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : fallback;
     }),
     normalizeCraftAssistMaterialsForRun: overrides.normalizeCraftAssistMaterialsForRun,
     craftAssistTargetCountFromMaterials: overrides.craftAssistTargetCountFromMaterials,
@@ -89,7 +94,7 @@ function createBatchRunHarness({DateImpl, accounts, api, limit = 10, existingQue
       batchCraftIncludeCooling: false,
       batchCraftFastMode: true,
       batchCraftApproachMode: true,
-      batchCraftWearOffsetPct: 17
+      batchCraftWearOffset: 0.00017
     },
     hasCachedSnapshotForAccount(username) {
       assert.ok(accounts.includes(username), `unexpected account cache check: ${username}`);
@@ -166,7 +171,7 @@ async function test_batch_helper_uses_current_assist_route_contract({DateImpl}) 
       batchCraftIncludeCooling: false,
       batchCraftFastMode: true,
       batchCraftApproachMode: true,
-      batchCraftWearOffsetPct: 17
+      batchCraftWearOffset: 0.00017
     },
     getCraftRowsForAccount(username) {
       assert.equal(username, "acc-a");
@@ -221,7 +226,7 @@ async function test_batch_helper_uses_current_assist_route_contract({DateImpl}) 
     materials: [{id: "mat-1", role: "main", count: 10, items: [{id: "mat-1__1", name: "AK"}]}],
     use_component_items: true,
     include_cooling: false,
-    wear_offset_pct: 17,
+    wear_offset: 0.00017,
     blocked_ids: ["used-1", "used-2"],
     enable_fast_craft_assist: true
   });
@@ -245,7 +250,7 @@ async function test_batch_helper_below_mode_keeps_raw_and_does_not_pre_shift({Da
       batchCraftIncludeCooling: false,
       batchCraftFastMode: true,
       batchCraftApproachMode: false,
-      batchCraftWearOffsetPct: 17
+      batchCraftWearOffset: 0.00017
     },
     getCraftRowsForAccount(username) {
       assert.equal(username, "acc-below");
@@ -308,7 +313,7 @@ async function test_batch_helper_keeps_null_and_logs_account_level_failure({Date
       batchCraftIncludeCooling: false,
       batchCraftFastMode: true,
       batchCraftApproachMode: true,
-      batchCraftWearOffsetPct: 17
+      batchCraftWearOffset: 0.00017
     },
     getCraftRowsForAccount(username) {
       assert.equal(username, "acc-b");
@@ -369,7 +374,7 @@ async function test_batch_helper_keeps_null_and_logs_account_level_failure({Date
     target_wear: targetWearStep,
     target_wear_raw: targetWearRaw,
     wear_approach_mode: "infinite",
-    wear_offset_pct: 17,
+    wear_offset: 0.00017,
     enable_fast_craft_assist: true,
     use_component_items: true,
     include_cooling: false,
@@ -413,7 +418,7 @@ async function test_batch_selection_surfaces_blocked_shortfall_message_in_top_st
       batchCraftIncludeCooling: false,
       batchCraftFastMode: true,
       batchCraftApproachMode: true,
-      batchCraftWearOffsetPct: 17
+      batchCraftWearOffset: 0.00017
     },
     hasCachedSnapshotForAccount(username) {
       assert.equal(username, "acc-c");
@@ -671,7 +676,7 @@ async function test_batch_selection_preserves_preset_target_wear_raw_in_assist_r
       batchCraftIncludeCooling: false,
       batchCraftFastMode: true,
       batchCraftApproachMode: true,
-      batchCraftWearOffsetPct: 17
+      batchCraftWearOffset: 0.00017
     },
     hasCachedSnapshotForAccount(username) {
       assert.equal(username, "acc-raw");

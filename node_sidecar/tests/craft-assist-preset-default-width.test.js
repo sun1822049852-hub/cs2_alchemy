@@ -44,7 +44,7 @@ function createLoadPrefsContext(storageValue) {
       craftShowCoolingTime: false,
       craftAssistFastMode: false,
       craftAssistApproachMode: false,
-      craftAssistWearOffsetPct: 5,
+      craftAssistWearOffset: 0.00001,
       craftRightPanelWidth: 0,
       craftAssistOverlayHeight: 0,
       craftAssistPresetWidth: 0
@@ -56,11 +56,15 @@ function createLoadPrefsContext(storageValue) {
       }
     },
     CRAFT_UI_PREFS_KEY: "craft_ui_prefs_v2",
-    DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT: 5,
+    DEFAULT_CRAFT_ASSIST_WEAR_OFFSET: 0.00001,
     CRAFT_ASSIST_PRESET_MIN_WIDTH: 186,
-    normalizeCraftAssistWearOffsetPct(value, fallback) {
+    normalizeCraftAssistWearOffset(value, fallback) {
       const numeric = Number(value);
       return Number.isFinite(numeric) ? numeric : fallback;
+    },
+    normalizeLegacyCraftAssistWearOffsetPct(value, fallback) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric / 100 : fallback;
     }
   };
   vm.runInNewContext(extractFunctionSource("loadCraftUiPrefs"), context, {filename: APP_PATH});

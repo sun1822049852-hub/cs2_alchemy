@@ -106,7 +106,7 @@ function loadApplyCraftAssistAutoSelection() {
     }
   }
   const source = [
-    extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT"),
+    extractConst("DEFAULT_CRAFT_ASSIST_WEAR_OFFSET"),
     extractConst("WEAR_INPUT_DECIMALS"),
     extractBlock("function resolveCraftAssistTargetWearPair(", "function normalizeCraftAssistTargetWearStepOrFallback("),
     extractBlock("async function api(", "function parseEventData("),
@@ -155,7 +155,7 @@ function loadApplyCraftAssistAutoSelection() {
       craftAssistApproachMode: false,
       craftUseComponentItems: false,
       craftIncludeCooling: false,
-      craftAssistWearOffsetPct: 5,
+      craftAssistWearOffset: 0.00001,
       craftAssistRuntimeByAccount: new Map(),
       craftAssistActiveRunTokensByAccount: new Map()
     },
@@ -210,8 +210,9 @@ function loadApplyCraftAssistAutoSelection() {
     normalizeCraftRecipeItemIds(list) {
       return Array.from(new Set((Array.isArray(list) ? list : []).map((id) => String(id || "").trim()).filter(Boolean)));
     },
-    normalizeCraftAssistWearOffsetPct(value) {
-      return Number(value) || 5;
+    normalizeCraftAssistWearOffset(value, fallback = 0.00001) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : fallback;
     },
     async fetch(_path, options = {}) {
       return new Promise((resolve, reject) => {
@@ -371,7 +372,7 @@ async function testFailedAutoSelectionShowsHumanMessageAndLogsDetailSummary() {
     target_wear: targetWearStep,
     target_wear_raw: targetWearRaw,
     wear_approach_mode: "below",
-    wear_offset_pct: 5,
+    wear_offset: 0.00001,
     enable_fast_craft_assist: false,
     use_component_items: false,
     include_cooling: false,

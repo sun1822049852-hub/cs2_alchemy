@@ -42,7 +42,7 @@ for (const fragment of appFragments) {
 
 assert.match(
   html,
-  /高速选材[\s\S]*逼近磨损模式[\s\S]*磨损偏移阈值\(%\)/,
+  /高速选材[\s\S]*逼近磨损模式[\s\S]*固定磨损偏移值/,
   "craft settings should place approach mode directly under fast mode and above wear offset"
 );
 

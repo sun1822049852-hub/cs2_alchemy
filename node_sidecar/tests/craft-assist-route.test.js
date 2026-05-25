@@ -166,7 +166,7 @@ function summarizeAssistArgs(args, {snapshotRows = null} = {}) {
     selectedItemIds: normalizeIdList(args && args.selectedItemIds),
     includeComponentItems: !!(args && args.includeComponentItems),
     includeCooling: !!(args && args.includeCooling),
-    wearOffsetPct: Number(args && args.wearOffsetPct),
+    wearOffset: Number(args && args.wearOffset),
     enableFastCraftAssist: !!(args && args.enableFastCraftAssist),
     materials: projectCraftAssistPersistedMaterials(materials),
     candidateCacheKeyTuples: materials.map((material) => buildCraftAssistCandidateCacheKeyTuple(material, args && args.targetWear)),
@@ -444,7 +444,7 @@ async function test_assist_select_route_feeds_direct_and_worker_from_same_normal
       selected_item_ids: ["selected-1", "selected-2"],
       use_component_items: "true",
       include_cooling: true,
-      wear_offset_pct: 17,
+      wear_offset: 0.00017,
       enable_fast_craft_assist: 1
     };
 
@@ -468,7 +468,7 @@ async function test_assist_select_route_feeds_direct_and_worker_from_same_normal
       selectedItemIds: body.selected_item_ids,
       includeComponentItems: true,
       includeCooling: true,
-      wearOffsetPct: body.wear_offset_pct,
+      wearOffset: body.wear_offset,
       enableFastCraftAssist: true,
       candidateRows: expectedCandidateRows
     });

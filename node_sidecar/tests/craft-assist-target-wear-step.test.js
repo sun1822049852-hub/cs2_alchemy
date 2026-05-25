@@ -35,7 +35,7 @@ function loadTargetWearFns(overrides = {}) {
   const context = {
     state,
     WEAR_INPUT_DECIMALS: 6,
-    DEFAULT_CRAFT_ASSIST_WEAR_OFFSET_PCT: 5,
+    DEFAULT_CRAFT_ASSIST_WEAR_OFFSET: 0.00001,
     Math,
     Number,
     String,
@@ -68,7 +68,7 @@ function loadTargetWearFns(overrides = {}) {
     createEmptyCraftRecipeEntryInState: overrides.createEmptyCraftRecipeEntryInState || (() => ({id: "recipe-1"})),
     getCraftQueuePendingEntriesFromState: overrides.getCraftQueuePendingEntriesFromState || (() => []),
     normalizeCraftRecipeItemIds: overrides.normalizeCraftRecipeItemIds || ((ids) => Array.from(new Set((Array.isArray(ids) ? ids : []).map((value) => String(value || "").trim()).filter(Boolean)))),
-    normalizeCraftAssistWearOffsetPct: overrides.normalizeCraftAssistWearOffsetPct || ((value, fallback) => {
+    normalizeCraftAssistWearOffset: overrides.normalizeCraftAssistWearOffset || ((value, fallback) => {
       const numeric = Number(value);
       return Number.isFinite(numeric) ? numeric : fallback;
     }),
@@ -346,7 +346,7 @@ async function test_auto_select_request_quantizes_legacy_preset_target_wear() {
       currentAccountUsername: "acc-a",
       craftAssistSelecting: false,
       craftAssistApproachMode: false,
-      craftAssistWearOffsetPct: 5,
+      craftAssistWearOffset: 0.00005,
       craftUseComponentItems: false,
       craftIncludeCooling: false,
       craftAssistFastMode: false
@@ -381,7 +381,55 @@ async function test_auto_select_request_quantizes_legacy_preset_target_wear() {
   assert.equal(request.target_wear, Math.fround(0.214285));
   assert.equal(Math.fround(request.target_wear), request.target_wear);
   assert.equal(request.wear_approach_mode, "below");
-  assert.equal(request.wear_offset_pct, 5);
+  assert.equal(request.wear_offset, 0.00005);
+  assert.equal(Object.prototype.hasOwnProperty.call(request, "wear_offset_pct"), false);
+}
+
+async function test_auto_select_request_sends_fixed_default_wear_offset() {
+  let request = null;
+  const scopedState = {
+    craftRecipeQueue: [],
+    craftActiveRecipeId: "",
+    craftAssistSelecting: false
+  };
+  const app = loadTargetWearFns({
+    state: {
+      currentAccountUsername: "acc-a",
+      craftAssistSelecting: false,
+      craftAssistApproachMode: false,
+      craftUseComponentItems: false,
+      craftIncludeCooling: false,
+      craftAssistFastMode: false
+    },
+    getCraftRowsForAccount: () => [{asset_id: "seed-1"}],
+    getCraftQueuePendingEntriesFromState: () => scopedState.craftRecipeQueue,
+    commitCraftAccountScopedStateForUsername: (_username, updater) => {
+      updater(scopedState);
+    },
+    getCraftAccountScopedStateSnapshot: () => scopedState,
+    commitCraftAccountScopedState: () => scopedState,
+    createEmptyCraftRecipeEntryInState: (targetState) => {
+      const entry = {id: "recipe-1"};
+      targetState.craftRecipeQueue.push(entry);
+      return entry;
+    },
+    api: async (_path, options = {}) => {
+      request = JSON.parse(String(options.body || "{}"));
+      return {item_ids: Array.from({length: 10}, (_, index) => `item-${index + 1}`)};
+    }
+  });
+
+  const ok = await app.applyCraftAssistAutoSelection({
+    accountUsername: "acc-a",
+    draftSnapshot: {
+      target_wear: 0.214285,
+      materials: [{id: "mat_1", role: "main", count: 10, items: [{id: "mat_1__1", name: "AK"}]}]
+    }
+  });
+
+  assert.equal(ok, true);
+  assert.equal(request.wear_offset, 0.00001);
+  assert.equal(Object.prototype.hasOwnProperty.call(request, "wear_offset_pct"), false);
 }
 
 async function test_batch_request_quantizes_legacy_preset_target_wear() {
@@ -391,7 +439,7 @@ async function test_batch_request_quantizes_legacy_preset_target_wear() {
       batchCraftApproachMode: true,
       batchCraftUseComponentItems: false,
       batchCraftIncludeCooling: false,
-      batchCraftWearOffsetPct: 9,
+      batchCraftWearOffset: 0.00009,
       batchCraftFastMode: false
     },
     getCraftRowsForAccount: () => [{asset_id: "seed-1"}],
@@ -414,7 +462,8 @@ async function test_batch_request_quantizes_legacy_preset_target_wear() {
   assert.equal(request.target_wear, Math.fround(0.214285));
   assert.equal(Math.fround(request.target_wear), request.target_wear);
   assert.equal(request.wear_approach_mode, "infinite");
-  assert.equal(request.wear_offset_pct, 9);
+  assert.equal(request.wear_offset, 0.00009);
+  assert.equal(Object.prototype.hasOwnProperty.call(request, "wear_offset_pct"), false);
 }
 
 async function main() {
@@ -429,6 +478,7 @@ async function main() {
   test_draft_snapshot_and_restore_preserve_target_wear_raw();
   test_load_legacy_preset_into_draft_rejects_unparsable_raw();
   await test_apply_preset_auto_select_passes_float32_target_wear_without_frontend_below_step();
+  await test_auto_select_request_sends_fixed_default_wear_offset();
   await test_auto_select_request_quantizes_legacy_preset_target_wear();
   await test_batch_request_quantizes_legacy_preset_target_wear();
   console.log("craft-assist-target-wear-step tests passed");

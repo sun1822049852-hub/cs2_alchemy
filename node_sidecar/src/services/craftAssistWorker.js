@@ -46,6 +46,7 @@ parentPort.on("message", async (message) => {
       materials: payload.materials,
       blockedIds: payload.blockedIds,
       includeCooling,
+      wearOffset: payload.wearOffset,
       wearOffsetPct: payload.wearOffsetPct,
       enableFastCraftAssist: payload.enableFastCraftAssist,
       rows,
