@@ -1938,7 +1938,7 @@ function loadCraftUiPrefs() {
       // 兼容旧默认值 320：迁移为自动高度（贴近底部），减少中间空白。
       state.craftAssistOverlayHeight = savedOverlayHeight === 320 ? 0 : savedOverlayHeight;
     }
-    if (Number.isFinite(Number(prefs.craft_assist_preset_width))) state.craftAssistPresetWidth = Number(prefs.craft_assist_preset_width);
+    if (Number.isFinite(Number(prefs.craft_assist_preset_width))) state.craftAssistPresetWidth = CRAFT_ASSIST_PRESET_MIN_WIDTH;
   } catch (_) {
     // ignore storage errors
   }
