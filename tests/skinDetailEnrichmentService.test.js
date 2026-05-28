@@ -482,6 +482,127 @@ async function test_enrichment_fills_wear_range_per_family_once() {
   assert.equal(rows[1].wear_range, 1);
 }
 
+async function test_enrichment_passes_representative_c5id_to_wear_provider_context() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "M4A1-S | Printstream (Field-Tested)",
+      basemarkethashname: "M4A1-S | Printstream",
+      collection: "Operation Broken Fang Case",
+      rarity: "隐秘",
+      wearlevel: "Field-Tested",
+      buffid: "8101",
+      c5id: "",
+      detail_status: "ok",
+      detail_source: "buff"
+    },
+    {
+      markethashname: "M4A1-S | Printstream (Minimal Wear)",
+      basemarkethashname: "M4A1-S | Printstream",
+      collection: "Operation Broken Fang Case",
+      rarity: "隐秘",
+      wearlevel: "Minimal Wear",
+      buffid: "8102",
+      c5id: "c5-8102",
+      detail_status: "ok",
+      detail_source: "buff"
+    }
+  ]);
+  db.close();
+
+  const wearCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchWearRangeByGoodsId(goodsId, options = {}) {
+        wearCalls.push({
+          goodsId: String(goodsId),
+          familyKey: String(options.familyKey || ""),
+          basename: String(options.basename || ""),
+          c5id: String(options.c5id || ""),
+          representativeC5Id: String(options.representativeC5Id || ""),
+          rowC5Ids: Array.isArray(options.rows)
+            ? options.rows.map((row) => String(row.c5id || ""))
+            : []
+        });
+        return {
+          minfloat: 0.01,
+          maxfloat: 0.7,
+          wear_range: 0.69
+        };
+      }
+    }
+  });
+
+  const result = await service.enrichMissingDetails();
+
+  assert.deepEqual(wearCalls, [{
+    goodsId: "8101",
+    familyKey: buildSkinFamilyKey("M4A1-S | Printstream"),
+    basename: "M4A1-S | Printstream",
+    c5id: "c5-8102",
+    representativeC5Id: "c5-8102",
+    rowC5Ids: ["", "c5-8102"]
+  }]);
+  assert.equal(result.wear_rows_ok, 2);
+  assert.equal(result.wear_rows_failed, 0);
+}
+
+async function test_enrichment_uses_c5_wear_provider_even_when_buff_id_is_missing() {
+  const {dbPath, db} = createTempSkinDb();
+  insertSkinRows(db, [
+    {
+      markethashname: "P250 | X-Ray (Factory New)",
+      name: "P250 | X 射线 (崭新出厂)",
+      basemarkethashname: "P250 | X-Ray",
+      basename: "P250 | X 射线",
+      collection: "X-Ray Collection",
+      rarity: "保密",
+      wearlevel: "Factory New",
+      buffid: "",
+      c5id: "c5-p250",
+      detail_status: "ok",
+      detail_source: "buff"
+    }
+  ]);
+  db.close();
+
+  const wearCalls = [];
+  const service = createSkinDetailEnrichmentService({
+    dbPath,
+    provider: {
+      async fetchByGoodsId() {
+        throw new Error("should not call family detail provider");
+      },
+      async fetchWearRangeByGoodsId(goodsId, options = {}) {
+        wearCalls.push({
+          goodsId: String(goodsId),
+          c5id: String(options.c5id || ""),
+          basename: String(options.basename || "")
+        });
+        return {
+          minfloat: 0,
+          maxfloat: 0.07,
+          wear_range: 0.07
+        };
+      }
+    }
+  });
+
+  const result = await service.enrichMissingDetails();
+
+  assert.deepEqual(wearCalls, [{
+    goodsId: "",
+    c5id: "c5-p250",
+    basename: "P250 | X 射线"
+  }]);
+  assert.equal(result.wear_rows_ok, 1);
+  assert.equal(result.wear_rows_failed, 0);
+}
+
 async function test_enrichment_images_only_can_resume_from_db_state() {
   const {dbPath, db} = createTempSkinDb();
   insertSkinRows(db, [
@@ -1241,6 +1362,8 @@ async function runTests() {
   await test_enrichment_skips_ok_rows();
   await test_enrichment_fills_images_for_ok_rows_with_missing_image();
   await test_enrichment_fills_wear_range_per_family_once();
+  await test_enrichment_passes_representative_c5id_to_wear_provider_context();
+  await test_enrichment_uses_c5_wear_provider_even_when_buff_id_is_missing();
   await test_enrichment_images_only_can_resume_from_db_state();
   await test_enrichment_recalculates_alchemy_type_for_affected_rows();
   await test_enrichment_throttles_detail_refresh_requests();

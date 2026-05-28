@@ -162,6 +162,199 @@ async function test_syncSkinDb_enriches_missing_wear_range_after_base_commit() {
   assert.equal(row.wear_range, 0.6);
 }
 
+async function test_syncSkinDb_refreshes_existing_wear_range_during_update() {
+  const {dbPath, db} = createTempSkinDb();
+  db.exec(`
+    INSERT INTO skin (
+      markethashname, name, basemarkethashname, basename, collection, rarity,
+      wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, wear_range
+    ) VALUES (
+      'AK-47 | Slate (Field-Tested)',
+      'AK-47 | Slate (Field-Tested)',
+      'AK-47 | Slate',
+      'AK-47 | Slate',
+      'Snakebite Case',
+      '受限',
+      'Field-Tested',
+      0,
+      1,
+      0,
+      'old-buff',
+      'old-c5',
+      1
+    )
+  `);
+  db.close();
+
+  const wearCalls = [];
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "AK-47 | Slate (久经沙场)",
+        marketHashName: "AK-47 | Slate (Field-Tested)",
+        platformList: [
+          {name: "BUFF", itemId: "new-buff"},
+          {name: "C5", itemId: "new-c5"}
+        ]
+      }
+    ],
+    detailProvider: {
+      async fetchByGoodsId() {
+        throw new Error("detail metadata should already be complete");
+      },
+      async fetchWearRangeByGoodsId(goodsId, options = {}) {
+        wearCalls.push({
+          goodsId: String(goodsId),
+          c5id: String(options.c5id || ""),
+          basename: String(options.basename || "")
+        });
+        return {
+          minfloat: 0,
+          maxfloat: 0.7,
+          wear_range: 0.7
+        };
+      }
+    }
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT minfloat, maxfloat, wear_range, buffid, c5id
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AK-47 | Slate (Field-Tested)");
+  verify.close();
+
+  assert.deepEqual(wearCalls, [{
+    goodsId: "new-buff",
+    c5id: "new-c5",
+    basename: "AK-47 | Slate"
+  }]);
+  assert.equal(result.detailStats.wear_rows_ok, 1);
+  assert.equal(row.minfloat, 0);
+  assert.equal(row.maxfloat, 0.7);
+  assert.equal(row.wear_range, 0.7);
+  assert.equal(row.buffid, "new-buff");
+  assert.equal(row.c5id, "new-c5");
+}
+
+async function test_syncSkinDb_preserves_existing_wear_range_when_refresh_provider_fails() {
+  const {dbPath, db} = createTempSkinDb();
+  db.exec(`
+    INSERT INTO skin (
+      markethashname, name, basemarkethashname, basename, collection, rarity,
+      wearlevel, minfloat, maxfloat, isstattrak, buffid, c5id, wear_range
+    ) VALUES (
+      'AK-47 | Slate (Field-Tested)',
+      'AK-47 | Slate (Field-Tested)',
+      'AK-47 | Slate',
+      'AK-47 | Slate',
+      'Snakebite Case',
+      '受限',
+      'Field-Tested',
+      0.07,
+      0.8,
+      0,
+      'old-buff',
+      'old-c5',
+      0.73
+    )
+  `);
+  db.close();
+
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "AK-47 | Slate (久经沙场)",
+        marketHashName: "AK-47 | Slate (Field-Tested)",
+        platformList: [
+          {name: "BUFF", itemId: "new-buff"},
+          {name: "C5", itemId: "new-c5"}
+        ]
+      }
+    ],
+    detailProvider: {
+      async fetchByGoodsId() {
+        throw new Error("detail metadata should already be complete");
+      },
+      async fetchWearRangeByGoodsId() {
+        throw new Error("wear provider down");
+      }
+    }
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT minfloat, maxfloat, wear_range, buffid, c5id
+    FROM skin
+    WHERE markethashname = ?
+  `).get("AK-47 | Slate (Field-Tested)");
+  verify.close();
+
+  assert.equal(result.detailStats.wear_rows_failed, 1);
+  assert.equal(row.minfloat, 0.07);
+  assert.equal(row.maxfloat, 0.8);
+  assert.equal(row.wear_range, 0.73);
+  assert.equal(row.buffid, "new-buff");
+  assert.equal(row.c5id, "new-c5");
+}
+
+async function test_syncSkinDb_refreshes_wear_range_when_platform_list_only_has_c5() {
+  const {dbPath, db} = createTempSkinDb();
+  db.close();
+
+  const wearCalls = [];
+  const result = await syncSkinDb({
+    dbPath,
+    items: [
+      {
+        name: "XM1014 | 跑跑跑 (略有磨损)",
+        marketHashName: "XM1014 | Run Run Run (Minimal Wear)",
+        platformList: [{name: "C5", itemId: "c5-only"}]
+      }
+    ],
+    detailProvider: {
+      async fetchByGoodsId() {
+        throw new Error("detail metadata should not be called without BUFF id");
+      },
+      async fetchWearRangeByGoodsId(goodsId, options = {}) {
+        wearCalls.push({
+          goodsId: String(goodsId),
+          c5id: String(options.c5id || ""),
+          basename: String(options.basename || "")
+        });
+        return {
+          minfloat: 0.07,
+          maxfloat: 0.15,
+          wear_range: 0.08
+        };
+      }
+    }
+  });
+
+  const verify = new DatabaseSync(dbPath, {open: true, readOnly: true});
+  const row = verify.prepare(`
+    SELECT minfloat, maxfloat, wear_range, buffid, c5id
+    FROM skin
+    WHERE markethashname = ?
+  `).get("XM1014 | Run Run Run (Minimal Wear)");
+  verify.close();
+
+  assert.deepEqual(wearCalls, [{
+    goodsId: "",
+    c5id: "c5-only",
+    basename: "XM1014 | 跑跑跑"
+  }]);
+  assert.equal(result.detailStats.wear_rows_ok, 1);
+  assert.equal(row.minfloat, 0.07);
+  assert.equal(row.maxfloat, 0.15);
+  assert.equal(row.wear_range, 0.08);
+  assert.equal(row.buffid, "");
+  assert.equal(row.c5id, "c5-only");
+}
+
 async function test_syncSkinDb_enriches_images_for_inventory_display_only_rows() {
   const {dbPath, db} = createTempSkinDb();
   db.close();
@@ -579,6 +772,9 @@ async function runTests() {
   await test_syncSkinDb_enriches_pending_rows_after_base_commit();
   await test_syncSkinDb_keeps_base_rows_when_enrichment_fails();
   await test_syncSkinDb_enriches_missing_wear_range_after_base_commit();
+  await test_syncSkinDb_refreshes_existing_wear_range_during_update();
+  await test_syncSkinDb_preserves_existing_wear_range_when_refresh_provider_fails();
+  await test_syncSkinDb_refreshes_wear_range_when_platform_list_only_has_c5();
   await test_syncSkinDb_enriches_images_for_inventory_display_only_rows();
   await test_syncSkinDb_handles_large_import_without_sql_variable_overflow();
   await test_syncSkinDb_creates_skin_table_for_empty_db_path();

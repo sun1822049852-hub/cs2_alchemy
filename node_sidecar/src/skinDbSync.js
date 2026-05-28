@@ -779,7 +779,7 @@ async function syncSkinDb({
       imageDelayRelaxAfterSuccesses: 5
     });
     try {
-      detailStats = await service.enrichMissingDetails();
+      detailStats = await service.enrichMissingDetails({refreshWearRanges: true});
     } catch (error) {
       const verifyDb = new DatabaseSync(dbPath, {open: true, readOnly: true});
       try {

@@ -507,8 +507,9 @@ function createSkinDetailEnrichmentService({
 
   function loadPendingWearFamilies(db, options = {}) {
     const inventoryFilter = buildInventoryDisplayOnlyFilterClause(db);
+    const refreshWearRanges = Boolean(options.refreshWearRanges);
     const rows = db.prepare(`
-      SELECT id, markethashname, basemarkethashname, buffid, minfloat, maxfloat, wear_range
+      SELECT id, markethashname, basemarkethashname, basename, name, buffid, c5id, wearlevel, minfloat, maxfloat, wear_range
       FROM skin
       WHERE TRIM(COALESCE(markethashname, '')) <> ''
         ${inventoryFilter}
@@ -533,7 +534,7 @@ function createSkinDetailEnrichmentService({
       });
       const pendingRows = members.filter((row) => {
         const wearInfo = normalizeWearInfo(row);
-        return !hasCompleteWearInfo(wearInfo);
+        return refreshWearRanges || !hasCompleteWearInfo(wearInfo);
       });
       return {
         familyKey,
@@ -541,6 +542,12 @@ function createSkinDetailEnrichmentService({
         pendingRows,
         representativeGoodsId: asString(
           (members.find((row) => asString(row && row.buffid).trim()) || {}).buffid
+        ).trim(),
+        representativeBaseName: asString(
+          (members.find((row) => asString(row && row.basename).trim()) || {}).basename
+        ).trim(),
+        representativeC5Id: asString(
+          (members.find((row) => asString(row && row.c5id).trim()) || {}).c5id
         ).trim(),
         wearInfo: hasCompleteWearInfo(mergedWearInfo) ? mergedWearInfo : null
       };
@@ -614,9 +621,9 @@ function createSkinDetailEnrichmentService({
     await mapWithConcurrency(wearFamilies, concurrency, async (family) => {
       const workerDb = new DatabaseSync(dbPath);
       try {
-        let wearInfo = hasCompleteWearInfo(family.wearInfo) ? family.wearInfo : null;
+        let wearInfo = !options.refreshWearRanges && hasCompleteWearInfo(family.wearInfo) ? family.wearInfo : null;
         if (!wearInfo) {
-          if (!family.representativeGoodsId) {
+          if (!family.representativeGoodsId && !family.representativeC5Id) {
             summary.wear_rows_failed += family.pendingRows.length;
             log(
               logger,
@@ -626,7 +633,11 @@ function createSkinDetailEnrichmentService({
             return;
           }
           wearInfo = await provider.fetchWearRangeByGoodsId(family.representativeGoodsId, {
-            familyKey: family.familyKey
+            familyKey: family.familyKey,
+            basename: family.representativeBaseName,
+            c5id: family.representativeC5Id,
+            representativeC5Id: family.representativeC5Id,
+            rows: family.rows
           });
         }
         summary.wear_rows_ok += markFamilyWearOk(workerDb, family, wearInfo);
@@ -777,7 +788,7 @@ function createSkinDetailEnrichmentService({
     return summary;
   }
 
-  async function enrichMissingDetails() {
+  async function enrichMissingDetails(options = {}) {
     const summary = createSummary();
     const families = [];
     const affectedCollections = new Set();
@@ -851,7 +862,7 @@ function createSkinDetailEnrichmentService({
       db.close();
     }
 
-    await enrichPendingWear(summary);
+    await enrichPendingWear(summary, options);
     await enrichPendingImages(summary);
 
     return summary;
