@@ -120,11 +120,11 @@ function getTradeupSimulationService(service, catalog) {
   return defaultTradeupSimulationService;
 }
 
-function getAuthStore(deps = {}) {
+function getAuthStore(deps = {}, options = {}) {
   if (typeof deps.authStoreFactory === "function") {
-    return deps.authStoreFactory();
+    return deps.authStoreFactory(options);
   }
-  return new AppAuthStore();
+  return new AppAuthStore(options);
 }
 
 function getUiStateStore(deps = {}, viewerUsername = "") {
@@ -167,47 +167,94 @@ async function resolveWebSessionForAccount(account) {
 
   // 优先 maFile
   if (account.mafile_content) {
-    const maData = parseMaFile(account.mafile_content);
+    let maData = null;
+    try {
+      maData = parseMaFile(account.mafile_content);
+    } catch (err) {
+      logMaFileParseFallback(username, err);
+      return refreshWebSessionFromTokenStore(account, {
+        username,
+        maData: null,
+        hasMaFile: false
+      });
+    }
     try {
       const webSession = await refreshWebCookie(maData);
       return {webSession, hasMaFile: true, maData};
     } catch (err) {
-      let tokenStore = null;
-      try {
-        tokenStore = new TokenStore();
-        const refreshToken = tokenStore.get(username);
-        let steamId64 = asString(maData.steamId64 || account.steam_id64 || account.steam_id).trim();
-        if (!refreshToken || !steamId64) {
-          throw err;
-        }
-        const webSession = await refreshWebCookieFromToken(refreshToken, steamId64);
-        return {webSession, hasMaFile: true, maData};
-      } finally {
-        if (tokenStore && typeof tokenStore.close === "function") {
-          tokenStore.close();
-        }
-      }
+      return refreshWebSessionFromTokenStore(account, {
+        username,
+        maData,
+        hasMaFile: true,
+        fallbackError: err
+      });
     }
   }
 
   // fallback: TokenStore refresh_token
+  return refreshWebSessionFromTokenStore(account, {
+    username,
+    maData: null,
+    hasMaFile: false
+  });
+}
+
+function maFileParseFailureReason(err) {
+  const message = asString(err && err.message ? err.message : err).trim();
+  if (/shared_secret/i.test(message)) {
+    return "missing_shared_secret";
+  }
+  if (/json|parse|unexpected/i.test(message)) {
+    return "invalid_json";
+  }
+  return "invalid_mafile";
+}
+
+function logMaFileParseFallback(username, err) {
+  logger.warn(
+    "web_session",
+    `mafile parse skipped: account=${sanitizeLogValue(username) || "-"} reason=${maFileParseFailureReason(err)}`
+  );
+}
+
+async function refreshWebSessionFromTokenStore(account, {
+  username,
+  maData = null,
+  hasMaFile = false,
+  fallbackError = null
+} = {}) {
   const tokenStore = new TokenStore();
-  const refreshToken = tokenStore.get(username);
-  if (!refreshToken) {
-    throw new Error(`账号 ${username} 既无 maFile 也无 refresh_token，无法获取 Web Session`);
-  }
+  try {
+    const refreshToken = tokenStore.get(username);
+    if (!refreshToken) {
+      if (fallbackError) {
+        throw fallbackError;
+      }
+      throw new Error(`账号 ${username} 既无 maFile 也无 refresh_token，无法获取 Web Session`);
+    }
 
-  // 需要 steamId64 — 从 account 的 steam_id64 或 steam_id 字段取
-  let steamId64 = asString(account.steam_id64 || "").trim();
-  if (!steamId64) {
-    steamId64 = asString(account.steam_id || "").trim();
-  }
-  if (!steamId64) {
-    throw new Error(`账号 ${username} 缺少 steamId64，无法组装 Web Cookie（请先通过连接刷新获取）`);
-  }
+    // 需要 steamId64 — 从 maFile 或 account 的 steam_id64 / steam_id 字段取
+    let steamId64 = asString(maData && maData.steamId64 ? maData.steamId64 : "").trim();
+    if (!steamId64) {
+      steamId64 = asString(account.steam_id64 || "").trim();
+    }
+    if (!steamId64) {
+      steamId64 = asString(account.steam_id || "").trim();
+    }
+    if (!steamId64) {
+      if (fallbackError) {
+        throw fallbackError;
+      }
+      throw new Error(`账号 ${username} 缺少 steamId64，无法组装 Web Cookie（请先通过连接刷新获取）`);
+    }
 
-  const webSession = await refreshWebCookieFromToken(refreshToken, steamId64);
-  return {webSession, hasMaFile: false, maData: null};
+    const webSession = await refreshWebCookieFromToken(refreshToken, steamId64);
+    return {webSession, hasMaFile: Boolean(hasMaFile), maData: maData || null};
+  } finally {
+    if (tokenStore && typeof tokenStore.close === "function") {
+      tokenStore.close();
+    }
+  }
 }
 
 function sanitizeLogValue(value) {
@@ -584,22 +631,41 @@ function isPublicApiRoute(pathname) {
 function resolveRequestAuth(req, deps = {}) {
   const runtime = getLicenseRuntime(deps);
   const state = runtime && typeof runtime.getState === "function" ? runtime.getState() : null;
+  const fallbackStore = {
+    dbPath: PATHS.SKIN_DB_FILE,
+    accountsFilePath: PATHS.ACCOUNTS_FILE,
+    canAccessSteamAccount() {
+      return true;
+    },
+    close() {}
+  };
+  let store = null;
+  try {
+    store = getAuthStore(deps, {readOnly: true, initialize: false});
+  } catch (_) {
+    store = null;
+  }
+  const stateUsername = state && state.ok && state.user
+    ? asString(state.user.username).trim()
+    : "";
+  let localUser = null;
+  if (store && stateUsername && typeof store.getUserByUsername === "function") {
+    try {
+      localUser = store.getUserByUsername(stateUsername);
+    } catch (_) {
+      localUser = null;
+    }
+  }
+  const accountViewerUsername = localUser ? asString(localUser.username).trim() : "";
   const user = state && state.ok && state.user
     ? {
-        username: asString(state.user.username).trim(),
-        display_name: asString(state.user.username).trim(),
-        is_super_admin: false
+        username: stateUsername,
+        display_name: asString(localUser && localUser.display_name ? localUser.display_name : state.user.username).trim(),
+        is_super_admin: !!(localUser && localUser.is_super_admin)
       }
     : null;
   return {
-    store: {
-      dbPath: PATHS.SKIN_DB_FILE,
-      accountsFilePath: PATHS.ACCOUNTS_FILE,
-      canAccessSteamAccount() {
-        return true;
-      },
-      close() {}
-    },
+    store: store || fallbackStore,
     token: "",
     session: null,
     licenseState: state,
@@ -607,7 +673,7 @@ function resolveRequestAuth(req, deps = {}) {
     user,
     permissions: Array.isArray(state && state.permissions) ? state.permissions : [],
     membership: state && state.user && state.user.membership_plan ? [state.user.membership_plan] : [],
-    accountViewerUsername: ""
+    accountViewerUsername
   };
 }
 
@@ -787,11 +853,54 @@ function requireSteamAccountAccess(res, auth, username) {
     writeJson(res, 400, {ok: false, message: "username is required"});
     return false;
   }
-  if (auth && auth.store && auth.store.canAccessSteamAccount(auth.user && auth.user.username, key)) {
+  if (canAccessSteamAccount(auth, key)) {
     return true;
   }
   writeJson(res, 403, {ok: false, reason: "account_scope_denied", message: "当前登录用户无权访问该 Steam 账号"});
   return false;
+}
+
+function canAccessSteamAccount(auth, username) {
+  const key = asString(username).trim();
+  if (!key) {
+    return false;
+  }
+  return !!(auth && auth.store && auth.store.canAccessSteamAccount(resolveAccountViewerUsername(auth), key));
+}
+
+function filterComponentTaskSnapshotForAuth(snapshot, auth) {
+  const value = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const canViewJob = (job) => {
+    const username = asString(job && job.username).trim();
+    return !username || canAccessSteamAccount(auth, username);
+  };
+  const queued = (Array.isArray(value.queued) ? value.queued : [])
+    .filter(canViewJob)
+    .map((job, index) => ({
+      ...job,
+      queue_position: index + 1
+    }));
+  const running = value.running && canViewJob(value.running) ? value.running : null;
+  return {
+    ...value,
+    running,
+    queued,
+    queued_count: queued.length,
+    total_queued: queued.length
+  };
+}
+
+function findComponentTaskJob(jobId) {
+  const key = asString(jobId).trim();
+  if (!key) {
+    return null;
+  }
+  const snapshot = componentTaskQueue.getSnapshot("");
+  const candidates = [
+    snapshot && snapshot.running,
+    ...(Array.isArray(snapshot && snapshot.queued) ? snapshot.queued : [])
+  ].filter(Boolean);
+  return candidates.find((job) => asString(job && job.job_id).trim() === key) || null;
 }
 
 function parseLooseBoolean(value) {
@@ -3123,10 +3232,20 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/component/deposit" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const componentId = asString(body.component_id).trim();
-    if (!username || !refreshRuntime.isConnected(username)) {
+    if (!username) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    if (!refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
     }
@@ -3155,10 +3274,20 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/component/deposit-candidates" && req.method === "GET") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const username = asString(urlObj.searchParams.get("username") || "").trim();
     const componentId = asString(urlObj.searchParams.get("component_id") || "").trim();
     const includeExcluded = asString(urlObj.searchParams.get("include_excluded") || "").trim() === "1";
-    if (!username || !refreshRuntime.isConnected(username)) {
+    if (!username) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    if (!refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
     }
@@ -3179,10 +3308,20 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/component/withdraw" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const componentId = asString(body.component_id).trim();
-    if (!username || !refreshRuntime.isConnected(username)) {
+    if (!username) {
+      writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
+      return true;
+    }
+    if (!requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    if (!refreshRuntime.isConnected(username)) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
     }
@@ -3654,17 +3793,31 @@ async function handleApi(req, res, urlObj, deps = {}) {
   }
 
   if (pathname === "/api/component/tasks" && req.method === "GET") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const username = asString(urlObj.searchParams.get("username") || "").trim();
+    if (username && !requireSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const snapshot = componentTaskQueue.getSnapshot(username);
     writeJson(res, 200, {
       ok: true,
-      ...componentTaskQueue.getSnapshot(username)
+      ...(username ? snapshot : filterComponentTaskSnapshotForAuth(snapshot, auth))
     });
     return true;
   }
 
   if (pathname === "/api/component/tasks/cancel" && req.method === "POST") {
+    if (!requirePermission(res, auth, "inventory.refresh")) {
+      return true;
+    }
     const body = await readJsonBody(req);
     const jobId = asString(body.job_id).trim();
+    const job = findComponentTaskJob(jobId);
+    if (job && !requireSteamAccountAccess(res, auth, job.username)) {
+      return true;
+    }
     const result = componentTaskQueue.cancel(jobId);
     if (!result.ok) {
       const status = result.code === "running" ? 409 : (result.code === "invalid_job_id" ? 400 : 404);
@@ -3815,7 +3968,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         .map((x) => asString(x.username).trim())
         .filter(Boolean);
     }
-    usernames = usernames.filter((username) => auth.store.canAccessSteamAccount(viewerUsername, username));
+    usernames = usernames.filter((username) => canAccessSteamAccount(auth, username));
     usernames = [...new Set(usernames)];
     if (!usernames.length) {
       writeJson(res, 200, {ok: true, snapshots: []});

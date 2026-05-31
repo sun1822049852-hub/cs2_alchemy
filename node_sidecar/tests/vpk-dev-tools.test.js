@@ -121,11 +121,27 @@ function test_run_vpk_dev_command_lists_matches_to_stdout() {
   assert.equal(stderr.read(), "");
 }
 
+function test_run_vpk_dev_command_prints_help_for_subcommand_help_flag() {
+  const stdout = createWritableCollector();
+  const stderr = createWritableCollector();
+
+  const exitCode = runVpkDevCommand(["list", "--help"], {
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    VPKClass: FakeVPK
+  });
+
+  assert.equal(exitCode, 0);
+  assert.match(stdout.read(), /Usage:/);
+  assert.equal(stderr.read(), "");
+}
+
 function main() {
   test_list_vpk_entries_filters_and_limits_matches();
   test_read_vpk_entry_supports_text_and_hex();
   test_extract_vpk_entry_writes_file_and_returns_metadata();
   test_run_vpk_dev_command_lists_matches_to_stdout();
+  test_run_vpk_dev_command_prints_help_for_subcommand_help_flag();
   console.log("vpk-dev-tools tests passed");
 }
 

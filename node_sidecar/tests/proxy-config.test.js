@@ -43,6 +43,10 @@ function withProxyEnv(envValues, fn) {
   }
 }
 
+function createWindowsProxyResolver(proxyUrl) {
+  return () => proxyUrl;
+}
+
 function loadProxyConfigFresh() {
   const modulePath = path.resolve(__dirname, "../src/proxyConfig.js");
   delete require.cache[modulePath];
@@ -123,10 +127,98 @@ function test_unconfigured_proxy_keeps_direct_connection() {
     const proxyConfig = loadProxyConfigFresh();
 
     withProxyEnv({}, () => {
-      assert.equal(proxyConfig.getProxyUrl({configPath}), "");
-      assert.equal(proxyConfig.createProxyAgent({configPath}), null);
-      assert.deepEqual(proxyConfig.getSteamSessionProxyOptions({configPath}), {});
-      assert.equal(proxyConfig.proxyHint({configPath}), " (proxy not configured)");
+      const options = {configPath, windowsProxyResolver: createWindowsProxyResolver("")};
+      assert.equal(proxyConfig.getProxyUrl(options), "");
+      assert.equal(proxyConfig.createProxyAgent(options), null);
+      assert.deepEqual(proxyConfig.getSteamSessionProxyOptions(options), {});
+      assert.equal(proxyConfig.proxyHint(options), " (proxy not configured)");
+    });
+  } finally {
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
+function test_windows_system_proxy_is_used_after_explicit_sources() {
+  const tempDir = makeTempDir();
+  try {
+    const configPath = path.join(tempDir, "config.py");
+    const proxyConfig = loadProxyConfigFresh();
+
+    withProxyEnv({}, () => {
+      assert.equal(
+        proxyConfig.getProxyUrl({
+          configPath,
+          windowsProxyResolver: createWindowsProxyResolver("http://127.0.0.1:15732")
+        }),
+        "http://127.0.0.1:15732"
+      );
+      assert.deepEqual(
+        proxyConfig.getSteamSessionProxyOptions({
+          configPath,
+          windowsProxyResolver: createWindowsProxyResolver("http://127.0.0.1:15732")
+        }),
+        {httpProxy: "http://127.0.0.1:15732"}
+      );
+    });
+  } finally {
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
+function test_env_proxy_takes_priority_over_windows_system_proxy() {
+  const tempDir = makeTempDir();
+  try {
+    const configPath = path.join(tempDir, "config.py");
+    const proxyConfig = loadProxyConfigFresh();
+
+    withProxyEnv({HTTPS_PROXY: "http://env.example:8080"}, () => {
+      assert.equal(
+        proxyConfig.getProxyUrl({
+          configPath,
+          windowsProxyResolver: createWindowsProxyResolver("http://127.0.0.1:15732")
+        }),
+        "http://env.example:8080"
+      );
+    });
+  } finally {
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
+function test_proxy_hint_redacts_credentials() {
+  const tempDir = makeTempDir();
+  try {
+    const configPath = path.join(tempDir, "config.py");
+    const proxyConfig = loadProxyConfigFresh();
+
+    withProxyEnv({}, () => {
+      assert.equal(
+        proxyConfig.proxyHint({
+          configPath,
+          windowsProxyResolver: createWindowsProxyResolver("http://user:secret@127.0.0.1:15732")
+        }),
+        " (proxy=http://***:***@127.0.0.1:15732)"
+      );
+    });
+  } finally {
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
+function test_steamcommunity_options_use_windows_system_proxy_fallback() {
+  const tempDir = makeTempDir();
+  try {
+    const configPath = path.join(tempDir, "config.py");
+    const proxyConfig = loadProxyConfigFresh();
+
+    withProxyEnv({}, () => {
+      assert.equal(
+        proxyConfig.getSteamCommunityOptions({
+          configPath,
+          windowsProxyResolver: createWindowsProxyResolver("http://provided.example:8888")
+        }).requestProxy,
+        "http://provided.example:8888"
+      );
     });
   } finally {
     fs.rmSync(tempDir, {recursive: true, force: true});
@@ -160,6 +252,10 @@ function main() {
   test_use_proxy_false_falls_back_to_env_priority_order();
   test_malformed_config_does_not_crash_and_falls_back_to_env();
   test_unconfigured_proxy_keeps_direct_connection();
+  test_windows_system_proxy_is_used_after_explicit_sources();
+  test_env_proxy_takes_priority_over_windows_system_proxy();
+  test_proxy_hint_redacts_credentials();
+  test_steamcommunity_options_use_windows_system_proxy_fallback();
   test_bad_proxy_url_fails_closed();
   test_unsupported_proxy_scheme_fails_closed();
   console.log("proxy-config tests passed");

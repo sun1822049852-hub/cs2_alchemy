@@ -13,14 +13,17 @@
     "ui": "node src/uiServer.js",
     "ui:cli": "node src/main_ui.js",
     "ui:desktop": "electron electron-main.js",
+    "test": "node scripts/runNodeTests.js",
+    "test:list": "node scripts/runNodeTests.js --list",
+    "test:browser": "node scripts/runNodeTests.js --include-browser",
     "vpk:list": "node src/vpkDevCli.js list",
     "vpk:cat": "node src/vpkDevCli.js cat",
     "vpk:extract": "node src/vpkDevCli.js extract",
-    "pack:win": "electron-builder --dir --win",
-    "build:win": "electron-builder --win nsis"
+    "packaging:preflight": "node scripts/checkPackagingResources.js",
+    "pack:win": "npm run packaging:preflight && electron-builder --dir --win",
+    "build:win": "npm run packaging:preflight && electron-builder --win nsis"
   },
   "dependencies": {
-    "@lowly1337/vpk": "^0.2.6",
     "globaloffensive": "^3.2.0",
     "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
@@ -32,6 +35,7 @@
     "steamcommunity": "^3.50.0"
   },
   "devDependencies": {
+    "@lowly1337/vpk": "^0.2.6",
     "electron": "^37.2.0",
     "electron-builder": "^26.0.0"
   }

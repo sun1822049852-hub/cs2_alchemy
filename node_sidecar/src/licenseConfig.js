@@ -1,6 +1,7 @@
 const path = require("path");
 const {PATHS} = require("./constants");
 const {readJson} = require("./jsonStore");
+const {assertSecureControlPlaneBaseUrl} = require("./controlPlaneUrlPolicy");
 
 function resolveNumber(value, fallback) {
   const number = Number(value);
@@ -83,11 +84,14 @@ function getLicenseConfig(overrides = {}) {
     || path.join(PATHS.ROOT_DIR, "tmp", "client_license_private.pem");
   const machineIdFile = value.machineIdFile || process.env.CLIENT_MACHINE_ID_FILE || PATHS.MACHINE_ID_FILE;
   const licenseStateFile = value.licenseStateFile || process.env.CLIENT_LICENSE_STATE_FILE || PATHS.LICENSE_STATE_FILE;
+  const normalizedControlPlaneBaseUrl = authMode === "prod_login"
+    ? assertSecureControlPlaneBaseUrl(controlPlaneBaseUrl)
+    : String(controlPlaneBaseUrl || "").trim();
   return {
     authMode,
     allowManualImport: authMode === "debug_bundle",
     requireRemoteCraftPermit,
-    controlPlaneBaseUrl: String(controlPlaneBaseUrl || "").trim(),
+    controlPlaneBaseUrl: normalizedControlPlaneBaseUrl,
     publicKeyFile: path.resolve(publicKeyFile),
     devLicensePrivateKeyFile: path.resolve(devLicensePrivateKeyFile),
     machineIdFile: path.resolve(machineIdFile),

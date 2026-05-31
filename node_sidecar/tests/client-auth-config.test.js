@@ -4,6 +4,8 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const {getLicenseConfig} = require("../src/licenseConfig");
 
+const RELEASE_CLIENT_CONFIG_PATH = path.resolve(__dirname, "../build/client_config.release.json");
+
 function withEnv(overrides, run) {
   const previous = {};
   for (const key of Object.keys(overrides)) {
@@ -83,6 +85,70 @@ function test_uses_runtime_default_control_plane_base_url_when_env_missing() {
   });
 }
 
+function test_prod_login_allows_https_control_plane_base_url() {
+  withMissingClientConfig(() => {
+    withEnv({
+      CLIENT_AUTH_MODE: null,
+      CONTROL_PLANE_BASE_URL: null
+    }, () => {
+      const config = getLicenseConfig({
+        defaultAuthMode: "prod_login",
+        defaultControlPlaneBaseUrl: "https://auth.example.com"
+      });
+      assert.equal(config.controlPlaneBaseUrl, "https://auth.example.com");
+    });
+  });
+}
+
+function test_prod_login_allows_loopback_http_control_plane_base_url() {
+  withMissingClientConfig(() => {
+    withEnv({
+      CLIENT_AUTH_MODE: null,
+      CONTROL_PLANE_BASE_URL: null
+    }, () => {
+      const config = getLicenseConfig({
+        defaultAuthMode: "prod_login",
+        defaultControlPlaneBaseUrl: "http://127.0.0.1:8787"
+      });
+      assert.equal(config.controlPlaneBaseUrl, "http://127.0.0.1:8787");
+    });
+  });
+}
+
+function test_prod_login_rejects_public_http_control_plane_base_url() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "client-auth-config-public-http-"));
+  try {
+    const configFile = path.join(tempDir, "client_config.json");
+    fs.writeFileSync(configFile, JSON.stringify({
+      control_plane_base_url: "http://8.138.39.139"
+    }, null, 2), "utf8");
+    withEnv({
+      CLIENT_AUTH_MODE: "prod_login",
+      CONTROL_PLANE_BASE_URL: null,
+      CLIENT_CONFIG_FILE: configFile
+    }, () => {
+      assert.throws(
+        () => getLicenseConfig(),
+        (err) => err && err.code === "insecure_control_plane_base_url"
+      );
+    });
+  } finally {
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
+function test_release_client_config_uses_https_control_plane_base_url() {
+  withEnv({
+    CLIENT_AUTH_MODE: "prod_login",
+    CONTROL_PLANE_BASE_URL: null,
+    CLIENT_CONFIG_FILE: RELEASE_CLIENT_CONFIG_PATH
+  }, () => {
+    const config = getLicenseConfig();
+    const parsed = new URL(config.controlPlaneBaseUrl);
+    assert.equal(parsed.protocol, "https:");
+  });
+}
+
 function test_reads_control_plane_base_url_from_client_config_file() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "client-auth-config-"));
   try {
@@ -134,6 +200,10 @@ function main() {
   test_defaults_to_debug_bundle_mode();
   test_uses_runtime_default_auth_mode_when_env_missing();
   test_uses_runtime_default_control_plane_base_url_when_env_missing();
+  test_prod_login_allows_https_control_plane_base_url();
+  test_prod_login_allows_loopback_http_control_plane_base_url();
+  test_prod_login_rejects_public_http_control_plane_base_url();
+  test_release_client_config_uses_https_control_plane_base_url();
   test_reads_control_plane_base_url_from_client_config_file();
   test_reads_prod_login_mode_from_env();
   test_reads_dev_auto_bundle_mode_from_env();

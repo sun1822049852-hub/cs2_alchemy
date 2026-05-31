@@ -251,6 +251,119 @@ const CRAFT_ASSIST_PRESETS_KEY = "craft_assist_presets_v1";
 const TRADEUP_SIMULATION_PRESETS_KEY = "tradeup_simulation_presets_v1";
 const ERROR_TOAST_DURATION_MS = 2800;
 
+const CLIENT_PERMISSION_LABELS = {
+  "accounts.write": "账号管理",
+  "inventory.refresh": "库存刷新",
+  "craft.use": "炼金",
+  "simulation.use": "汰换模拟"
+};
+
+function clientPermissionLabel(permission) {
+  const key = String(permission || "").trim();
+  return CLIENT_PERMISSION_LABELS[key] || "当前功能";
+}
+
+function clientPermissionList() {
+  const license = state.clientLicense && typeof state.clientLicense === "object" ? state.clientLicense : {};
+  return Array.isArray(license.permissions) ? license.permissions.map((x) => String(x || "").trim()).filter(Boolean) : [];
+}
+
+function hasClientPermission(permission) {
+  const key = String(permission || "").trim();
+  if (!key) return true;
+  const license = state.clientLicense && typeof state.clientLicense === "object" ? state.clientLicense : {};
+  if (!license.authenticated) return false;
+  return clientPermissionList().includes(key);
+}
+
+function clientPermissionState(permission) {
+  const key = String(permission || "").trim();
+  if (!key || hasClientPermission(key)) {
+    return {allowed: true, message: ""};
+  }
+  const license = state.clientLicense && typeof state.clientLicense === "object" ? state.clientLicense : {};
+  const code = String(license.code || "").trim();
+  if (!license.authenticated) {
+    const expired = code === "license_expired" || Number(license.expiresInMs) < 0;
+    return {
+      allowed: false,
+      message: expired
+        ? "当前登录或授权已失效，请重新登录后继续使用。"
+        : "请先完成客户端登录或授权后继续使用。"
+    };
+  }
+  return {
+    allowed: false,
+    message: `当前登录用户无权使用${clientPermissionLabel(key)}。`
+  };
+}
+
+function applyClientPermissionToButton(button, permission, {disabled = false, title = ""} = {}) {
+  if (!button) return false;
+  const result = clientPermissionState(permission);
+  button.disabled = !!disabled || !result.allowed;
+  const nextTitle = result.allowed ? String(title || "").trim() : result.message;
+  if (nextTitle) button.title = nextTitle;
+  else if ("title" in button) button.title = "";
+  return result.allowed;
+}
+
+async function parseRawFetchErrorPayload(response) {
+  const contentType = String(response && response.headers && typeof response.headers.get === "function"
+    ? response.headers.get("content-type")
+    : "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    try {
+      return await response.json();
+    } catch (_) {
+      return {};
+    }
+  }
+  try {
+    const text = typeof response.text === "function" ? await response.text() : "";
+    return text ? {message: text} : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function isExpectedRawFetchContentType(response, expectedContentTypes) {
+  const expected = Array.isArray(expectedContentTypes)
+    ? expectedContentTypes.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+  if (!expected.length) return true;
+  const contentType = String(response && response.headers && typeof response.headers.get === "function"
+    ? response.headers.get("content-type")
+    : "").toLowerCase();
+  return expected.some((type) => contentType.includes(type));
+}
+
+async function fetchAuthAwareRaw(path, options = {}, {operation = "请求", expectedContentTypes = []} = {}) {
+  const response = await fetch(path, options);
+  if (!response.ok) {
+    const data = await parseRawFetchErrorPayload(response);
+    const message = String(data && data.message || "").trim()
+      || (Number(response.status) === 403 ? "当前登录用户无权执行该操作" : `${operation}失败：HTTP ${response.status}`);
+    const err = new Error(message);
+    err.status = response.status;
+    err.data = data;
+    if (
+      Number(response.status) === 401 &&
+      typeof window !== "undefined" &&
+      typeof window.__cs2AlchemyHandleApiLicenseFailure === "function"
+    ) {
+      window.__cs2AlchemyHandleApiLicenseFailure(err);
+    }
+    throw err;
+  }
+  if (!isExpectedRawFetchContentType(response, expectedContentTypes)) {
+    const err = new Error(`${operation}返回格式不正确，请重新登录或稍后再试。`);
+    err.status = response.status;
+    throw err;
+  }
+  return response;
+}
+
 async function api(path, options = {}) {
   const requestOptions = options && typeof options === "object" ? {...options} : {};
   const timeoutMs = Math.max(0, Number(requestOptions.timeoutMs) || 0);
@@ -2835,7 +2948,10 @@ function clearAccountInputs({focusUsername = false} = {}) {
 function syncAccountLoginActionState() {
   const busy = !!state.accountLoginBusy;
   const refreshing = !!state.refreshing;
-  if (ui.loginSaveBtn) ui.loginSaveBtn.disabled = busy || refreshing;
+  applyClientPermissionToButton(ui.loginSaveBtn, "accounts.write", {
+    disabled: busy || refreshing,
+    title: busy ? "处理中，请稍候" : ""
+  });
   if (ui.clearAccountBtn) ui.clearAccountBtn.disabled = busy;
   if (ui.accountLoginModalClose) ui.accountLoginModalClose.disabled = busy;
   if (ui.accountPasswordToggle) ui.accountPasswordToggle.disabled = busy;
@@ -3025,11 +3141,11 @@ function syncInventoryAccountSelect() {
       selectEl.value = "";
       selectEl.disabled = true;
     }
-    ui.refreshBtn.disabled = false;
-    if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = false;
+    applyClientPermissionToButton(ui.refreshBtn, "inventory.refresh");
+    applyClientPermissionToButton(ui.craftRefreshBtn, "inventory.refresh");
     if (ui.disconnectBtn) ui.disconnectBtn.disabled = false;
     if (ui.craftDisconnectBtn) ui.craftDisconnectBtn.disabled = false;
-    if (ui.accountPageRefreshBtn) ui.accountPageRefreshBtn.disabled = false;
+    applyClientPermissionToButton(ui.accountPageRefreshBtn, "inventory.refresh");
     if (ui.accountPageDisconnectBtn) ui.accountPageDisconnectBtn.disabled = false;
     syncAccountPageSummary();
     syncInventoryTop();
@@ -3054,9 +3170,9 @@ function syncInventoryAccountSelect() {
     else selectEl.value = "";
   }
   const hasAccount = state.accounts.length > 0;
-  ui.refreshBtn.disabled = !hasAccount || state.refreshing;
-  if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = !hasAccount || state.refreshing;
-  if (ui.accountPageRefreshBtn) ui.accountPageRefreshBtn.disabled = !hasAccount || state.refreshing;
+  applyClientPermissionToButton(ui.refreshBtn, "inventory.refresh", {disabled: !hasAccount || state.refreshing});
+  applyClientPermissionToButton(ui.craftRefreshBtn, "inventory.refresh", {disabled: !hasAccount || state.refreshing});
+  applyClientPermissionToButton(ui.accountPageRefreshBtn, "inventory.refresh", {disabled: !hasAccount || state.refreshing});
   if (ui.accountPageDisconnectBtn) ui.accountPageDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   syncAccountPageSummary();
   syncInventoryTop();
@@ -10737,7 +10853,10 @@ function renderSimulationWorkspaceActionsBar(preset) {
   const showActions = state.simulationViewMode === "workspace";
   ui.simulationWorkspaceActionsBar.classList.toggle("hidden", !showActions);
   if (ui.simulationSavePresetBtn) {
-    ui.simulationSavePresetBtn.disabled = !preset || !(preset.primary_output || preset.cover_output) || !!state.simulationLoading || !!state.simulationPersisting;
+    applyClientPermissionToButton(ui.simulationSavePresetBtn, "simulation.use", {
+      disabled: !preset || !(preset.primary_output || preset.cover_output) || !!state.simulationLoading || !!state.simulationPersisting,
+      title: state.simulationPersisting ? "保存中，请稍候" : ""
+    });
     ui.simulationSavePresetBtn.textContent = state.simulationPersisting ? "保存中..." : "保存配置";
   }
   if (ui.simulationCancelEditBtn) {
@@ -11900,7 +12019,10 @@ function renderTradeupSimulationPickerModal() {
     ui.simulationPickerSearchInput.value = queryText;
   }
   if (ui.simulationPickerSearchBtn) {
-    ui.simulationPickerSearchBtn.disabled = !!state.simulationSearchLoading;
+    applyClientPermissionToButton(ui.simulationPickerSearchBtn, "simulation.use", {
+      disabled: !!state.simulationSearchLoading,
+      title: state.simulationSearchLoading ? "搜索中，请稍候" : ""
+    });
     ui.simulationPickerSearchBtn.textContent = state.simulationSearchLoading ? "搜索中..." : "搜索";
   }
   renderTradeupSimulationPickerResults();
@@ -11966,14 +12088,16 @@ function renderCraftPage() {
   syncCraftStatusDom();
   renderCraftQueue();
   if (ui.craftAddRecipeBtn) {
-    ui.craftAddRecipeBtn.disabled = topActionsLocked || pendingQueueCount >= 50;
+    applyClientPermissionToButton(ui.craftAddRecipeBtn, "craft.use", {disabled: topActionsLocked || pendingQueueCount >= 50});
   }
   if (ui.craftExecuteQueueBtn) {
     const executeLabel = state.craftBusy ? (state.craftPauseRequested ? "暂停中..." : "暂停执行") : (state.craftPaused && executableCount > 0 ? "继续执行" : "执行配方");
-    ui.craftExecuteQueueBtn.disabled = state.craftBusy
-      ? !!state.craftPauseRequested
-      : (topActionsLocked || executableCount <= 0);
-    ui.craftExecuteQueueBtn.title = executeLabel;
+    applyClientPermissionToButton(ui.craftExecuteQueueBtn, "craft.use", {
+      disabled: state.craftBusy
+        ? !!state.craftPauseRequested
+        : (topActionsLocked || executableCount <= 0),
+      title: executeLabel
+    });
     ui.craftExecuteQueueBtn.setAttribute("aria-label", executeLabel);
     ui.craftExecuteQueueBtn.classList.toggle("is-pausing", !!state.craftBusy);
     ui.craftExecuteQueueBtn.classList.toggle("is-paused", !state.craftBusy && !!state.craftPaused && executableCount > 0);
@@ -11987,7 +12111,7 @@ function renderCraftPage() {
     ui.craftClearQueueBtn.disabled = topActionsLocked || queueCount <= 0;
   }
   if (ui.craftAssistToggleBtn) {
-    ui.craftAssistToggleBtn.disabled = topActionsLocked;
+    applyClientPermissionToButton(ui.craftAssistToggleBtn, "craft.use", {disabled: topActionsLocked});
   }
   renderCraftAssistPanel();
 
@@ -12856,14 +12980,17 @@ function syncComponentActionState() {
   const selectedRows = getSelectedRows();
   const hasTargetComponent = listComponentChoices().length > 0;
   const busy = state.componentOpBusy || state.refreshing;
-  const depositBlocked = busy;
-  const withdrawBlocked = busy;
+  const inventoryPermission = clientPermissionState("inventory.refresh");
+  const depositBlocked = busy || !inventoryPermission.allowed;
+  const withdrawBlocked = busy || !inventoryPermission.allowed;
   if (ui.componentWithdrawBtn) {
     ui.componentWithdrawBtn.classList.toggle("hidden", !currentComponent);
   }
   ui.componentDepositBtn.disabled = depositBlocked;
   ui.componentWithdrawBtn.disabled = withdrawBlocked;
-  if (depositBlocked) {
+  if (!inventoryPermission.allowed) {
+    ui.componentDepositBtn.title = inventoryPermission.message;
+  } else if (depositBlocked) {
     ui.componentDepositBtn.title = "处理中，请稍候";
   } else if (!connected) {
     ui.componentDepositBtn.title = "未连接时将在存入前自动连接并刷新库存";
@@ -12871,6 +12998,10 @@ function syncComponentActionState() {
     ui.componentDepositBtn.title = !selectedRows.length
       ? "请先在列表选择要存入的物品"
       : (!hasTargetComponent ? "暂无可用目标组件" : "存入组件");
+  }
+  if (!inventoryPermission.allowed) {
+    ui.componentWithdrawBtn.title = inventoryPermission.message;
+    return;
   }
   if (withdrawBlocked) {
     ui.componentWithdrawBtn.title = "处理中，请稍候";
@@ -13523,13 +13654,16 @@ async function disconnectOtherSessionsForTarget(username, {silent = true} = {}) 
 function setRefreshBusy(busy) {
   state.refreshing = !!busy;
   const disabled = state.refreshing || state.accounts.length <= 0;
-  ui.refreshBtn.disabled = disabled;
-  if (ui.craftRefreshBtn) ui.craftRefreshBtn.disabled = disabled;
-  if (ui.accountPageRefreshBtn) ui.accountPageRefreshBtn.disabled = disabled;
+  applyClientPermissionToButton(ui.refreshBtn, "inventory.refresh", {disabled});
+  applyClientPermissionToButton(ui.craftRefreshBtn, "inventory.refresh", {disabled});
+  applyClientPermissionToButton(ui.accountPageRefreshBtn, "inventory.refresh", {disabled});
   if (ui.disconnectBtn) ui.disconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   if (ui.craftDisconnectBtn) ui.craftDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
   if (ui.accountPageDisconnectBtn) ui.accountPageDisconnectBtn.disabled = state.refreshing || !isCurrentAccountConnected();
-  if (ui.accountPageAddBtn) ui.accountPageAddBtn.disabled = state.refreshing;
+  applyClientPermissionToButton(ui.accountPageAddBtn, "accounts.write", {
+    disabled: state.refreshing,
+    title: state.refreshing ? "库存刷新中，请稍后再管理账号" : ""
+  });
   syncAccountLoginActionState();
   syncComponentActionState();
   renderSavedAccounts();
@@ -14316,8 +14450,8 @@ function renderBatchCraftPage() {
     ui.batchCraftLimitInput.value = String(state.batchCraftLimit || 10);
   }
   const busy = !!state.batchCraftBusy;
-  if (ui.batchCraftRunSelectBtn) ui.batchCraftRunSelectBtn.disabled = busy;
-  if (ui.batchCraftExecuteBtn) ui.batchCraftExecuteBtn.disabled = busy;
+  if (ui.batchCraftRunSelectBtn) applyClientPermissionToButton(ui.batchCraftRunSelectBtn, "craft.use", {disabled: busy});
+  if (ui.batchCraftExecuteBtn) applyClientPermissionToButton(ui.batchCraftExecuteBtn, "craft.use", {disabled: busy});
   if (ui.batchCraftAddAccountBtn) ui.batchCraftAddAccountBtn.disabled = busy;
   if (ui.batchCraftClearAccountsBtn) ui.batchCraftClearAccountsBtn.disabled = busy;
   if (ui.batchCraftClearQueueBtn) ui.batchCraftClearQueueBtn.disabled = busy;
@@ -14396,9 +14530,17 @@ async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, exi
     });
     const itemIds = normalizeCraftRecipeItemIds(data && (data.item_ids || data.itemIds));
     if (itemIds.length !== mode) return null;
+    const rawItemSources = data && data.item_sources && typeof data.item_sources === "object" ? data.item_sources : {};
+    const itemSources = {};
+    for (const id of itemIds) {
+      if (rawItemSources[id] && typeof rawItemSources[id] === "object") {
+        itemSources[id] = deepCopyPlain(rawItemSources[id]);
+      }
+    }
     return {
       id: `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       item_ids: itemIds,
+      item_sources: itemSources,
       status: "pending",
       result: null
     };
@@ -14437,6 +14579,14 @@ async function callBatchCraftAssistSelectForAccount(username, draftSnapshot, exi
 
 async function runBatchCraftAssistSelect() {
   if (state.batchCraftBusy) return;
+  const craftPermission = typeof clientPermissionState === "function"
+    ? clientPermissionState("craft.use")
+    : {allowed: true, message: ""};
+  if (!craftPermission.allowed) {
+    setBatchCraftStatus(craftPermission.message || "当前登录用户无权使用炼金功能。", true);
+    renderBatchCraftPage();
+    return;
+  }
   if (!state.batchCraftAccounts.length) {
     setBatchCraftStatus("请先添加参与账号", true);
     return;
@@ -14565,6 +14715,14 @@ async function runBatchCraftAssistSelect() {
 
 async function runBatchCraftExecution() {
   if (state.batchCraftBusy) return;
+  const craftPermission = typeof clientPermissionState === "function"
+    ? clientPermissionState("craft.use")
+    : {allowed: true, message: ""};
+  if (!craftPermission.allowed) {
+    setBatchCraftStatus(craftPermission.message || "当前登录用户无权使用炼金功能。", true);
+    renderBatchCraftPage();
+    return;
+  }
   const pendingEntries = state.batchCraftQueue.filter((e) => e.recipes.some((r) => r.status === "pending"));
   if (!pendingEntries.length) {
     setBatchCraftStatus("无待执行配方", true);
@@ -14680,13 +14838,90 @@ async function runBatchCraftExecution() {
       continue;
     }
 
+    const accountRowsById = buildRowsByAssetId(getAllInventoryCraftableRows({
+      rows: state.rows,
+      includeComponentItems: true
+    }));
+    const pendingRecipeIndexes = new Map(pendingRecipes.map((recipe, index) => [recipe, index]));
+    const componentRecipes = pendingRecipes.filter((recipe) => craftRecipeEntryUsesComponentItems(recipe, accountRowsById));
+    const plainRecipes = pendingRecipes.filter((recipe) => !componentRecipes.includes(recipe));
+    let recipesToExecute = plainRecipes.map((recipe, index) => ({
+      sourceRecipe: recipe,
+      queueIndex: pendingRecipeIndexes.get(recipe) ?? index,
+      request: buildCraftApiRecipePayload({
+        ...recipe,
+        queue_index: pendingRecipeIndexes.get(recipe) ?? index
+      })
+    }));
+
+    if (componentRecipes.length > 0) {
+      try {
+        const prepareData = await api("/api/craft/tradeup-with-components", {
+          method: "POST",
+          body: JSON.stringify({
+            username: entry.username,
+            allow_cooling: !!state.batchCraftIncludeCooling,
+            prepare_only: true,
+            use_component_items: true,
+            recipes: componentRecipes.map((recipe, index) => buildCraftApiRecipePayload({
+              ...recipe,
+              queue_index: pendingRecipeIndexes.get(recipe) ?? index
+            }))
+          })
+        });
+        applyBatchCraftSuccessSnapshot(entry.username, prepareData);
+        const prepareResults = Array.isArray(prepareData && prepareData.prepare_results) ? prepareData.prepare_results : [];
+        const readyRecipes = Array.isArray(prepareData && prepareData.ready_recipes) ? prepareData.ready_recipes : [];
+        const readyByQueueIndex = new Map();
+        for (const ready of readyRecipes) {
+          const queueIndex = Number(ready && ready.queue_index);
+          if (Number.isFinite(queueIndex)) readyByQueueIndex.set(Math.trunc(queueIndex), ready);
+        }
+        for (let ri = 0; ri < componentRecipes.length; ri += 1) {
+          const sourceRecipe = componentRecipes[ri];
+          const queueIndex = pendingRecipeIndexes.get(sourceRecipe) ?? ri;
+          const prepareResult = prepareResults.find((result) => Number(result && result.queue_index) === queueIndex) || null;
+          const prepareReady = prepareResult && String(prepareResult.prepare_status || prepareResult.status || "").trim() === "ready";
+          const ready = readyByQueueIndex.get(queueIndex) || (prepareReady ? prepareResult : null);
+          if (ready) {
+            sourceRecipe.item_ids = normalizeCraftRecipeItemIds(ready.item_ids);
+            sourceRecipe.item_sources = deepCopyPlain(ready.item_sources && typeof ready.item_sources === "object" ? ready.item_sources : {});
+            recipesToExecute.push({
+              sourceRecipe,
+              queueIndex,
+              request: buildCraftApiRecipePayload({
+                ...sourceRecipe,
+                queue_index: queueIndex
+              })
+            });
+            continue;
+          }
+          sourceRecipe.status = "failed";
+          sourceRecipe.result = {
+            error: String(prepareResult && prepareResult.prepare_message || prepareData && prepareData.message || "组件取料失败")
+          };
+          failedCount++;
+        }
+        renderBatchCraftQueue();
+      } catch (err) {
+        for (const recipe of componentRecipes) {
+          recipe.status = "failed";
+          recipe.result = {error: err.message};
+          failedCount++;
+        }
+        renderBatchCraftQueue();
+      }
+    }
+    recipesToExecute = recipesToExecute.sort((a, b) => (Number(a.queueIndex) || 0) - (Number(b.queueIndex) || 0));
+
     // 逐个执行配方
-    for (let ri = 0; ri < pendingRecipes.length; ri++) {
-      const recipe = pendingRecipes[ri];
+    for (let ri = 0; ri < recipesToExecute.length; ri++) {
+      const executeEntry = recipesToExecute[ri];
+      const recipe = executeEntry.sourceRecipe;
       const overallDone = completedCount + failedCount;
       const overallTotal = totalRecipes;
       setBatchCraftOverlay(true, {
-        title: `${entry.username}：执行第 ${ri + 1}/${pendingRecipes.length} 组`,
+        title: `${entry.username}：执行第 ${ri + 1}/${recipesToExecute.length} 组`,
         detail: `总进度 ${overallDone}/${overallTotal}`,
         percent: (overallDone / overallTotal) * 100
       });
@@ -14696,13 +14931,9 @@ async function runBatchCraftExecution() {
           method: "POST",
           body: JSON.stringify({
             username: entry.username,
-            allow_cooling: !!state.craftIncludeCooling,
+            allow_cooling: !!state.batchCraftIncludeCooling,
             use_component_items: false,
-            recipes: [{
-              queue_index: ri,
-              item_ids: recipe.item_ids,
-              item_sources: {}
-            }]
+            recipes: [executeEntry.request]
           })
         });
         applyBatchCraftSuccessSnapshot(entry.username, data);
@@ -16354,10 +16585,13 @@ async function startBatchImport() {
   }));
 
   try {
-    const resp = await fetch("/api/accounts/batch-import", {
+    const resp = await fetchAuthAwareRaw("/api/accounts/batch-import", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({accounts})
+    }, {
+      operation: "批量导入账号",
+      expectedContentTypes: ["text/event-stream"]
     });
 
     const reader = resp.body.getReader();
@@ -16610,8 +16844,7 @@ async function webInvFetchInventory() {
   if (!username) return;
   if (ui.webInvFetchBtn) { ui.webInvFetchBtn.disabled = true; ui.webInvFetchBtn.textContent = "拉取中..."; }
   try {
-    const resp = await fetch(`/api/accounts/${encodeURIComponent(username)}/inventory`);
-    const data = await resp.json();
+    const data = await api(`/api/accounts/${encodeURIComponent(username)}/inventory`);
     if (data.ok && data.items) {
       webInvState.inventoryCache.set(username, {
         items: data.items,
@@ -16658,12 +16891,10 @@ async function webInvFetchBalance() {
   if (!username) return;
   if (ui.webInvBalanceBtn) { ui.webInvBalanceBtn.disabled = true; ui.webInvBalanceBtn.textContent = "查询中..."; }
   try {
-    const resp = await fetch("/api/accounts/fetch-balance", {
+    const data = await api("/api/accounts/fetch-balance", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
       body: JSON.stringify({usernames: [username]})
     });
-    const data = await resp.json();
     if (data.ok && data.results && data.results.length > 0) {
       const r = data.results[0];
       if (r.success) {
@@ -16687,7 +16918,7 @@ async function webInvBatchBanCheck() {
     const accounts = state.savedAccounts || [];
     const usernames = accounts.map(a => a.username);
     if (usernames.length === 0) return;
-    const resp = await fetch("/api/accounts/check-bans", {
+    const resp = await fetchAuthAwareRaw("/api/accounts/check-bans", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({usernames})
@@ -16743,7 +16974,7 @@ async function webInvBatchTradeUrl() {
     const accounts = state.savedAccounts || [];
     const usernames = accounts.map(a => a.username);
     if (usernames.length === 0) return;
-    const resp = await fetch("/api/accounts/refresh-trade-url", {
+    const resp = await fetchAuthAwareRaw("/api/accounts/refresh-trade-url", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({usernames})
@@ -16879,10 +17110,13 @@ async function marketSellFetchPrices() {
   if (items.length === 0) return;
   if (ui.marketSellFetchPricesBtn) { ui.marketSellFetchPricesBtn.disabled = true; ui.marketSellFetchPricesBtn.textContent = "查询中..."; }
   try {
-    const resp = await fetch("/api/market/batch-price", {
+    const resp = await fetchAuthAwareRaw("/api/market/batch-price", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({items, currency: 23})
+    }, {
+      operation: "批量查询市场价",
+      expectedContentTypes: ["text/event-stream"]
     });
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -16958,10 +17192,13 @@ async function marketSellStart() {
   if (ui.marketSellProgress) ui.marketSellProgress.classList.remove("hidden");
 
   try {
-    const resp = await fetch("/api/market/batch-sell", {
+    const resp = await fetchAuthAwareRaw("/api/market/batch-sell", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({username, items})
+    }, {
+      operation: "批量上架",
+      expectedContentTypes: ["text/event-stream"]
     });
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -17026,12 +17263,10 @@ async function marketConfirmRefresh() {
   if (ui.marketConfirmItemList) ui.marketConfirmItemList.replaceChildren();
 
   try {
-    const resp = await fetch("/api/market/confirmations", {
+    const data = await api("/api/market/confirmations", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
       body: JSON.stringify({username})
     });
-    const data = await resp.json();
     if (!data.ok) { alert(data.message || "获取确认列表失败"); return; }
 
     const items = data.confirmations || [];
@@ -17099,12 +17334,10 @@ async function marketConfirmStart() {
   if (ui.marketConfirmProgressText) ui.marketConfirmProgressText.textContent = "确认中...";
 
   try {
-    const resp = await fetch("/api/market/confirm-listings", {
+    const data = await api("/api/market/confirm-listings", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
       body: JSON.stringify({username, confirmationIds: ids})
     });
-    const data = await resp.json();
     if (!data.ok) { alert(data.message || "确认失败"); return; }
 
     const results = data.results || [];
@@ -17431,7 +17664,7 @@ async function startTradeTransfer() {
   startBtn.disabled = true;
 
   try {
-    const resp = await fetch("/api/accounts/send-trade-offer", {
+    const resp = await fetchAuthAwareRaw("/api/accounts/send-trade-offer", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
@@ -17439,6 +17672,9 @@ async function startTradeTransfer() {
         toTradeUrl,
         assetIds: tradeTransferState.assetIds
       })
+    }, {
+      operation: "发送交易报价",
+      expectedContentTypes: ["text/event-stream"]
     });
 
     const reader = resp.body.getReader();

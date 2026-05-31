@@ -5314,3 +5314,257 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
   - 当前 root worktree 在本轮前已有大量未提交改动和运行态/备份文件变化；本轮不回退、不清理这些既有内容。
   - 未启动 Electron、本地服务或真实 UI。
   - 没有跑全仓库测试，只跑了用户指定三条 Node 测试。
+
+## 2026-05-29 handoff - project audit repair checklist
+
+- 当前目标：
+  - 将本轮项目级代码审查结果整理成下个会话可执行的多 agent 修复清单。
+  - 下个会话应按清单修复剩余问题，不要重新从零审查。
+- 本轮完成：
+  - 已使用 5 个 `gpt-5.5` + `xhigh` 审查 agent，覆盖：
+    - 认证 / 授权 / 安全 / admin control plane
+    - Electron / Node 客户端可靠性
+    - 炼金 / 库存 / 数据正确性
+    - UI / 前端授权与误操作体验
+    - 测试 / 发布 / 配置 / 依赖
+  - 主 agent 已抽查高风险证据，确认多数核心问题成立。
+  - 用户已明确：问题 3（`/api/accounts` 返回 Steam password / `mafile_content`）是单用户本地程序的刻意设计，本轮不作为修复项。
+- 已落盘 handoff：
+  - `docs/agent/project-audit-fix-handoff-2026-05-29.md`
+- 下个会话必须先读：
+  - `docs/agent/project-audit-fix-handoff-2026-05-29.md`
+  - `docs/agent/session-log.md`
+  - `docs/agent/memory.md`
+  - `AGENTS.md`
+- 下个会话启动要求：
+  - 先运行 `git status --short --branch` 和 `git worktree list --porcelain`。
+  - 先复述目标、当前范围、必须不变项、问题 3 的设计接受边界、第一波 worker 拆分和未验证范围。
+  - 复述后停住，等待用户明确批准；除非用户同一条消息明确说“复述后直接继续实现”。
+  - 获批后按 handoff 的多 agent split 执行，不要改其它 worktree，不要提交，不要触发真实 Steam/炼金/交易/市场动作，不要清理 runtime/output 文件。
+
+## 2026-05-30 project audit repair implementation
+
+- 当前目标：
+  - 从 `docs/agent/project-audit-fix-handoff-2026-05-29.md` 继续实现项目级审查修复清单。
+  - 用户已明确授权多 agent 并行，主 agent 只做子 agent 结果审查。
+- 本轮执行范围：
+  - 只在当前 root worktree `C:/Users/18220/Desktop/cs2_alchemy` 工作。
+  - 未检查其它 worktree 内容；其它 worktree 仍包括：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+  - 未提交 git。
+  - 未触发真实 Steam、交易、市场、炼金、登录动作。
+  - 未清理或回退 `output/`、`backup/`、`inventory_ui_state.json`、`csgo_skins.db` 等运行态产物。
+- 已完成的修复：
+  - Release/control plane transport：
+    - release config 改为 HTTPS 控制面。
+    - prod/release 禁止公网 HTTP 控制面，保留 loopback HTTP。
+    - 增加控制面 URL policy 和相关测试。
+  - Client auth/session：
+    - 修复授权生命周期测试隔离和 refresh timing。
+    - 修复 DPAPI 空输出时写入空 `dpapi:` 的问题。
+  - Admin Console 安全和 UX：
+    - email code 使用随机码。
+    - email code scene 加 whitelist。
+    - 验证码多次失败后锁定 active code。
+    - Admin UI 动态字段改 DOM/text 渲染，避免拼 raw HTML。
+    - device revoke 加确认、pending disable、成功/失败状态。
+    - `admin_console npm test` 覆盖更多 UI/security/policy/tools 测试。
+  - Client 账号范围和权限：
+    - `resolveRequestAuth` 通过 `AppAuthStore` 解析当前 license user 对应本地 user，账号视图按绑定裁剪。
+    - account read/write、snapshot、refresh、craft、component、trade、market、account-tool 直接影响区增加账号范围测试。
+    - component deposit/withdraw/task 相关入口加权限和账号范围检查。
+  - Client reliability：
+    - malformed/incomplete maFile 先脱敏记录，再尝试 refresh-token fallback。
+    - proxy 优先级改为 explicit config/env > Windows system proxy > direct，并脱敏 proxy 日志。
+    - JSON store 区分 file-not-found 和 corrupt JSON；敏感 store corrupt fail-closed；UI state corrupt 写前备份；写入走 temp + rename。
+  - Craft / inventory correctness：
+    - batch craft assist-select 保留 `item_sources`。
+    - batch craft component recipes 先走 `/api/craft/tradeup-with-components` prepare flow，再执行 ready recipe。
+    - batch craft cooling 使用 batch 设置。
+    - inventory parser 的 `asset_id` 保持 string，排序用 BigInt 友好比较。
+  - Client UI auth/permission：
+    - stream-like raw fetch 在打开 SSE reader 前检查 `response.ok`、401/403 和 content-type。
+    - market confirmations/listings、Web inventory/balance 等 raw JSON fetch 改走共享 `api()`。
+    - 前端增加 permission helper，覆盖 `accounts.write`、`inventory.refresh`、`craft.use`、`simulation.use` 主要入口。
+    - 补齐 batch craft 选材/执行按钮的 `craft.use` 前端权限态和点击前短路。
+  - Release/test/packaging：
+    - 增加 `node_sidecar` test/list/browser/preflight scripts。
+    - packaging preflight 检查 schema seed、public key、electron-builder resources。
+    - `electron-builder.yml` resources 收窄 keys 到 public key，schema seed 路径明确。
+    - `admin_console` `nodemailer` 升到 `^8.0.10`，admin audit 已清零。
+- 本轮新增/修改的主要文件：
+  - `admin_console/package.json`
+  - `admin_console/package-lock.json`
+  - `admin_console/src/controlPlaneStore.js`
+  - `admin_console/src/server.js`
+  - `admin_console/ui/app.js`
+  - `admin_console/tests/control-plane-server.test.js`
+  - `admin_console/tests/control-plane-ui-security.test.js`
+  - `node_sidecar/src/controlPlaneUrlPolicy.js`
+  - `node_sidecar/src/controlPlaneAuthClient.js`
+  - `node_sidecar/src/licenseConfig.js`
+  - `node_sidecar/src/secretStore.js`
+  - `node_sidecar/src/uiServer.js`
+  - `node_sidecar/src/proxyConfig.js`
+  - `node_sidecar/src/jsonStore.js`
+  - `node_sidecar/src/inventoryParser.js`
+  - `node_sidecar/ui/app.js`
+  - `node_sidecar/package.json`
+  - `node_sidecar/electron-builder.yml`
+  - `node_sidecar/scripts/checkPackagingResources.js`
+  - `node_sidecar/scripts/runNodeTests.js`
+  - `node_sidecar/build/schema_cache.seed.json`
+  - multiple focused tests under `node_sidecar/tests/` and `tests/`
+  - `docs/project-cognition-map.md`
+- 主 agent 复核 / review 结果：
+  - Worker B 曾漏测 trade/market/account-tool username 入口；已退回补测，补齐后通过。
+  - Worker F 原 agent 未交付可审结果；已关闭并重派替代 F。
+  - 只读 review agent 发现 batch craft 主按钮未接 `craft.use` 前端权限态；已派小修 worker 补齐并复跑通过。
+  - 只读 review agent 关于“当前检查范围未发现项目地图”的描述不准确；主 agent 已确认 `docs/project-cognition-map.md` 存在并已更新。
+- 已通过的验证：
+  - Admin:
+    - `npm test` in `admin_console`
+  - Release / auth / control plane:
+    - `node tests/client-auth-config.test.js`
+    - `node tests/control-plane-auth-client.test.js`
+    - `node tests/client-auth-session-lifecycle.test.js`
+    - `node tests/secret-store.test.js`
+    - `node tests/license-scheduler.test.js`
+  - Account scope / component / craft permission:
+    - `node tests/account-scope-route.test.js`
+    - `node tests/component-permission-scope.test.js`
+    - `node tests/app-auth-store.test.js`
+    - `node tests/ui-server-auth.test.js`
+    - `node tests/account-profile-route-scope.test.js`
+    - `node tests/craft-permission-gate.test.js`
+    - `node tests/craft-component-batch-route.test.js`
+  - Frontend auth/permission and batch craft:
+    - `node --check node_sidecar/ui/app.js`
+    - `node tests/raw-fetch-auth-handling.test.js`
+    - `node tests/client-permission-ui-state.test.js`
+    - `node tests/batch-craft-assist-select.test.js`
+    - `node tests/batch-craft-execution-writeback.test.js`
+  - Client reliability:
+    - `node tests/proxy-config.test.js`
+    - `node tests/json-store-corruption-safety.test.js`
+    - `node tests/steam-guard-web-session-fallback.test.js`
+    - `node tests/ui-state-store-auth-scope.test.js`
+    - `node tests/steam-guard-enroll-route.test.js`
+    - `node tests/token-detail-route.test.js`
+  - Craft/inventory:
+    - `node tests/inventoryCategoryAwareSchema.test.js`
+    - `node tests/craftTradeupWithComponentsService.test.js`
+    - `node tests/craftCandidateService.test.js`
+  - Packaging:
+    - `node tests/packaging-preflight.test.js`
+    - `node tests/windows-installer-entrypoint.test.js`
+    - `npm run packaging:preflight` in `node_sidecar`
+- 已知未覆盖 / 仍需注意：
+  - 未跑真实 Electron/UI 运行态，未做浏览器截图/DOM 验证；前端权限态只做了源码/VM 单测。
+  - 未触发真实 Steam、market、trade、craft、login。
+  - 未做完整打包，也未检查安装产物。
+  - 未声明 `node_sidecar npm test` 全绿；此前全量 `npm test` 仍有已知 unrelated/历史失败，不能把本轮聚焦测试通过扩大成全量通过。
+  - `node_sidecar npm audit` 仍有已知漏洞链路，主要来自 `request`/`form-data`/`qs`/`tough-cookie`/`uuid`、`steamcommunity`/`cheerio`、`steam-user`/`protobufjs`、`electron` semver-major、`@lowly1337/vpk` no fix；本轮未强行升级。
+  - `csgo_skins.db` 当前仍是 modified，按项目规则视为运行态产物变脏，需要结合本地程序是否正在写入判断；本轮不处理。
+  - `output/c5-wear-dry-run/` 仍是 untracked，本轮未处理。
+- 下一步建议：
+  - 让用户在真实 Electron/UI 中验证前端权限提示、Admin revoke 交互、batch craft 按钮禁用效果。
+  - 若要收敛发布质量，单独处理 `node_sidecar npm test` 的既有失败和 `npm audit` 剩余风险。
+  - 如需提交，先重新运行 `git status --short`，确认 runtime/untracked 文件是否排除在提交外。
+
+## 2026-05-30 handoff - dependency audit follow-up
+
+- 当前目标：
+  - 下个会话继续处理依赖审计剩余项，但主线只修第 4 类：VPK 本地开发工具不应进入正式 Electron 包。
+  - 第 1/2/3 类问题只做风险记录和后续专项，不在下个会话里盲升依赖。
+- 当前现场状态：
+  - 当前 root worktree：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 当前分支：`main`
+  - 当前工作区已有大量未提交改动，来自 2026-05-30 项目审查修复；不要回退。
+  - 当前 `git status --short` 仍显示 `csgo_skins.db` modified 和 `output/c5-wear-dry-run/` untracked；按项目规则视为运行态/输出产物，除非用户明确要求，不处理、不提交。
+  - 已知其它 worktree 未检查：
+    - `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`
+    - `C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`
+- 本轮依赖审计事实：
+  - `admin_console npm audit --registry=https://registry.npmjs.org --json` 当前为 0 vulnerabilities。
+  - `node_sidecar npm audit --registry=https://registry.npmjs.org --json` 当前仍有 22 个：
+    - critical: 3
+    - high: 11
+    - moderate: 8
+  - 主要剩余链路：
+    - 第 1 类：Steam 登录 / CS2 GC / protobuf 链路，主要是 `steam-user` / `globaloffensive` / `protobufjs`，影响 Steam 登录、refresh token、CS2 GC、库存/组件读取等。
+    - 第 2 类：Steam Community / Web 库存 / 交易 / 市场链路，主要是 `steamcommunity` -> `request` / `cheerio` / `form-data` / `qs` / `tough-cookie` / `uuid`，影响报价、市场上架、确认、Web 库存、交易链接等。
+    - 第 3 类：Electron 桌面壳，主要是 `electron` 大版本风险，影响桌面窗口、IPC、系统集成、打包运行环境。
+    - 第 4 类：VPK 本地开发工具，主要是 `@lowly1337/vpk` -> `jbinary` -> `request`，实际只用于 `src/vpkDevTools.js` 和 `npm run vpk:list/cat/extract`。
+- 用户最新决策 / 下个会话主线：
+  - 用户确认第 4 类是本地工具，不应作为正式程序风险；下个会话主要修第 4 类。
+  - 问题 1/2/3 先做好记录，不要在下个会话主线里盲目升级 `steam-user`、`steamcommunity`、`electron` 或跑 `npm audit fix --force`。
+- 第 4 类当前证据：
+  - `node_sidecar/package.json` 把 `@lowly1337/vpk` 放在 `dependencies`。
+  - `node_sidecar/electron-builder.yml` 的 `files` 包含：
+    - `package.json`
+    - `src/**`
+  - Electron 打包通常会带 production dependencies；因此虽然 VPK 只被本地 CLI 使用，但它大概率会被顺手带进安装包。
+  - VPK 调用点：
+    - `node_sidecar/src/vpkDevTools.js`
+    - `node_sidecar/src/vpkDevCli.js`
+    - package scripts: `vpk:list`、`vpk:cat`、`vpk:extract`
+  - 目前未看到主 UI / Steam / market / craft 链路调用 VPK 工具。
+- 下个会话第一刀：
+  - 先只读恢复：
+    - 读 `docs/agent/session-log.md` 最新节。
+    - 读 `docs/project-cognition-map.md`。
+    - 读 `node_sidecar/package.json`、`node_sidecar/electron-builder.yml`、`node_sidecar/src/vpkDevTools.js`、`node_sidecar/src/vpkDevCli.js`。
+    - 运行 `git status --short` 和 `git worktree list --porcelain`。
+  - 复述后等用户批准，再实现。
+  - 优先方案：
+    - 把 `@lowly1337/vpk` 从正式 production dependency 中移出，改为 `devDependencies` 或拆成可选 dev-only 工具依赖。
+    - 确保正式打包不会包含 `src/vpkDevTools.js` / `src/vpkDevCli.js` 或不会包含 `@lowly1337/vpk`。
+    - 保留本地 `npm run vpk:list/cat/extract` 的开发可用性。
+    - 加 packaging preflight / package metadata 测试，证明 VPK 工具不会被正式资源契约带进安装包。
+- 下个会话验证建议：
+  - `npm install` / lockfile 更新后检查 `node_sidecar/package-lock.json` 只发生预期变化。
+  - `node node_sidecar/scripts/checkPackagingResources.js` 或 `npm run packaging:preflight`。
+  - 相关 packaging preflight / installer entrypoint tests。
+  - `npm run vpk:list -- --help` 或等价轻量命令，确认本地工具仍能提示用法；不要读取真实大 VPK，除非用户批准。
+  - `npm audit --registry=https://registry.npmjs.org --json`，确认第 4 类是否从正式生产风险中消失；注意总数可能仍包含第 1/2/3 类。
+- 必须不变项：
+  - 不触发真实 Steam、交易、市场、炼金、登录。
+  - 不跑 `npm audit fix --force`。
+  - 不盲升 `steam-user` / `steamcommunity` / `electron`。
+  - 不清理 runtime/output 文件。
+  - 不提交，除非用户明确要求。
+  - 不把第 1/2/3 类当作下个会话主线修复；只记录风险和后续专项。
+- 下个会话启动指令：
+  ```text
+  继续 cs2_alchemy 依赖审计后续。先读 docs/agent/session-log.md 最新的 `2026-05-30 handoff - dependency audit follow-up`、docs/project-cognition-map.md、node_sidecar/package.json、node_sidecar/electron-builder.yml、node_sidecar/src/vpkDevTools.js、node_sidecar/src/vpkDevCli.js，并运行 git status --short 和 git worktree list --porcelain。先复述：当前主线只修第 4 类 VPK 本地开发工具不要进入正式 Electron 包；第 1 类 Steam/GC、第 2 类 Steam Community/交易市场、第 3 类 Electron 只记录风险，不盲升。复述后停住等批准；获批后用最小改动把 @lowly1337/vpk 从正式生产包中剥离，同时保持本地 vpk:list/cat/extract 可用，并补 packaging/preflight 测试。
+  ```
+
+## 2026-05-31 dependency audit follow-up - VPK dev-only packaging
+
+- 本轮目标：
+  - 只修依赖审计第 4 类：VPK 本地开发工具不能进入正式 Electron 包，同时保留本地开发命令可用。
+  - 未处理 Steam/GC、Steam Community/交易市场、Electron 其它依赖审计项。
+- 本轮改动：
+  - 将 `@lowly1337/vpk` 从 `node_sidecar/package.json` 的 `dependencies` 移到 `devDependencies`，并同步 `package-lock.json`。
+  - 在 `node_sidecar/electron-builder.yml` 的 `files` 中显式排除 `src/vpkDevTools.js` 和 `src/vpkDevCli.js`。
+  - 增强 packaging preflight：正式包检查会拒绝 VPK 出现在 production dependency，也会拒绝 VPK dev source files 被正式包配置包含。
+  - 补充 packaging preflight 测试，先确认旧行为会失败，再用最小修改通过。
+  - 修复 VPK CLI help：`npm run vpk:list -- --help` 现在只打印帮助，不要求真实 `--file`，不会读取真实 VPK 文件。
+  - 最小更新 `docs/project-cognition-map.md` 的打包/测试条目，记录 VPK dev-only package boundary。
+- 已验证：
+  - `node tests/packaging-preflight.test.js` -> PASS。
+  - `node tests/vpk-dev-tools.test.js` -> PASS。
+  - `node tests/windows-installer-entrypoint.test.js` -> PASS。
+  - `npm run packaging:preflight` -> PASS，输出 `Packaging resources OK`。
+  - `npm run vpk:list -- --help` -> PASS，打印 VPK CLI usage，不读取真实 VPK。
+  - `npm audit --omit=dev --registry=https://registry.npmjs.org --json` -> FAIL/非 0，仍有既有生产依赖漏洞：metadata 显示 `critical: 3`、`high: 7`、`moderate: 5`、`total: 15`；输出中未再列出 `@lowly1337/vpk`/`jbinary` 作为生产漏洞项。本轮没有运行 `npm audit fix`。
+- 未验证 / 风险：
+  - 未做真实 Electron 打包，也未检查安装产物内容。
+  - 未启动真实 Electron/UI。
+  - 未触发真实 Steam、login、trade、market、craft、inventory refresh 或账号动作。
+  - `npm audit --omit=dev` 剩余问题仍来自其它生产链路，需要后续专项处理；本轮按用户要求不盲升这些依赖。
+  - 当前只检查并修改主工作区 `C:/Users/18220/Desktop/cs2_alchemy`，未检查其它 worktree。

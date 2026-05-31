@@ -135,6 +135,47 @@ function formatLocalDateTimeText(value = "") {
   ].join("-") + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function clearElement(element) {
+  if (element) {
+    element.replaceChildren();
+  }
+}
+
+function appendText(parent, text = "") {
+  parent.appendChild(document.createTextNode(String(text || "")));
+}
+
+function createElement(tagName, {className = "", text = "", attrs = {}} = {}, children = []) {
+  const element = document.createElement(tagName);
+  if (className) {
+    element.className = className;
+  }
+  for (const [name, value] of Object.entries(attrs || {})) {
+    if (value !== undefined && value !== null) {
+      element.setAttribute(name, String(value));
+    }
+  }
+  if (text !== "") {
+    element.textContent = String(text);
+  }
+  for (const child of children) {
+    if (child === null || child === undefined) {
+      continue;
+    }
+    if (typeof child === "string" || typeof child === "number") {
+      appendText(element, child);
+    } else {
+      element.appendChild(child);
+    }
+  }
+  return element;
+}
+
+function renderEmptyBlock(target, text = "") {
+  clearElement(target);
+  target.appendChild(createElement("div", {className: "empty-block", text}));
+}
+
 function normalizeTimeValue(value = "") {
   const text = String(value || "").trim();
   const match = text.match(/^(\d{1,2}):(\d{2})$/);
@@ -217,70 +258,79 @@ function renderStats() {
   refs.sessionSummary.textContent = state.session
     ? `当前管理员：${state.session.user.username}`
     : "尚未登录";
-  refs.statsGrid.innerHTML = `
-    <div class="stats-strip">
-      ${[
-        ["用户总数", stats.total_users, "Client Users"],
-        ["活跃用户", stats.active_users, "Active Accounts"],
-        ["会员计划", stats.plans, "Plan Templates"]
-      ].map(([label, value, kicker]) => `
-        <div class="card">
-          <div class="card-body">
-            <div class="stats-kicker">${kicker}</div>
-            <div class="stats-value">${value}</div>
-            <div class="text-secondary mt-2">${label}</div>
-          </div>
-        </div>
-      `).join("")}
-    </div>
-  `;
+  clearElement(refs.statsGrid);
+  const strip = createElement("div", {className: "stats-strip"});
+  [
+    ["用户总数", stats.total_users, "Client Users"],
+    ["活跃用户", stats.active_users, "Active Accounts"],
+    ["会员计划", stats.plans, "Plan Templates"]
+  ].forEach(([label, value, kicker]) => {
+    const body = createElement("div", {className: "card-body"}, [
+      createElement("div", {className: "stats-kicker", text: kicker}),
+      createElement("div", {className: "stats-value", text: value}),
+      createElement("div", {className: "text-secondary mt-2", text: label})
+    ]);
+    strip.appendChild(createElement("div", {className: "card"}, [body]));
+  });
+  refs.statsGrid.appendChild(strip);
 }
 
 function renderUsers() {
   if (!state.users.length) {
-    refs.usersList.innerHTML = '<div class="empty-block">当前没有终端用户。</div>';
+    renderEmptyBlock(refs.usersList, "当前没有终端用户。");
     return;
   }
-  refs.usersList.innerHTML = `
-    <table class="table table-vcenter card-table users-table">
-      <thead>
-        <tr>
-          <th>用户</th>
-          <th>会员</th>
-          <th>剩余天数</th>
-          <th>状态</th>
-          <th>最终权限</th>
-          <th class="w-1"></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${state.users.map((user) => `
-          <tr class="${user.id === state.selectedUserId ? "is-selected" : ""}" data-user-id="${user.id}">
-            <td>
-              <div class="fw-semibold">${user.username}</div>
-              <div class="text-secondary">${user.email}</div>
-            </td>
-            <td>
-              <span class="badge bg-blue-lt">${user.membership_plan}</span>
-              <div class="text-secondary mt-1">${formatLocalDateTimeText(user.membership_expires_at)}</div>
-            </td>
-            <td>${user.remaining_membership_days}</td>
-            <td><span class="badge ${user.status === "active" ? "bg-green-lt" : "bg-red-lt"}">${user.status}</span></td>
-            <td>
-              <div class="feature-chips">
-                ${((user.entitlements && user.entitlements.permissions) || []).map((code) => `
-                  <span class="badge bg-secondary-lt">${code}</span>
-                `).join("") || '<span class="text-secondary">无</span>'}
-              </div>
-            </td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary" type="button" data-user-id="${user.id}">管理</button>
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
+  clearElement(refs.usersList);
+  const table = createElement("table", {className: "table table-vcenter card-table users-table"});
+  const thead = createElement("thead");
+  const headerRow = createElement("tr");
+  ["用户", "会员", "剩余天数", "状态", "最终权限"].forEach((label) => {
+    headerRow.appendChild(createElement("th", {text: label}));
+  });
+  headerRow.appendChild(createElement("th", {className: "w-1"}));
+  thead.appendChild(headerRow);
+  const tbody = createElement("tbody");
+  state.users.forEach((user) => {
+    const row = createElement("tr", {
+      className: user.id === state.selectedUserId ? "is-selected" : "",
+      attrs: {"data-user-id": user.id}
+    });
+    row.appendChild(createElement("td", {}, [
+      createElement("div", {className: "fw-semibold", text: user.username}),
+      createElement("div", {className: "text-secondary", text: user.email})
+    ]));
+    row.appendChild(createElement("td", {}, [
+      createElement("span", {className: "badge bg-blue-lt", text: user.membership_plan}),
+      createElement("div", {className: "text-secondary mt-1", text: formatLocalDateTimeText(user.membership_expires_at)})
+    ]));
+    row.appendChild(createElement("td", {text: user.remaining_membership_days}));
+    row.appendChild(createElement("td", {}, [
+      createElement("span", {
+        className: `badge ${user.status === "active" ? "bg-green-lt" : "bg-red-lt"}`,
+        text: user.status
+      })
+    ]));
+    const chips = createElement("div", {className: "feature-chips"});
+    const permissions = (user.entitlements && user.entitlements.permissions) || [];
+    if (permissions.length) {
+      permissions.forEach((code) => {
+        chips.appendChild(createElement("span", {className: "badge bg-secondary-lt", text: code}));
+      });
+    } else {
+      chips.appendChild(createElement("span", {className: "text-secondary", text: "无"}));
+    }
+    row.appendChild(createElement("td", {}, [chips]));
+    row.appendChild(createElement("td", {}, [
+      createElement("button", {
+        className: "btn btn-sm btn-outline-primary",
+        text: "管理",
+        attrs: {type: "button", "data-user-id": user.id}
+      })
+    ]));
+    tbody.appendChild(row);
+  });
+  table.append(thead, tbody);
+  refs.usersList.appendChild(table);
 }
 
 function renderUserDetail() {
@@ -288,16 +338,18 @@ function renderUserDetail() {
   if (!user) {
     refs.userForm.hidden = true;
     refs.detailHint.textContent = "选择左侧用户后即可调整会员、单项权限与设备授权。";
-    refs.deviceList.innerHTML = '<div class="empty-block">尚未选择用户。</div>';
+    renderEmptyBlock(refs.deviceList, "尚未选择用户。");
     return;
   }
   refs.userForm.hidden = false;
   refs.detailHint.textContent = `正在编辑 ${user.username}。`;
-  refs.userPlan.innerHTML = state.plans.map((plan) => `
-    <option value="${plan.code}" ${plan.code === user.membership_plan ? "selected" : ""}>
-      ${plan.code}
-    </option>
-  `).join("");
+  clearElement(refs.userPlan);
+  state.plans.forEach((plan) => {
+    const option = createElement("option", {text: plan.code});
+    option.value = String(plan.code || "");
+    option.selected = plan.code === user.membership_plan;
+    refs.userPlan.appendChild(option);
+  });
   refs.userStatus.value = user.status;
   const expiryParts = splitLocalDateTimeParts(user.membership_expires_at);
   refs.userExpiryDate.value = expiryParts.dateValue;
@@ -313,15 +365,25 @@ function renderUserDetail() {
         ? `当前计划：${user.membership_plan}，可按需覆盖单项权限。剩余 ${user.remaining_membership_days} 天，到期时间：${formatLocalDateTimeText(user.membership_expires_at)}`
         : `当前计划：${user.membership_plan}，可按需覆盖单项权限。请选择到期日期；若不调整时间，默认按 ${DEFAULT_EXPIRY_TIME} 处理。`;
   const permissions = new Set((user.entitlements && user.entitlements.permissions) || []);
-  refs.permissionList.innerHTML = FEATURE_CODES.map((code) => `
-    <div class="permission-row">
-      <label class="form-check form-switch">
-        <span class="form-check-label">${code}</span>
-        <input class="form-check-input" type="checkbox" data-feature-code="${code}" ${permissions.has(code) ? "checked" : ""}>
-      </label>
-      <div class="permission-hint">计划模板 + 用户覆盖共同决定控制签名快照是否下发此功能。</div>
-    </div>
-  `).join("");
+  clearElement(refs.permissionList);
+  FEATURE_CODES.forEach((code) => {
+    const input = createElement("input", {
+      className: "form-check-input",
+      attrs: {type: "checkbox", "data-feature-code": code}
+    });
+    input.checked = permissions.has(code);
+    const label = createElement("label", {className: "form-check form-switch"}, [
+      createElement("span", {className: "form-check-label", text: code}),
+      input
+    ]);
+    refs.permissionList.appendChild(createElement("div", {className: "permission-row"}, [
+      label,
+      createElement("div", {
+        className: "permission-hint",
+        text: "计划模板 + 用户覆盖共同决定控制签名快照是否下发此功能。"
+      })
+    ]));
+  });
   renderDevices();
   renderBindings();
 }
@@ -329,50 +391,56 @@ function renderUserDetail() {
 function renderDevices() {
   const user = selectedUser();
   if (!user) {
-    refs.deviceList.innerHTML = '<div class="empty-block">尚未选择用户。</div>';
+    renderEmptyBlock(refs.deviceList, "尚未选择用户。");
     return;
   }
   if (!state.devices.length) {
-    refs.deviceList.innerHTML = '<div class="empty-block">当前没有活跃设备。</div>';
+    renderEmptyBlock(refs.deviceList, "当前没有活跃设备。");
     return;
   }
-  refs.deviceList.innerHTML = `
-    <div class="device-stack">
-      ${state.devices.map((item) => `
-        <article class="device-item">
-          <h4>${item.device_id}</h4>
-          <div class="device-meta">最后使用：${item.last_used_at || item.created_at}</div>
-          <div class="device-meta">过期时间：${formatLocalDateTimeText(item.expires_at)}</div>
-          <button class="btn btn-sm btn-outline-danger" type="button" data-session-id="${item.id}">吊销设备</button>
-        </article>
-      `).join("")}
-    </div>
-  `;
+  clearElement(refs.deviceList);
+  const stack = createElement("div", {className: "device-stack"});
+  state.devices.forEach((item) => {
+    stack.appendChild(createElement("article", {className: "device-item"}, [
+      createElement("h4", {text: item.device_id}),
+      createElement("div", {className: "device-meta", text: `最后使用：${item.last_used_at || item.created_at}`}),
+      createElement("div", {className: "device-meta", text: `过期时间：${formatLocalDateTimeText(item.expires_at)}`}),
+      createElement("button", {
+        className: "btn btn-sm btn-outline-danger",
+        text: "吊销设备",
+        attrs: {type: "button", "data-session-id": item.id}
+      })
+    ]));
+  });
+  refs.deviceList.appendChild(stack);
 }
 
 function renderBindings() {
   const user = selectedUser();
   if (!user) {
-    refs.bindingList.innerHTML = '<div class="empty-block">尚未选择用户。</div>';
+    renderEmptyBlock(refs.bindingList, "尚未选择用户。");
     return;
   }
   if (!state.bindings.length) {
-    refs.bindingList.innerHTML = '<div class="empty-block">当前没有占用中的 Steam 绑定资格。</div>';
+    renderEmptyBlock(refs.bindingList, "当前没有占用中的 Steam 绑定资格。");
     return;
   }
-  refs.bindingList.innerHTML = `
-    <div class="device-stack">
-      ${state.bindings.map((item) => `
-        <article class="device-item">
-          <h4>${item.steam_account_name || item.steam_id}</h4>
-          <div class="device-meta">SteamID：${item.steam_id}</div>
-          <div class="device-meta">首次绑定：${formatLocalDateTimeText(item.first_bound_at)}</div>
-          <div class="device-meta">最近使用：${formatLocalDateTimeText(item.last_seen_at)}</div>
-          <button class="btn btn-sm btn-outline-danger" type="button" data-binding-id="${item.id}">解除绑定资格</button>
-        </article>
-      `).join("")}
-    </div>
-  `;
+  clearElement(refs.bindingList);
+  const stack = createElement("div", {className: "device-stack"});
+  state.bindings.forEach((item) => {
+    stack.appendChild(createElement("article", {className: "device-item"}, [
+      createElement("h4", {text: item.steam_account_name || item.steam_id}),
+      createElement("div", {className: "device-meta", text: `SteamID：${item.steam_id}`}),
+      createElement("div", {className: "device-meta", text: `首次绑定：${formatLocalDateTimeText(item.first_bound_at)}`}),
+      createElement("div", {className: "device-meta", text: `最近使用：${formatLocalDateTimeText(item.last_seen_at)}`}),
+      createElement("button", {
+        className: "btn btn-sm btn-outline-danger",
+        text: "解除绑定资格",
+        attrs: {type: "button", "data-binding-id": item.id}
+      })
+    ]));
+  });
+  refs.bindingList.appendChild(stack);
 }
 
 async function loadSession() {
@@ -526,12 +594,27 @@ async function handleWorkspaceClick(event) {
     if (!user) {
       return;
     }
-    await api(`/api/admin/users/${user.id}/devices/${sessionButton.getAttribute("data-session-id")}/revoke`, {
-      method: "POST",
-      body: JSON.stringify({})
-    });
-    await loadSelectedUserRuntimeDetails();
-    await loadDashboard();
+    const sessionId = sessionButton.getAttribute("data-session-id");
+    if (!window.confirm("确认吊销该设备？该设备上的客户端需要重新登录后才能继续使用。")) {
+      return;
+    }
+    const originalText = sessionButton.textContent;
+    sessionButton.disabled = true;
+    sessionButton.textContent = "吊销中...";
+    try {
+      const result = await api(`/api/admin/users/${user.id}/devices/${sessionId}/revoke`, {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      setMessage(result.message || "设备已吊销");
+      await loadSelectedUserRuntimeDetails();
+      await loadDashboard();
+    } catch (err) {
+      setMessage(err.message || "设备吊销失败", true);
+    } finally {
+      sessionButton.disabled = false;
+      sessionButton.textContent = originalText || "吊销设备";
+    }
     return;
   }
   const bindingButton = event.target.closest("[data-binding-id]");

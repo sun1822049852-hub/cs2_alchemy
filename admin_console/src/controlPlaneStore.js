@@ -54,6 +54,8 @@ const DEFAULT_MEMBERSHIP_PLANS = [
   }
 ];
 
+const EMAIL_CODE_MAX_FAILED_ATTEMPTS = 5;
+
 function toIsoString(value = new Date()) {
   if (value instanceof Date) {
     return value.toISOString();
@@ -159,7 +161,8 @@ function sanitizeCodeRow(row) {
     code_hash: asString(row.code_hash).trim(),
     expires_at: asString(row.expires_at).trim(),
     created_at: asString(row.created_at).trim(),
-    consumed_at: asString(row.consumed_at).trim()
+    consumed_at: asString(row.consumed_at).trim(),
+    failed_attempts: Number(row.failed_attempts) || 0
   };
 }
 
@@ -267,7 +270,8 @@ class ControlPlaneStore {
         code_hash TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        consumed_at TEXT NOT NULL DEFAULT ''
+        consumed_at TEXT NOT NULL DEFAULT '',
+        failed_attempts INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_email_code_email_scene_created
       ON email_code(email, scene, created_at DESC);
@@ -401,6 +405,7 @@ class ControlPlaneStore {
       );
     `);
     this.ensureClientUserColumn("membership_expires_at", "TEXT NOT NULL DEFAULT ''");
+    this.ensureEmailCodeColumn("failed_attempts", "INTEGER NOT NULL DEFAULT 0");
   }
 
   ensureClientUserColumn(columnName, definition) {
@@ -409,6 +414,14 @@ class ControlPlaneStore {
       return;
     }
     this.db.exec(`ALTER TABLE client_user ADD COLUMN ${columnName} ${definition}`);
+  }
+
+  ensureEmailCodeColumn(columnName, definition) {
+    const columns = this.db.prepare("PRAGMA table_info(email_code)").all();
+    if (columns.some((item) => asString(item && item.name).trim() === columnName)) {
+      return;
+    }
+    this.db.exec(`ALTER TABLE email_code ADD COLUMN ${columnName} ${definition}`);
   }
 
   ensureDefaultMembershipPlans() {
@@ -460,8 +473,8 @@ class ControlPlaneStore {
       WHERE email = ? AND scene = ? AND consumed_at = ''
     `).run(createdAt, emailText, sceneText);
     const result = this.db.prepare(`
-      INSERT INTO email_code(email, scene, code_hash, expires_at, created_at, consumed_at)
-      VALUES(?, ?, ?, ?, ?, '')
+      INSERT INTO email_code(email, scene, code_hash, expires_at, created_at, consumed_at, failed_attempts)
+      VALUES(?, ?, ?, ?, ?, '', 0)
     `).run(emailText, sceneText, hashCode(codeText), expiresAt, createdAt);
     return sanitizeCodeRow(this.db.prepare("SELECT * FROM email_code WHERE id = ?").get(result.lastInsertRowid));
   }
@@ -503,6 +516,16 @@ class ControlPlaneStore {
       return {ok: false, reason: "code_not_found"};
     }
     if (active.code_hash !== hashCode(code)) {
+      const failedAttempts = active.failed_attempts + 1;
+      const consumedAt = failedAttempts >= EMAIL_CODE_MAX_FAILED_ATTEMPTS ? toIsoString(now) : "";
+      this.db.prepare(`
+        UPDATE email_code
+        SET failed_attempts = ?, consumed_at = CASE WHEN ? != '' THEN ? ELSE consumed_at END
+        WHERE id = ?
+      `).run(failedAttempts, consumedAt, consumedAt, active.id);
+      if (failedAttempts >= EMAIL_CODE_MAX_FAILED_ATTEMPTS) {
+        return {ok: false, reason: "code_attempt_limit_exceeded"};
+      }
       return {ok: false, reason: "code_mismatch"};
     }
     this.db.prepare("UPDATE email_code SET consumed_at = ? WHERE id = ?").run(toIsoString(now), active.id);

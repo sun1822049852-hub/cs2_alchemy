@@ -19,6 +19,7 @@ inventory_ui_state.json
 schema_cache.json
 client_license_state.json
 client_config.json
+!node_sidecar/build/schema_cache.seed.json
 
 # node runtime
 node_modules/

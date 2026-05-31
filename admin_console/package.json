@@ -5,12 +5,14 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
-    "test": "npm run test:store && npm run test:server && npm run test:ui",
+    "test": "npm run test:store && npm run test:server && npm run test:ui && npm run test:policy && npm run test:tools",
     "test:store": "node tests/control-plane-store.test.js",
     "test:server": "node tests/control-plane-server.test.js",
-    "test:ui": "node tests/control-plane-ui-copy.test.js"
+    "test:ui": "node tests/control-plane-ui-copy.test.js && node tests/control-plane-binding-ui.test.js && node tests/control-plane-datetime-format.test.js && node tests/control-plane-expiry-input.test.js && node tests/control-plane-ui-security.test.js",
+    "test:policy": "node tests/control-plane-binding-policy.test.js",
+    "test:tools": "node tests/connect-admin-console.test.js"
   },
   "dependencies": {
-    "nodemailer": "^6.10.0"
+    "nodemailer": "^8.0.10"
   }
 }

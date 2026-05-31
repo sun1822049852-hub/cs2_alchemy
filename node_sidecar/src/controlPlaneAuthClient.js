@@ -1,4 +1,5 @@
 const {asString} = require("./utils");
+const {assertSecureControlPlaneBaseUrl} = require("./controlPlaneUrlPolicy");
 
 function buildClientAuthError({
   code = "auth_request_failed",
@@ -51,9 +52,19 @@ function createControlPlaneAuthClient({
   fetchFn = globalThis.fetch
 } = {}) {
   const normalizedBaseUrl = asString(baseUrl).trim().replace(/\/+$/g, "");
+  let baseUrlError = null;
+  let secureBaseUrl = "";
+  try {
+    secureBaseUrl = assertSecureControlPlaneBaseUrl(normalizedBaseUrl);
+  } catch (err) {
+    baseUrlError = err;
+  }
 
   function assertConfigured() {
-    if (normalizedBaseUrl) {
+    if (baseUrlError) {
+      throw baseUrlError;
+    }
+    if (secureBaseUrl) {
       return;
     }
     throw buildClientAuthError({
@@ -103,8 +114,8 @@ function createControlPlaneAuthClient({
   return {
     getCapabilities() {
       return {
-        configured: !!normalizedBaseUrl,
-        baseUrl: normalizedBaseUrl
+        configured: !!secureBaseUrl && !baseUrlError,
+        baseUrl: baseUrlError ? "" : secureBaseUrl
       };
     },
     async login({username = "", password = "", deviceId = "", clientVersion = ""} = {}) {

@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const {ControlPlaneStore} = require("./controlPlaneStore");
 const {getMailConfig} = require("./mailConfig");
 const {createMailService} = require("./mailService");
@@ -15,6 +16,8 @@ const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8"
 };
+
+const EMAIL_CODE_SCENES = new Set(["register", "reset_password"]);
 
 function isValidEmail(value) {
   const text = asString(value).trim();
@@ -63,7 +66,7 @@ function readJsonBody(req) {
 }
 
 function createCodeGenerator() {
-  return () => String(Math.floor(100000 + Math.random() * 900000));
+  return () => String(crypto.randomInt(100000, 1000000));
 }
 
 function readBearerToken(req) {
@@ -175,8 +178,13 @@ function createServer({
 
   async function handleSendCode(res, body, scene) {
     const email = asString(body && body.email).trim().toLowerCase();
+    const sceneText = asString(scene).trim() || "register";
     if (!isValidEmail(email)) {
       writeError(res, 400, "email_invalid", "邮箱格式不正确");
+      return;
+    }
+    if (!EMAIL_CODE_SCENES.has(sceneText)) {
+      writeError(res, 400, "email_code_scene_invalid", "验证码场景无效");
       return;
     }
     if (!config.configured) {
@@ -184,7 +192,7 @@ function createServer({
       return;
     }
     const cooldownMs = Math.max(1, Number(config.authCodeCooldownSeconds) || DEFAULTS.AUTH_CODE_COOLDOWN_SECONDS) * 1000;
-    if (!store.canSendCode({email, scene, cooldownMs, now: now()})) {
+    if (!store.canSendCode({email, scene: sceneText, cooldownMs, now: now()})) {
       writeError(res, 429, "email_code_rate_limited", "验证码发送过于频繁，请稍后再试");
       return;
     }
@@ -192,7 +200,7 @@ function createServer({
     const codeTtlMs = Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60 * 1000;
     const row = store.createEmailCode({
       email,
-      scene,
+      scene: sceneText,
       code,
       ttlMs: codeTtlMs,
       now: now()
@@ -201,7 +209,7 @@ function createServer({
       await mailService.sendVerificationCode({
         to: email,
         code,
-        scene,
+        scene: sceneText,
         ttlMinutes: config.authCodeTtlMinutes
       });
     } catch (err) {
@@ -212,10 +220,10 @@ function createServer({
     const expiresInSeconds = Math.max(1, Number(config.authCodeTtlMinutes) || DEFAULTS.AUTH_CODE_TTL_MINUTES) * 60;
     const responsePayload = {
       ok: true,
-      message: scene === "reset_password" ? "重置验证码已发送，请查收邮箱。" : "注册验证码已发送，请查收邮箱。",
+      message: sceneText === "reset_password" ? "重置验证码已发送，请查收邮箱。" : "注册验证码已发送，请查收邮箱。",
       expires_in_seconds: expiresInSeconds
     };
-    if (scene === "register") {
+    if (sceneText === "register") {
       const session = store.createRegisterSession({email, ttlMs: codeTtlMs, now: now()});
       responsePayload.register_session_id = session.session_id;
       responsePayload.masked_email = maskEmail(email);

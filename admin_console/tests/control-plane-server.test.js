@@ -166,6 +166,52 @@ async function main() {
     assert.equal(ctx.sentMessages[0].to, "alice@example.com");
     assert.equal(ctx.sentMessages[0].code, "123456");
 
+    const invalidScene = await requestJson(ctx, "POST", "/api/auth/email/send-code", {
+      email: "mallory@example.com",
+      scene: "admin_unlock"
+    });
+    assert.equal(invalidScene.status, 400);
+    assert.equal(invalidScene.body.reason, "email_code_scene_invalid");
+    assert.equal(ctx.sentMessages.length, 1);
+
+    const bruteForceRegisterCode = await requestJson(ctx, "POST", "/api/auth/email/send-code", {
+      email: "brute@example.com"
+    });
+    assert.equal(bruteForceRegisterCode.status, 200);
+    assert.equal(bruteForceRegisterCode.body.ok, true);
+    assert.equal(ctx.sentMessages.length, 2);
+    assert.equal(ctx.sentMessages[1].scene, "register");
+    assert.equal(ctx.sentMessages[1].code, "234567");
+
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const wrongRegisterCode = await requestJson(ctx, "POST", "/api/auth/register", {
+        email: "brute@example.com",
+        code: "000000",
+        username: "brute",
+        password: "Secret123!"
+      });
+      assert.equal(wrongRegisterCode.status, 400);
+      assert.equal(wrongRegisterCode.body.reason, "code_mismatch");
+    }
+
+    const lockedRegisterCode = await requestJson(ctx, "POST", "/api/auth/register", {
+      email: "brute@example.com",
+      code: "000000",
+      username: "brute",
+      password: "Secret123!"
+    });
+    assert.equal(lockedRegisterCode.status, 400);
+    assert.equal(lockedRegisterCode.body.reason, "code_attempt_limit_exceeded");
+
+    const consumedAfterWrongAttempts = await requestJson(ctx, "POST", "/api/auth/register", {
+      email: "brute@example.com",
+      code: "234567",
+      username: "brute",
+      password: "Secret123!"
+    });
+    assert.equal(consumedAfterWrongAttempts.status, 400);
+    assert.equal(consumedAfterWrongAttempts.body.reason, "code_not_found");
+
     const registered = await requestJson(ctx, "POST", "/api/auth/register", {
       email: "alice@example.com",
       code: "123456",
@@ -444,13 +490,13 @@ async function main() {
     });
     assert.equal(reset.status, 200);
     assert.equal(reset.body.ok, true);
-    assert.equal(ctx.sentMessages.length, 2);
-    assert.equal(ctx.sentMessages[1].scene, "reset_password");
-    assert.equal(ctx.sentMessages[1].code, "234567");
+    assert.equal(ctx.sentMessages.length, 3);
+    assert.equal(ctx.sentMessages[2].scene, "reset_password");
+    assert.equal(ctx.sentMessages[2].code, "345678");
 
     const resetDone = await requestJson(ctx, "POST", "/api/auth/password/reset", {
       email: "alice@example.com",
-      code: "234567",
+      code: "345678",
       new_password: "Secret456!"
     });
     assert.equal(resetDone.status, 200);
@@ -483,9 +529,9 @@ async function main() {
     });
     assert.equal(testMail.status, 200);
     assert.equal(testMail.body.ok, true);
-    assert.equal(ctx.sentMessages.length, 3);
-    assert.equal(ctx.sentMessages[2].kind, "test");
-    assert.equal(ctx.sentMessages[2].to, "430158438@qq.com");
+    assert.equal(ctx.sentMessages.length, 4);
+    assert.equal(ctx.sentMessages[3].kind, "test");
+    assert.equal(ctx.sentMessages[3].to, "430158438@qq.com");
 
     const adminHtml = await requestJson(ctx, "GET", "/admin");
     assert.equal(adminHtml.status, 200);

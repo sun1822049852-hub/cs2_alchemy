@@ -11,6 +11,8 @@ const ICON_ICO_PATH = path.resolve(__dirname, "../build/icon.ico");
 const ICON_PNG_PATH = path.resolve(__dirname, "../build/icon.png");
 const RELEASE_CONFIG_PATH = path.resolve(__dirname, "../build/client_config.release.json");
 const SKIN_DB_SEED_PATH = path.resolve(__dirname, "../build/csgo_skins.seed.db");
+const SCHEMA_CACHE_SEED_PATH = path.resolve(__dirname, "../build/schema_cache.seed.json");
+const LICENSE_PUBLIC_KEY_PATH = path.resolve(__dirname, "../../keys/client_license_public.pem");
 
 function test_nsis_installer_defaults_to_custom_install_dir_with_desktop_shortcut() {
   assert.match(CONFIG_TEXT, /productName:\s*CS Tools/, "用户可见产品名应统一改为 CS Tools");
@@ -51,6 +53,8 @@ function test_brand_icon_assets_exist() {
   assert.equal(fs.existsSync(ICON_ICO_PATH), true, "Windows 图标资源 icon.ico 必须存在");
   assert.equal(fs.existsSync(ICON_PNG_PATH), true, "品牌预览图标 icon.png 必须存在");
   assert.equal(fs.existsSync(SKIN_DB_SEED_PATH), true, "打包专用皮肤数据库种子 csgo_skins.seed.db 必须存在");
+  assert.equal(fs.existsSync(SCHEMA_CACHE_SEED_PATH), true, "打包专用 schema_cache.seed.json 必须存在");
+  assert.equal(fs.existsSync(LICENSE_PUBLIC_KEY_PATH), true, "安装包只能内置许可校验 public key");
 }
 
 function test_packaged_release_resources_are_included() {
@@ -62,8 +66,13 @@ function test_packaged_release_resources_are_included() {
   );
   assert.match(
     CONFIG_TEXT,
+    /from:\s*build\/schema_cache\.seed\.json[\s\S]*to:\s*schema_cache\.json/,
+    "安装包必须从 build/schema_cache.seed.json 内置 schema_cache.json 种子资源"
+  );
+  assert.doesNotMatch(
+    CONFIG_TEXT,
     /from:\s*\.\.\/schema_cache\.json[\s\S]*to:\s*schema_cache\.json/,
-    "安装包必须内置 schema_cache.json 种子资源"
+    "打包配置不应引用根目录运行态 schema_cache.json"
   );
   assert.match(
     CONFIG_TEXT,
@@ -79,6 +88,16 @@ function test_packaged_release_resources_are_included() {
     CONFIG_TEXT,
     /from:\s*build\/icon\.ico[\s\S]*to:\s*app-icon\.ico/,
     "安装包必须内置 app-icon.ico，供运行时窗口与快捷方式统一复用"
+  );
+  assert.match(
+    CONFIG_TEXT,
+    /from:\s*\.\.\/keys\/client_license_public\.pem[\s\S]*to:\s*keys\/client_license_public\.pem/,
+    "安装包应只内置许可校验 public key"
+  );
+  assert.doesNotMatch(
+    CONFIG_TEXT,
+    /from:\s*\.\.\/keys\s*[\r\n]+\s*to:\s*keys/,
+    "打包配置不应把整个 keys 目录打进安装包"
   );
 }
 

@@ -269,6 +269,29 @@ function decodeCasketId(item) {
   return "";
 }
 
+function normalizeSteamItemId(value, fallback = "0") {
+  const text = asString(value).trim();
+  return text || fallback;
+}
+
+function compareSteamItemIds(left, right) {
+  const a = normalizeSteamItemId(left, "");
+  const b = normalizeSteamItemId(right, "");
+  const aNumeric = /^\d+$/.test(a);
+  const bNumeric = /^\d+$/.test(b);
+  if (aNumeric && bNumeric) {
+    const av = BigInt(a);
+    const bv = BigInt(b);
+    if (av < bv) return -1;
+    if (av > bv) return 1;
+    return 0;
+  }
+  if (aNumeric !== bNumeric) {
+    return aNumeric ? -1 : 1;
+  }
+  return a.localeCompare(b);
+}
+
 function getCasketContainedItemCount(item) {
   if (toInt(item.def_index, 0) !== STORAGE_UNIT_DEF_INDEX) {
     return 0;
@@ -464,7 +487,7 @@ function parseOne(item, schema) {
   }).trim();
 
   return {
-    asset_id: toInt(item.id, 0),
+    asset_id: normalizeSteamItemId(item.id),
     def_index: defIndex,
     paint_index: toInt(parts.paint_index, 0),
     paint_seed: getAttrUint32(item, 7),
@@ -502,9 +525,7 @@ function parseOne(item, schema) {
 
 function sortRowsByAssetId(rows) {
   rows.sort((a, b) => {
-    const av = toInt(a.asset_id, 0);
-    const bv = toInt(b.asset_id, 0);
-    return av - bv;
+    return compareSteamItemIds(a && a.asset_id, b && b.asset_id);
   });
 }
 

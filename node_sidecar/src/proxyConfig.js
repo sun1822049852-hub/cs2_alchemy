@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const {execFileSync} = require("child_process");
 const {asString} = require("./utils");
 
 const ENV_PROXY_KEYS = [
@@ -61,12 +62,74 @@ function getEnvProxyUrl(env = process.env) {
   return "";
 }
 
-function getProxyUrl({configPath, env = process.env} = {}) {
+function readWindowsSystemProxy() {
+  if (process.platform !== "win32") {
+    return "";
+  }
+  try {
+    const output = execFileSync(
+      "reg",
+      [
+        "query",
+        "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"
+      ],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true
+      }
+    );
+    return parseWindowsProxyServer(output);
+  } catch (_) {
+    return "";
+  }
+}
+
+function parseWindowsProxyServer(output) {
+  const text = asString(output);
+  const enabledMatch = text.match(/ProxyEnable\s+REG_DWORD\s+0x([0-9a-f]+)/i);
+  if (enabledMatch && Number.parseInt(enabledMatch[1], 16) === 0) {
+    return "";
+  }
+  const match = text.match(/ProxyServer\s+REG_\w+\s+([^\r\n]+)/i);
+  if (!match) {
+    return "";
+  }
+  return normalizeProxyUrl(match[1]);
+}
+
+function normalizeProxyUrl(value) {
+  const text = asString(value).trim();
+  if (!text) {
+    return "";
+  }
+  const entries = text.split(";").map((item) => item.trim()).filter(Boolean);
+  const selected = entries.find((item) => /^https\s*=/i.test(item))
+    || entries.find((item) => /^http\s*=/i.test(item))
+    || entries[0];
+  const raw = selected.includes("=") ? selected.slice(selected.indexOf("=") + 1).trim() : selected;
+  if (!raw) {
+    return "";
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    return raw;
+  }
+  return `http://${raw}`;
+}
+
+function getWindowsSystemProxyUrl({windowsProxyResolver = readWindowsSystemProxy} = {}) {
+  if (typeof windowsProxyResolver !== "function") {
+    return "";
+  }
+  return normalizeProxyUrl(windowsProxyResolver());
+}
+
+function getProxyUrl({configPath, env = process.env, windowsProxyResolver = readWindowsSystemProxy} = {}) {
   const pythonConfig = readPythonProxyConfig(configPath);
   if (pythonConfig && pythonConfig.useProxy && pythonConfig.proxyUrl) {
     return pythonConfig.proxyUrl;
   }
-  return getEnvProxyUrl(env);
+  return getEnvProxyUrl(env) || getWindowsSystemProxyUrl({windowsProxyResolver});
 }
 
 function isSocksProxy(proxyUrl) {
@@ -101,8 +164,8 @@ function parseProxyUrl(proxyUrl) {
   };
 }
 
-function createProxyAgent({configPath, env = process.env, keepAlive = false, targetProtocol = "https:"} = {}) {
-  const proxyUrl = getProxyUrl({configPath, env});
+function createProxyAgent({configPath, env = process.env, windowsProxyResolver = readWindowsSystemProxy, keepAlive = false, targetProtocol = "https:"} = {}) {
+  const proxyUrl = getProxyUrl({configPath, env, windowsProxyResolver});
   if (!proxyUrl) {
     return null;
   }
@@ -136,8 +199,8 @@ function createProxyAgentForUrl(targetUrl, options = {}) {
   });
 }
 
-function getSteamSessionProxyOptions({configPath, env = process.env} = {}) {
-  const proxyUrl = getProxyUrl({configPath, env});
+function getSteamSessionProxyOptions(options = {}) {
+  const proxyUrl = getProxyUrl(options);
   if (!proxyUrl) {
     return {};
   }
@@ -148,8 +211,8 @@ function getSteamSessionProxyOptions({configPath, env = process.env} = {}) {
   return {httpProxy: parsedProxy.url};
 }
 
-function getSteamCommunityRequestOptions({configPath, env = process.env} = {}) {
-  const proxyUrl = getProxyUrl({configPath, env});
+function getSteamCommunityRequestOptions(options = {}) {
+  const proxyUrl = getProxyUrl(options);
   if (!proxyUrl) {
     return {};
   }
@@ -160,8 +223,8 @@ function getSteamCommunityRequestOptions({configPath, env = process.env} = {}) {
   return {proxy: parsedProxy.url};
 }
 
-function getSteamCommunityOptions({configPath, env = process.env} = {}) {
-  const requestOptions = getSteamCommunityRequestOptions({configPath, env});
+function getSteamCommunityOptions(options = {}) {
+  const requestOptions = getSteamCommunityRequestOptions(options);
   if (!requestOptions.proxy) {
     return {};
   }
@@ -183,10 +246,27 @@ function getSteamCommunityOptions({configPath, env = process.env} = {}) {
   }
 }
 
-function proxyHint({configPath, env = process.env} = {}) {
-  const proxyUrl = getProxyUrl({configPath, env});
+function redactProxyUrl(proxyUrl) {
+  const value = asString(proxyUrl).trim();
+  if (!value) {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.username || parsed.password) {
+      parsed.username = "***";
+      parsed.password = "***";
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch (_) {
+    return value.replace(/:\/\/([^:@\s]+):([^@\s]+)@/, "://***:***@");
+  }
+}
+
+function proxyHint({configPath, env = process.env, windowsProxyResolver = readWindowsSystemProxy} = {}) {
+  const proxyUrl = getProxyUrl({configPath, env, windowsProxyResolver});
   if (proxyUrl) {
-    return ` (proxy=${proxyUrl})`;
+    return ` (proxy=${redactProxyUrl(proxyUrl)})`;
   }
   return " (proxy not configured)";
 }
@@ -194,6 +274,9 @@ function proxyHint({configPath, env = process.env} = {}) {
 module.exports = {
   getProxyUrl,
   proxyHint,
+  getWindowsSystemProxyUrl,
+  parseWindowsProxyServer,
+  redactProxyUrl,
   createProxyAgent,
   createProxyAgentForUrl,
   getSteamSessionProxyOptions,

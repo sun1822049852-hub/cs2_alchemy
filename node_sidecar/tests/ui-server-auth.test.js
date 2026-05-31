@@ -94,8 +94,10 @@ async function startServer(options = {}) {
   const accountsFilePath = path.join(tempDir, "accounts.json");
   const uiStateFilePath = path.join(tempDir, "inventory_ui_state.json");
   const licenseStateFilePath = path.join(tempDir, "client_license_state.json");
+  const clientConfigFilePath = path.join(tempDir, "client_config.json");
   writeJson(accountsFilePath, legacyAccountsFixture());
   writeJson(uiStateFilePath, {});
+  writeJson(clientConfigFilePath, {});
 
   const runtime = createLicenseRuntime(licenseStateFilePath);
   const fakeAccountStore = {
@@ -135,6 +137,7 @@ async function startServer(options = {}) {
     ...(options.useBuiltInLicenseRuntime ? {} : {licenseRuntimeFactory: () => runtime.scheduler}),
     licenseConfigFactory: () => ({
       authMode: "debug_bundle",
+      configFile: clientConfigFilePath,
       ...(options.licenseConfig && typeof options.licenseConfig === "object" ? options.licenseConfig : {})
     }),
     controlPlaneAuthClientFactory: options.controlPlaneAuthClientFactory,
@@ -364,6 +367,7 @@ async function test_dev_auto_bundle_mode_bootstraps_local_signed_license() {
     const server = createServer({
       licenseConfigFactory: () => ({
         authMode: "dev_auto_bundle",
+        configFile: path.join(tempDir, "client_config.json"),
         publicKeyFile,
         machineIdFile,
         licenseStateFile: licenseStateFilePath,

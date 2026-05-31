@@ -10,6 +10,38 @@ async function test_login_fails_when_service_is_not_configured() {
   );
 }
 
+function test_capabilities_allow_https_auth_service() {
+  const client = createControlPlaneAuthClient({baseUrl: "https://auth.example.com"});
+  assert.deepEqual(client.getCapabilities(), {
+    configured: true,
+    baseUrl: "https://auth.example.com"
+  });
+}
+
+function test_capabilities_allow_loopback_http_auth_service() {
+  const client = createControlPlaneAuthClient({baseUrl: "http://localhost:8787"});
+  assert.deepEqual(client.getCapabilities(), {
+    configured: true,
+    baseUrl: "http://localhost:8787"
+  });
+}
+
+async function test_login_rejects_public_http_auth_service_before_fetch() {
+  let called = false;
+  const client = createControlPlaneAuthClient({
+    baseUrl: "http://8.138.39.139",
+    fetchFn: async () => {
+      called = true;
+      throw new Error("fetch should not be called for insecure public http");
+    }
+  });
+  await assert.rejects(
+    () => client.login({username: "alice", password: "secret", deviceId: "device_1"}),
+    (err) => err && err.code === "insecure_control_plane_base_url"
+  );
+  assert.equal(called, false);
+}
+
 async function test_login_normalizes_remote_auth_payload() {
   const calls = [];
   const client = createControlPlaneAuthClient({
@@ -236,6 +268,9 @@ async function test_check_or_bind_steam_account_normalizes_request_and_response(
 
 async function main() {
   await test_login_fails_when_service_is_not_configured();
+  test_capabilities_allow_https_auth_service();
+  test_capabilities_allow_loopback_http_auth_service();
+  await test_login_rejects_public_http_auth_service_before_fetch();
   await test_login_normalizes_remote_auth_payload();
   await test_refresh_normalizes_rotated_refresh_token();
   await test_issue_craft_permit_normalizes_request_and_response();

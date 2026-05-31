@@ -308,7 +308,8 @@ async function test_helper_craft_routes_allow_simulation_permission_without_craf
         route: "/api/craft/assist-select",
         body: {
           username: "member_test",
-          target_wear: "0.12",
+          target_wear: Math.fround(0.12),
+          target_wear_raw: "0.12",
           wear_approach_mode: "finite",
           materials: [],
           selected_item_ids: ["asset_1"]
@@ -403,6 +404,7 @@ async function test_real_craft_execution_routes_require_remote_permit_in_prod_lo
     const server = createServer({
       licenseConfigFactory: () => ({
         defaultAuthMode: "prod_login",
+        controlPlaneBaseUrl: "https://auth.example.com",
         publicKeyFile,
         machineIdFile
       }),
@@ -453,7 +455,7 @@ async function test_real_craft_execution_routes_require_remote_permit_in_prod_lo
         route: "/api/craft/tradeup",
         body: tradeupBody
       });
-      assert.equal(tradeupResponse.statusCode, 200);
+      assert.equal(tradeupResponse.statusCode, 200, JSON.stringify(tradeupResponse.body));
       assert.equal(tradeupResponse.body.ok, true);
 
       const componentBody = {
@@ -473,7 +475,7 @@ async function test_real_craft_execution_routes_require_remote_permit_in_prod_lo
         route: "/api/craft/tradeup-with-components",
         body: componentBody
       });
-      assert.equal(componentResponse.statusCode, 200);
+      assert.equal(componentResponse.statusCode, 200, JSON.stringify(componentResponse.body));
       assert.equal(componentResponse.body.ok, true);
 
       assert.equal(permitCalls.length, 2);
@@ -513,6 +515,7 @@ async function test_real_craft_execution_routes_fail_when_remote_permit_is_unava
     const server = createServer({
       licenseConfigFactory: () => ({
         defaultAuthMode: "prod_login",
+        controlPlaneBaseUrl: "https://auth.example.com",
         machineIdFile
       }),
       licenseRuntimeFactory: () => createLicenseRuntime([

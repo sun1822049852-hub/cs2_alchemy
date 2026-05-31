@@ -43,6 +43,19 @@ function loadRunBatchCraftExecution(overrides = {}) {
     setRows: overrides.setRows,
     syncInventoryTop: overrides.syncInventoryTop,
     cacheSnapshotForAccount: overrides.cacheSnapshotForAccount,
+    normalizeCraftRecipeItemIds: overrides.normalizeCraftRecipeItemIds || ((ids) => Array.from(new Set((Array.isArray(ids) ? ids : []).map((value) => String(value || "").trim()).filter(Boolean)))),
+    deepCopyPlain: overrides.deepCopyPlain || ((value) => JSON.parse(JSON.stringify(value))),
+    buildCraftApiRecipePayload: overrides.buildCraftApiRecipePayload || ((entry) => ({
+      queue_index: Number(entry && entry.queue_index),
+      item_ids: Array.from(new Set((Array.isArray(entry && entry.item_ids) ? entry.item_ids : []).map((value) => String(value || "").trim()).filter(Boolean))),
+      item_sources: JSON.parse(JSON.stringify(entry && entry.item_sources && typeof entry.item_sources === "object" ? entry.item_sources : {}))
+    })),
+    buildRowsByAssetId: overrides.buildRowsByAssetId || ((rows) => new Map((Array.isArray(rows) ? rows : []).map((row) => [String(row && row.asset_id || "").trim(), row]).filter(([id]) => id))),
+    getAllInventoryCraftableRows: overrides.getAllInventoryCraftableRows || (({rows = []} = {}) => rows),
+    craftRecipeEntryUsesComponentItems: overrides.craftRecipeEntryUsesComponentItems || ((entry) => {
+      const itemSources = entry && entry.item_sources && typeof entry.item_sources === "object" ? entry.item_sources : {};
+      return Object.values(itemSources).some((source) => source && String(source.source_scope || "").trim() === "component");
+    }),
     console
   };
   vm.runInNewContext(`${source}\nthis.runBatchCraftExecution = runBatchCraftExecution;`, context, {filename: APP_PATH});
@@ -154,8 +167,126 @@ async function test_batch_craft_success_writebacks_latest_inventory_snapshot() {
   assert.equal(cached.fetchTime, "new-fetch");
 }
 
+async function test_batch_craft_execution_uses_batch_cooling_switch_and_component_prepare_flow() {
+  const capturedTradeupRequests = [];
+  const capturedComponentRequests = [];
+  const componentSources = {
+    "component-1": {
+      source_scope: "component",
+      source_component_id: "box-1",
+      source_component_name: "Box 1"
+    },
+    "main-1": {
+      source_scope: "main",
+      source_component_id: "",
+      source_component_name: ""
+    }
+  };
+  const state = {
+    batchCraftBusy: false,
+    batchCraftQueue: [{
+      username: "acc-batch",
+      recipes: [{
+        id: "recipe-component",
+        item_ids: ["component-1", "main-1", "main-2", "main-3", "main-4", "main-5", "main-6", "main-7", "main-8", "main-9"],
+        item_sources: deepCopy(componentSources),
+        status: "pending",
+        result: null
+      }]
+    }],
+    craftIncludeCooling: false,
+    batchCraftIncludeCooling: true,
+    batchCraftActiveAccount: "",
+    currentAccountUsername: "acc-batch",
+    rows: [],
+    component: {summary_map: {}, item_map: {}},
+    snapshotPath: "snapshot-old.json",
+    fetchTime: "old-fetch",
+    snapshotCacheByAccount: new Map()
+  };
+
+  const app = loadRunBatchCraftExecution({
+    state,
+    async openConfirmModal() {
+      return true;
+    },
+    setBatchCraftStatus() {},
+    setBatchCraftOverlay() {},
+    renderBatchCraftPage() {},
+    renderBatchCraftAccountCards() {},
+    renderBatchCraftQueue() {},
+    setRows() {},
+    syncInventoryTop() {},
+    cacheSnapshotForAccount() {},
+    async doRefresh() {
+      return {ok: true};
+    },
+    async api(route, options = {}) {
+      if (route === "/api/accounts/active") return {ok: true};
+      if (route === "/api/craft/tradeup-with-components") {
+        const payload = JSON.parse(String(options.body || "{}"));
+        capturedComponentRequests.push(payload);
+        return {
+          ok: true,
+          prepare_only: true,
+          prepare_results: [{
+            queue_index: 0,
+            status: "ready",
+            prepare_status: "ready",
+            prepare_message: "",
+            item_ids: ["component-1", "main-1", "main-2", "main-3", "main-4", "main-5", "main-6", "main-7", "main-8", "main-9"],
+            item_sources: {
+              ...componentSources,
+              "component-1": {
+                source_scope: "main",
+                source_component_id: "",
+                source_component_name: ""
+              }
+            }
+          }],
+          ready_recipes: [{
+            queue_index: 0,
+            item_ids: ["component-1", "main-1", "main-2", "main-3", "main-4", "main-5", "main-6", "main-7", "main-8", "main-9"],
+            item_sources: {
+              ...componentSources,
+              "component-1": {
+                source_scope: "main",
+                source_component_id: "",
+                source_component_name: ""
+              }
+            }
+          }],
+          rows: [],
+          component: {summary_map: {}, item_map: {}}
+        };
+      }
+      if (route === "/api/craft/tradeup") {
+        const payload = JSON.parse(String(options.body || "{}"));
+        capturedTradeupRequests.push(payload);
+        return {ok: true, rows: [], component: {summary_map: {}, item_map: {}}, gained_ids: []};
+      }
+      throw new Error(`unexpected route: ${route}`);
+    }
+  });
+
+  await app.runBatchCraftExecution();
+
+  assert.equal(capturedComponentRequests.length, 1);
+  assert.equal(capturedComponentRequests[0].allow_cooling, true);
+  assert.equal(capturedComponentRequests[0].use_component_items, true);
+  assert.equal(capturedComponentRequests[0].prepare_only, true);
+  assert.deepEqual(capturedComponentRequests[0].recipes[0].item_sources, componentSources);
+
+  assert.equal(capturedTradeupRequests.length, 1);
+  const request = capturedTradeupRequests[0];
+  assert.equal(request.allow_cooling, true);
+  assert.equal(request.use_component_items, false);
+  assert.equal(request.recipes[0].item_sources["component-1"].source_scope, "main");
+}
+
 async function main() {
   await test_batch_craft_success_writebacks_latest_inventory_snapshot();
+  await test_batch_craft_execution_uses_batch_cooling_switch_and_component_prepare_flow();
   console.log("batch-craft-execution-writeback tests passed");
 }
 

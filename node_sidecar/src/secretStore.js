@@ -30,7 +30,11 @@ function encryptSecret(plaintext) {
       timeout: 10000,
       windowsHide: true
     });
-    return DPAPI_PREFIX + result.trim();
+    const encrypted = result.trim();
+    if (!encrypted) {
+      return plaintext;
+    }
+    return DPAPI_PREFIX + encrypted;
   } catch (_) {
     return plaintext;
   }
@@ -59,7 +63,11 @@ function decryptSecret(ciphertext) {
       timeout: 10000,
       windowsHide: true
     });
-    return Buffer.from(result.trim(), "base64").toString("utf8");
+    const decrypted = result.trim();
+    if (!decrypted) {
+      return "";
+    }
+    return Buffer.from(decrypted, "base64").toString("utf8");
   } catch (_) {
     return "";
   }

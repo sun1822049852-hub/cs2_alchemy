@@ -132,7 +132,7 @@ function runVpkDevCommand(argv, {stdout = process.stdout, stderr = process.stder
   try {
     const args = parseCliArgs(Array.isArray(argv) ? argv : []);
     const command = String(args._positional[0] || "").trim().toLowerCase();
-    if (!command || command === "help" || command === "--help") {
+    if (!command || command === "help" || command === "--help" || args.help === "true") {
       stdout.write(`${buildHelpText()}\n`);
       return 0;
     }

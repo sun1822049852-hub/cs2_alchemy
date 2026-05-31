@@ -11,20 +11,22 @@ files:
   - fetch_component_contents.js
   - package.json
   - src/**
+  - "!src/vpkDevTools.js"
+  - "!src/vpkDevCli.js"
   - ui/**
 extraResources:
   - from: build/client_config.release.json
     to: client_config.json
   - from: build/icon.ico
     to: app-icon.ico
-  - from: ../schema_cache.json
+  - from: build/schema_cache.seed.json
     to: schema_cache.json
   - from: build/csgo_skins.seed.db
     to: csgo_skins.db
   - from: ../shared
     to: shared
-  - from: ../keys
-    to: keys
+  - from: ../keys/client_license_public.pem
+    to: keys/client_license_public.pem
 win:
   signAndEditExecutable: false
   target:

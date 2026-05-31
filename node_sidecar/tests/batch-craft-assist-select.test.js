@@ -49,6 +49,7 @@ function loadBatchCraftAssistSelect(overrides = {}) {
     craftAssistTargetCountFromMaterials: overrides.craftAssistTargetCountFromMaterials,
     api: overrides.api,
     normalizeCraftRecipeItemIds: overrides.normalizeCraftRecipeItemIds,
+    deepCopyPlain: overrides.deepCopyPlain || ((value) => JSON.parse(JSON.stringify(value))),
     hasCachedSnapshotForAccount: overrides.hasCachedSnapshotForAccount,
     sanitizeCraftAssistPresetPayload: overrides.sanitizeCraftAssistPresetPayload,
     renderBatchCraftPage: overrides.renderBatchCraftPage || function() {},
@@ -233,9 +234,78 @@ async function test_batch_helper_uses_current_assist_route_contract({DateImpl}) 
   assert.deepEqual(JSON.parse(JSON.stringify(result)), {
     id: "batch_1745582400000_4fzzzx",
     item_ids: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+    item_sources: {},
     status: "pending",
     result: null
   });
+}
+
+async function test_batch_helper_preserves_component_item_sources_from_assist_select({DateImpl}) {
+  const componentSources = {
+    "1": {
+      source_scope: "component",
+      source_component_id: "box-1",
+      source_component_name: "Box 1"
+    },
+    "2": {
+      source_scope: "main",
+      source_component_id: "",
+      source_component_name: ""
+    }
+  };
+  const app = loadBatchCraftAssistSelect({
+    Date: DateImpl,
+    state: {
+      batchCraftUseComponentItems: true,
+      batchCraftIncludeCooling: false,
+      batchCraftFastMode: true,
+      batchCraftApproachMode: true,
+      batchCraftWearOffset: 0.00017
+    },
+    getCraftRowsForAccount(username) {
+      assert.equal(username, "acc-component");
+      return [{asset_id: "seed-1"}];
+    },
+    normalizeCraftAssistFilterMode(value) {
+      return String(value || "").trim() === "absolute" ? "absolute" : "relative";
+    },
+    parseOptionalWear01(value) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : null;
+    },
+    normalizeCraftAssistMaterialsForRun({materials}) {
+      return Array.isArray(materials) ? materials : [];
+    },
+    craftAssistTargetCountFromMaterials(materials) {
+      assert.equal(materials.length, 1);
+      return 10;
+    },
+    async api(route) {
+      assert.equal(route, "/api/craft/assist-select");
+      return {
+        ok: true,
+        item_ids: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+        item_sources: componentSources,
+        overall: 0.2141
+      };
+    },
+    normalizeCraftRecipeItemIds(ids) {
+      return Array.from(new Set((Array.isArray(ids) ? ids : []).map((value) => String(value || "").trim()).filter(Boolean)));
+    }
+  });
+
+  const result = await app.callBatchCraftAssistSelectForAccount(
+    "acc-component",
+    {
+      target_wear: Math.fround(0.21),
+      target_wear_raw: "0.21",
+      wear_filter_mode: "relative",
+      materials: [{id: "mat-1", role: "main", count: 10, items: [{id: "mat-1__1", name: "AK"}]}]
+    },
+    []
+  );
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result.item_sources)), componentSources);
 }
 
 async function test_batch_helper_below_mode_keeps_raw_and_does_not_pre_shift({DateImpl}) {
@@ -750,6 +820,7 @@ async function main() {
   Math.random = () => 0.123456789;
   try {
     await test_batch_helper_uses_current_assist_route_contract({DateImpl: FakeDate});
+    await test_batch_helper_preserves_component_item_sources_from_assist_select({DateImpl: FakeDate});
     await test_batch_helper_below_mode_keeps_raw_and_does_not_pre_shift({DateImpl: FakeDate});
     await test_batch_helper_keeps_null_and_logs_account_level_failure({DateImpl: FakeDate});
     await test_batch_selection_surfaces_blocked_shortfall_message_in_top_status({DateImpl: FakeDate});

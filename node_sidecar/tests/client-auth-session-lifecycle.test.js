@@ -62,9 +62,11 @@ async function startServer({
   const publicKeyFile = path.join(tempDir, "client_license_public.pem");
   const machineIdFile = path.join(tempDir, "machine_id.bin");
   const licenseStateFile = path.join(tempDir, "client_license_state.json");
+  const clientConfigFile = path.join(tempDir, "client_config.json");
   fs.writeFileSync(publicKeyFile, publicKey.export({format: "pem", type: "spki"}), "utf8");
   fs.writeFileSync(machineIdFile, Buffer.from("test-machine", "utf8"));
   writeJson(licenseStateFile, {});
+  writeJson(clientConfigFile, {});
 
   const deviceId = resolveDeviceId(machineIdFile);
   const authClient = typeof authClientFactory === "function"
@@ -73,6 +75,7 @@ async function startServer({
   const server = createServer({
     licenseConfigFactory: () => ({
       authMode: "prod_login",
+      configFile: clientConfigFile,
       controlPlaneBaseUrl: "https://auth.example.com",
       publicKeyFile,
       machineIdFile,
@@ -126,7 +129,10 @@ async function requestJson(ctx, method, route, {body = null} = {}) {
         });
       }
     );
-    req.on("error", reject);
+    req.on("error", (err) => {
+      err.message = `${method} ${route}: ${err.message}`;
+      reject(err);
+    });
     if (payload) {
       req.write(payload);
     }
@@ -172,7 +178,8 @@ async function test_client_refreshes_bundle_before_expiry_using_saved_refresh_cr
           },
           bundle: createSignedBundle(privateKey, deviceId, {
             jti: "snap_1",
-            expMsFromNow: 90
+            // The scheduler floors intervals to 1000ms, so this enters the 60ms refresh window on the first tick.
+            expMsFromNow: 1000
           }),
           refreshCredential: "refresh_token_1"
         };
