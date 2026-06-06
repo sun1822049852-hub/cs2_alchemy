@@ -1,8 +1,18 @@
-﻿# 项目认知地图 pilot
+﻿# 项目认知地图
 
-一句话定位：这是一份覆盖整个 `cs2_alchemy` 项目的认知地图 pilot，适用范围包括但不限于入口、前端、API、数据、外部账号/交易、测试验证、运行态文件；它不是按钮清单、接口清单，也不是事实源。
+一句话定位：这是一份覆盖整个 `cs2_alchemy` 项目的认知地图，适用范围包括但不限于入口、前端、API、数据、外部账号/交易、测试验证、运行态文件；它不是按钮清单、接口清单，也不是事实源。
+
+状态说明：该地图已在 2026-06-06 由 pilot 转为稳定项目地图；地图仍只是 navigation / hypothesis layer，不表示本次重新验证了全部代码行为。
 
 > 使用前先记住：地图只是 navigation / hypothesis layer，用来帮助后续 AI 更快找到可能相关的链路、职责和风险。代码、测试、契约、真实运行日志、DB/缓存/队列/trace 才是真源。先读地图，再用真源核验。
+
+## 地图类型与事实边界
+
+- `map schema last updated`: `2026-06-06`。本次只补强 Project Cognition Map 的使用口径、地图类型和索引字段，不代表重新验证了所有代码行为。
+- `owner/maintainer`: 项目主维护者；后续 AI/agent 只在当前任务直接影响范围内维护相关条目。
+- `source of truth`: 代码、测试、契约、真实运行日志、DB/cache/profile/WebSocket/队列/trace、真实账号和外部服务返回。地图只负责导航、假设和风险提示。
+- `map types`: 当前文件同时承担两类稳定地图：链路地图用于排查入口和传播路径；分层功能索引用于改功能前确认状态归属、状态口径、统一更新入口、上下游和持久化/事件链路。它不是全函数、全按钮、全接口清单。
+- `do-not-infer`: 不要把某个入口、按钮、接口或文件在地图里出现，反推为唯一实现、完整覆盖或运行态已验证。每个条目的 `last verified` 只对该条目记录的验证方式负责。
 
 ## 使用规则
 
@@ -32,6 +42,25 @@
 | 外部账号/市场/交易 | `node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamMarketService.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/proxyConfig.js` | 需要真实账号、session、网络和运行态证据补验。 |
 | 测试验证 | `tests/`、`node_sidecar/tests/`、`admin_console/tests/` | 当前更像单文件脚本测试，不是统一根 `npm test`。 |
 | 运行态文件 | `csgo_skins.db`、`inventory_ui_state.json`、`login_keys.json`、`logs/processed_inventory` | 这些是核心例子，不是完整清单；变脏不一定异常，需先判断是否本地程序正在写入。 |
+
+## 分层功能索引起点
+
+- `scope/coverage`: 这是面向后续改功能前定位的最小索引起点，覆盖当前地图已反复出现的 UI/API、应用服务、领域动作、基础设施和运行态状态。它只列高价值、跨模块或容易误读的能力，不覆盖全项目所有函数。
+- `source links`: `node_sidecar/ui/app.js`、`node_sidecar/src/uiServer.js`、`node_sidecar/src/services/`、`node_sidecar/src/constants.js`、`node_sidecar/src/accountStore.js`、`node_sidecar/src/snapshotStore.js`、`node_sidecar/src/steamWebSession.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/steamMarketService.js`、`inventory_ui_state.json`、`csgo_skins.db`、`logs/processed_inventory`。
+- `last verified`: `2026-06-06`（只验证索引口径来自本地图和项目规则；具体代码行为仍看下方各条目的 `last verified`）。
+- `validation method`: 静态读取 `AGENTS.md` 和本地图；未重新读取业务源文件、未运行 UI、未访问真实账号或外部服务。
+- `owner/maintainer`: 主项目维护者；后续修改状态或跨层链路时，由触达该链路的 agent 更新对应最小范围。
+- `update triggers`: 新增/删除/移动高价值能力；改变状态归属、状态语义、统一更新入口、持久化位置、事件/SSE/WebSocket/队列传播、外部账号动作或主 UI/API 入口。
+- `stale signals`: 代码已拆层但索引仍指向旧汇聚点；同一个状态出现多个未说明的写入口；UI 展示和领域真相状态混在一起；运行态 trace 与地图描述不一致。
+- `do-not-infer`: 这里的“层”是导航口径，不代表项目已经完整实现严格 DDD/Clean Architecture；不要绕过真实 owner 在 route、runtime 文件、页面组件或 repository 里零散补状态。
+- `known risks/open questions`: 当前索引仍是最小稳定地图粒度，炼金执行、Steam 交易/市场、本地凭据和 Skin DB 同步后续适合拆子地图；本轮没有核验真实运行态状态传播。
+
+| 层/口径 | 典型能力 | 状态归属和口径 | 统一更新入口 | 上游调用者 | 持久化/传播 | 下游消费者 |
+| --- | --- | --- | --- | --- | --- | --- |
+| UI / projection | 工作台功能区、账号选择、库存表格、炼金/模拟表单、权限提示 | 展示状态和临时交互状态；不等于真实库存、真实账号能力或真实交易结果 | 前端 hydrate、同源 `api()` 调用、SSE/事件回推后的渲染入口 | 用户操作、Electron/浏览器页面加载 | `inventory_ui_state.json` 的 UI 选择/preset、localStorage、前端内存状态 | 用户界面、批量流程按钮态、错误提示 |
+| API / application | client auth、账号范围、refresh、snapshot、craft、component、market、trade、simulation 路由 | 请求级授权、账号作用域、工作流编排状态；不应成为长期领域真相的旁路写点 | `node_sidecar/src/uiServer.js` 路由和服务调用边界 | 前端 `fetch("/api/...")`、Electron 内嵌服务 | SSE `/api/events`、HTTP response、运行日志、运行态 JSON/DB 调用 | UI、测试脚本、真实账号动作服务 |
+| Domain / workflow | 炼金执行、组件存取、库存刷新、交易报价、市场确认、Skin DB 同步 | 真实账号动作、库存快照、皮肤基础库和交易结果等高风险状态；区分真相状态、投影状态和观察态 | 对应 service，例如 craft/component/snapshot/trade/market/skin sync 服务 | API 路由、定时/手动刷新、外部账号流程 | SQLite、processed snapshot、Steam/C5/BUFF/SteamDT 返回、日志和失败恢复记录 | API 返回、UI rows、预测/模拟、后续账号操作 |
+| Infrastructure / runtime | 路径常量、SQLite、凭据文件、代理、Electron `userData`、打包 seed | 运行态文件、凭据和环境观察态；开发态和打包态可能不同 | `constants`、store/secret/proxy/session 相关模块 | 应用启动、服务层读写、打包首启 | `csgo_skins.db`、`login_keys.json`、`client_config.json`、`schema_cache.json`、Electron `userData`、系统代理/DPAPI | 账号登录、库存和市场链路、打包产物、调试和审查 |
 
 ## 核心地图条目
 
