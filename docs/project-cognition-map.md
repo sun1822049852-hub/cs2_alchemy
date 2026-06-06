@@ -174,10 +174,10 @@
 
 ### 10. Web 库存、交易报价与市场确认
 
-- `scope/coverage`: Web 库存/市场/交易页高风险接口包括 `/api/accounts/:username/inventory`、`/api/accounts/send-trade-offer`、`/api/market/batch-sell`、`/api/market/confirmations`、`/api/market/confirm-listings`，涉及 Steam web session、交易报价、市场上架确认。主 Web 库存页走 `/api/accounts/:username/inventory`；另一个库存弹窗走 `/api/snapshot/account?source=web_inventory&save_stub=1`。`/api/market/confirmations` 偏确认列表读取，`/api/market/confirm-listings` 偏执行确认。
+- `scope/coverage`: Web 库存/市场/交易页高风险接口包括 `/api/accounts/:username/inventory`、`/api/accounts/send-trade-offer`、`/api/market/batch-sell`、`/api/market/confirmations`、`/api/market/confirm-listings`，涉及 Steam web session、交易报价、市场上架确认。Web 库存主页面和旧库存弹窗都走 `/api/accounts/:username/inventory`；Web inventory 不再通过 snapshot/stub 读取 GC 快照。`/api/market/confirmations` 偏确认列表读取，`/api/market/confirm-listings` 偏执行确认。
 - `source links`: `node_sidecar/src/uiServer.js`、`node_sidecar/ui/app.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/steamMarketService.js`、`node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamHttpClient.js`。
-- `last verified`: `2026-05-30`
-- `validation method`: 静态切片整理；运行 raw fetch auth handling、account scope route 定向测试；未访问真实 Steam Web session、报价或市场确认。
+- `last verified`: `2026-06-06`
+- `validation method`: 静态切片整理；运行 raw fetch auth handling、account scope route 定向测试；2026-06-06 静态测试覆盖 Web inventory 主页面/旧弹窗走 `/api/accounts/:username/inventory`、不走 snapshot/stub；未访问真实 Steam Web session、报价或市场确认。
 - `owner/maintainer`: Web 库存、交易和市场功能维护者。
 - `update triggers`: 改报价发送、批量上架、确认逻辑、Steam Guard、Web session 续期、前端账号选择。
 - `stale signals`: 接口路径变化；市场确认方式变化；Steam Guard 处理方式变化；前端账号列表来源变化。
@@ -232,7 +232,7 @@
 
 ## 待验证问题
 
-- Web 库存页使用 `state.savedAccounts`，静态扫描未找到赋值点；可能导致该页面账号列表为空。需要浏览器/Electron 运行态验证，不应直接定性为 bug。
+- Web 库存页账号来源已统一到 `state.accounts`；Web inventory 读取与 GC snapshot 分离，静态测试已覆盖旧弹窗不再走 snapshot/stub。真实浏览器/Electron 运行态仍未验证。
 - `login_keys.json` 当前实现是直接 JSON 读写；这是静态扫描结论，未读取真实文件内容，需要结合实际平台分支、真实文件写入和安全设计确认。
 - 根目录 `config.py` 扫描时未发现；代理实际来源需要在运行环境中确认。
 - 打包态 `userData` 路径、seed `client_config.json`、`schema_cache.json`、`csgo_skins.db` 和首次启动状态需要真实打包验证。

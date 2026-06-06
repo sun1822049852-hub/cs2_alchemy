@@ -16652,11 +16652,15 @@ const webInvState = {
   panelWidth: 220
 };
 
+function webInvAccounts() {
+  return Array.isArray(state.accounts) ? state.accounts : [];
+}
+
 function renderWebInvAccountList() {
   if (!ui.webInvAccountList) return;
   const wrap = ui.webInvAccountList;
   wrap.replaceChildren();
-  const accounts = state.savedAccounts || [];
+  const accounts = webInvAccounts();
   for (const acc of accounts) {
     const item = document.createElement("div");
     item.className = "web-inv-account-item" + (webInvState.selectedAccount === acc.username ? " selected" : "");
@@ -16701,7 +16705,7 @@ function renderWebInvAccountInfo() {
     return;
   }
   ui.webInvAccountInfo.classList.remove("hidden");
-  const acc = (state.savedAccounts || []).find(a => a.username === username);
+  const acc = webInvAccounts().find(a => a.username === username);
   if (!acc) return;
   ui.webInvAccName.textContent = acc.steam_name || acc.username;
   ui.webInvAccBalance.textContent = acc.balance || "-";
@@ -16711,62 +16715,6 @@ function renderWebInvAccountInfo() {
   ui.webInvAccTradeUrl.title = tradeUrl || "无交易链接";
   ui.webInvAccTradeUrl.onclick = () => {
     if (tradeUrl) { navigator.clipboard.writeText(tradeUrl).catch(() => {}); }
-  };
-}
-
-function webInvComponentName(component, componentId) {
-  const key = String(componentId || "").trim();
-  if (!key) return "";
-  const summaryMap = component && component.summary_map && typeof component.summary_map === "object"
-    ? component.summary_map
-    : {};
-  const summary = summaryMap[key];
-  const rawName = String(summary && summary.name || "").trim();
-  return compactComponentName(rawName || key);
-}
-
-function webInvAdaptSnapshotRow(row, component) {
-  if (!row || typeof row !== "object") return null;
-  const assetid = rowAssetId(row);
-  if (!assetid) return null;
-  if (Number(row.def_index || 0) === STORAGE_UNIT_DEF_INDEX) return null;
-  const componentId = String(row.casket_id || "").trim();
-  const hiddenReason = String(row.hidden_reason || "").trim();
-  const imageUrl = preferredRowSkinImageUrl(row);
-  const marketHashName = String(row.market_hash_name || "").trim();
-  const name = String(row.name || marketHashName || assetid).trim();
-  const tradable = !hiddenReason && coolingUnlockTs(row) <= 0;
-  return {
-    assetid,
-    asset_id: assetid,
-    market_hash_name: marketHashName || name,
-    name: name || marketHashName || assetid,
-    name_color: String(row.name_color || "").trim(),
-    image_url: imageUrl,
-    icon_url: String(row.icon_url || "").trim(),
-    tradable,
-    tradable_after: row.tradable_after,
-    source_scope: componentId ? "component" : "main",
-    source_component_id: componentId,
-    source_component_name: componentId ? webInvComponentName(component, componentId) : "",
-    is_component_item: !!componentId,
-    can_transfer: tradable && !componentId,
-    can_list: !hiddenReason && !!(marketHashName || name),
-    block_reason: hiddenReason,
-    raw_row: row
-  };
-}
-
-function webInvBuildSnapshotCacheEntry(data) {
-  const rows = Array.isArray(data && data.rows) ? data.rows : [];
-  const component = data && data.component ? data.component : {summary_map: {}, item_map: {}};
-  return {
-    rows,
-    component,
-    items: rows.map((row) => webInvAdaptSnapshotRow(row, component)).filter(Boolean),
-    fetchTime: String(data && data.fetch_time || "").trim(),
-    snapshotPath: data && data.snapshot && data.snapshot.path ? data.snapshot.path : "",
-    fetchedAt: Date.now()
   };
 }
 
@@ -16812,7 +16760,7 @@ function renderWebInvItemGrid() {
     const label = document.createElement("div");
     label.className = "web-inv-item-label";
     label.textContent = item.market_hash_name || item.name || "Unknown";
-    label.title = item.source_component_name ? `${label.textContent}\n来源：${item.source_component_name}` : label.textContent;
+    label.title = label.textContent;
     card.title = label.title;
     card.append(img, label);
     if (!item.tradable) {
@@ -16898,7 +16846,7 @@ async function webInvFetchBalance() {
     if (data.ok && data.results && data.results.length > 0) {
       const r = data.results[0];
       if (r.success) {
-        const acc = (state.savedAccounts || []).find(a => a.username === username);
+        const acc = webInvAccounts().find(a => a.username === username);
         if (acc) acc.balance = r.balance;
         renderWebInvAccountInfo();
       } else {
@@ -16915,7 +16863,7 @@ async function webInvFetchBalance() {
 async function webInvBatchBanCheck() {
   if (ui.webInvBatchBanCheck) { ui.webInvBatchBanCheck.disabled = true; ui.webInvBatchBanCheck.textContent = "检测中..."; }
   try {
-    const accounts = state.savedAccounts || [];
+    const accounts = webInvAccounts();
     const usernames = accounts.map(a => a.username);
     if (usernames.length === 0) return;
     const resp = await fetchAuthAwareRaw("/api/accounts/check-bans", {
@@ -16971,7 +16919,7 @@ async function webInvBatchBanCheck() {
 async function webInvBatchTradeUrl() {
   if (ui.webInvBatchTradeUrl) { ui.webInvBatchTradeUrl.disabled = true; ui.webInvBatchTradeUrl.textContent = "刷新中..."; }
   try {
-    const accounts = state.savedAccounts || [];
+    const accounts = webInvAccounts();
     const usernames = accounts.map(a => a.username);
     if (usernames.length === 0) return;
     const resp = await fetchAuthAwareRaw("/api/accounts/refresh-trade-url", {
@@ -17481,10 +17429,9 @@ function openWebInventoryModal(username) {
 
 async function fetchWebInventory(username) {
   try {
-    const data = await api(`/api/snapshot/account?username=${encodeURIComponent(username)}&source=web_inventory&save_stub=1`);
-    const cached = webInvBuildSnapshotCacheEntry(data);
+    const data = await api(`/api/accounts/${encodeURIComponent(username)}/inventory`);
     document.getElementById("webInventoryLoading").style.display = "none";
-    webInventoryState.items = cached.items || [];
+    webInventoryState.items = data && data.ok && Array.isArray(data.items) ? data.items : [];
     if (webInventoryState.items.length === 0) {
       document.getElementById("webInventoryEmpty").classList.remove("hidden");
       return;
