@@ -53,7 +53,7 @@ function createReadyLicenseRuntime() {
   };
 }
 
-function loadCreateServer() {
+function loadCreateServer({wallet} = {}) {
   const uiServerPath = require.resolve("../src/uiServer");
   const uiServerSourcePath = path.join(__dirname, "..", "src", "uiServer.js");
   const originalLoad = Module._load;
@@ -78,32 +78,36 @@ function loadCreateServer() {
         createSessionPool() {
           return {
             async acquire() {
+              const steam = {
+                steamID: {
+                  getSteamID64() {
+                    return "76561199000000001";
+                  },
+                  getSteam3RenderedID() {
+                    return "[U:1:12345673]";
+                  }
+                },
+                async getPersonas(ids) {
+                  const steamId64 = Array.isArray(ids) && ids[0] ? String(ids[0]) : "76561199000000001";
+                  return {
+                    personas: {
+                      [steamId64]: {
+                        player_name: "Seleno",
+                        avatar_url_icon: "https://example.com/avatar-icon.png",
+                        avatar_url_medium: "https://example.com/avatar-medium.png",
+                        avatar_url_full: "https://example.com/avatar-full.png"
+                      }
+                    }
+                  };
+                },
+                users: {}
+              };
+              if (wallet !== undefined) {
+                steam.wallet = wallet;
+              }
               return {
                 reused: false,
-                steam: {
-                  steamID: {
-                    getSteamID64() {
-                      return "76561199000000001";
-                    },
-                    getSteam3RenderedID() {
-                      return "[U:1:12345673]";
-                    }
-                  },
-                  async getPersonas(ids) {
-                    const steamId64 = Array.isArray(ids) && ids[0] ? String(ids[0]) : "76561199000000001";
-                    return {
-                      personas: {
-                        [steamId64]: {
-                          player_name: "Seleno",
-                          avatar_url_icon: "https://example.com/avatar-icon.png",
-                          avatar_url_medium: "https://example.com/avatar-medium.png",
-                          avatar_url_full: "https://example.com/avatar-full.png"
-                        }
-                      }
-                    };
-                  },
-                  users: {}
-                },
+                steam,
                 csgo: {
                   accountData: {
                     account_id: 12345673,
@@ -196,6 +200,27 @@ function requestJson({port, route, method = "GET", body = null}) {
   });
 }
 
+function writeProfileAccountsFixture(accountsFilePath) {
+  writeJson(accountsFilePath, {
+    accounts: {
+      selenomorphology: {
+        password: "SecretA",
+        remark: ""
+      }
+    },
+    active: "selenomorphology"
+  });
+}
+
+function readSteamAccountRow({dbPath, accountsFilePath, username}) {
+  const verifyStore = new AppAuthStore({dbPath, accountsFilePath, readOnly: true, initialize: false});
+  try {
+    return verifyStore.getSteamAccountForUser("", username, {includeAll: true});
+  } finally {
+    verifyStore.close();
+  }
+}
+
 async function testAccountProfileRouteUsesAccountViewerScopeConsistently() {
   const tempDir = makeTempDir();
   const originalPaths = {...PATHS};
@@ -209,15 +234,7 @@ async function testAccountProfileRouteUsesAccountViewerScopeConsistently() {
       userDataDir: tempDir,
       isPackaged: false
     });
-    writeJson(accountsFilePath, {
-      accounts: {
-        selenomorphology: {
-          password: "SecretA",
-          remark: ""
-        }
-      },
-      active: "selenomorphology"
-    });
+    writeProfileAccountsFixture(accountsFilePath);
     writeJson(uiStateFilePath, {});
 
     const seeded = new AppAuthStore({dbPath, accountsFilePath});
@@ -250,9 +267,7 @@ async function testAccountProfileRouteUsesAccountViewerScopeConsistently() {
         "https://example.com/avatar-full.png"
       );
 
-      const verifyStore = new AppAuthStore({dbPath, accountsFilePath, readOnly: true, initialize: false});
-      const row = verifyStore.getSteamAccountForUser("", "selenomorphology", {includeAll: true});
-      verifyStore.close();
+      const row = readSteamAccountRow({dbPath, accountsFilePath, username: "selenomorphology"});
       assert.equal(row.steam_name, "Seleno");
       assert.equal(row.avatar_url, "https://example.com/avatar-full.png");
     } finally {
@@ -269,8 +284,137 @@ async function testAccountProfileRouteUsesAccountViewerScopeConsistently() {
   }
 }
 
+async function testAccountProfileRoutePersistsSteamCmWalletMetadata() {
+  const tempDir = makeTempDir();
+  const originalPaths = {...PATHS};
+  const dbPath = path.join(tempDir, "csgo_skins.db");
+  const accountsFilePath = path.join(tempDir, "accounts.json");
+  const uiStateFilePath = path.join(tempDir, "inventory_ui_state.json");
+
+  try {
+    configureRuntimePaths({
+      projectRoot: tempDir,
+      userDataDir: tempDir,
+      isPackaged: false
+    });
+    writeProfileAccountsFixture(accountsFilePath);
+    writeJson(uiStateFilePath, {});
+
+    const seeded = new AppAuthStore({dbPath, accountsFilePath});
+    seeded.close();
+
+    const createServer = loadCreateServer({
+      wallet: {
+        hasWallet: true,
+        currency: 23,
+        balance: 15
+      }
+    });
+    const server = createServer({
+      licenseRuntimeFactory: () => createReadyLicenseRuntime()
+    });
+
+    try {
+      const address = await listen(server);
+      const profileResponse = await requestJson({
+        port: address.port,
+        route: "/api/accounts/profile?username=selenomorphology"
+      });
+      assert.equal(profileResponse.statusCode, 200);
+      assert.equal(profileResponse.body.ok, true);
+      assert.equal(profileResponse.body.profile.wallet_balance, "¥ 15.00");
+      assert.equal(profileResponse.body.profile.wallet_source, "steam_cm");
+      assert.equal(profileResponse.body.profile.wallet_currency, "CNY");
+      assert.ok(profileResponse.body.profile.wallet_observed_at);
+
+      const row = readSteamAccountRow({dbPath, accountsFilePath, username: "selenomorphology"});
+      assert.equal(row.balance, "¥ 15.00");
+      assert.equal(row.balance_source, "steam_cm");
+      assert.equal(row.balance_currency, "CNY");
+      assert.ok(row.balance_observed_at);
+    } finally {
+      await closeServer(server);
+      delete require.cache[require.resolve("../src/uiServer")];
+    }
+  } finally {
+    configureRuntimePaths({
+      projectRoot: originalPaths.ROOT_DIR,
+      userDataDir: originalPaths.WRITABLE_ROOT,
+      isPackaged: false
+    });
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
+async function testAccountProfileRouteDoesNotFallbackToStoredStoreWalletWhenCmUnavailable() {
+  const tempDir = makeTempDir();
+  const originalPaths = {...PATHS};
+  const dbPath = path.join(tempDir, "csgo_skins.db");
+  const accountsFilePath = path.join(tempDir, "accounts.json");
+  const uiStateFilePath = path.join(tempDir, "inventory_ui_state.json");
+  const oldObservedAt = "2026-06-06T11:00:00.000Z";
+
+  try {
+    configureRuntimePaths({
+      projectRoot: tempDir,
+      userDataDir: tempDir,
+      isPackaged: false
+    });
+    writeProfileAccountsFixture(accountsFilePath);
+    writeJson(uiStateFilePath, {});
+
+    const seeded = new AppAuthStore({dbPath, accountsFilePath});
+    seeded.updateSteamWalletBalance("selenomorphology", {
+      balance: "¥ 88.00",
+      source: "steam_store",
+      currency: "CNY",
+      observedAt: oldObservedAt
+    });
+    seeded.close();
+
+    const createServer = loadCreateServer({
+      wallet: {
+        hasWallet: false
+      }
+    });
+    const server = createServer({
+      licenseRuntimeFactory: () => createReadyLicenseRuntime()
+    });
+
+    try {
+      const address = await listen(server);
+      const profileResponse = await requestJson({
+        port: address.port,
+        route: "/api/accounts/profile?username=selenomorphology"
+      });
+      assert.equal(profileResponse.statusCode, 200);
+      assert.equal(profileResponse.body.ok, true);
+      assert.notEqual(profileResponse.body.profile.wallet_source, "steam_store");
+      assert.equal(profileResponse.body.profile.wallet_balance, "");
+
+      const row = readSteamAccountRow({dbPath, accountsFilePath, username: "selenomorphology"});
+      assert.equal(row.balance, "¥ 88.00");
+      assert.equal(row.balance_source, "steam_store");
+      assert.equal(row.balance_currency, "CNY");
+      assert.equal(row.balance_observed_at, oldObservedAt);
+    } finally {
+      await closeServer(server);
+      delete require.cache[require.resolve("../src/uiServer")];
+    }
+  } finally {
+    configureRuntimePaths({
+      projectRoot: originalPaths.ROOT_DIR,
+      userDataDir: originalPaths.WRITABLE_ROOT,
+      isPackaged: false
+    });
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
 async function main() {
   await testAccountProfileRouteUsesAccountViewerScopeConsistently();
+  await testAccountProfileRoutePersistsSteamCmWalletMetadata();
+  await testAccountProfileRouteDoesNotFallbackToStoredStoreWalletWhenCmUnavailable();
   console.log("account-profile-route scope tests passed");
 }
 

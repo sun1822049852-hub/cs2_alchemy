@@ -130,10 +130,58 @@ function test_legacy_active_account_remains_available_for_unscoped_dev_viewer() 
   }
 }
 
+function test_wallet_balance_source_metadata_is_persisted() {
+  const ctx = createStore();
+  try {
+    ctx.store.updateSteamWalletBalance("countsteam01", {
+      balance: "¥ 12.34",
+      source: "steam_store",
+      currency: "CNY",
+      observedAt: "2026-06-06T12:00:00.000Z"
+    });
+
+    const row = ctx.store.getSteamAccountForUser("", "countsteam01", {includeAll: true});
+    assert.equal(row.balance, "¥ 12.34");
+    assert.equal(row.balance_source, "steam_store");
+    assert.equal(row.balance_currency, "CNY");
+    assert.equal(row.balance_observed_at, "2026-06-06T12:00:00.000Z");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_wallet_balance_latest_successful_source_replaces_current_value() {
+  const ctx = createStore();
+  try {
+    ctx.store.updateSteamWalletBalance("countsteam01", {
+      balance: "¥ 12.34",
+      source: "steam_store",
+      currency: "CNY",
+      observedAt: "2026-06-06T12:00:00.000Z"
+    });
+    ctx.store.updateSteamWalletBalance("countsteam01", {
+      balance: "¥ 15.00",
+      source: "steam_cm",
+      currency: "CNY",
+      observedAt: "2026-06-06T12:05:00.000Z"
+    });
+
+    const row = ctx.store.getSteamAccountForUser("", "countsteam01", {includeAll: true});
+    assert.equal(row.balance, "¥ 15.00");
+    assert.equal(row.balance_source, "steam_cm");
+    assert.equal(row.balance_currency, "CNY");
+    assert.equal(row.balance_observed_at, "2026-06-06T12:05:00.000Z");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
 function main() {
   test_bootstrap_admin_creates_super_admin_and_imports_legacy_accounts();
   test_regular_user_only_sees_bound_steam_accounts();
   test_legacy_active_account_remains_available_for_unscoped_dev_viewer();
+  test_wallet_balance_source_metadata_is_persisted();
+  test_wallet_balance_latest_successful_source_replaces_current_value();
   console.log("app-auth-store tests passed");
 }
 

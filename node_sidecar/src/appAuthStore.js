@@ -82,6 +82,9 @@ function sanitizeSteamAccount(row, activeUsername = "") {
     ban_status: asString(row.ban_status || ""),
     trade_url: asString(row.trade_url || ""),
     balance: asString(row.balance || ""),
+    balance_source: asString(row.balance_source || ""),
+    balance_currency: asString(row.balance_currency || ""),
+    balance_observed_at: asString(row.balance_observed_at || ""),
     is_active: !!username && username === asString(activeUsername).trim()
   };
 }
@@ -220,6 +223,9 @@ class AppAuthStore {
     try { this.db.exec("ALTER TABLE steam_account ADD COLUMN ban_status TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
     try { this.db.exec("ALTER TABLE steam_account ADD COLUMN trade_url TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
     try { this.db.exec("ALTER TABLE steam_account ADD COLUMN balance TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN balance_source TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN balance_currency TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
+    try { this.db.exec("ALTER TABLE steam_account ADD COLUMN balance_observed_at TEXT NOT NULL DEFAULT ''"); } catch (_) { /* already exists */ }
   }
 
   seedSystemData() {
@@ -706,6 +712,37 @@ class AppAuthStore {
 
   updateSteamAccountTradeUrl(username, tradeUrl) {
     this.updateSteamAccountField(username, "trade_url", tradeUrl);
+  }
+
+  updateSteamWalletBalance(username, {balance, source, currency = "", observedAt = ""} = {}) {
+    const key = asString(username).trim();
+    const nextBalance = asString(balance).trim();
+    const nextSource = asString(source).trim();
+    if (!key) {
+      throw new Error("username is required");
+    }
+    if (!nextBalance) {
+      throw new Error("balance is required");
+    }
+    if (!["steam_store", "steam_cm"].includes(nextSource)) {
+      throw new Error("balance source is invalid");
+    }
+    this.db.prepare(`
+      UPDATE steam_account
+      SET balance = ?,
+          balance_source = ?,
+          balance_currency = ?,
+          balance_observed_at = ?,
+          updated_at = ?
+      WHERE username = ?
+    `).run(
+      nextBalance,
+      nextSource,
+      asString(currency).trim(),
+      asString(observedAt).trim() || new Date().toISOString(),
+      nowSqlText(),
+      key
+    );
   }
 
   updateSteamAccountBalance(username, balance) {

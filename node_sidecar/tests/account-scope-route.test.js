@@ -58,6 +58,7 @@ function createExternalCallTracker() {
     checkBansBatch: [],
     checkBanSingle: [],
     fetchBalance: [],
+    fetchBalanceResult: {success: true, balance: "12.34"},
     fetchTradeUrl: [],
     refreshWebCookie: [],
     refreshWebCookieFromToken: []
@@ -167,7 +168,10 @@ function loadCreateServer({calls = createExternalCallTracker()} = {}) {
         },
         async fetchBalance(args) {
           calls.fetchBalance.push({...args});
-          return {success: true, balance: "12.34"};
+          const result = typeof calls.fetchBalanceResult === "function"
+            ? await calls.fetchBalanceResult(args)
+            : calls.fetchBalanceResult;
+          return {...result};
         },
         async fetchTradeUrl(args) {
           calls.fetchTradeUrl.push({...args});
@@ -437,7 +441,7 @@ async function withScopedServer({username, permissions}, run) {
     });
     try {
       const address = await listen(server);
-      await run({port: address.port, calls});
+      await run({port: address.port, calls, dbPath, accountsFilePath});
     } finally {
       await closeServer(server);
       delete require.cache[require.resolve("../src/uiServer")];
@@ -602,6 +606,192 @@ async function test_market_routes_stop_before_external_calls_for_unbound_account
   });
 }
 
+async function test_fetch_balance_persists_steam_store_source_metadata() {
+  await withScopedServer({
+    username: "member_a",
+    permissions: accountReadPermissions()
+  }, async ({port, calls, dbPath, accountsFilePath}) => {
+    calls.fetchBalanceResult = {
+      success: true,
+      balance: "¥ 12.34",
+      currency: "CNY",
+      source: "upstream_fake",
+      observed_at: "2026-06-06T10:00:00.000Z"
+    };
+
+    const response = await requestJson({
+      port,
+      method: "POST",
+      route: "/api/accounts/fetch-balance",
+      body: {
+        usernames: ["countsteam01"]
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.results.length, 1);
+    const result = response.body.results[0];
+    assert.equal(result.username, "countsteam01");
+    assert.equal(result.success, true);
+    assert.equal(result.balance, "¥ 12.34");
+    assert.equal(result.source, "steam_store");
+    assert.equal(result.persisted, true);
+    assert.equal(result.currency, "CNY");
+    assert.equal(typeof result.observed_at, "string");
+    assert.ok(result.observed_at.length > 0);
+
+    const store = new AppAuthStore({dbPath, accountsFilePath, readOnly: true, initialize: false});
+    try {
+      const account = store.getSteamAccountForUser("member_a", "countsteam01");
+      assert.equal(account.balance, "¥ 12.34");
+      assert.equal(account.balance_source, "steam_store");
+      assert.equal(account.balance_currency, "CNY");
+      assert.equal(typeof account.balance_observed_at, "string");
+      assert.ok(account.balance_observed_at.length > 0);
+    } finally {
+      store.close();
+    }
+  });
+}
+
+async function test_fetch_balance_failure_does_not_fall_back_to_steam_cm_balance() {
+  await withScopedServer({
+    username: "member_a",
+    permissions: accountReadPermissions()
+  }, async ({port, calls, dbPath, accountsFilePath}) => {
+    const seedStore = new AppAuthStore({dbPath, accountsFilePath});
+    try {
+      seedStore.updateSteamWalletBalance("countsteam01", {
+        balance: "¥ 99.00",
+        source: "steam_cm",
+        currency: "CNY",
+        observedAt: "2026-06-06T11:00:00.000Z"
+      });
+    } finally {
+      seedStore.close();
+    }
+    calls.fetchBalanceResult = {
+      success: false,
+      balance: null,
+      currency: null,
+      message: "store unavailable",
+      source: "upstream_fake",
+      observed_at: "2026-06-06T10:00:00.000Z"
+    };
+
+    const response = await requestJson({
+      port,
+      method: "POST",
+      route: "/api/accounts/fetch-balance",
+      body: {
+        usernames: ["countsteam01"]
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.results.length, 1);
+    const result = response.body.results[0];
+    assert.equal(result.username, "countsteam01");
+    assert.equal(result.success, false);
+    assert.notEqual(result.balance, "¥ 99.00");
+    assert.equal(Object.prototype.hasOwnProperty.call(result, "source"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(result, "observed_at"), false);
+
+    const readStore = new AppAuthStore({dbPath, accountsFilePath, readOnly: true, initialize: false});
+    try {
+      const account = readStore.getSteamAccountForUser("member_a", "countsteam01");
+      assert.equal(account.balance, "¥ 99.00");
+      assert.equal(account.balance_source, "steam_cm");
+      assert.equal(account.balance_currency, "CNY");
+      assert.equal(account.balance_observed_at, "2026-06-06T11:00:00.000Z");
+    } finally {
+      readStore.close();
+    }
+  });
+}
+
+async function test_fetch_balance_reports_unpersisted_source_metadata_when_local_persist_fails() {
+  await withScopedServer({
+    username: "member_a",
+    permissions: accountReadPermissions()
+  }, async ({port, calls, dbPath, accountsFilePath}) => {
+    const seedStore = new AppAuthStore({dbPath, accountsFilePath});
+    try {
+      seedStore.updateSteamWalletBalance("countsteam01", {
+        balance: "¥ 99.00",
+        source: "steam_cm",
+        currency: "CNY",
+        observedAt: "2026-06-06T11:00:00.000Z"
+      });
+    } finally {
+      seedStore.close();
+    }
+
+    calls.fetchBalanceResult = {
+      success: true,
+      balance: "¥ 12.34",
+      currency: "CNY",
+      source: "upstream_fake",
+      observed_at: "2026-06-06T10:00:00.000Z"
+    };
+    const originalUpdateSteamWalletBalance = AppAuthStore.prototype.updateSteamWalletBalance;
+    const originalClose = AppAuthStore.prototype.close;
+    let balancePersistStoreCloseCount = 0;
+    let balancePersistStore = null;
+    AppAuthStore.prototype.updateSteamWalletBalance = function failBalancePersist() {
+      balancePersistStore = this;
+      throw new Error("simulated balance persist failure");
+    };
+    AppAuthStore.prototype.close = function countClose() {
+      if (this === balancePersistStore) {
+        balancePersistStoreCloseCount += 1;
+      }
+      return originalClose.apply(this, arguments);
+    };
+
+    try {
+      const response = await requestJson({
+        port,
+        method: "POST",
+        route: "/api/accounts/fetch-balance",
+        body: {
+          usernames: ["countsteam01"]
+        }
+      });
+
+      assert.equal(response.statusCode, 200);
+      assert.equal(response.body.results.length, 1);
+      const result = response.body.results[0];
+      assert.equal(result.username, "countsteam01");
+      assert.equal(result.success, true);
+      assert.equal(result.balance, "¥ 12.34");
+      assert.equal(result.currency, "CNY");
+      assert.equal(result.persisted, false);
+      assert.match(result.persist_error, /simulated balance persist failure/);
+      assert.equal(Object.prototype.hasOwnProperty.call(result, "source"), false);
+      assert.equal(Object.prototype.hasOwnProperty.call(result, "observed_at"), false);
+      assert.equal(balancePersistStoreCloseCount, 1);
+    } finally {
+      AppAuthStore.prototype.updateSteamWalletBalance = originalUpdateSteamWalletBalance;
+      AppAuthStore.prototype.close = originalClose;
+      if (balancePersistStore && balancePersistStoreCloseCount === 0) {
+        originalClose.call(balancePersistStore);
+      }
+    }
+
+    const readStore = new AppAuthStore({dbPath, accountsFilePath, readOnly: true, initialize: false});
+    try {
+      const account = readStore.getSteamAccountForUser("member_a", "countsteam01");
+      assert.equal(account.balance, "¥ 99.00");
+      assert.equal(account.balance_source, "steam_cm");
+      assert.equal(account.balance_currency, "CNY");
+      assert.equal(account.balance_observed_at, "2026-06-06T11:00:00.000Z");
+    } finally {
+      readStore.close();
+    }
+  });
+}
+
 async function test_account_tool_routes_skip_unbound_accounts_before_steam_calls() {
   await withScopedServer({
     username: "member_a",
@@ -733,6 +923,9 @@ async function main() {
   await test_unbound_user_cannot_select_wrong_steam_account();
   await test_trade_routes_stop_before_external_calls_for_unbound_account();
   await test_market_routes_stop_before_external_calls_for_unbound_account();
+  await test_fetch_balance_persists_steam_store_source_metadata();
+  await test_fetch_balance_failure_does_not_fall_back_to_steam_cm_balance();
+  await test_fetch_balance_reports_unpersisted_source_metadata_when_local_persist_fails();
   await test_account_tool_routes_skip_unbound_accounts_before_steam_calls();
   await test_super_admin_can_access_unbound_steam_accounts();
   await test_unknown_dev_user_keeps_legacy_single_user_scope();

@@ -1794,13 +1794,18 @@ async function resolveAccountProfile({username, password = "", viewerUsername = 
   // --- wallet: layer-1 from steam CM (auto-pushed on login) ---
   let walletBalance = "";
   let walletSource = "";
+  let walletCurrency = "";
+  let walletObservedAt = "";
   const WALLET_CURRENCY_SYMBOLS = {1: "$", 2: "£", 3: "€", 23: "¥", 13: "S$", 29: "HK$"};
+  const WALLET_CURRENCY_CODES = {1: "USD", 2: "GBP", 3: "EUR", 23: "CNY", 13: "SGD", 29: "HKD"};
   if (steam && steam.wallet && steam.wallet.hasWallet) {
     const wBal = steam.wallet.balance;
     const wCur = steam.wallet.currency;
     const sym = WALLET_CURRENCY_SYMBOLS[wCur] || `[${wCur}] `;
     walletBalance = `${sym} ${Number(wBal).toFixed(2)}`;
     walletSource = "steam_cm";
+    walletCurrency = WALLET_CURRENCY_CODES[wCur] || `steam_currency:${wCur}`;
+    walletObservedAt = new Date().toISOString();
     logger.info(
       "ui_server",
       `profile wallet from CM: account=${accountName} balance=${walletBalance} currency=${wCur}`
@@ -1825,7 +1830,9 @@ async function resolveAccountProfile({username, password = "", viewerUsername = 
     gc_player_level: gcPlayerLevel > 0 ? gcPlayerLevel : 0,
     gc_player_cur_xp: gcPlayerCurXp > 0 ? gcPlayerCurXp : 0,
     wallet_balance: walletBalance,
-    wallet_source: walletSource
+    wallet_source: walletSource,
+    wallet_currency: walletCurrency,
+    wallet_observed_at: walletObservedAt
   };
   const avatarReady = Boolean(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon);
   if (!avatarReady) {
@@ -2410,8 +2417,16 @@ async function handleApi(req, res, urlObj, deps = {}) {
       if (profile.wallet_balance) {
         try {
           const balStore = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
-          balStore.updateSteamAccountBalance(profile.username, profile.wallet_balance);
-          balStore.close();
+          try {
+            balStore.updateSteamWalletBalance(profile.username, {
+              balance: profile.wallet_balance,
+              currency: profile.wallet_currency || "",
+              source: "steam_cm",
+              observedAt: profile.wallet_observed_at
+            });
+          } finally {
+            balStore.close();
+          }
         } catch (_) {}
       }
       logger.info(
@@ -4853,13 +4868,49 @@ async function handleApi(req, res, urlObj, deps = {}) {
             steamId64: webSession.steamId64
           });
           if (balResult.success) {
+            const observedAt = new Date().toISOString();
+            const result = {
+              username: u,
+              success: true,
+              balance: balResult.balance
+            };
+            if (Object.prototype.hasOwnProperty.call(balResult, "currency")) {
+              result.currency = balResult.currency;
+            }
             try {
               const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
-              store.updateSteamAccountBalance(u, balResult.balance);
-              store.close();
-            } catch (_) {}
+              try {
+                store.updateSteamWalletBalance(u, {
+                  balance: balResult.balance,
+                  currency: balResult.currency || "",
+                  source: "steam_store",
+                  observedAt
+                });
+                result.source = "steam_store";
+                result.observed_at = observedAt;
+                result.persisted = true;
+              } finally {
+                store.close();
+              }
+            } catch (persistErr) {
+              result.persisted = false;
+              result.persist_error = asString(persistErr && persistErr.message ? persistErr.message : persistErr).slice(0, 200);
+            }
+            results.push(result);
+            continue;
           }
-          results.push({username: u, ...balResult});
+          const failureResult = {
+            username: u,
+            success: false,
+            balance: Object.prototype.hasOwnProperty.call(balResult, "balance") ? balResult.balance : null
+          };
+          if (Object.prototype.hasOwnProperty.call(balResult, "currency")) {
+            failureResult.currency = balResult.currency;
+          }
+          if (Object.prototype.hasOwnProperty.call(balResult, "message")) {
+            failureResult.message = asString(balResult.message).slice(0, 200);
+          }
+          results.push(failureResult);
         } catch (err) {
           results.push({username: u, success: false, message: asString(err.message || err).slice(0, 200)});
         }

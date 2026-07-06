@@ -8,7 +8,7 @@
 
 ## 地图类型与事实边界
 
-- `map schema last updated`: `2026-06-06`。本次只补强 Project Cognition Map 的使用口径、地图类型和索引字段，不代表重新验证了所有代码行为。
+- `map schema last updated`: `2026-07-06`。本次按更新后的 Project Cognition Map 工作流补齐状态口径、分层功能索引和主要业务代码文件职责索引，不代表重新验证了所有代码行为。
 - `owner/maintainer`: 项目主维护者；后续 AI/agent 只在当前任务直接影响范围内维护相关条目。
 - `source of truth`: 代码、测试、契约、真实运行日志、DB/cache/profile/WebSocket/队列/trace、真实账号和外部服务返回。地图只负责导航、假设和风险提示。
 - `map types`: 当前文件同时承担两类稳定地图：链路地图用于排查入口和传播路径；分层功能索引用于改功能前确认状态归属、状态口径、统一更新入口、上下游和持久化/事件链路。它不是全函数、全按钮、全接口清单。
@@ -23,10 +23,10 @@
 
 ## 覆盖范围与未覆盖范围
 
-- `last verified`: `2026-05-30`（全项目审查覆盖）；VPK dev-only 打包边界小范围补验为 `2026-05-31`。
-- `scope/coverage`: 覆盖当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 的静态只读扫描、已审切片结论、2026-05-28 对 Skin DB 同步/C5 磨损来源链路的定向实现验证，以及 2026-05-30 项目审查修复的授权、账号范围、前端权限、批量炼金、运行态 JSON、代理、Admin Console、打包预检等直接影响区；另覆盖 2026-05-31 VPK dev-only 打包边界小范围补验。
-- `validation method`: 静态路径核对、切片整理、定向 Node 测试、`admin_console npm test`、`node_sidecar` packaging preflight、2026-05-31 VPK CLI help；未运行真实 Electron/UI、真实 Steam/交易/市场/炼金、真实外部服务或完整打包产物。
-- `未覆盖`: 未检查其它 worktree；未读取真实账号、Steam session、真实 DB 内容或外部交易状态；未访问 Steam、BUFF、SteamDT、C5 等外部服务；未做真实 UI 运行态截图/DOM 验证；未证明 `node_sidecar npm test` 全量通过。
+- `last verified`: `2026-05-30`（全项目审查覆盖）；VPK dev-only 打包边界小范围补验为 `2026-05-31`；地图结构补全和主工作区只读入口核对为 `2026-07-06`。
+- `scope/coverage`: 覆盖当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 的静态只读扫描、已审切片结论、2026-05-28 对 Skin DB 同步/C5 磨损来源链路的定向实现验证，以及 2026-05-30 项目审查修复的授权、账号范围、前端权限、批量炼金、运行态 JSON、代理、Admin Console、打包预检等直接影响区；另覆盖 2026-05-31 VPK dev-only 打包边界小范围补验。2026-07-06 只补齐地图结构、状态口径和主要业务文件职责导航。
+- `validation method`: 静态路径核对、切片整理、定向 Node 测试、`admin_console npm test`、`node_sidecar` packaging preflight、2026-05-31 VPK CLI help；2026-07-06 只读核对 `AGENTS.md`、`git worktree list --porcelain`、当前主工作区 `git status --short`、现有地图和关键源码入口/服务导出。未运行真实 Electron/UI、真实 Steam/交易/市场/炼金、真实外部服务或完整打包产物。
+- `未覆盖`: 未检查其它 worktree 的源码和 diff；未读取真实账号、Steam session、真实 DB 内容或外部交易状态；未访问 Steam、BUFF、SteamDT、C5 等外部服务；未做真实 UI 运行态截图/DOM 验证；未证明 `node_sidecar npm test` 全量通过；未判断当前工作区既有未提交业务改动是否正确。
 - `其它 worktree 未检查`: `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`。
 
 ## 快速导航总览
@@ -42,13 +42,14 @@
 | 外部账号/市场/交易 | `node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamMarketService.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/proxyConfig.js` | 需要真实账号、session、网络和运行态证据补验。 |
 | 测试验证 | `tests/`、`node_sidecar/tests/`、`admin_console/tests/` | 当前更像单文件脚本测试，不是统一根 `npm test`。 |
 | 运行态文件 | `csgo_skins.db`、`inventory_ui_state.json`、`login_keys.json`、`logs/processed_inventory` | 这些是核心例子，不是完整清单；变脏不一定异常，需先判断是否本地程序正在写入。 |
+| 主要业务文件职责 | 本地图的“主要业务代码文件职责索引” | 先用它找第一批该读的文件，再回到源码、测试、日志或真实运行态核验。 |
 
 ## 分层功能索引起点
 
 - `scope/coverage`: 这是面向后续改功能前定位的最小索引起点，覆盖当前地图已反复出现的 UI/API、应用服务、领域动作、基础设施和运行态状态。它只列高价值、跨模块或容易误读的能力，不覆盖全项目所有函数。
-- `source links`: `node_sidecar/ui/app.js`、`node_sidecar/src/uiServer.js`、`node_sidecar/src/services/`、`node_sidecar/src/constants.js`、`node_sidecar/src/accountStore.js`、`node_sidecar/src/snapshotStore.js`、`node_sidecar/src/steamWebSession.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/steamMarketService.js`、`inventory_ui_state.json`、`csgo_skins.db`、`logs/processed_inventory`。
-- `last verified`: `2026-06-06`（只验证索引口径来自本地图和项目规则；具体代码行为仍看下方各条目的 `last verified`）。
-- `validation method`: 静态读取 `AGENTS.md` 和本地图；未重新读取业务源文件、未运行 UI、未访问真实账号或外部服务。
+- `source links`: `node_sidecar/ui/app.js`、`node_sidecar/src/uiServer.js`、`node_sidecar/src/services/`、`node_sidecar/src/constants.js`、`node_sidecar/src/appAuthStore.js`、`node_sidecar/src/accountStore.js`、`node_sidecar/src/uiStateStore.js`、`node_sidecar/src/snapshotStore.js`、`node_sidecar/src/refreshWorkflow.js`、`node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamAccountTools.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/steamMarketService.js`、`inventory_ui_state.json`、`csgo_skins.db`、`logs/processed_inventory`。
+- `last verified`: `2026-07-06`（只验证索引口径来自本地图、项目规则和主工作区关键源码入口；具体代码行为仍看下方各条目的 `last verified`）。
+- `validation method`: 静态读取 `AGENTS.md`、本地图、关键 `node_sidecar/src` 与 `node_sidecar/src/services` 文件名、`uiServer.js`/`app.js` 入口片段和部分主要服务导出；未运行 UI、未访问真实账号或外部服务。
 - `owner/maintainer`: 主项目维护者；后续修改状态或跨层链路时，由触达该链路的 agent 更新对应最小范围。
 - `update triggers`: 新增/删除/移动高价值能力；改变状态归属、状态语义、统一更新入口、持久化位置、事件/SSE/WebSocket/队列传播、外部账号动作或主 UI/API 入口。
 - `stale signals`: 代码已拆层但索引仍指向旧汇聚点；同一个状态出现多个未说明的写入口；UI 展示和领域真相状态混在一起；运行态 trace 与地图描述不一致。
@@ -61,6 +62,57 @@
 | API / application | client auth、账号范围、refresh、snapshot、craft、component、market、trade、simulation 路由 | 请求级授权、账号作用域、工作流编排状态；不应成为长期领域真相的旁路写点 | `node_sidecar/src/uiServer.js` 路由和服务调用边界 | 前端 `fetch("/api/...")`、Electron 内嵌服务 | SSE `/api/events`、HTTP response、运行日志、运行态 JSON/DB 调用 | UI、测试脚本、真实账号动作服务 |
 | Domain / workflow | 炼金执行、组件存取、库存刷新、交易报价、市场确认、Skin DB 同步 | 真实账号动作、库存快照、皮肤基础库和交易结果等高风险状态；区分真相状态、投影状态和观察态 | 对应 service，例如 craft/component/snapshot/trade/market/skin sync 服务 | API 路由、定时/手动刷新、外部账号流程 | SQLite、processed snapshot、Steam/C5/BUFF/SteamDT 返回、日志和失败恢复记录 | API 返回、UI rows、预测/模拟、后续账号操作 |
 | Infrastructure / runtime | 路径常量、SQLite、凭据文件、代理、Electron `userData`、打包 seed | 运行态文件、凭据和环境观察态；开发态和打包态可能不同 | `constants`、store/secret/proxy/session 相关模块 | 应用启动、服务层读写、打包首启 | `csgo_skins.db`、`login_keys.json`、`client_config.json`、`schema_cache.json`、Electron `userData`、系统代理/DPAPI | 账号登录、库存和市场链路、打包产物、调试和审查 |
+
+## 状态口径索引
+
+- `scope/coverage`: 该索引用于先区分“真相状态 / 投影状态 / 观察态”，避免后续 agent 只改 UI、缓存或临时变量就误以为业务状态已经收敛。
+- `last verified`: `2026-07-06`（基于现有地图、主工作区关键入口静态核对和已记录的定向测试说明；不是运行态复验）。
+- `validation method`: 静态只读核对；未读真实 DB 内容、未读真实凭据、未访问真实账号或外部服务。
+- `do-not-infer`: 表中 owner 是第一批定位入口，不代表唯一实现。任何真实修复仍要看源码调用链、测试、日志和运行态证据。
+
+| 状态/对象 | 真相状态 | 投影/读模型 | 观察态/临时态 | 统一更新入口 | 主要消费者 | 不能推断 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 应用登录、角色、权限、账号绑定 | SQLite 中的 `app_user`、role/permission、user 与 Steam account 绑定 | `/api/client-auth/state`、`/api/accounts` 返回、前端权限按钮态 | session cookie、登录表单状态、guest preview | `AppAuthStore` 和 `uiServer.js` 授权 gate | 前端 hydrate、API permission guard、测试脚本 | UI 上按钮可点不等于真实权限已经持久化；未登录和缺权限要分清 `401`/`403` |
+| Steam 账号当前选择 | `steam_account` 记录、viewer 绑定和 active Steam username | `inventory_ui_state.json` 的 last-selected、前端当前账号卡 | 登录中、切换中、旧窗口里缓存的 active account | `AppAuthStore`、scoped `AccountStore`、`UiStateStore` | snapshot、refresh、trade/market/craft 路由 | last-selected 不是账号拥有权真相；旧 session 可能继续显示旧投影 |
+| 库存快照与 UI rows | Steam/GC 返回和 `logs/processed_inventory` 里的 processed snapshot | 前端 `state.rows`、component summary、snapshot cache | refreshRuntime 进度、SSE 事件、加载遮罩 | `refreshWorkflow`、`snapshotStore`、`snapshotRowsLoader` | UI 表格、炼金候选、组件存取、模拟/预测 | UI rows 正确不等于 Steam 真实库存已刷新；source 更新后还要证明消费者入口收敛 |
+| 组件/Storage Unit 内容 | Steam storage unit 真实内容和刷新后 snapshot | `casket_id`、component summary、组件任务队列视图 | component move progress/done/failed 事件 | `componentOpsService`、`componentTaskQueue` | 组件管理 UI、组件来源炼金、快照合并 | 队列完成不等于全部物品真实移动成功；失败恢复要看 snapshot 和日志 |
+| 炼金真实执行 | Steam GC trade-up 实际结果 | API 执行结果、前端队列、UI rows 回写 | active craft run、pause/overlay/progress | `craftService`、`craftTradeupWithComponentsService` | 炼金 UI、多账号汰换、后续库存刷新 | 预测/模拟不是实际产物；API 返回成功也要核验 UI rows 和快照传播 |
+| 汰换模拟和预测 | 皮肤基础库、snapshot rows、算法输入 | `/api/craft/predict-outcomes`、`/api/simulation/tradeup/*` 输出 | 表单选择、preset、localStorage 草稿 | `craftOutcomePredictor`、`tradeupSimulationService`、前端 preset 持久化入口 | 模拟页、炼金预览、导出材料 | 模拟链路不得触发真实账号动作；预测不是 Steam 保证结果 |
+| 皮肤基础库和磨损/图片元数据 | `csgo_skins.db` 的 `skin` 表和同步来源 | snapshot rows 补全后的 wear bounds、图片、alchemy type | provider 请求结果、失败统计、dry-run 输出 | `skinDbSync`、`skinDetailEnrichmentService`、`skinMetaStore` | 炼金候选、预测、库存展示 | DB 文件存在不等于数据完整；C5/BUFF/SteamDT mock 不等于线上长期可用 |
+| Steam 钱包余额 | 外部来源分离：Store/Web `steam_store`、Steam client/CM `steam_cm`、GC/军械库余额独立 | `steam_account.balance`、`balance_source`、`balance_currency`、`balance_observed_at` | 本次 fetch response 的 success/persisted/source/observed_at | `AppAuthStore` 持久化；`/api/accounts/fetch-balance` 主动刷新 | `/api/accounts`、账号卡、余额展示测试 | 旧缓存余额不能反推本次刷新成功；`steam_store` 和 `steam_cm` 不能互相伪装成功来源 |
+| 运行态路径与凭据 | `PATHS` 解析出的真实读写位置、实际文件内容和平台密钥能力 | 打包 seed 后的 `userData` 文件、开发态项目根文件 | 本地程序持续写入导致的 git 脏状态 | `constants`、`jsonStore`、`secretStore`、`TokenStore`、packaged bootstrap | 登录、库存刷新、打包首启、审查/提交检查 | `csgo_skins.db`/UI state 变脏不一定是本轮改动；静态看到路径不等于真实文件安全 |
+
+## 主要业务代码文件职责索引
+
+- `scope/coverage`: 只收录后续 AI 最容易找错、跨模块、高风险或主链路入口的业务文件/文件组；不是全项目文件百科。
+- `source links`: 2026-07-06 静态读取 `node_sidecar/src`、`node_sidecar/src/services` 文件列表和部分关键文件入口片段；结合本地图既有条目。
+- `last verified`: `2026-07-06`（职责导航级静态核对）。
+- `validation method`: 文件列表、导入/导出、路由/服务入口片段静态核对；未逐行审查完整实现，未运行测试或真实 UI。
+- `update triggers`: 主要业务文件新增、拆分、合并、移动或职责改变；状态 owner、统一更新入口、消费者入口、持久化路径或事件传播变化。
+- `do-not-infer`: 表中“主要入口”只用于找第一批该读的文件，不代表完整调用图。改功能前仍要读实际调用方、测试和运行态证据。
+
+| 文件/路径 | 层 | 主要职责 | 主入口/调用方 | 触碰状态/数据 | 下游消费者/验证入口 | stale signals / do-not-infer |
+| --- | --- | --- | --- | --- | --- | --- |
+| `main_ui_node_desktop.js`、`node_sidecar/electron-main.js` | Entry / runtime | 桌面启动、Electron 主进程、内嵌启动 `uiServer` | 用户桌面启动、`npm run ui:desktop` | cwd、端口、Electron `userData`、窗口生命周期 | 桌面 UI、打包产物 | 浏览器模式可用不代表 Electron 可用；启动逻辑变化要同步地图 |
+| `node_sidecar/src/uiServer.js` | API / application | 客户端 HTTP API、静态 UI、授权 gate、SSE、服务编排大入口 | 前端同源 `api()`、Electron 内嵌服务、浏览器模式 | session、viewer scope、账号、refresh/craft/component/trade/market 路由状态 | `node_sidecar/ui/app.js`、Node 路由测试 | 文件很大，地图不代表完整路由目录；拆路由或改 gate 时必须重新核调用方 |
+| `node_sidecar/ui/app.js`、`node_sidecar/ui/index.html` | UI / projection | 工作台渲染、前端状态、账号/库存/炼金/模拟/组件/市场交互 | 浏览器/Electron 页面加载、用户操作、SSE 回调 | 前端 `state`、localStorage、UI preset、当前账号/rows 投影 | 用户界面、UI 静态测试、浏览器/Electron 运行态 | 静态命中不等于界面已生效；视觉和交互必须跑真实 UI |
+| `node_sidecar/src/appAuthStore.js` | Domain / persistence | 应用用户、角色权限、Steam 账号绑定、账号级投影字段 | `uiServer.js` auth/account 路由、scoped stores | SQLite app/user/role/session/steam_account、余额元数据 | `/api/client-auth/state`、`/api/accounts`、权限测试 | 不要绕过它在 route/UI 里补权限或账号状态；余额字段是投影，不是本次外部成功证明 |
+| `node_sidecar/src/accountStore.js` | Domain adapter | 对 Steam account 做按 viewer 裁剪的兼容 store | `uiServer.js`、refresh/craft/component 等服务 | active Steam account、账号明细裁剪 | 账号相关 API、真实账号动作服务 | 它是适配层，不是新的账号真相 owner |
+| `node_sidecar/src/uiStateStore.js` | Projection / persistence | UI 选择、last-selected、snapshot path、craft/simulation preset 的本地持久化 | 前端 preset/账号选择路由、snapshot 读取 | `inventory_ui_state.json`、backup/ui_state | UI hydrate、账号切换、preset 加载 | UI state 不是真实库存或账号权限；写前备份不能替代业务成功 |
+| `node_sidecar/src/refreshWorkflow.js`、`node_sidecar/src/snapshotStore.js` | Domain / workflow | Steam/GC 库存刷新、解析后落 processed/raw snapshot | `/api/refresh`、连接刷新、服务层刷新调用 | Steam inventory、schema、processed/raw snapshot | UI rows、组件摘要、炼金候选、快照测试 | 源头刷新成功后还要看 UI/API 消费者是否读到新 snapshot |
+| `node_sidecar/src/inventoryService.js`、`node_sidecar/src/inventoryParser.js` | Domain / parsing | Steam/Web/GC 库存读取和本地 rows 结构解析 | refresh、Web inventory、snapshot/候选服务 | raw inventory、schema、asset/casket/wear 字段 | UI 表格、组件/炼金/模拟服务 | 解析结构要跟真实 payload 对齐，不能用简化 mock 代替 |
+| `node_sidecar/src/services/componentOpsService.js`、`componentTaskQueue.js`、`componentSummary.js` | Domain / workflow | Storage Unit 存取、任务队列、组件摘要 | component API 路由、组件来源炼金 prepare | Steam storage unit、snapshot rows、component progress | 组件 UI、炼金组件来源、SSE 事件 | 队列状态不是实际资产状态；跨上下文事件要验证消费者被唤醒 |
+| `node_sidecar/src/services/craftService.js`、`craftTradeupWithComponentsService.js`、`craftExecutionGuard.js` | Domain / workflow | 真实炼金执行、组件来源准备、黄盾/冷却/来源保护 | craft API 路由、多账号流程、组件来源流程 | Steam GC trade-up、UI rows 回写、snapshot、active run | 炼金 UI、批量炼金测试、账号资产 | 真实执行不可逆；模拟/预测代码不能当真实执行验证 |
+| `node_sidecar/src/services/craftAssistService.js`、`craftCandidateService.js`、`craftOutcomePredictor.js`、`craftAssistWorkerPool.js` | Domain / compute | 炼金候选、辅助选材、产物预测、worker pool | craft assist/predict 路由、前端预览 | snapshot rows、skin DB、preset、worker 运行态 | 炼金预览、候选表、定向 Node 测试 | worker/缓存结果要证明和当前 snapshot/DB stamp 对齐 |
+| `node_sidecar/src/services/tradeupSimulationService.js`、`tradeupSimulationCatalog.js` | Domain / compute | 非真实执行的汰换模拟、材料/产物推导 | simulation API、前端模拟页 | skin DB/catalog、preset、localStorage/server preset | 模拟页、导出材料、预测预览 | 不得让模拟链路触发真实账号动作 |
+| `node_sidecar/src/skinDbSync.js`、`skinMetaStore.js` | Domain / persistence | `skin` 表建表/迁移/同步、磨损/图片/炼金类型元数据读取 | skin sync 脚本、snapshot rows 补全、炼金/模拟服务 | `csgo_skins.db`、upstream base info、metadata | 炼金候选、预测、库存展示、同步测试 | 空目标删除和 schema 迁移是高风险；DB 存在不等于数据完整 |
+| `node_sidecar/src/services/skinDetailEnrichmentService.js`、`c5SkinDetailProvider.js`、`buffSkinDetailProvider.js`、`steamdtBaseInfoProvider.js`、`steamCdnSkinImageProvider.js` | Infrastructure / external data | 外部详情、磨损范围、图片和基础信息补全 | Skin DB 同步/补全流程 | C5/BUFF/SteamDT/Steam CDN response、retry/backoff 状态 | `skin` 表、库存展示、同步测试 | 外部页面/API 会变；mock 通过不等于线上可用 |
+| `node_sidecar/src/steamWebSession.js`、`steamHttpClient.js`、`proxyConfig.js` | Infrastructure / external access | Web cookie、HTTP 请求、代理选择、脱敏日志 | Web inventory、market、trade、account tools | refresh token、access token、cookie、proxy config | Steam Web/Store/Market/Trade 服务 | 不能记录 secrets；代理和 cookie 运行态要脱敏核验 |
+| `node_sidecar/src/steamAccountTools.js` | Domain / external account | ban、余额、trade URL 等账号工具 | account profile/fetch-balance/trade URL API | Steam Web API、Store wallet、profile page | 账号卡、余额刷新、交易入口 | `fetchBalance()` 成功和本地持久化成功要分开判断 |
+| `node_sidecar/src/tradeService.js`、`steamMarketService.js` | Domain / external action | 交易报价、报价确认、市场上架、市场确认 | trade/market API 路由 | Steam trade offer、market listing、identity secret | Web 库存/交易/市场 UI、真实账号资产 | 高风险真实资产动作；未运行真实账号前不能称安全可用 |
+| `node_sidecar/src/constants.js`、`jsonStore.js`、`secretStore.js`、`tokenStore.js` | Infrastructure / runtime | 路径常量、JSON 原子写、密钥/refresh token 存取 | 几乎所有 store/service、打包启动 | runtime files、DPAPI/明文 fallback、`login_keys.json` | 登录、refresh、提交前状态判断 | 开发态/打包态路径不同；运行态文件变脏需先区分本地程序写入 |
+| `node_sidecar/src/packagedRuntimeBootstrap.js`、`node_sidecar/electron-builder.yml`、`node_sidecar/scripts/checkPackagingResources.js` | Release / packaging | 打包资源、首启 seed、发布前资源检查 | `npm run packaging:preflight`、`pack:win`/`build:win` | public key、schema seed、DB seed、Electron resources | Windows 安装包、桌面启动 | preflight 通过不等于真实安装包首启通过 |
+| `admin_console/src/server.js`、`admin_console/tests/` | Admin / separate app | 独立后台控制台、admin auth/API/UI | `admin_console npm start`、`npm test` | 控制面账号、邮件码、设备/会员/绑定策略 | Admin UI、控制面测试 | 不要把 admin 行为套到主客户端；端口相同也不是同一个入口 |
 
 ## 核心地图条目
 
@@ -102,15 +154,15 @@
 
 ### 4. 授权、账号与库存刷新主链路
 
-- `scope/coverage`: 授权是工作台总入口。前端先查 `/api/client-auth/state`，授权成功后才 hydrate 真实账号/库存状态；未授权进入 guest preview。未登录访问非 public API 会先被 `401` 拦住；已登录但缺权限的接口再由 `requirePermission` 返回 `403`。账号/库存主链路需要谨慎理解：初始化会先读 `/api/ui-state` 和 `/api/accounts` 获取账号与上次选择；切换账号时写 `/api/ui-state/last-selected`、读取 `/api/snapshot/account`；连接刷新时走 `/api/refresh`，SSE `/api/events` 持续回推刷新结果。
-- `source links`: `node_sidecar/src/uiServer.js`、`node_sidecar/ui/app.js`、`inventory_ui_state.json`。
-- `last verified`: `2026-05-30`
-- `validation method`: 静态切片整理；运行 client auth、account scope、component permission、UI permission state、raw fetch auth handling 等定向测试；未使用真实账号或运行态事件流验证。
+- `scope/coverage`: 授权是工作台总入口。前端先查 `/api/client-auth/state`，授权成功后才 hydrate 真实账号/库存状态；未授权进入 guest preview。未登录访问非 public API 会先被 `401` 拦住；已登录但缺权限的接口再由 `requirePermission` 返回 `403`。账号/库存主链路需要谨慎理解：初始化会先读 `/api/ui-state` 和 `/api/accounts` 获取账号与上次选择；切换账号时写 `/api/ui-state/last-selected`、读取 `/api/snapshot/account`；连接刷新时走 `/api/refresh`，SSE `/api/events` 持续回推刷新结果。Steam 钱包余额是账号级当前投影，owner 是 `AppAuthStore` 持久化的 `steam_account.balance`、`balance_source`、`balance_currency`、`balance_observed_at`；`/api/accounts` 和前端账号卡只消费这个当前投影，不等于本次外部来源一定成功。
+- `source links`: `node_sidecar/src/uiServer.js`、`node_sidecar/src/appAuthStore.js`、`node_sidecar/ui/app.js`、`inventory_ui_state.json`。
+- `last verified`: `2026-05-30`；Steam 钱包余额来源边界小范围补验为 `2026-06-06`。
+- `validation method`: 静态切片整理；运行 client auth、account scope、component permission、UI permission state、raw fetch auth handling 等定向测试；2026-06-06 余额来源边界记录依据 targeted tests：`node tests/app-auth-store.test.js`、`node tests/account-scope-route.test.js`、`node tests/account-profile-route-scope.test.js`、`node tests/wallet-balance-source-ui.test.js`、`node tests/web-inventory-bootstrap.test.js`。未使用真实账号、真实 Steam、真实 Electron/UI 或运行态事件流验证；未跑全量 `npm test`。
 - `owner/maintainer`: client auth、账号管理、库存刷新链路维护者。
-- `update triggers`: 改登录/授权、last selected account、snapshot、refresh、SSE、前端缓存或重渲染逻辑。
+- `update triggers`: 改登录/授权、last selected account、snapshot、refresh、SSE、前端缓存或重渲染逻辑；改 `steam_account.balance` 或 `balance_source/balance_currency/balance_observed_at` 语义、写入口、展示口径时也要更新本条。
 - `stale signals`: guest preview 行为变化；`401`/`403` gate 策略变化；前端不再按该顺序 hydrate；SSE 事件名或刷新状态变化。
-- `do-not-infer`: 不要把 `inventory_ui_state.json` 当作唯一真实库存；真实库存还需看 processed snapshot、DB、Steam 返回和运行日志。
-- `known risks/open questions`: 2026-05-30 已验证 license 控制面公网 HTTP fail-closed、loopback HTTP 保留；账号范围现在通过 `AppAuthStore` 绑定和 scoped `AccountStore` 裁剪，trade/market/account-tool 未绑定账号会 fail-closed 且测试断言不触发外部 stub。授权、账号状态、SSE 刷新和 UI 缓存仍强相关，静态/单测无法证明真实刷新体验正确。
+- `do-not-infer`: 不要把 `inventory_ui_state.json` 当作唯一真实库存；真实库存还需看 processed snapshot、DB、Steam 返回和运行日志。不要把账号上的旧 `balance` 反推成本次 Web/Store 或 Steam client/CM 来源成功；必须同时看本次返回的 success/persisted/source/observed_at。
+- `known risks/open questions`: 2026-05-30 已验证 license 控制面公网 HTTP fail-closed、loopback HTTP 保留；账号范围现在通过 `AppAuthStore` 绑定和 scoped `AccountStore` 裁剪，trade/market/account-tool 未绑定账号会 fail-closed 且测试断言不触发外部 stub。授权、账号状态、SSE 刷新和 UI 缓存仍强相关，静态/单测无法证明真实刷新体验正确。Steam 钱包余额来源边界已由定向测试覆盖本地持久化和 UI 状态规则，但真实 Steam session、真实 Web/Store 返回、Electron 页面实际显示仍未验证。
 
 ### 5. 炼金、预测、模拟与多账号汰换
 
@@ -162,27 +214,27 @@
 
 ### 9. 外部 Steam/Web/市场链路
 
-- `scope/coverage`: 外部数据源/API 包括 Steam auth/session/GC/community market、Steam Web inventory、Steam Web API bans/trade token、BUFF detail、C5 sell page/range API、SteamDT base info、Steam CDN image。C5 磨损链路读取 C5 sell page 的 `window.__NUXT__` / `relatedList`，再访问 `api.c5game.com/search/v2/item/{itemId}/wear/range`；只把五个磨损档当作磨损来源，普通版/暗金/StatTrak/纪念品/Souvenir 不算磨损档。Web 库存使用 `steamcommunity.com/inventory/<steamid>/730/2`，分页最多 20 页，支持代理，cookie 会脱敏摘要记录。
-- `source links`: `node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamHttpClient.js`、`node_sidecar/src/steamMarketService.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/inventoryService.js`、`node_sidecar/src/inventoryParser.js`、`node_sidecar/src/steamAccountTools.js`、`node_sidecar/src/steamApiKeyStore.js`、`node_sidecar/src/secretStore.js`、`node_sidecar/src/proxyConfig.js`、`node_sidecar/src/services/c5SkinDetailProvider.js`、`node_sidecar/src/services/buffSkinDetailProvider.js`、`node_sidecar/src/services/steamdtBaseInfoProvider.js`、`node_sidecar/src/services/steamCdnSkinImageProvider.js`。
-- `last verified`: `2026-05-30`
-- `validation method`: 静态切片整理、C5 provider mock 测试、proxy config、maFile fallback、raw fetch auth handling、account scope route 定向测试；未访问外部网络或真实账号。
+- `scope/coverage`: 外部数据源/API 包括 Steam auth/session/GC/community market、Steam Web inventory、Steam Web API bans/trade token、BUFF detail、C5 sell page/range API、SteamDT base info、Steam CDN image。C5 磨损链路读取 C5 sell page 的 `window.__NUXT__` / `relatedList`，再访问 `api.c5game.com/search/v2/item/{itemId}/wear/range`；只把五个磨损档当作磨损来源，普通版/暗金/StatTrak/纪念品/Souvenir 不算磨损档。Web 库存使用 `steamcommunity.com/inventory/<steamid>/730/2`，分页最多 20 页，支持代理，cookie 会脱敏摘要记录。Steam 钱包余额有两个独立观察来源：Web/Store 主动查询记为 `steam_store`，Steam client/CM profile 的 `steam.wallet` 记为 `steam_cm`；GC/军械库 `redeemable_balance` 是独立余额，不参与 Steam 钱包余额。
+- `source links`: `node_sidecar/src/uiServer.js`、`node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamHttpClient.js`、`node_sidecar/src/steamMarketService.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/inventoryService.js`、`node_sidecar/src/inventoryParser.js`、`node_sidecar/src/steamAccountTools.js`、`node_sidecar/src/steamApiKeyStore.js`、`node_sidecar/src/secretStore.js`、`node_sidecar/src/proxyConfig.js`、`node_sidecar/src/services/c5SkinDetailProvider.js`、`node_sidecar/src/services/buffSkinDetailProvider.js`、`node_sidecar/src/services/steamdtBaseInfoProvider.js`、`node_sidecar/src/services/steamCdnSkinImageProvider.js`。
+- `last verified`: `2026-05-30`；Steam 钱包余额来源边界小范围补验为 `2026-06-06`。
+- `validation method`: 静态切片整理、C5 provider mock 测试、proxy config、maFile fallback、raw fetch auth handling、account scope route 定向测试；2026-06-06 余额来源边界用 targeted Node tests 覆盖 Web/Store 成功/失败、CM 成功/不可用和前端状态合并规则；未访问外部网络、真实 Steam、真实账号或真实 GC/军械库余额。
 - `owner/maintainer`: Steam 集成、市场交易和代理配置维护者。
-- `update triggers`: 改 Steam session、GC refresh、Web inventory、market sell、confirmation、trade offer、代理策略、外部价格源、C5 页面解析、C5 range API、C5/BUFF 磨损兜底顺序。
+- `update triggers`: 改 Steam session、GC refresh、Web inventory、market sell、confirmation、trade offer、代理策略、外部价格源、C5 页面解析、C5 range API、C5/BUFF 磨损兜底顺序；改 `fetchBalance()`、Steam client/CM `steam.wallet` 读取、GC/军械库 `redeemable_balance` 或余额来源命名时也要更新。
 - `stale signals`: C5 页面不再提供 `window.__NUXT__` / `relatedList`；C5 range API 路径或返回结构变化；代理配置从 `proxyConfig.js` 读取方式迁移；Steam API 响应格式变化；分页或 cookie 记录策略变化。
-- `do-not-infer`: 不要用静态扫描确认 Steam 链路可用；外部接口需要真实网络、账号权限、代理和日志证据。
-- `known risks/open questions`: 2026-05-30 已验证代理优先级为显式 config/env > Windows system proxy > direct，日志会脱敏代理凭据；malformed/incomplete maFile 会尝试 refresh-token fallback。外部接口属于静态/单测已见，运行态未证，网络策略、风控和服务可用性待外查。
+- `do-not-infer`: 不要用静态扫描确认 Steam 链路可用；外部接口需要真实网络、账号权限、代理和日志证据。不要把 `steam_store` 与 `steam_cm` 当成互相兜底来源，也不要把 GC/军械库 `redeemable_balance` 合并进 Steam 钱包余额。
+- `known risks/open questions`: 2026-05-30 已验证代理优先级为显式 config/env > Windows system proxy > direct，日志会脱敏代理凭据；malformed/incomplete maFile 会尝试 refresh-token fallback。外部接口属于静态/单测已见，运行态未证，网络策略、风控和服务可用性待外查。余额来源边界的真实 Steam Store/CM/GC 返回格式和风控场景仍需运行态补验。
 
 ### 10. Web 库存、交易报价与市场确认
 
-- `scope/coverage`: Web 库存/市场/交易页高风险接口包括 `/api/accounts/:username/inventory`、`/api/accounts/send-trade-offer`、`/api/market/batch-sell`、`/api/market/confirmations`、`/api/market/confirm-listings`，涉及 Steam web session、交易报价、市场上架确认。Web 库存主页面和旧库存弹窗都走 `/api/accounts/:username/inventory`；Web inventory 不再通过 snapshot/stub 读取 GC 快照。`/api/market/confirmations` 偏确认列表读取，`/api/market/confirm-listings` 偏执行确认。
-- `source links`: `node_sidecar/src/uiServer.js`、`node_sidecar/ui/app.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/steamMarketService.js`、`node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamHttpClient.js`。
+- `scope/coverage`: Web 库存/市场/交易页高风险接口包括 `/api/accounts/:username/inventory`、`/api/accounts/send-trade-offer`、`/api/market/batch-sell`、`/api/market/confirmations`、`/api/market/confirm-listings`，涉及 Steam web session、交易报价、市场上架确认。Web 库存主页面和旧库存弹窗都走 `/api/accounts/:username/inventory`；Web inventory 不再通过 snapshot/stub 读取 GC 快照。`/api/market/confirmations` 偏确认列表读取，`/api/market/confirm-listings` 偏执行确认。Web/Store 余额主动查询入口是 `POST /api/accounts/fetch-balance`，来源固定为 `steam_store`；只有查询成功且本地 `AppAuthStore` 持久化成功时，响应才把这次结果标为 `persisted:true` 并返回 `source`、`observed_at`。查询失败或本地持久化失败不能用 CM 旧值兜底，也不能把 `source/observed_at` 泄漏成本次成功元数据。
+- `source links`: `node_sidecar/src/uiServer.js`、`node_sidecar/src/appAuthStore.js`、`node_sidecar/src/steamAccountTools.js`、`node_sidecar/ui/app.js`、`node_sidecar/src/tradeService.js`、`node_sidecar/src/steamMarketService.js`、`node_sidecar/src/steamWebSession.js`、`node_sidecar/src/steamHttpClient.js`。
 - `last verified`: `2026-06-06`
-- `validation method`: 静态切片整理；运行 raw fetch auth handling、account scope route 定向测试；2026-06-06 静态测试覆盖 Web inventory 主页面/旧弹窗走 `/api/accounts/:username/inventory`、不走 snapshot/stub；未访问真实 Steam Web session、报价或市场确认。
+- `validation method`: 静态切片整理；运行 raw fetch auth handling、account scope route 定向测试；2026-06-06 静态测试覆盖 Web inventory 主页面/旧弹窗走 `/api/accounts/:username/inventory`、不走 snapshot/stub；余额来源边界 targeted tests 覆盖 `/api/accounts/fetch-balance` 的 `steam_store` 成功持久化、失败不兜底、本地持久化失败不返回成功来源元数据，以及前端只在成功且持久化后合并来源。未访问真实 Steam Web session、报价、市场确认或真实 UI/Electron。
 - `owner/maintainer`: Web 库存、交易和市场功能维护者。
-- `update triggers`: 改报价发送、批量上架、确认逻辑、Steam Guard、Web session 续期、前端账号选择。
-- `stale signals`: 接口路径变化；市场确认方式变化；Steam Guard 处理方式变化；前端账号列表来源变化。
-- `do-not-infer`: 不要在未运行真实环境前确认交易/市场动作安全；这类动作可能真实影响账号和资产。
-- `known risks/open questions`: 2026-05-30 前端 stream-like raw fetch 会先检查 401/403/content-type 再打开 SSE reader；market confirmations/listings 和 Web inventory/balance 改走共享 `api()` 错误处理。真实交易/市场动作仍未运行，不能据此确认真实账号资产流程安全。
+- `update triggers`: 改报价发送、批量上架、确认逻辑、Steam Guard、Web session 续期、前端账号选择；改 `/api/accounts/fetch-balance`、Web/Store 余额展示、`persisted` 合约或余额来源元数据时也要更新。
+- `stale signals`: 接口路径变化；市场确认方式变化；Steam Guard 处理方式变化；前端账号列表来源变化；余额刷新失败时 UI 或接口又展示另一来源旧值为本次成功。
+- `do-not-infer`: 不要在未运行真实环境前确认交易/市场动作安全；这类动作可能真实影响账号和资产。Web/Store 刷新失败后，页面可继续显示缓存账号余额，但不能把缓存值解释成本次 Web/Store 成功结果。
+- `known risks/open questions`: 2026-05-30 前端 stream-like raw fetch 会先检查 401/403/content-type 再打开 SSE reader；market confirmations/listings 和 Web inventory/balance 改走共享 `api()` 错误处理。真实交易/市场动作仍未运行，不能据此确认真实账号资产流程安全。Web/Store 余额来源 UI 仅有静态/单测证据，真实浏览器/Electron 展示和真实 Store 返回仍未验证。
 
 ### 11. Admin Console
 
@@ -198,15 +250,15 @@
 
 ### 12. 测试、验证与打包
 
-- `scope/coverage`: 测试主力是 Node 脚本测试，不是统一根 `npm test`。根目录无 `package.json`；2026-05-30 `node_sidecar/package.json` 已新增 `test`、`test:list`、`test:browser`、`packaging:preflight` 等入口，但 full `node_sidecar npm test` 当前不能被当作全绿结论；`admin_console/package.json` 有 `npm test` 且本轮通过。打包配置在 `node_sidecar/electron-builder.yml`；当前主工作区项目自身主链路未见 `.github/workflows`，不代表其它 worktree 或第三方目录。
-- `source links`: `tests/`、`node_sidecar/tests/`、`admin_console/tests/`、`node_sidecar/README.md`、`node_sidecar/package.json`、`admin_console/package.json`、`node_sidecar/electron-builder.yml`。
-- `last verified`: `2026-05-30`（测试/打包审查主体）；VPK dev-only package boundary 补验为 `2026-05-31`。
-- `validation method`: 静态切片整理；运行多组定向 Node 测试、`admin_console npm test`、`node_sidecar npm run packaging:preflight`、packaging/windows installer entrypoint tests、2026-05-31 VPK dev CLI help；未运行真实 Electron/UI、完整打包或真实外部账号流程。
+- `scope/coverage`: 测试主力是 Node 脚本测试，不是统一根 `npm test`。根目录无 `package.json`；2026-05-30 `node_sidecar/package.json` 已新增 `test`、`test:list`、`test:browser`、`packaging:preflight` 等入口，但 full `node_sidecar npm test` 当前不能被当作全绿结论；`admin_console/package.json` 有 `npm test` 且本轮通过。打包配置在 `node_sidecar/electron-builder.yml`；当前主工作区项目自身主链路未见 `.github/workflows`，不代表其它 worktree 或第三方目录。Steam 钱包余额来源边界当前只按 targeted Node tests 记录，不等于真实 UI/Steam/全量测试已通过。
+- `source links`: `tests/`、`node_sidecar/tests/`、`node_sidecar/tests/wallet-balance-source-ui.test.js`、`admin_console/tests/`、`node_sidecar/README.md`、`node_sidecar/package.json`、`admin_console/package.json`、`node_sidecar/electron-builder.yml`。
+- `last verified`: `2026-05-30`（测试/打包审查主体）；VPK dev-only package boundary 补验为 `2026-05-31`；Steam 钱包余额来源边界 targeted tests 记录为 `2026-06-06`。
+- `validation method`: 静态切片整理；运行多组定向 Node 测试、`admin_console npm test`、`node_sidecar npm run packaging:preflight`、packaging/windows installer entrypoint tests、2026-05-31 VPK dev CLI help；2026-06-06 余额来源边界记录的目标测试为 `node tests/app-auth-store.test.js`、`node tests/account-scope-route.test.js`、`node tests/account-profile-route-scope.test.js`、`node tests/wallet-balance-source-ui.test.js`、`node tests/web-inventory-bootstrap.test.js`。未运行真实 Electron/UI、完整打包、真实 Steam/真实账号/真实外部网络或全量 `npm test`。
 - `owner/maintainer`: 各功能测试维护者；打包由桌面发布链路维护者负责。
-- `update triggers`: 新增统一测试入口、改测试目录、改 Electron 打包配置、引入 CI、改真实账号/网络验证策略。
+- `update triggers`: 新增统一测试入口、改测试目录、改 Electron 打包配置、引入 CI、改真实账号/网络验证策略；改余额来源边界、`persisted` 合约、账号余额元数据或 UI 合并规则时同步更新 targeted 测试口径。
 - `stale signals`: 根目录出现 `package.json`；`node_sidecar/package.json` 增加 `test`；当前主工作区主链路出现 `.github/workflows`；测试从脚本式迁移到统一 runner。
-- `do-not-infer`: 测试文件数量不等于覆盖充分；静态断言不能替代 UI/Steam/打包运行态验证。
-- `known risks/open questions`: 2026-05-30 packaging preflight 已检查 schema seed、public key、electron-builder resources；2026-05-31 已补验 VPK dev-only package boundary 和 VPK dev CLI help；`electron-builder.yml` keys resource 收窄到 public key，schema seed 进入受控路径，VPK dev source files 从正式包 files 中排除。登录、库存刷新、Steam Web/GC、交易/市场、Steam Guard、代理、打包首启、Electron `userData` 状态仍需要真实运行态或真实网络补验。
+- `do-not-infer`: 测试文件数量不等于覆盖充分；静态断言不能替代 UI/Steam/打包运行态验证。targeted tests 通过只能说明对应本地合约，不说明真实 Steam Store/CM/GC 运行态可用。
+- `known risks/open questions`: 2026-05-30 packaging preflight 已检查 schema seed、public key、electron-builder resources；2026-05-31 已补验 VPK dev-only package boundary 和 VPK dev CLI help；`electron-builder.yml` keys resource 收窄到 public key，schema seed 进入受控路径，VPK dev source files 从正式包 files 中排除。登录、库存刷新、Steam Web/GC、交易/市场、Steam Guard、代理、打包首启、Electron `userData` 状态仍需要真实运行态或真实网络补验。余额来源边界未启动 Electron/UI，未访问真实 Steam/真实账号/真实网络，未跑全量 `npm test`。
 
 ## 高风险链路优先级
 
@@ -225,6 +277,8 @@
 | 入口/运行方式 | 启动脚本、Electron 主进程、浏览器模式、cwd、端口绑定变化 | 用户实际启动路径和地图不一致 |
 | 前端/UI | 主页面结构、功能区、状态模型、preload、同源 fetch 变化 | UI 已改版但地图仍描述旧功能区 |
 | API/授权 | 路由拆分、401 gate、client auth、license、SSE 变化 | 非 public API 行为和地图不一致 |
+| 状态口径 | 状态 owner、真相/投影/观察态、统一更新入口、消费者入口或传播路径变化 | 后续 agent 只改 UI/cache/route 就声称状态已收敛 |
+| 主要业务文件职责 | 主要业务文件新增、拆分、合并、移动、职责改变、调用方改变 | agent 仍从旧文件开始定位，或把适配层误当状态 owner |
 | 数据/运行态 | DB schema、运行态路径、凭据存储、`.gitignore`、打包 userData 变化 | 开发态和打包态读写位置变化 |
 | 外部账号/交易 | Steam session、GC、Web inventory、trade offer、market confirmation、代理变化 | 真实运行日志显示外部 API 链路不同 |
 | 测试/验证 | 新增统一 test script、CI、打包验证、真实账号验证流程 | 仍按单文件脚本理解测试体系 |
@@ -233,6 +287,7 @@
 ## 待验证问题
 
 - Web 库存页账号来源已统一到 `state.accounts`；Web inventory 读取与 GC snapshot 分离，静态测试已覆盖旧弹窗不再走 snapshot/stub。真实浏览器/Electron 运行态仍未验证。
+- Steam 钱包余额来源边界已记录：账号当前值 owner 为 `AppAuthStore` 的 `steam_account.balance` 和 `balance_source/balance_currency/balance_observed_at`；Web/Store 为 `steam_store`，Steam client/CM 为 `steam_cm`，GC/军械库 `redeemable_balance` 独立。定向测试覆盖本地规则，但未做真实 Electron/UI、真实 Steam、真实账号、真实网络或全量 `npm test`。
 - `login_keys.json` 当前实现是直接 JSON 读写；这是静态扫描结论，未读取真实文件内容，需要结合实际平台分支、真实文件写入和安全设计确认。
 - 根目录 `config.py` 扫描时未发现；代理实际来源需要在运行环境中确认。
 - 打包态 `userData` 路径、seed `client_config.json`、`schema_cache.json`、`csgo_skins.db` 和首次启动状态需要真实打包验证。

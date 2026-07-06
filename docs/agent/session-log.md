@@ -5568,3 +5568,105 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
   - 未触发真实 Steam、login、trade、market、craft、inventory refresh 或账号动作。
   - `npm audit --omit=dev` 剩余问题仍来自其它生产链路，需要后续专项处理；本轮按用户要求不盲升这些依赖。
   - 当前只检查并修改主工作区 `C:/Users/18220/Desktop/cs2_alchemy`，未检查其它 worktree。
+
+## 2026-06-06 handoff - Steam wallet balance source boundary
+
+- 本轮目标：
+  - 先完成“Web 库存显示应走 Web inventory、不能读 GC snapshot”的提交。
+  - 然后围绕“Steam 钱包余额来源”建立后续实现任务：账号下保留一个当前余额值，但 Web/Store 和 Steam client/CM 两个来源必须有清晰来源元数据，且失败时不能互相兜底。
+- 已完成：
+  - 已提交 Web 库存显示修复：
+    - commit：`9297757 fix: separate web inventory display source`
+    - 内容：Web 库存主页面和旧库存弹窗都走 `/api/accounts/:username/inventory`，不再通过 `/api/snapshot/account?source=web_inventory&save_stub=1` 读取 GC snapshot；Web 库存账号来源统一到 `state.accounts`；相关静态测试和项目地图已更新。
+  - 已通过多 agent 查证余额来源：
+    - 本地 Web/Store 查询接口：`POST /api/accounts/fetch-balance`，后端 `fetchBalance()` 先走 Steam Store `GetClientWalletDetails`，失败后解析 Store account HTML。
+    - Steam client/CM 来源：`steam-user` 收到 `ClientWalletInfoUpdate` 后更新 `steam.wallet`；项目 `resolveAccountProfile()` 读取 `steam.wallet`，来源约为 `steam_cm`。
+    - 两个来源当前都会写入同一个 `steam_account.balance`；当前没有持久化 `source`、`observed_at`、`currency`。
+    - GC/军械库 `redeemable_balance` 是另一类游戏内余额，不能和 Steam 钱包余额混淆。
+  - 已把余额来源问题挂到清单：
+    - 文件：`docs/agent/project-audit-task-checklist-2026-06-06.md`
+    - 新增条目：`A11 Steam 钱包余额来源边界未清晰/需统一`
+    - 用户已明确最终规则：余额继续挂在账号下；`Web/Store` 和 `Steam client/CM` 都可以作为来源；当前账号余额值取最新一次成功获取的来源；但任一来源失败时不能拿另一个来源旧值作为本次成功兜底。
+  - 已写实现计划：
+    - `docs/superpowers/plans/2026-06-06-steam-wallet-balance-source-boundary.md`
+    - 计划采用 TDD：先补 store/route/profile/UI 测试，再改 `AppAuthStore`、`uiServer`、`app.js`，最后更新地图和 A11。
+- 当前未完成：
+  - 尚未实现余额来源元数据。
+  - 尚未新增 `balance_source`、`balance_currency`、`balance_observed_at` 或等价持久化字段。
+  - 尚未修改 `/api/accounts/fetch-balance` 的返回和持久化语义。
+  - 尚未修改 `/api/accounts/profile` 的 CM 余额持久化语义。
+  - 尚未修改前端展示来源/更新时间。
+  - 尚未更新 `docs/project-cognition-map.md` 的余额来源边界。
+  - 尚未把 A11 标记为已处理。
+- 当前工作区现场：
+  - 当前路径：`C:/Users/18220/Desktop/cs2_alchemy`
+  - 当前分支：`main`
+  - 最新提交：`9297757 fix: separate web inventory display source`
+  - 当前 `git status --short`：
+    - `M csgo_skins.db`
+    - `?? docs/agent/project-audit-task-checklist-2026-06-06.md`
+    - `?? docs/superpowers/plans/2026-06-06-steam-wallet-balance-source-boundary.md`
+    - `?? output/c5-wear-dry-run/`
+  - `csgo_skins.db` 和 `output/c5-wear-dry-run/` 不属于余额实现任务，默认不要提交。
+  - `docs/agent/project-audit-task-checklist-2026-06-06.md` 当前是未跟踪清单，包含 A11 和其它审查任务；是否随余额实现一起提交需确认或按用户后续指令执行。
+  - 新计划文件也是未跟踪，后续实现前应读取它。
+- 已验证：
+  - Web 库存显示修复提交前已跑：
+    - `node tests/web-inventory-bootstrap.test.js` -> PASS
+    - `node tests/web-inventory-gc-source.test.js` -> PASS
+  - 当时 `npm test` 未全量通过，失败在既有 `account-relogin-modal.test.js`：`ReferenceError: applyClientPermissionToButton is not defined`。未证明该失败与库存显示或余额计划有关。
+  - 余额来源调研只做静态源码/本地依赖检查，未启动程序，未访问真实 Steam，未使用真实账号或 cookie。
+- 必须不变项：
+  - 账号余额仍是账号下一个当前值，不拆成两个用户可见余额。
+  - `steam_store` 和 `steam_cm` 都可以作为成功来源更新当前值。
+  - Web/Store 失败时不能用 Steam client/CM 旧值兜底。
+  - Steam client/CM 没拿到余额时不能用 Web/Store 旧值兜底。
+  - GC/军械库 `redeemable_balance` 不参与 Steam 钱包余额。
+  - 不访问真实 Steam、真实交易、真实市场、真实炼金、真实账号。
+  - 不提交 `csgo_skins.db`、`output/`。
+  - 不把既有 `account-relogin-modal.test.js` 失败包装成本任务已通过或本任务失败。
+- 下个会话第一刀：
+  - 先只读恢复：
+    - 读本节 handoff。
+    - 读 `docs/superpowers/plans/2026-06-06-steam-wallet-balance-source-boundary.md`。
+    - 读 `docs/agent/project-audit-task-checklist-2026-06-06.md` 的 A11。
+    - 读 `docs/project-cognition-map.md` 的 Web 库存/市场确认相关小节。
+    - 运行 `git status --short` 和 `git worktree list --porcelain`。
+  - 按 `Handoff Resume Approval Gate`：恢复后先复述目标、真实进度、未完成项、下一步第一刀、必须不变项和未检查范围；等待用户批准后再改代码。
+  - 获批后按计划从 P1 开始：
+    - 先在 `node_sidecar/tests/app-auth-store.test.js` 写失败测试，证明账号余额来源元数据要持久化。
+    - 跑 `node tests/app-auth-store.test.js` 确认 RED。
+    - 再改 `node_sidecar/src/appAuthStore.js` 实现最小 GREEN。
+- 下个会话启动指令：
+  ```text
+  继续 cs2_alchemy 的 Steam 钱包余额来源边界实现。先读 docs/agent/session-log.md 最新的 `2026-06-06 handoff - Steam wallet balance source boundary`、docs/superpowers/plans/2026-06-06-steam-wallet-balance-source-boundary.md、docs/agent/project-audit-task-checklist-2026-06-06.md 的 A11、docs/project-cognition-map.md 的 Web 库存/市场确认小节，并运行 git status --short 和 git worktree list --porcelain。先复述当前目标、真实进度、未完成项、下一步第一刀、必须不变项和未检查范围，等我批准后再实现。获批后按计划从 P1 的 app-auth-store RED 测试开始，严格 TDD，不访问真实 Steam，不提交 csgo_skins.db 或 output/。
+  ```
+
+## 2026-06-06 Steam wallet balance source boundary implementation close-out
+
+- 本轮目标：
+  - 完成 Steam 钱包余额来源边界：账号下仍保留一个当前余额值，但补齐来源元数据，避免 Web/Store 和 Steam client/CM 在失败时互相兜底。
+- 已完成：
+  - 账号余额持久化现在使用当前值加来源元数据：`balance_source`、`balance_currency`、`balance_observed_at`。
+  - `steam_store` 和 `steam_cm` 都可以作为成功来源更新账号当前余额。
+  - Web/Store 查询只有本地持久化成功时才返回 `persisted:true`、`source`、`observed_at`；查询失败或本地持久化失败不会拿另一来源旧值当本次成功，也不会返回本次成功来源元数据。
+  - Steam client/CM profile 有钱包信息时以 `steam_cm` 写入；CM 没有钱包信息时不会拿 Web/Store 旧值当本次 profile 结果。
+  - GC/军械库 `redeemable_balance` 保持独立，不参与 Steam 钱包余额。
+  - 前端只在 `r.success && r.persisted === true && r.source && r.observed_at` 时更新余额来源元数据；账号卡片和 Web inventory 余额 title 展示来源、币种和时间。
+  - `docs/project-cognition-map.md` 已补余额来源边界、验证范围和未验证范围。
+  - `docs/agent/project-audit-task-checklist-2026-06-06.md` 中 A11 已标记为已处理；A2 仍未处理。
+- 已验证：
+  - `node tests/app-auth-store.test.js` -> PASS。
+  - `node tests/account-scope-route.test.js` -> PASS。
+  - `node tests/account-profile-route-scope.test.js` -> PASS。
+  - `node tests/wallet-balance-source-ui.test.js` -> PASS。
+  - `node tests/web-inventory-bootstrap.test.js` -> PASS。
+  - `node --check src/uiServer.js` -> PASS。
+  - `node --check ui/app.js` -> PASS。
+- 未验证 / 风险：
+  - 未跑全量 `npm test`。
+  - 未启动 Electron/UI。
+  - 未访问真实 Steam、真实账号、真实网络。
+  - 未检查其它 worktree，本轮结论只覆盖主工作区 `C:/Users/18220/Desktop/cs2_alchemy`。
+  - 未 stage、未提交。
+  - `csgo_skins.db`、`output/c5-wear-dry-run/` 是运行态/既有产物，不属于本轮余额改动，仍不处理。

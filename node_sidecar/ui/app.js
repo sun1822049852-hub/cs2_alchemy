@@ -2695,13 +2695,35 @@ function pickAvatarUrlFromProfile(profile) {
   if (!profile || typeof profile !== "object") return "";
   return String(profile.avatar_url_full || profile.avatar_url_medium || profile.avatar_url_icon || "").trim();
 }
-function mergeAccountIdentity(username, {steamName = "", steamId = "", avatarUrl = "", balance = ""} = {}) {
+function formatWalletBalanceSourceMeta(row) {
+  const source = String(row && row.balance_source || "").trim();
+  const currency = String(row && row.balance_currency || "").trim();
+  const observedAt = String(row && row.balance_observed_at || "").trim();
+  if (!source && !currency && !observedAt) return "";
+  const sourceLabel = source === "steam_store"
+    ? "Web/Store"
+    : source === "steam_cm"
+      ? "Steam CM"
+      : source || "未知";
+  const parts = [`来源：${sourceLabel}`];
+  if (currency) parts.push(`币种：${currency}`);
+  if (observedAt) {
+    const observedDate = new Date(observedAt);
+    const observedText = Number.isNaN(observedDate.getTime()) ? observedAt : observedDate.toLocaleString();
+    parts.push(`时间：${observedText}`);
+  }
+  return parts.join(" · ");
+}
+function mergeAccountIdentity(username, {steamName = "", steamId = "", avatarUrl = "", balance = "", balanceSource = "", balanceCurrency = "", balanceObservedAt = ""} = {}) {
   const key = String(username || "").trim();
   if (!key) return false;
   const nextSteamName = String(steamName || "").trim();
   const nextSteamId = String(steamId || "").trim();
   const nextAvatarUrl = String(avatarUrl || "").trim();
   const nextBalance = String(balance || "").trim();
+  const nextBalanceSource = String(balanceSource || "").trim();
+  const nextBalanceCurrency = String(balanceCurrency || "").trim();
+  const nextBalanceObservedAt = String(balanceObservedAt || "").trim();
   let changed = false;
   state.accounts = state.accounts.map((row) => {
     if (String(row && row.username || "").trim() !== key) return row;
@@ -2709,18 +2731,36 @@ function mergeAccountIdentity(username, {steamName = "", steamId = "", avatarUrl
     const currentSteamId = String(row && row.steam_id || "").trim();
     const currentAvatarUrl = String(row && row.avatar_url || "").trim();
     const currentBalance = String(row && row.balance || "").trim();
+    const currentBalanceSource = String(row && row.balance_source || "").trim();
+    const currentBalanceCurrency = String(row && row.balance_currency || "").trim();
+    const currentBalanceObservedAt = String(row && row.balance_observed_at || "").trim();
     const mergedSteamName = nextSteamName || currentSteamName;
     const mergedSteamId = nextSteamId || currentSteamId;
     const mergedAvatarUrl = nextAvatarUrl || currentAvatarUrl;
     const mergedBalance = nextBalance || currentBalance;
+    const mergedBalanceSource = nextBalance ? (nextBalanceSource || currentBalanceSource) : currentBalanceSource;
+    const mergedBalanceCurrency = nextBalance ? (nextBalanceCurrency || currentBalanceCurrency) : currentBalanceCurrency;
+    const mergedBalanceObservedAt = nextBalance ? (nextBalanceObservedAt || currentBalanceObservedAt) : currentBalanceObservedAt;
     if (
       mergedSteamName === currentSteamName &&
       mergedSteamId === currentSteamId &&
       mergedAvatarUrl === currentAvatarUrl &&
-      mergedBalance === currentBalance
+      mergedBalance === currentBalance &&
+      mergedBalanceSource === currentBalanceSource &&
+      mergedBalanceCurrency === currentBalanceCurrency &&
+      mergedBalanceObservedAt === currentBalanceObservedAt
     ) return row;
     changed = true;
-    return {...row, steam_name: mergedSteamName, steam_id: mergedSteamId, avatar_url: mergedAvatarUrl, balance: mergedBalance};
+    return {
+      ...row,
+      steam_name: mergedSteamName,
+      steam_id: mergedSteamId,
+      avatar_url: mergedAvatarUrl,
+      balance: mergedBalance,
+      balance_source: mergedBalanceSource,
+      balance_currency: mergedBalanceCurrency,
+      balance_observed_at: mergedBalanceObservedAt
+    };
   });
   return changed;
 }
@@ -2742,11 +2782,15 @@ async function ensureAccountProfile(username, {force = false} = {}) {
   try {
     const data = await api(`/api/accounts/profile?username=${encodeURIComponent(key)}`);
     const profile = data && data.profile && typeof data.profile === "object" ? data.profile : null;
+    const walletBalance = String(profile && profile.wallet_balance || "").trim();
     const changed = mergeAccountIdentity(key, {
       steamName: String(profile && profile.persona_name || "").trim(),
       steamId: String(profile && profile.steam_id64 || "").trim(),
       avatarUrl: pickAvatarUrlFromProfile(profile),
-      balance: String(profile && profile.wallet_balance || "").trim()
+      balance: walletBalance,
+      balanceSource: walletBalance ? String(profile && profile.wallet_source || "").trim() : "",
+      balanceCurrency: walletBalance ? String(profile && profile.wallet_currency || "").trim() : "",
+      balanceObservedAt: walletBalance ? String(profile && profile.wallet_observed_at || "").trim() : ""
     });
     state.profileHydratedUsernames.add(key);
     if (changed) {
@@ -3358,9 +3402,11 @@ function renderSavedAccounts() {
     const sub = document.createElement("div");
     sub.className = "account-card-sub";
     const balanceText = String(row.balance || "").trim();
+    const balanceMeta = formatWalletBalanceSourceMeta(row);
     sub.textContent = balanceText
       ? `账号：${accountName || "-"} · 余额：${balanceText}`
       : `账号：${accountName || "-"}`;
+    if (balanceMeta) sub.title = balanceMeta;
     card.onclick = () => {
       state.accountSelectedUsername = row.username;
       syncInventoryAccountSelect();
@@ -16707,8 +16753,10 @@ function renderWebInvAccountInfo() {
   ui.webInvAccountInfo.classList.remove("hidden");
   const acc = webInvAccounts().find(a => a.username === username);
   if (!acc) return;
+  const balanceMeta = formatWalletBalanceSourceMeta(acc);
   ui.webInvAccName.textContent = acc.steam_name || acc.username;
   ui.webInvAccBalance.textContent = acc.balance || "-";
+  ui.webInvAccBalance.title = balanceMeta;
   ui.webInvAccBanStatus.textContent = acc.ban_status || "-";
   const tradeUrl = acc.trade_url || "";
   ui.webInvAccTradeUrl.textContent = tradeUrl ? tradeUrl.slice(0, 50) + (tradeUrl.length > 50 ? "..." : "") : "-";
@@ -16845,10 +16893,17 @@ async function webInvFetchBalance() {
     });
     if (data.ok && data.results && data.results.length > 0) {
       const r = data.results[0];
-      if (r.success) {
+      if (r.success && r.persisted === true && r.source && r.observed_at) {
         const acc = webInvAccounts().find(a => a.username === username);
-        if (acc) acc.balance = r.balance;
+        if (acc) {
+          acc.balance = r.balance;
+          acc.balance_source = r.source;
+          acc.balance_currency = String(r.currency || "").trim();
+          acc.balance_observed_at = r.observed_at;
+        }
         renderWebInvAccountInfo();
+      } else if (r.success) {
+        alert("余额查询成功，但本地来源未保存，当前显示仍为旧余额");
       } else {
         alert("余额查询失败: " + (r.message || "未知错误"));
       }
