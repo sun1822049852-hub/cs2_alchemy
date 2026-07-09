@@ -58,6 +58,7 @@ function createLoadPrefsContext(storageValue) {
     CRAFT_UI_PREFS_KEY: "craft_ui_prefs_v2",
     DEFAULT_CRAFT_ASSIST_WEAR_OFFSET: 0.00001,
     CRAFT_ASSIST_PRESET_MIN_WIDTH: 186,
+    CRAFT_ASSIST_SPLIT_WIDTH: 4,
     normalizeCraftAssistWearOffset(value, fallback) {
       const numeric = Number(value);
       return Number.isFinite(numeric) ? numeric : fallback;
@@ -81,6 +82,7 @@ const clampContext = {
   Math,
   Number,
   CRAFT_ASSIST_PRESET_MIN_WIDTH: 186,
+  CRAFT_ASSIST_SPLIT_WIDTH: 4,
   ui: {
     craftAssistContent: {
       clientWidth: 0

@@ -1904,8 +1904,8 @@ select.small {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(100% - var(--craft-right-width) - 6px);
-  width: 12px;
+  left: calc(100% - var(--craft-right-width) - 4px);
+  width: 8px;
   min-height: 0;
   border-radius: 0;
   cursor: col-resize;
@@ -4048,14 +4048,18 @@ select.small {
 }
 
 .craft-assist-overlay-handle {
-  width: 100%;
-  height: 6px;
+  width: 112px;
+  height: 14px;
   cursor: row-resize;
   background: transparent;
   border-bottom: 0;
-  position: relative;
+  position: absolute;
+  top: -1px;
+  left: 50%;
   flex-shrink: 0;
-  margin: -4px 0 -2px;
+  margin: 0;
+  transform: translateX(-50%);
+  z-index: 4;
 }
 
 .craft-assist-overlay-handle::before {
@@ -4152,7 +4156,7 @@ select.small {
   flex-direction: column;
   gap: 8px;
   margin-top: 0;
-  padding: 10px;
+  padding: 10px 4px 10px 10px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -4164,7 +4168,7 @@ select.small {
 
 .craft-assist-close.craft-assist-close-floating {
   position: absolute;
-  top: 1px;
+  top: -2px;
   right: 4px;
   width: 16px;
   height: 16px;
@@ -4442,7 +4446,7 @@ select.small {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 8px minmax(186px, var(--craft-assist-preset-width));
+  grid-template-columns: minmax(0, 1fr) 4px minmax(186px, var(--craft-assist-preset-width));
   gap: 0;
   align-items: stretch;
 }
@@ -4538,7 +4542,7 @@ select.small {
 
 .craft-assist-split-bar {
   position: relative;
-  width: 8px;
+  width: 4px;
   cursor: col-resize;
   border-radius: 0;
   background: transparent;
@@ -4614,7 +4618,7 @@ select.small {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   background: #ffffff;
-  padding: 4px;
+  padding: 4px 0 4px 4px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -8302,7 +8306,7 @@ body.theme-inkblue #craftPage .group-child.locked {
 body.theme-inkblue #craftPage .craft-assist-panel {
   border: none;
   border-radius: 18px;
-  padding: 12px;
+  padding: 12px 4px 12px 12px;
 }
 
 body.theme-inkblue #craftLeftPanel > .craft-assist-busy-mask {

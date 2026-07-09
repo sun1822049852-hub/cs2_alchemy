@@ -13,6 +13,7 @@ const TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS = 4;
 const TRADEUP_SIMULATION_RANGE_DECIMALS = 4;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET = 0.00001;
 const CRAFT_ASSIST_PRESET_MIN_WIDTH = 186;
+const CRAFT_ASSIST_SPLIT_WIDTH = 4;
 const SNAPSHOT_REUSE_WINDOW_MS = 10 * 60 * 1000;
 const WEAR_SUFFIX_RANGES = [
   {keys: ["崭新出厂", "崭新", "factory new", "factorynew"], min: 0, max: 0.07},
@@ -1887,7 +1888,7 @@ function updateCraftActionLayout() {
 function clampCraftAssistPresetWidth(width) {
   const min = CRAFT_ASSIST_PRESET_MIN_WIDTH;
   const contentWidth = Number(ui.craftAssistContent && ui.craftAssistContent.clientWidth || 0);
-  const effective = contentWidth > 0 ? Math.max(0, contentWidth - 8) : 0;
+  const effective = contentWidth > 0 ? Math.max(0, contentWidth - CRAFT_ASSIST_SPLIT_WIDTH) : 0;
   const auto = effective > 0 ? Math.max(min, Math.round(effective * 0.28)) : min;
   const maxByPanel = effective > 0 ? Math.max(min, Math.floor(effective * 0.62)) : 460;
   const max = Math.min(520, maxByPanel);

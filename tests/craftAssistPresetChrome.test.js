@@ -34,13 +34,13 @@ for (const fragment of cssFragments) {
 
 assert.match(
   css,
-  /\.craft-assist-overlay-handle\s*\{[\s\S]*height:\s*18px;/m,
-  "craft assist overlay handle should grow taller so the top guide zone keeps the close button clear of the content border"
+  /\.craft-assist-overlay-handle\s*\{[\s\S]*width:\s*112px;[\s\S]*height:\s*14px;[\s\S]*position:\s*absolute;[\s\S]*left:\s*50%;/m,
+  "craft assist overlay handle should be centered against the whole assist panel instead of the left column only"
 );
 
 assert.match(
   css,
-  /\.craft-assist-close\.craft-assist-close-floating\s*\{[\s\S]*top:\s*1px;[\s\S]*right:\s*4px;[\s\S]*width:\s*16px;[\s\S]*height:\s*16px;/m,
+  /\.craft-assist-close\.craft-assist-close-floating\s*\{[\s\S]*top:\s*-2px;[\s\S]*right:\s*4px;[\s\S]*width:\s*16px;[\s\S]*height:\s*16px;/m,
   "floating craft assist close button should shrink and move into the top guide frame near the upper-right corner"
 );
 
@@ -58,14 +58,26 @@ assert.match(
 
 assert.match(
   css,
+  /\.craft-assist-panel\s*\{[\s\S]*padding:\s*10px 4px 10px 10px;/m,
+  "craft assist panel should reduce right padding so the preset scrollbar aligns with the left reference list"
+);
+
+assert.match(
+  css,
+  /body\.theme-inkblue #craftPage \.craft-assist-panel\s*\{[\s\S]*padding:\s*12px 4px 12px 12px;/m,
+  "ink theme should keep the same reduced right padding for preset scrollbar alignment"
+);
+
+assert.match(
+  css,
   /\.craft-assist-content\s*\{[\s\S]*gap:\s*0;/m,
   "craft assist content should remove the visual gutter so the divider no longer reads like a thick empty border"
 );
 
 assert.match(
   css,
-  /\.craft-assist-split-bar\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*8px;/m,
-  "craft assist split bar should keep a draggable hit area while visually slimming the divider"
+  /\.craft-assist-split-bar\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*4px;/m,
+  "craft assist split bar should use a narrow draggable lane so the panel seam no longer reads as a thick gap"
 );
 
 assert.match(
@@ -76,14 +88,14 @@ assert.match(
 
 assert.match(
   css,
-  /\.craft-assist-main-col\s*\{[\s\S]*border-right:\s*0;[\s\S]*border-top-right-radius:\s*0;[\s\S]*border-bottom-right-radius:\s*0;/m,
+  /\.craft-assist-main-col\s*\{[\s\S]*border:\s*none;[\s\S]*border-top-right-radius:\s*0;[\s\S]*border-bottom-right-radius:\s*0;/m,
   "main editor column should drop its right border so the split bar owns the only visible divider line"
 );
 
 assert.match(
   css,
-  /\.craft-assist-preset-panel\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-bottom-left-radius:\s*0;[\s\S]*padding:\s*4px;/m,
-  "preset panel should drop its left edge chrome so the seam collapses into one line"
+  /\.craft-assist-preset-panel\s*\{[\s\S]*border:\s*none;[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-bottom-left-radius:\s*0;[\s\S]*padding:\s*4px 0 4px 4px;/m,
+  "preset panel should keep the seam compact while letting the preset scrollbar sit closer to the reference list edge"
 );
 
 assert.match(
