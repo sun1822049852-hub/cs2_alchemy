@@ -14109,7 +14109,6 @@ function renderBatchCraftAccountListbox() {
     btn.onclick = (evt) => {
       evt.stopPropagation();
       if (state.batchCraftBusy) return;
-      closeBatchCraftAccountPicker();
       void addBatchCraftAccount(username);
     };
     ui.batchCraftAccountListbox.append(btn);
@@ -14138,6 +14137,20 @@ function setBatchCraftAccountPickerOpen(open) {
 
 function closeBatchCraftAccountPicker() {
   setBatchCraftAccountPickerOpen(false);
+}
+
+function handleBatchCraftAccountPickerOutsideClick(evt) {
+  if (!state.batchCraftAccountPickerOpen) return;
+  const target = evt.target;
+  const listbox = ui.batchCraftAccountListbox;
+  const addBtn = ui.batchCraftAddAccountBtn;
+  const insideListbox = listbox && listbox.contains(target);
+  const insideAddBtn = addBtn && addBtn.contains(target);
+  if (insideListbox || insideAddBtn) return;
+  closeBatchCraftAccountPicker();
+  evt.preventDefault();
+  evt.stopPropagation();
+  if (typeof evt.stopImmediatePropagation === "function") evt.stopImmediatePropagation();
 }
 
 function placeBatchCraftSettingsPanel() {
@@ -15237,6 +15250,7 @@ function bindEvents() {
     stopCraftAssistOverlayDrag();
     stopCraftAssistSplitDrag();
   });
+  document.addEventListener("click", handleBatchCraftAccountPickerOutsideClick, true);
   document.addEventListener("click", (evt) => {
     const target = evt.target;
     if (!ui.filterDrawer.classList.contains("hidden")) {
@@ -15266,13 +15280,6 @@ function bindEvents() {
       const bBtn = ui.batchCraftSettingsBtn;
       if ((!bPanel || !bPanel.contains(target)) && (!bBtn || !bBtn.contains(target))) {
         setBatchCraftSettingsPanelOpen(false);
-      }
-    }
-    if (state.batchCraftAccountPickerOpen) {
-      const bListbox = ui.batchCraftAccountListbox;
-      const bBtn = ui.batchCraftAddAccountBtn;
-      if ((!bListbox || !bListbox.contains(target)) && (!bBtn || !bBtn.contains(target))) {
-        closeBatchCraftAccountPicker();
       }
     }
     if (state.craftAssistPickerOpen || state.craftAssistRoleChooserOpen) {

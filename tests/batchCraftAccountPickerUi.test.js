@@ -67,6 +67,50 @@ assert.match(
   "legacy select renderer should also refresh the custom listbox so the hidden select is only a compatibility fallback"
 );
 
+const listboxRenderMatch = appSource.match(
+  /function renderBatchCraftAccountListbox\(\)\s*\{[\s\S]*?\n\}\n\nfunction setBatchCraftAccountPickerOpen/m
+);
+assert.ok(
+  listboxRenderMatch,
+  "custom account listbox renderer should stay next to the picker open state code"
+);
+
+const optionClickMatch = listboxRenderMatch[0].match(/btn\.onclick = \(evt\) => \{[\s\S]*?\n    \};/m);
+assert.ok(
+  optionClickMatch,
+  "custom account option click handler should be explicit and testable"
+);
+
+assert.equal(
+  optionClickMatch[0].includes("closeBatchCraftAccountPicker()"),
+  false,
+  "clicking an account option should keep the account listbox open for adding more accounts"
+);
+
+assert.match(
+  optionClickMatch[0],
+  /evt\.stopPropagation\(\);[\s\S]*void addBatchCraftAccount\(username\);/m,
+  "clicking an account option should still add that account without bubbling to outside-click handlers"
+);
+
+assert.match(
+  appSource,
+  /function handleBatchCraftAccountPickerOutsideClick\(evt\)\s*\{[\s\S]*state\.batchCraftAccountPickerOpen[\s\S]*closeBatchCraftAccountPicker\(\);[\s\S]*evt\.preventDefault\(\);[\s\S]*evt\.stopPropagation\(\);[\s\S]*evt\.stopImmediatePropagation[\s\S]*\}/m,
+  "outside account picker clicks should close the listbox and consume the click before it reaches buttons underneath"
+);
+
+assert.match(
+  appSource,
+  /function handleBatchCraftAccountPickerOutsideClick\(evt\)\s*\{[\s\S]*insideListbox[\s\S]*insideAddBtn[\s\S]*if \(insideListbox \|\| insideAddBtn\) return;[\s\S]*closeBatchCraftAccountPicker\(\);/m,
+  "inside account picker clicks should be ignored by the outside-click consumer"
+);
+
+assert.match(
+  appSource,
+  /document\.addEventListener\("click",\s*handleBatchCraftAccountPickerOutsideClick,\s*true\);/,
+  "outside account picker clicks should be handled during capture so the same click cannot pass through to underlying controls"
+);
+
 assert.match(
   appSource,
   /empty\.className = "batch-craft-account-option empty";[\s\S]*empty\.textContent = "无可添加账号";/m,
