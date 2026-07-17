@@ -114,9 +114,60 @@ function test_account_store_reads_do_not_run_write_side_effects() {
   }
 }
 
+function test_account_store_separates_public_projection_from_internal_credentials() {
+  const ctx = createFixture();
+  try {
+    const store = new AccountStore({
+      dbPath: ctx.dbPath,
+      accountsFilePath: ctx.accountsFilePath,
+      viewerUsername: "member_a"
+    });
+    store.updateSteamGuard("countsteam01", {
+      mafile_content: JSON.stringify({shared_secret: "guard-secret"})
+    });
+    assert.equal(store.setActive("countsteam01"), true);
+
+    const account = store.get("countsteam01");
+    const credentials = store.getCredentials("countsteam01");
+    const activeCredentials = store.getActiveCredentials();
+
+    assert.equal(Object.hasOwn(account, "password"), false);
+    assert.equal(Object.hasOwn(account, "mafile_content"), false);
+    assert.equal(account.has_steam_guard, true);
+    assert.equal(credentials.password, "SecretA");
+    assert.equal(JSON.parse(credentials.mafile_content).shared_secret, "guard-secret");
+    assert.equal(activeCredentials.username, "countsteam01");
+    assert.equal(activeCredentials.password, "SecretA");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_account_store_update_steam_guard_rejects_unscoped_account() {
+  const ctx = createFixture();
+  try {
+    const store = new AccountStore({
+      dbPath: ctx.dbPath,
+      accountsFilePath: ctx.accountsFilePath,
+      viewerUsername: "member_a"
+    });
+
+    assert.throws(
+      () => store.updateSteamGuard("countsteam02", {
+        mafile_content: JSON.stringify({shared_secret: "guard-secret"})
+      }),
+      /cannot manage this steam account/
+    );
+  } finally {
+    cleanup(ctx);
+  }
+}
+
 function main() {
   test_account_store_lists_sqlite_accounts_for_viewer_scope();
   test_account_store_reads_do_not_run_write_side_effects();
+  test_account_store_separates_public_projection_from_internal_credentials();
+  test_account_store_update_steam_guard_rejects_unscoped_account();
   console.log("account-store-sqlite tests passed");
 }
 

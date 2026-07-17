@@ -9,6 +9,7 @@ const {URL} = require("url");
 const {asString, withTimeout} = require("./utils");
 const {enhanceCookieString} = require("./steamHttpClient");
 const {createProxyAgentForUrl, getSteamSessionProxyOptions} = require("./proxyConfig");
+const {isRecoverableTokenError} = require("./tokenRecoveryService");
 
 const TOKEN_REFRESH_TIMEOUT_MS = 15000;
 const STEAM_COUNTRY_COOKIE = "steamCountry=CN%7C0";
@@ -121,6 +122,12 @@ async function refreshAccessToken(refreshToken, steamId64) {
       res.on("data", (chunk) => { body += chunk; });
       res.on("end", () => {
         try {
+          if (res.statusCode === 401 || res.statusCode === 403) {
+            const rejected = new Error("Steam 拒绝 refresh token");
+            rejected.code = "refresh_token_rejected";
+            reject(rejected);
+            return;
+          }
           const data = JSON.parse(body);
           const resp = data && data.response;
           if (!resp || !resp.access_token) {
@@ -197,6 +204,9 @@ async function refreshWebCookie(maData) {
   try {
     accessToken = await refreshAccessToken(refreshToken, maData.steamId64);
   } catch (err) {
+    if (isRecoverableTokenError(err)) {
+      throw err;
+    }
     // 如果刷新失败，尝试直接用已有的 accessToken
     const fallback = asString(maData.accessToken).trim();
     if (fallback) {
@@ -219,7 +229,10 @@ async function refreshWebCookie(maData) {
       accessToken: sessionResult.accessToken || accessToken,
       isFallbackCookie: false
     });
-  } catch (_) {
+  } catch (err) {
+    if (isRecoverableTokenError(err)) {
+      throw err;
+    }
     // ignore and fall back to manual cookie assembly below
   }
 
@@ -253,6 +266,9 @@ async function refreshWebCookieFromToken(refreshToken, steamId64) {
   try {
     accessToken = await refreshAccessToken(token, sid);
   } catch (err) {
+    if (isRecoverableTokenError(err)) {
+      throw err;
+    }
     // fallback: 直接用 refresh_token 当 access_token 试试
     accessToken = token;
   }
@@ -265,7 +281,10 @@ async function refreshWebCookieFromToken(refreshToken, steamId64) {
       accessToken: sessionResult.accessToken || accessToken,
       isFallbackCookie: false
     });
-  } catch (_) {
+  } catch (err) {
+    if (isRecoverableTokenError(err)) {
+      throw err;
+    }
     // ignore and fall back to manual cookie assembly below
   }
 

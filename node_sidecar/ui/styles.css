@@ -10673,7 +10673,7 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   color: var(--ops-accent-strong, #f3c779);
 }
 
-/* ═══ Steam Guard 令牌绑定弹窗 ═══ */
+/* ═══ Steam Guard 联合绑定弹窗 ═══ */
 .steam-guard-enroll-dialog { max-width: 520px; }
 
 .enroll-step.hidden { display: none; }
@@ -10688,6 +10688,7 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   line-height: 1.6;
 }
 .enroll-warning-box p { margin: 0 0 6px; }
+.enroll-warning-box p:last-child { margin-bottom: 0; }
 .enroll-warning-box ul {
   margin: 0;
   padding-left: 18px;
@@ -10701,7 +10702,7 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   font-size: 13px;
   color: var(--text);
 }
-.enroll-select-label select {
+.enroll-select-label :is(select, input) {
   padding: 7px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -10709,6 +10710,38 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   color: var(--text);
   font-size: 13px;
 }
+
+.enroll-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.enroll-mode-switch button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+}
+.enroll-mode-switch button.active {
+  border-color: rgba(220, 164, 76, 0.68);
+  background: rgba(220, 164, 76, 0.14);
+  color: #f3c779;
+}
+.enroll-fields {
+  display: grid;
+  gap: 10px;
+}
+.enroll-fields.hidden { display: none; }
+.enroll-step-copy {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.enroll-step-copy span { color: var(--muted); }
 
 .enroll-revocation-box {
   background: rgba(220, 164, 76, 0.10);
@@ -10778,8 +10811,19 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
 }
 .enroll-status.error { color: var(--danger); }
 
-/* ═══ Steam Guard 令牌详情弹窗 ═══ */
+/* ═══ Steam Guard 令牌管理弹窗 ═══ */
 .token-detail-dialog { max-width: 480px; }
+
+.token-management-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.token-management-actions button {
+  min-height: 36px;
+  padding: 6px 8px;
+}
 
 .token-totp-section {
   text-align: center;
@@ -10865,6 +10909,17 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
 }
 .token-info-value.masked {
   letter-spacing: 2px;
+}
+.token-recovery-panel {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+@media (max-width: 520px) {
+  .token-management-actions { grid-template-columns: 1fr; }
 }
 .token-toggle-btn,
 .token-copy-btn {

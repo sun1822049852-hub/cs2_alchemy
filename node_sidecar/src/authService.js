@@ -166,6 +166,7 @@ async function loginAndSaveToken({
   twoFactorCode,
   tokenStore,
   logger,
+  persistToken = true,
   timeoutMs = 45000
 }) {
   const accountName = asString(username).trim();
@@ -281,17 +282,21 @@ async function loginAndSaveToken({
       "login-save authenticate timeout"
     );
 
-    if (tokenStore) {
+    if (tokenStore && persistToken) {
       tokenStore.set(accountName, refreshToken);
     }
     if (logger) {
-      logger.info("auth", `login-save token stored: account=${accountName} token_len=${refreshToken.length}`);
+      logger.info(
+        "auth",
+        `login-save token ${persistToken ? "stored" : "kept temporary"}: account=${accountName} token_len=${refreshToken.length}`
+      );
       logger.info("auth", `login-save done: account=${accountName} elapsed_ms=${Date.now() - startedAt}`);
     }
 
     return {
       username: accountName,
-      refresh_token: refreshToken
+      refresh_token: refreshToken,
+      steam_id64: getSteamId64(session)
     };
   } catch (err) {
     if (!authWaitHandled) {
@@ -325,6 +330,8 @@ async function startLoginSession({
   twoFactorCode,
   tokenStore,
   logger,
+  persistToken = true,
+  rejectAuthenticatorGuard = false,
   timeoutMs = 45000
 }) {
   const accountName = asString(username).trim();
@@ -337,7 +344,15 @@ async function startLoginSession({
 
   // If totp is provided, delegate to the original one-shot flow
   if (totp) {
-    const result = await loginAndSaveToken({username, password, twoFactorCode, tokenStore, logger, timeoutMs});
+    const result = await loginAndSaveToken({
+      username,
+      password,
+      twoFactorCode,
+      tokenStore,
+      logger,
+      persistToken,
+      timeoutMs
+    });
     return {ok: true, done: true, result};
   }
 
@@ -396,6 +411,17 @@ async function startLoginSession({
         throw new Error(ERR_GUARD_ACTION_MISSING);
       }
 
+      if (rejectAuthenticatorGuard && (needDeviceCode || needDeviceConfirmation)) {
+        waitAuth.catch(() => {});
+        try { session.cancelLoginAttempt(); } catch (_) {}
+        return {
+          ok: false,
+          done: false,
+          reason: "already_has_authenticator",
+          guard_type: needDeviceCode ? "device_code" : "device_confirmation"
+        };
+      }
+
       // Determine guard type and hint for the caller
       let guardType = null;
       let guardHint = "";
@@ -417,6 +443,7 @@ async function startLoginSession({
           startedAt,
           timeout,
           tokenStore: tokenStore || null,
+          persistToken: !!persistToken,
           logger: logger || null
         });
         if (logger) {
@@ -433,11 +460,15 @@ async function startLoginSession({
 
     // No guard needed or confirmation-based — wait for auth
     const refreshToken = await withTimeout(waitAuth, remainingTimeoutMs(startedAt, timeout), "login-start authenticate timeout");
-    if (tokenStore) tokenStore.set(accountName, refreshToken);
+    if (tokenStore && persistToken) tokenStore.set(accountName, refreshToken);
     if (logger) {
       logger.info("auth", `login-start done (no guard): account=${accountName} token_len=${refreshToken.length}`);
     }
-    return {ok: true, done: true, result: {username: accountName, refresh_token: refreshToken}};
+    return {
+      ok: true,
+      done: true,
+      result: {username: accountName, refresh_token: refreshToken, steam_id64: getSteamId64(session)}
+    };
   } catch (err) {
     waitAuth.catch(() => {});
     if (logger) {
@@ -456,6 +487,7 @@ async function submitGuardCode({
   code,
   tokenStore,
   logger,
+  persistToken,
   timeoutMs = 45000
 }) {
   const accountName = asString(username).trim();
@@ -473,6 +505,9 @@ async function submitGuardCode({
   const {session, waitAuth, startedAt} = entry;
   const timeout = Math.max(5000, Number(timeoutMs) || 45000);
   const effectiveTokenStore = tokenStore || entry.tokenStore;
+  const effectivePersistToken = typeof persistToken === "boolean"
+    ? persistToken
+    : entry.persistToken !== false;
   const effectiveLogger = logger || entry.logger;
 
   try {
@@ -496,13 +531,17 @@ async function submitGuardCode({
       "login-submit-code authenticate timeout"
     );
 
-    if (effectiveTokenStore) effectiveTokenStore.set(accountName, refreshToken);
+    if (effectiveTokenStore && effectivePersistToken) effectiveTokenStore.set(accountName, refreshToken);
     if (effectiveLogger) {
       effectiveLogger.info("auth", `login-submit-code done: account=${accountName} token_len=${refreshToken.length}`);
     }
 
     pendingSessions.delete(accountName);
-    return {ok: true, done: true, result: {username: accountName, refresh_token: refreshToken}};
+    return {
+      ok: true,
+      done: true,
+      result: {username: accountName, refresh_token: refreshToken, steam_id64: getSteamId64(session)}
+    };
   } catch (err) {
     if (effectiveLogger) {
       effectiveLogger.warn("auth", `login-submit-code failed: account=${accountName} error=${formatError(err)}`);

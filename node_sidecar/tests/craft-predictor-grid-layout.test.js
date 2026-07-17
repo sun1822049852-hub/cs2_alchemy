@@ -73,7 +73,7 @@ assert.match(
 
 assert.match(
   css,
-  /body\.theme-inkblue :is\(#inventoryPage, #craftPage\) :is\(#listWrap, \.menu-list, \.task-queue-list, \.drawer-select-list, \.craft-selection-list, \.craft-queue-list, \.craft-assist-picker, \.craft-assist-list, \.craft-assist-preset-list, #craftPredictorList\)\s*\{[\s\S]*scrollbar-color:\s*rgba\(220, 164, 76, 0\.72\) rgba\(12, 14, 18, 0\.88\);/m,
+  /body\.theme-inkblue[^{]*#craftPredictorList\)[^{]*\{[^}]*scrollbar-color:\s*rgba\(220, 164, 76, 0\.72\) rgba\(12, 14, 18, 0\.88\);/m,
   "craft predictor result list should share the inkblue themed scrollbar styling"
 );
 

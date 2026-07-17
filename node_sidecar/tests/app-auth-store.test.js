@@ -176,12 +176,151 @@ function test_wallet_balance_latest_successful_source_replaces_current_value() {
   }
 }
 
+function test_public_steam_account_projection_hides_secrets_and_reports_guard_presence() {
+  const ctx = createStore();
+  try {
+    ctx.store.upsertSteamAccount({
+      username: "countsteam01",
+      password: "SecretA",
+      remark: "主号A",
+      steamName: "Alpha",
+      steamId: "steamid-alpha",
+      avatarUrl: "https://example.com/a.png",
+      mafileContent: JSON.stringify({shared_secret: "guard-secret"})
+    }, {setActive: false});
+
+    const rows = ctx.store.listSteamAccountsForUser("", {includeAll: true});
+    const account = ctx.store.getSteamAccountForUser("", "countsteam01", {includeAll: true});
+
+    assert.equal(Object.hasOwn(rows[0], "password"), false);
+    assert.equal(Object.hasOwn(rows[0], "mafile_content"), false);
+    assert.equal(Object.hasOwn(account, "password"), false);
+    assert.equal(Object.hasOwn(account, "mafile_content"), false);
+    assert.equal(account.has_steam_guard, true);
+    assert.equal(rows.find((row) => row.username === "countsteam02").has_steam_guard, false);
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_internal_steam_account_credentials_remain_available_with_scope_checks() {
+  const ctx = createStore();
+  try {
+    ctx.store.bootstrapAdmin({password: "Admin!234"});
+    ctx.store.createUser({
+      username: "member_a",
+      password: "Member!234",
+      roleCodes: ["member"],
+      boundSteamUsernames: ["countsteam01"]
+    });
+    ctx.store.updateSteamGuard("", "countsteam01", {
+      mafile_content: JSON.stringify({shared_secret: "guard-secret"})
+    });
+
+    const credentials = ctx.store.getSteamAccountCredentialsForUser("member_a", "countsteam01");
+
+    assert.equal(credentials.password, "SecretA");
+    assert.equal(JSON.parse(credentials.mafile_content).shared_secret, "guard-secret");
+    assert.equal(ctx.store.getSteamAccountCredentialsForUser("member_a", "countsteam02"), null);
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_update_steam_guard_only_changes_guard_and_fills_empty_steam_id64() {
+  const ctx = createStore();
+  try {
+    ctx.store.bootstrapAdmin({password: "Admin!234"});
+    ctx.store.createUser({
+      username: "member_a",
+      password: "Member!234",
+      roleCodes: ["member"],
+      boundSteamUsernames: ["countsteam01"]
+    });
+    ctx.store.setActiveSteamAccount("member_a", "countsteam01");
+    ctx.store.updateSteamWalletBalance("countsteam01", {
+      balance: "¥ 12.34",
+      source: "steam_store",
+      currency: "CNY",
+      observedAt: "2026-06-06T12:00:00.000Z"
+    });
+    const before = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    const bindingBefore = ctx.store.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM user_steam_binding ub
+      JOIN app_user u ON u.id = ub.user_id
+      JOIN steam_account sa ON sa.id = ub.steam_account_id
+      WHERE u.username = ? AND sa.username = ?
+    `).get("member_a", "countsteam01");
+
+    const changed = ctx.store.updateSteamGuard("member_a", "countsteam01", {
+      mafile_content: JSON.stringify({shared_secret: "guard-secret"}),
+      steam_id64: "76561198000000001"
+    });
+    const after = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    const bindingAfter = ctx.store.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM user_steam_binding ub
+      JOIN app_user u ON u.id = ub.user_id
+      JOIN steam_account sa ON sa.id = ub.steam_account_id
+      WHERE u.username = ? AND sa.username = ?
+    `).get("member_a", "countsteam01");
+
+    assert.equal(changed, true);
+    assert.equal(JSON.parse(after.mafile_content).shared_secret, "guard-secret");
+    assert.equal(after.steam_id64, "76561198000000001");
+    for (const field of [
+      "password", "remark", "steam_name", "steam_id", "avatar_url", "ban_status", "trade_url",
+      "balance", "balance_source", "balance_currency", "balance_observed_at"
+    ]) {
+      assert.equal(after[field], before[field], `${field} must remain unchanged`);
+    }
+    assert.equal(ctx.store.getViewerActiveSteamUsername("member_a"), "countsteam01");
+    assert.equal(bindingAfter.count, bindingBefore.count);
+
+    ctx.store.updateSteamGuard("member_a", "countsteam01", {
+      mafile_content: JSON.stringify({shared_secret: "replacement-secret"}),
+      steam_id64: "76561198999999999"
+    });
+    const secondUpdate = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    assert.equal(secondUpdate.steam_id64, "76561198000000001");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_update_steam_guard_propagates_database_write_failure() {
+  const ctx = createStore();
+  try {
+    ctx.store.db.exec(`
+      CREATE TRIGGER reject_guard_write
+      BEFORE UPDATE OF mafile_content ON steam_account
+      BEGIN
+        SELECT RAISE(ABORT, 'guard write denied');
+      END;
+    `);
+
+    assert.throws(
+      () => ctx.store.updateSteamGuard("", "countsteam01", {
+        mafile_content: JSON.stringify({shared_secret: "guard-secret"})
+      }),
+      /guard write denied/
+    );
+  } finally {
+    cleanup(ctx);
+  }
+}
+
 function main() {
   test_bootstrap_admin_creates_super_admin_and_imports_legacy_accounts();
   test_regular_user_only_sees_bound_steam_accounts();
   test_legacy_active_account_remains_available_for_unscoped_dev_viewer();
   test_wallet_balance_source_metadata_is_persisted();
   test_wallet_balance_latest_successful_source_replaces_current_value();
+  test_public_steam_account_projection_hides_secrets_and_reports_guard_presence();
+  test_internal_steam_account_credentials_remain_available_with_scope_checks();
+  test_update_steam_guard_only_changes_guard_and_fills_empty_steam_id64();
+  test_update_steam_guard_propagates_database_write_failure();
   console.log("app-auth-store tests passed");
 }
 

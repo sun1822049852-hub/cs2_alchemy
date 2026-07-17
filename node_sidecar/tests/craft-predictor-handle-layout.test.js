@@ -12,23 +12,23 @@ const APP_SOURCE = fs.readFileSync(APP_PATH, "utf8");
 function main() {
   assert.match(
     HTML_SOURCE,
-    /id="craftPredictorStage"[\s\S]*id="craftPredictorPanel"[\s\S]*id="craftPredictorDrawer"[\s\S]*id="craftExecuteQueueBtn"[\s\S]*<button id="craftPredictorHandle"/m,
-    "predictor handle should sit outside the predictor stage so it can attach to the whole right panel edge"
+    /<div id="craftPredictorStage"[^>]*>[\s\S]*<section id="craftPredictorPanel"[\s\S]*id="craftPredictorDrawer"[\s\S]*<\/section>\s*<button id="craftPredictorHandle"/m,
+    "global predictor stage should own the panel and its sibling handle"
   );
   assert.match(
     CSS_SOURCE,
-    /\.craft-right-panel\s*\{[\s\S]*position:\s*relative;[\s\S]*--craft-predictor-handle-top:\s*50%;[\s\S]*--craft-predictor-handle-height:\s*156px;[\s\S]*--craft-predictor-handle-width:\s*24px;/m,
-    "craft right panel should own the predictor handle geometry variables"
+    /\.craft-predictor-stage\s*\{[^}]*position:\s*fixed;[^}]*right:\s*0;[^}]*bottom:\s*0;[^}]*width:\s*404px;[^}]*height:\s*50vh;[^}]*pointer-events:\s*none;/m,
+    "global predictor stage should own the fixed viewport geometry"
   );
   assert.match(
     CSS_SOURCE,
-    /\.craft-right-panel\s*>\s*\.craft-predictor-handle\s*\{[\s\S]*right:\s*0;[\s\S]*top:\s*var\(--craft-predictor-handle-top\);[\s\S]*width:\s*var\(--craft-predictor-handle-width\);[\s\S]*height:\s*var\(--craft-predictor-handle-height\);[\s\S]*clip-path:\s*polygon\(0 12%,\s*100% 0,\s*100% 100%,\s*0 88%\);/m,
-    "predictor handle should mirror the left rail tab shape and derive its top/width/height from live geometry vars"
+    /\.craft-predictor-stage\s*>\s*\.craft-predictor-handle\s*\{[^}]*right:\s*0;[^}]*top:\s*50%;[^}]*width:\s*24px;[^}]*height:\s*156px;[^}]*pointer-events:\s*auto;/m,
+    "predictor handle should use fixed geometry and remain interactive inside the global stage"
   );
   assert.match(
     CSS_SOURCE,
-    /body\.theme-inkblue #craftPage \.craft-predictor-handle\s*\{[\s\S]*background:\s*linear-gradient\(180deg,\s*rgba\(36,\s*31,\s*23,\s*0\.96\)\s*0%,\s*rgba\(14,\s*16,\s*20,\s*0\.98\)\s*100%\);[\s\S]*color:\s*#f3c779;/m,
-    "predictor handle should reuse the left rail's dark tab styling in inkblue theme"
+    /body\.theme-inkblue \.craft-predictor-handle\s*\{[^}]*background:\s*linear-gradient\(180deg,\s*rgba\(36,\s*31,\s*23,\s*0\.96\)\s*0%,\s*rgba\(14,\s*16,\s*20,\s*0\.98\)\s*100%\);[^}]*color:\s*#f3c779;/m,
+    "global predictor handle should retain the dark tab styling in inkblue theme"
   );
   assert.match(
     CSS_SOURCE,
@@ -37,23 +37,25 @@ function main() {
   );
   assert.match(
     CSS_SOURCE,
-    /\.craft-right-panel\s*>\s*\.craft-predictor-handle:active\s*\{[^}]*transform:\s*translateY\(-50%\);/m,
+    /\.craft-predictor-stage\s*>\s*\.craft-predictor-handle:active\s*\{[^}]*transform:\s*translateY\(-50%\);/m,
     "predictor handle active state must stay still when clicked"
   );
   assert.match(
     CSS_SOURCE,
-    /\.craft-right-panel\s*>\s*\.craft-predictor-handle\[aria-expanded="true"\]\s+\.craft-predictor-handle-arrow\s*\{[^}]*transform:\s*rotate\(45deg\)\s*translateX\(-1px\);/m,
+    /\.craft-predictor-stage\s*>\s*\.craft-predictor-handle\[aria-expanded="true"\]\s+\.craft-predictor-handle-arrow\s*\{[^}]*transform:\s*rotate\(45deg\)\s*translateX\(-1px\);/m,
     "predictor handle arrow should still flip after the tab moves to the panel edge"
   );
-  assert.match(
-    APP_SOURCE,
-    /function updateCraftPredictorHandleGeometry\(\)\s*\{[\s\S]*--craft-predictor-handle-top[\s\S]*--craft-predictor-handle-height[\s\S]*--craft-predictor-handle-width[\s\S]*\}/m,
-    "predictor handle geometry should be computed from the predictor card center and the outer edge gap"
+  const geometryFunction = APP_SOURCE.match(/function updateCraftPredictorHandleGeometry\(\)\s*\{[^}]*\}/m);
+  assert.ok(geometryFunction, "predictor geometry compatibility function should remain available");
+  assert.doesNotMatch(
+    geometryFunction[0],
+    /--craft-predictor-handle-(?:top|height|width)/,
+    "fixed global stage should not write legacy dynamic geometry variables"
   );
   assert.match(
     APP_SOURCE,
-    /function renderCraftPredictorPanel\(\)\s*\{[\s\S]*updateCraftPredictorHandleGeometry\(\);[\s\S]*\}/m,
-    "predictor handle geometry should refresh whenever the predictor panel re-renders"
+    /function renderCraftPredictorPanel\(\)\s*\{[\s\S]*closest\("\.craft-predictor-stage"\)[\s\S]*stage\.classList\.toggle\("collapsed",\s*!open\)[\s\S]*updateCraftPredictorHandleGeometry\(\);[\s\S]*\}/m,
+    "predictor render should keep the global stage collapsed state synchronized"
   );
   assert.match(
     APP_SOURCE,

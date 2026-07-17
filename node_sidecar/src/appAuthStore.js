@@ -72,12 +72,11 @@ function sanitizeSteamAccount(row, activeUsername = "") {
   const username = asString(row.username).trim();
   return {
     username,
-    password: asString(row.password).trim(),
     remark: asString(row.remark).trim(),
     steam_name: asString(row.steam_name).trim(),
     steam_id: asString(row.steam_id).trim(),
     avatar_url: asString(row.avatar_url).trim(),
-    mafile_content: asString(row.mafile_content).trim(),
+    has_steam_guard: Boolean(asString(row.mafile_content).trim()),
     steam_id64: asString(row.steam_id64).trim(),
     ban_status: asString(row.ban_status || ""),
     trade_url: asString(row.trade_url || ""),
@@ -86,6 +85,17 @@ function sanitizeSteamAccount(row, activeUsername = "") {
     balance_currency: asString(row.balance_currency || ""),
     balance_observed_at: asString(row.balance_observed_at || ""),
     is_active: !!username && username === asString(activeUsername).trim()
+  };
+}
+
+function readSteamAccountCredentials(row, activeUsername = "") {
+  if (!row) {
+    return null;
+  }
+  return {
+    ...sanitizeSteamAccount(row, activeUsername),
+    password: asString(row.password).trim(),
+    mafile_content: asString(row.mafile_content).trim()
   };
 }
 
@@ -602,6 +612,18 @@ class AppAuthStore {
     return sanitizeSteamAccount(row, this.getViewerActiveSteamUsername(viewerUsername));
   }
 
+  getSteamAccountCredentialsForUser(viewerUsername, username, {includeAll = false} = {}) {
+    const key = asString(username).trim();
+    if (!key) {
+      return null;
+    }
+    if (!includeAll && !this.canAccessSteamAccount(viewerUsername, key)) {
+      return null;
+    }
+    const row = this.db.prepare("SELECT * FROM steam_account WHERE username = ?").get(key);
+    return readSteamAccountCredentials(row, this.getViewerActiveSteamUsername(viewerUsername));
+  }
+
   upsertSteamAccount(payload, {viewerUsername = "", setActive = true} = {}) {
     const data = payload && typeof payload === "object" ? payload : {};
     const username = asString(data.username).trim();
@@ -637,6 +659,36 @@ class AppAuthStore {
     if (setActive && viewerUsername) {
       this.setActiveSteamAccount(viewerUsername, username);
     }
+  }
+
+  updateSteamGuard(viewerUsername, username, {mafile_content = "", steam_id64 = ""} = {}) {
+    const viewer = asString(viewerUsername).trim();
+    const key = asString(username).trim();
+    const maFileContent = asString(mafile_content).trim();
+    const steamId64 = asString(steam_id64).trim();
+    if (!key) {
+      throw new Error("username is required");
+    }
+    if (!maFileContent) {
+      throw new Error("mafile_content is required");
+    }
+    if (viewer && !this.canAccessSteamAccount(viewer, key)) {
+      throw new Error("viewer cannot manage this steam account");
+    }
+    const result = this.db.prepare(`
+      UPDATE steam_account
+      SET mafile_content = ?,
+          steam_id64 = CASE
+            WHEN TRIM(COALESCE(steam_id64, '')) = '' AND ? != '' THEN ?
+            ELSE steam_id64
+          END,
+          updated_at = ?
+      WHERE username = ?
+    `).run(maFileContent, steamId64, steamId64, nowSqlText(), key);
+    if (Number(result.changes) < 1) {
+      throw new Error("steam account not found");
+    }
+    return true;
   }
 
   updateSteamRemark(viewerUsername, username, remark) {
@@ -691,6 +743,13 @@ class AppAuthStore {
   getActiveSteamAccount(viewerUsername) {
     const key = this.getViewerActiveSteamUsername(viewerUsername);
     return key ? this.getSteamAccountForUser(viewerUsername, key, {includeAll: this.isSuperAdmin(viewerUsername)}) : null;
+  }
+
+  getActiveSteamAccountCredentials(viewerUsername) {
+    const key = this.getViewerActiveSteamUsername(viewerUsername);
+    return key
+      ? this.getSteamAccountCredentialsForUser(viewerUsername, key, {includeAll: this.isSuperAdmin(viewerUsername)})
+      : null;
   }
 
   /**

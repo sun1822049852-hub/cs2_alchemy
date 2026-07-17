@@ -2669,7 +2669,15 @@ function getAccountAuthState(username) {
   return "normal";
 }
 function getAccountConnectionLabel(username, {connected = false, phaseText = "", currentSnapshot = false} = {}) {
-  if (getAccountAuthState(username) === "auth_invalid") {
+  const row = accountByUsername(username);
+  const authState = getAccountAuthState(username);
+  if (authState === "needs_attention") {
+    return {
+      text: "需要处理",
+      connected: false
+    };
+  }
+  if (authState === "auth_invalid" && !(row && row.has_steam_guard)) {
     return {
       text: "登录失效",
       connected: false
@@ -2679,6 +2687,12 @@ function getAccountConnectionLabel(username, {connected = false, phaseText = "",
     return {
       text: normalizeTopStatusText(phaseText, false),
       connected: isConnectedPhaseText(phaseText)
+    };
+  }
+  if (state.refreshing && row && row.has_steam_guard && !connected) {
+    return {
+      text: "正在重新连接",
+      connected: false
     };
   }
   if (connected) {
@@ -3062,13 +3076,13 @@ function openAccountLoginModal({focusUsername = false, focusGuard = false} = {})
   ensureAccountFormEditable({focusUsername, focusGuard});
 }
 
-function openAccountReloginModal({username = "", password = "", reason = ""} = {}) {
+function openAccountReloginModal({username = "", reason = ""} = {}) {
   state.accountLoginMode = "relogin";
   state.pendingRelogin = {
     username: String(username || "").trim(),
     reason: String(reason || "").trim()
   };
-  setAccountForm({username, password, totp: "", remark: ""});
+  setAccountForm({username, password: "", totp: "", remark: ""});
   openAccountLoginModal({focusGuard: true});
 }
 
@@ -3394,19 +3408,29 @@ function renderSavedAccounts() {
     webInvBtn.onclick = (e) => { e.stopPropagation(); showPage("webInventoryPage"); webInvSelectAccount(row.username); };
 
     const tokenBtn = document.createElement("button");
-    tokenBtn.textContent = "令牌详情";
-    tokenBtn.title = "查看 Steam Guard 令牌信息";
-    tokenBtn.style.display = row.mafile_content ? "" : "none";
-    tokenBtn.onclick = (e) => { e.stopPropagation(); openTokenDetailModal(row.username); };
+    tokenBtn.textContent = "令牌管理";
+    tokenBtn.title = row.has_steam_guard ? "管理 Steam Guard 令牌" : "该账号尚未添加令牌";
+    tokenBtn.disabled = state.refreshing || !row.has_steam_guard;
+    tokenBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!row.has_steam_guard) {
+        setAccountStatus("该账号尚未添加令牌", true);
+        return;
+      }
+      openTokenDetailModal(row.username);
+    };
 
     actions.append(remarkBtn, tokenBtn, webInvBtn, delBtn);
     const sub = document.createElement("div");
     sub.className = "account-card-sub";
     const balanceText = String(row.balance || "").trim();
     const balanceMeta = formatWalletBalanceSourceMeta(row);
+    const guardLabel = row.has_steam_guard
+      ? (row.has_refresh_token ? "令牌可用" : "令牌已保存")
+      : "未添加令牌";
     sub.textContent = balanceText
-      ? `账号：${accountName || "-"} · 余额：${balanceText}`
-      : `账号：${accountName || "-"}`;
+      ? `账号：${accountName || "-"} · 余额：${balanceText} · ${guardLabel}`
+      : `账号：${accountName || "-"} · ${guardLabel}`;
     if (balanceMeta) sub.title = balanceMeta;
     card.onclick = () => {
       state.accountSelectedUsername = row.username;
@@ -3718,12 +3742,13 @@ async function loginAndSave() {
     return false;
   }
   if (state.accountLoginBusy) return false;
+  const reloginMode = String(state.accountLoginMode || "").trim() === "relogin";
   const username = String(ui.accountUsername.value || "").trim();
-  const password = String(ui.accountPassword.value || "").trim();
+  const password = reloginMode ? "" : String(ui.accountPassword.value || "").trim();
   const totp = normalizeAccountTotpInput();
   const remark = "";
   if (!username) { setAccountStatus("请输入 Steam 账号", true); return; }
-  if (!password) { setAccountStatus("请输入密码", true); return; }
+  if (!password && !reloginMode) { setAccountStatus("请输入密码", true); return; }
 
   // --- Phase 2: submitting guard code for a pending session ---
   if (state.pendingGuard && state.pendingGuard.username === username) {
@@ -13783,9 +13808,14 @@ async function doRefresh({
     }
     reportProgress({percent: 40, detail: "正在清理其他账号连接..."});
     await disconnectOtherSessionsForTarget(username, {silent: true});
-    setRefreshPhase(state.connectedUsername === username ? "连接状态：已连接（刷新中）" : "连接状态：连接中");
+    const recoveringWithGuard = !!(account.has_steam_guard && !account.has_refresh_token && state.connectedUsername !== username);
+    setRefreshPhase(state.connectedUsername === username
+      ? "连接状态：已连接（刷新中）"
+      : (recoveringWithGuard ? "正在重新连接" : "连接状态：连接中"));
     if (!silentInfo) {
-      setSummary(state.connectedUsername === username ? "已连接，正在刷新库存..." : "正在建立连接并刷新库存...");
+      setSummary(state.connectedUsername === username
+        ? "已连接，正在刷新库存..."
+        : (recoveringWithGuard ? "正在使用本地令牌重新连接..." : "正在建立连接并刷新库存..."));
     }
     reportProgress({
       percent: 68,
@@ -13805,6 +13835,7 @@ async function doRefresh({
         : null);
     setRows(rows, component, snapshotPath, nextKeepSelectedIds ? {keepSelectedIds: nextKeepSelectedIds} : {});
     setAccountAuthState(username, {authState: "normal", authReason: ""});
+    state.accounts = state.accounts.map((row) => row.username === username ? {...row, has_refresh_token: true} : row);
     cacheSnapshotForAccount(username, {
       rows,
       component,
@@ -13828,6 +13859,15 @@ async function doRefresh({
     clearRefreshPhase();
     const payload = err && err.data && typeof err.data === "object" ? err.data : null;
     const reason = String(payload && payload.reason || "").trim();
+    const responseAuthState = String(payload && payload.auth_state || "").trim();
+    if (account.has_steam_guard && (responseAuthState === "needs_attention" || reason === "login_key_missing" || reason === "login_key_invalid")) {
+      setAccountAuthState(username, {authState: "needs_attention", authReason: reason});
+      syncInventoryTop();
+      const message = String(payload && payload.message || "").trim()
+        || "自动重新连接失败，请检查账号密码或 Steam 是否要求额外人工验证";
+      setSummary(message);
+      return {ok: false, message, reloginRequired: false, reason, authState: "needs_attention"};
+    }
     if (reason === "login_key_missing" || reason === "login_key_invalid") {
       const authState = reason === "login_key_invalid"
         ? "auth_invalid"
@@ -13837,7 +13877,6 @@ async function doRefresh({
       if (!suppressReloginModal) {
         openAccountReloginModal({
           username,
-          password: String(account && account.password || "").trim(),
           reason
         });
       }
@@ -17593,7 +17632,7 @@ function openTradeTransferModal(fromUsername, assetIds) {
   // 填充发送方下拉
   fromSelect.innerHTML = "";
   for (const acc of state.accounts) {
-    if (!acc.mafile_content) continue;
+    if (!acc.has_steam_guard) continue;
     const opt = document.createElement("option");
     opt.value = acc.username;
     opt.textContent = acc.remark || acc.username;
@@ -17733,14 +17772,9 @@ async function startTradeTransfer() {
   startBtn.disabled = false;
 }
 
-// ═══ Steam Guard 令牌绑定 ═══
+// ═══ Steam Guard 联合绑定 ═══
 
-let enrollState = { step: 1, username: "", mode: "", revocationCode: "", running: false };
-
-function isReplaceEnrollMode(mode) {
-  const value = String(mode || "").trim();
-  return value === "replace_existing" || value === "replace";
-}
+let enrollState = {step: 1, mode: "existing", flowId: "", running: false};
 
 function formatSteamGuardEnrollError(input, fallbackMessage) {
   const payload = input && typeof input === "object" && input.data && typeof input.data === "object"
@@ -17750,10 +17784,21 @@ function formatSteamGuardEnrollError(input, fallbackMessage) {
   const message = String(payload && payload.message || "").trim();
   const status = String(payload && payload.status || "").trim();
   const reasonMessageMap = {
-    already_has_authenticator: "该账号已绑定 Steam Guard 令牌",
-    replace_start_failed: "旧令牌替换验证启动失败，请稍后重试",
+    already_has_authenticator: "该 Steam 账号已经绑定令牌，联合绑定仅支持尚未绑定令牌的账号；不会移除或替换现有令牌",
+    local_guard_exists: "该账号本地已保存 Steam Guard，请使用令牌管理",
+    local_account_exists: "该账号已保存，请改用“选择已有账号”",
+    account_not_found: "本地账号不存在，请刷新账号列表后重试",
+    username_required: "请输入 Steam 账号",
+    password_required: "请输入 Steam 密码",
+    email_code_required: "请输入邮箱验证码",
+    app_code_mismatch: "动态码与本地候选令牌不一致，请确认 Steam App 已完成绑定后重试",
+    app_code_attempts_exceeded: "动态码连续三次验证失败，本次候选令牌已销毁，请重新开始",
+    flow_not_found: "本次绑定已超时或结束，请重新开始",
+    persistence_failed: "令牌已验证，但保存失败，请重新开始",
+    login_failed: "Steam 登录失败，请检查账号、密码、邮箱验证码或网络连接",
+    unsupported_login_state: "Steam 要求额外人工验证，当前联合绑定已终止",
+    add_authenticator_failed: "获取待绑定令牌失败，请稍后重试",
     rate_limited: "操作过于频繁，请稍后再试",
-    no_phone_number: "该账号未绑定手机号，请先在 Steam 客户端绑定手机",
     unknown_error: `未知错误 (status=${status || "?"})`
   };
   if (reason && reasonMessageMap[reason]) {
@@ -17767,35 +17812,49 @@ function initSteamGuardEnroll() {
   const modal = document.getElementById("steamGuardEnrollModal");
   const closeBtn = document.getElementById("steamGuardEnrollCloseBtn");
   const actionBtn = document.getElementById("enrollActionBtn");
-  const backBtn = document.getElementById("enrollBackBtn");
+  const cancelBtn = document.getElementById("enrollCancelBtn");
+  const existingModeBtn = document.getElementById("coexistExistingModeBtn");
+  const newModeBtn = document.getElementById("coexistNewModeBtn");
 
   if (!btn || !modal) return;
 
   btn.onclick = () => {
-    enrollState = { step: 1, username: "", mode: "", revocationCode: "", running: false };
+    enrollState = {step: 1, mode: "existing", flowId: "", running: false};
     populateEnrollAccountSelect();
+    setCoexistAccountMode("existing");
     showEnrollStep(1);
-    document.getElementById("enrollRevocationWrap").classList.remove("hidden");
-    document.getElementById("enrollRevocationCode").textContent = "-";
-    document.getElementById("enrollFinalRevCode").textContent = "-";
-    document.getElementById("enrollFinalModeText").textContent = "Steam Guard 令牌绑定成功";
+    document.getElementById("coexistNewUsername").value = "";
+    document.getElementById("coexistNewPassword").value = "";
+    document.getElementById("coexistNewRemark").value = "";
+    document.getElementById("coexistEmailCode").value = "";
+    document.getElementById("coexistAppCode").value = "";
     document.getElementById("enrollStatusText").textContent = "";
     document.getElementById("enrollStatusText").className = "enroll-status";
     modal.classList.remove("hidden");
   };
 
-  closeBtn.onclick = () => {
-    if (enrollState.running) return;
-    modal.classList.add("hidden");
-  };
+  const closeEnrollModal = () => void cancelCoexistFlow({closeModal: true});
+  closeBtn.onclick = closeEnrollModal;
+  cancelBtn.onclick = closeEnrollModal;
   modal.onclick = (e) => {
-    if (e.target === modal && !enrollState.running) modal.classList.add("hidden");
+    if (e.target === modal) closeEnrollModal();
   };
 
   actionBtn.onclick = () => handleEnrollAction();
-  backBtn.onclick = () => {
-    if (enrollState.step === 2 && !enrollState.running) showEnrollStep(1);
-  };
+  existingModeBtn.onclick = () => setCoexistAccountMode("existing");
+  newModeBtn.onclick = () => setCoexistAccountMode("new");
+}
+
+function setCoexistAccountMode(mode) {
+  if (enrollState.running || enrollState.step !== 1) return;
+  enrollState.mode = mode === "new" ? "new" : "existing";
+  const existing = enrollState.mode === "existing";
+  document.getElementById("coexistExistingModeBtn").classList.toggle("active", existing);
+  document.getElementById("coexistExistingModeBtn").setAttribute("aria-selected", existing ? "true" : "false");
+  document.getElementById("coexistNewModeBtn").classList.toggle("active", !existing);
+  document.getElementById("coexistNewModeBtn").setAttribute("aria-selected", existing ? "false" : "true");
+  document.getElementById("coexistExistingFields").classList.toggle("hidden", !existing);
+  document.getElementById("coexistNewFields").classList.toggle("hidden", existing);
 }
 
 function populateEnrollAccountSelect() {
@@ -17822,20 +17881,55 @@ function showEnrollStep(step) {
   document.getElementById("enrollStep1").classList.toggle("hidden", step !== 1);
   document.getElementById("enrollStep2").classList.toggle("hidden", step !== 2);
   document.getElementById("enrollStep3").classList.toggle("hidden", step !== 3);
+  document.getElementById("enrollStep4").classList.toggle("hidden", step !== 4);
   const actionBtn = document.getElementById("enrollActionBtn");
-  const backBtn = document.getElementById("enrollBackBtn");
   if (step === 1) {
     actionBtn.textContent = "开始绑定";
     actionBtn.disabled = false;
-    backBtn.classList.add("hidden");
   } else if (step === 2) {
-    actionBtn.textContent = "确认绑定";
+    actionBtn.textContent = "提交邮箱验证码";
     actionBtn.disabled = false;
-    backBtn.classList.remove("hidden");
   } else if (step === 3) {
+    actionBtn.textContent = "验证并保存";
+    actionBtn.disabled = false;
+  } else if (step === 4) {
     actionBtn.textContent = "完成";
     actionBtn.disabled = false;
-    backBtn.classList.add("hidden");
+  }
+}
+
+function continueCoexistFlow(data) {
+  enrollState.flowId = String(data && data.flow_id || enrollState.flowId || "").trim();
+  if (data && data.state === "email_code_required") {
+    const guardHint = String(data.guard_hint || "").trim();
+    document.getElementById("coexistEmailHint").textContent = guardHint
+      ? `Steam 已向 ${guardHint} 发送验证码。`
+      : "Steam 已向账号邮箱发送验证码。";
+    showEnrollStep(2);
+    document.getElementById("coexistEmailCode").focus();
+    return;
+  }
+  if (data && data.state === "steam_app_binding_required") {
+    showEnrollStep(3);
+    document.getElementById("coexistAppCode").focus();
+    return;
+  }
+  throw new Error("Steam 返回了无法识别的绑定状态");
+}
+
+async function cancelCoexistFlow({closeModal = false} = {}) {
+  if (enrollState.running) return;
+  const flowId = String(enrollState.flowId || "").trim();
+  enrollState.flowId = "";
+  if (closeModal) document.getElementById("steamGuardEnrollModal").classList.add("hidden");
+  if (!flowId) return;
+  try {
+    await api("/api/accounts/steam-guard/coexist/cancel", {
+      method: "POST",
+      body: JSON.stringify({flow_id: flowId})
+    });
+  } catch (_) {
+    // 会话可能已经完成或超时，关闭弹窗时无需二次提示。
   }
 }
 
@@ -17844,266 +17938,254 @@ async function handleEnrollAction() {
   const actionBtn = document.getElementById("enrollActionBtn");
 
   if (enrollState.step === 1) {
-    // Step 1 → call enroll API
-    const username = document.getElementById("enrollAccountSelect").value;
-    if (!username) { statusEl.textContent = "请选择账号"; statusEl.className = "enroll-status error"; return; }
-    enrollState.username = username;
+    const existingMode = enrollState.mode === "existing";
+    const username = String(existingMode
+      ? document.getElementById("enrollAccountSelect").value
+      : document.getElementById("coexistNewUsername").value).trim();
+    const password = existingMode ? "" : document.getElementById("coexistNewPassword").value;
+    const remark = existingMode ? "" : document.getElementById("coexistNewRemark").value.trim();
+    if (!username) { statusEl.textContent = existingMode ? "请选择已有账号" : "请输入 Steam 账号"; statusEl.className = "enroll-status error"; return; }
+    if (!existingMode && !password) { statusEl.textContent = "请输入 Steam 密码"; statusEl.className = "enroll-status error"; return; }
     enrollState.running = true;
     actionBtn.disabled = true;
-    statusEl.textContent = "正在连接 Steam 服务器...";
+    statusEl.textContent = "正在登录 Steam 并检查账号状态...";
     statusEl.className = "enroll-status";
     try {
-      const data = await api("/api/accounts/enroll-steam-guard", {
+      const data = await api("/api/accounts/steam-guard/coexist/start", {
         method: "POST",
-        body: JSON.stringify({ username })
+        body: JSON.stringify({mode: enrollState.mode, username, ...(existingMode ? {} : {password, remark})})
       });
-      if (!data.ok) {
-        statusEl.textContent = formatSteamGuardEnrollError(data, "绑定失败");
-        statusEl.className = "enroll-status error";
-        enrollState.running = false;
-        actionBtn.disabled = false;
-        return;
-      }
-      enrollState.mode = data.mode || "new_enroll";
-      enrollState.revocationCode = data.revocation_code || "";
-      const isReplace = isReplaceEnrollMode(enrollState.mode);
-      document.getElementById("enrollRevocationWrap").classList.toggle("hidden", isReplace);
-      document.getElementById("enrollRevocationCode").textContent = enrollState.revocationCode || "-";
-      document.getElementById("enrollSmsInput").value = "";
-      statusEl.textContent = isReplace
-        ? "旧令牌替换验证已开始，请输入收到的验证码"
-        : "验证码已发送到绑定手机";
-      statusEl.className = "enroll-status";
-      enrollState.running = false;
-      showEnrollStep(2);
+      continueCoexistFlow(data);
+      statusEl.textContent = data.state === "email_code_required" ? "请查收邮箱验证码" : "请先在 Steam App 中完成绑定";
     } catch (err) {
       statusEl.textContent = formatSteamGuardEnrollError(err, `请求失败：${err.message}`);
       statusEl.className = "enroll-status error";
+      enrollState.flowId = "";
+    } finally {
+      document.getElementById("coexistNewPassword").value = "";
       enrollState.running = false;
       actionBtn.disabled = false;
     }
   } else if (enrollState.step === 2) {
-    // Step 2 → call finalize API
-    const code = document.getElementById("enrollSmsInput").value.trim();
-    if (!code) { statusEl.textContent = "请输入验证码"; statusEl.className = "enroll-status error"; return; }
+    const code = document.getElementById("coexistEmailCode").value.trim();
+    if (!code) { statusEl.textContent = "请输入邮箱验证码"; statusEl.className = "enroll-status error"; return; }
     enrollState.running = true;
     actionBtn.disabled = true;
-    statusEl.textContent = "正在验证...";
+    statusEl.textContent = "正在验证邮箱验证码并获取待绑定令牌...";
     statusEl.className = "enroll-status";
     try {
-      const data = await api("/api/accounts/finalize-steam-guard", {
+      const data = await api("/api/accounts/steam-guard/coexist/submit-email-code", {
         method: "POST",
-        body: JSON.stringify({ username: enrollState.username, activationCode: code })
+        body: JSON.stringify({flow_id: enrollState.flowId, code})
       });
-      if (!data.ok) {
-        statusEl.textContent = formatSteamGuardEnrollError(data, "验证失败，请检查验证码");
-        statusEl.className = "enroll-status error";
-        enrollState.running = false;
-        actionBtn.disabled = false;
-        return;
-      }
-      document.getElementById("enrollFinalRevCode").textContent = data.revocation_code || enrollState.revocationCode;
-      document.getElementById("enrollFinalModeText").textContent = isReplaceEnrollMode(enrollState.mode)
-        ? "旧令牌已替换为新令牌"
-        : "Steam Guard 令牌绑定成功";
-      statusEl.textContent = "";
-      enrollState.running = false;
-      showEnrollStep(3);
-      // Refresh account list
-      try { await loadAccounts(); } catch (_) {}
+      continueCoexistFlow(data);
+      statusEl.textContent = "请在 Steam App 中完成绑定，再输入当前五位动态码";
     } catch (err) {
       statusEl.textContent = formatSteamGuardEnrollError(err, `请求失败：${err.message}`);
       statusEl.className = "enroll-status error";
+      if (String(err && err.data && err.data.reason || "") !== "email_code_required") enrollState.flowId = "";
+    } finally {
       enrollState.running = false;
       actionBtn.disabled = false;
     }
   } else if (enrollState.step === 3) {
-    // Step 3 → close modal
+    const code = document.getElementById("coexistAppCode").value.trim().toUpperCase();
+    if (!/^[23456789BCDFGHJKMNPQRTVWXY]{5}$/.test(code)) {
+      statusEl.textContent = "请输入 Steam App 当前显示的五位动态码";
+      statusEl.className = "enroll-status error";
+      return;
+    }
+    enrollState.running = true;
+    actionBtn.disabled = true;
+    statusEl.textContent = "正在验证动态码并保存令牌...";
+    statusEl.className = "enroll-status";
+    try {
+      await api("/api/accounts/steam-guard/coexist/verify-app-code", {
+        method: "POST",
+        body: JSON.stringify({flow_id: enrollState.flowId, code})
+      });
+      enrollState.flowId = "";
+      statusEl.textContent = "";
+      showEnrollStep(4);
+      await loadAccounts();
+    } catch (err) {
+      const reason = String(err && err.data && err.data.reason || "");
+      const remaining = Number(err && err.data && err.data.attempts_remaining);
+      statusEl.textContent = formatSteamGuardEnrollError(err, `验证失败：${err.message}`)
+        + (reason === "app_code_mismatch" && Number.isFinite(remaining) ? `（还可尝试 ${remaining} 次）` : "");
+      statusEl.className = "enroll-status error";
+      if (reason !== "app_code_mismatch") enrollState.flowId = "";
+    } finally {
+      enrollState.running = false;
+      actionBtn.disabled = false;
+    }
+  } else if (enrollState.step === 4) {
     document.getElementById("steamGuardEnrollModal").classList.add("hidden");
   }
 }
 
-// ═══ Steam Guard 令牌详情 ═══
+// ═══ Steam Guard 令牌管理 ═══
 
-let tokenDetailState = { interval: null, sharedSecret: null, serverTimeDiff: 0 };
+let tokenDetailState = {
+  interval: null,
+  username: "",
+  period: 30,
+  remaining: 0,
+  recoveryCode: "",
+  recoveryVisible: false
+};
 
-const STEAM_CHARS = "23456789BCDFGHJKMNPQRTVWXY";
-
-async function computeSteamTotp(sharedSecretB64, serverTimeDiff) {
-  const secretBytes = Uint8Array.from(atob(sharedSecretB64), c => c.charCodeAt(0));
-  const time = Math.floor((Date.now() / 1000 + serverTimeDiff) / 30);
-  const timeBytes = new ArrayBuffer(8);
-  const view = new DataView(timeBytes);
-  view.setUint32(4, time, false); // big-endian
-
-  const key = await crypto.subtle.importKey("raw", secretBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, timeBytes);
-  const hash = new Uint8Array(sig);
-
-  const offset = hash[hash.length - 1] & 0x0f;
-  let code = ((hash[offset] & 0x7f) << 24) | (hash[offset + 1] << 16) | (hash[offset + 2] << 8) | hash[offset + 3];
-
-  let result = "";
-  for (let i = 0; i < 5; i++) {
-    result += STEAM_CHARS[code % STEAM_CHARS.length];
-    code = Math.floor(code / STEAM_CHARS.length);
-  }
-  return result;
+function clearTokenCodeTimer() {
+  if (tokenDetailState.interval) clearInterval(tokenDetailState.interval);
+  tokenDetailState.interval = null;
 }
 
-function getTotpRemaining(serverTimeDiff) {
-  return 30 - Math.floor((Date.now() / 1000 + serverTimeDiff) % 30);
+function renderTokenCodeCountdown() {
+  const period = Math.max(1, Number(tokenDetailState.period) || 30);
+  const remaining = Math.max(0, Number(tokenDetailState.remaining) || 0);
+  const countdownEl = document.getElementById("tokenTotpCountdown");
+  const barEl = document.getElementById("tokenTotpBar");
+  countdownEl.textContent = `${remaining}s`;
+  barEl.style.setProperty("--totp-progress", `${Math.round((remaining / period) * 100)}%`);
 }
 
-function parseTokenDetailSteamData(steamData) {
-  if (!steamData) {
-    return {};
+async function copyTextWithFeedback(button, text, idleLabel = "复制") {
+  const value = String(text || "").trim();
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    button.textContent = "已复制";
+    setTimeout(() => { button.textContent = idleLabel; }, 1200);
+  } catch (_) {
+    document.getElementById("tokenManageStatus").textContent = "复制失败，请手动选择内容";
+    document.getElementById("tokenManageStatus").className = "enroll-status error";
   }
-  if (typeof steamData === "string") {
-    try {
-      const parsed = JSON.parse(steamData);
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (_) {
-      return {};
-    }
-  }
-  return steamData && typeof steamData === "object" ? steamData : {};
-}
-
-function sanitizeTokenDetailSecret(value) {
-  const text = String(value || "").trim();
-  if (!text || text === "[REDACTED]") {
-    return "";
-  }
-  return text;
-}
-
-function extractSharedSecretFromTokenDetailData(steamData) {
-  const raw = parseTokenDetailSteamData(steamData);
-  const response = raw && raw.response && typeof raw.response === "object" ? raw.response : {};
-  const responsePascal = raw && raw.Response && typeof raw.Response === "object" ? raw.Response : {};
-  const candidates = [
-    raw.shared_secret,
-    raw.SharedSecret,
-    response.shared_secret,
-    response.SharedSecret,
-    responsePascal.shared_secret,
-    responsePascal.SharedSecret
-  ];
-  for (const candidate of candidates) {
-    const secret = sanitizeTokenDetailSecret(candidate);
-    if (secret) {
-      return secret;
-    }
-  }
-  return "";
-}
-
-async function decryptTokenDetailSharedSecret(data) {
-  const encryptedSecret = String(data && data.encryptedSecret || "").trim();
-  const secretKeyHex = String(data && data.secretKeyHex || "").trim();
-  const ivHex = String(data && data.ivHex || "").trim();
-  if (!encryptedSecret || !secretKeyHex || !ivHex || !crypto || !crypto.subtle) {
-    return "";
-  }
-  const keyParts = secretKeyHex.match(/.{2}/g);
-  const ivParts = ivHex.match(/.{2}/g);
-  if (!Array.isArray(keyParts) || !Array.isArray(ivParts)) {
-    return "";
-  }
-  const keyBytes = new Uint8Array(keyParts.map((b) => parseInt(b, 16)));
-  const ivBytes = new Uint8Array(ivParts.map((b) => parseInt(b, 16)));
-  const encBytes = Uint8Array.from(atob(encryptedSecret), (c) => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, {name: "AES-CBC"}, false, ["decrypt"]);
-  const decrypted = await crypto.subtle.decrypt({name: "AES-CBC", iv: ivBytes}, cryptoKey, encBytes);
-  return new TextDecoder().decode(decrypted).trim();
 }
 
 async function openTokenDetailModal(username) {
   const modal = document.getElementById("tokenDetailModal");
-  const nameEl = document.getElementById("tokenDetailAccountName");
-  const codeEl = document.getElementById("tokenTotpCode");
-  const barEl = document.getElementById("tokenTotpBar");
-  const countdownEl = document.getElementById("tokenTotpCountdown");
-
-  // Reset
-  nameEl.textContent = username;
-  codeEl.textContent = "-----";
-  barEl.style.setProperty("--totp-progress", "100%");
-  countdownEl.textContent = "30s";
-  document.getElementById("tokenDeviceId").textContent = "●●●●●●●●";
-  document.getElementById("tokenDeviceId").classList.add("masked");
-  document.getElementById("tokenRevCode").textContent = "●●●●●●●●";
-  document.getElementById("tokenRevCode").classList.add("masked");
-  document.getElementById("tokenAccName").textContent = "-";
-  document.getElementById("tokenSteamId").textContent = "-";
-  document.getElementById("tokenRawData").textContent = "加载中...";
-
-  // Clear previous interval
-  if (tokenDetailState.interval) { clearInterval(tokenDetailState.interval); tokenDetailState.interval = null; }
-  tokenDetailState.sharedSecret = null;
-
+  clearTokenCodeTimer();
+  tokenDetailState = {
+    interval: null,
+    username: String(username || "").trim(),
+    period: 30,
+    remaining: 0,
+    recoveryCode: "",
+    recoveryVisible: false
+  };
+  document.getElementById("tokenDetailAccountName").textContent = tokenDetailState.username;
+  document.getElementById("tokenCodePanel").classList.add("hidden");
+  document.getElementById("tokenRecoveryPanel").classList.add("hidden");
+  document.getElementById("tokenTotpCode").textContent = "-----";
+  document.getElementById("tokenTotpCountdown").textContent = "30s";
+  document.getElementById("tokenTotpBar").style.setProperty("--totp-progress", "100%");
+  const recoveryEl = document.getElementById("tokenRevCode");
+  recoveryEl.textContent = "••••••••";
+  recoveryEl.classList.add("masked");
+  document.getElementById("tokenRecoveryRevealBtn").textContent = "显示";
+  document.getElementById("tokenRecoveryCopyBtn").disabled = true;
+  document.getElementById("tokenManageStatus").textContent = "";
+  document.getElementById("tokenManageStatus").className = "enroll-status";
   modal.classList.remove("hidden");
+}
 
+async function loadCurrentGuardCode() {
+  const statusEl = document.getElementById("tokenManageStatus");
+  const codePanel = document.getElementById("tokenCodePanel");
+  const codeEl = document.getElementById("tokenTotpCode");
+  clearTokenCodeTimer();
+  codePanel.classList.remove("hidden");
+  codeEl.textContent = "-----";
+  statusEl.textContent = "正在获取当前令牌码...";
+  statusEl.className = "enroll-status";
   try {
-    const data = await api(`/api/accounts/token-detail?username=${encodeURIComponent(username)}`);
-    if (!data.ok) {
-      codeEl.textContent = "ERROR";
-      document.getElementById("tokenRawData").textContent = data.message || "加载失败";
-      return;
-    }
-
-    // Populate info fields (store real values as data attributes)
-    document.getElementById("tokenDeviceId").dataset.real = data.deviceId || "-";
-    document.getElementById("tokenRevCode").dataset.real = data.revocationCode || "-";
-    document.getElementById("tokenAccName").textContent = data.accountName || "-";
-    document.getElementById("tokenSteamId").textContent = data.steamId64 || "-";
-    document.getElementById("tokenSteamId").dataset.real = data.steamId64 || "-";
-
-    // Raw data
-    const rawSteamData = parseTokenDetailSteamData(data.steamData);
-    document.getElementById("tokenRawData").textContent = JSON.stringify(rawSteamData, null, 2);
-
-    codeEl.textContent = data.currentTotp || "-----";
-    tokenDetailState.serverTimeDiff = data.serverTimeDiff || 0;
-    const remaining = getTotpRemaining(tokenDetailState.serverTimeDiff);
-    barEl.style.setProperty("--totp-progress", Math.round((remaining / 30) * 100) + "%");
-    countdownEl.textContent = remaining + "s";
-
-    let sharedSecret = "";
-    try {
-      sharedSecret = await decryptTokenDetailSharedSecret(data);
-    } catch (_) {
-      sharedSecret = "";
-    }
-    if (!sharedSecret) {
-      sharedSecret = extractSharedSecretFromTokenDetailData(rawSteamData);
-    }
-    if (!sharedSecret) {
-      return;
-    }
-
-    tokenDetailState.sharedSecret = sharedSecret;
-
-    // Initial TOTP
-    const totp = await computeSteamTotp(sharedSecret, tokenDetailState.serverTimeDiff);
-    codeEl.textContent = totp;
-
-    // Start interval
-    tokenDetailState.interval = setInterval(async () => {
-      try {
-        const code = await computeSteamTotp(tokenDetailState.sharedSecret, tokenDetailState.serverTimeDiff);
-        codeEl.textContent = code;
-        const remaining = getTotpRemaining(tokenDetailState.serverTimeDiff);
-        const pct = Math.round((remaining / 30) * 100);
-        barEl.style.setProperty("--totp-progress", pct + "%");
-        countdownEl.textContent = remaining + "s";
-      } catch (_) {}
+    const data = await api(`/api/accounts/steam-guard/code?username=${encodeURIComponent(tokenDetailState.username)}`);
+    codeEl.textContent = String(data.current_code || "-----");
+    tokenDetailState.period = Math.max(1, Number(data.period) || 30);
+    tokenDetailState.remaining = Math.max(0, Number(data.remaining_seconds) || 0);
+    renderTokenCodeCountdown();
+    statusEl.textContent = "令牌码由后端安全生成";
+    tokenDetailState.interval = setInterval(() => {
+      tokenDetailState.remaining = Math.max(0, tokenDetailState.remaining - 1);
+      renderTokenCodeCountdown();
+      if (tokenDetailState.remaining === 0) void loadCurrentGuardCode();
     }, 1000);
-
   } catch (err) {
     codeEl.textContent = "ERROR";
-    document.getElementById("tokenRawData").textContent = `加载失败：${err.message}`;
+    statusEl.textContent = `令牌码获取失败：${err.message}`;
+    statusEl.className = "enroll-status error";
+  }
+}
+
+async function loadRecoveryCode() {
+  const statusEl = document.getElementById("tokenManageStatus");
+  const panel = document.getElementById("tokenRecoveryPanel");
+  panel.classList.remove("hidden");
+  tokenDetailState.recoveryVisible = false;
+  tokenDetailState.recoveryCode = "";
+  document.getElementById("tokenRevCode").textContent = "••••••••";
+  document.getElementById("tokenRevCode").classList.add("masked");
+  document.getElementById("tokenRecoveryRevealBtn").textContent = "显示";
+  document.getElementById("tokenRecoveryCopyBtn").disabled = true;
+  statusEl.textContent = "恢复码已遮挡，点击“显示”后才会读取并展示";
+  statusEl.className = "enroll-status";
+}
+
+async function revealRecoveryCode() {
+  const statusEl = document.getElementById("tokenManageStatus");
+  const recoveryEl = document.getElementById("tokenRevCode");
+  const revealBtn = document.getElementById("tokenRecoveryRevealBtn");
+  if (tokenDetailState.recoveryVisible) {
+    recoveryEl.textContent = "••••••••";
+    recoveryEl.classList.add("masked");
+    tokenDetailState.recoveryVisible = false;
+    revealBtn.textContent = "显示";
+    document.getElementById("tokenRecoveryCopyBtn").disabled = true;
+    return;
+  }
+  try {
+    revealBtn.disabled = true;
+    statusEl.textContent = "正在读取恢复码...";
+    const data = await api(`/api/accounts/steam-guard/recovery-code?username=${encodeURIComponent(tokenDetailState.username)}`);
+    tokenDetailState.recoveryCode = String(data.recovery_code || "").trim();
+    recoveryEl.textContent = tokenDetailState.recoveryCode || "-";
+    recoveryEl.classList.remove("masked");
+    tokenDetailState.recoveryVisible = true;
+    revealBtn.textContent = "隐藏";
+    document.getElementById("tokenRecoveryCopyBtn").disabled = !tokenDetailState.recoveryCode;
+    statusEl.textContent = "请妥善保管恢复码，不要发送给他人";
+    statusEl.className = "enroll-status";
+  } catch (err) {
+    statusEl.textContent = `恢复码读取失败：${err.message}`;
+    statusEl.className = "enroll-status error";
+  } finally {
+    revealBtn.disabled = false;
+  }
+}
+
+async function exportGuardMaFile() {
+  const statusEl = document.getElementById("tokenManageStatus");
+  try {
+    statusEl.textContent = "正在准备 maFile...";
+    statusEl.className = "enroll-status";
+    const response = await fetchAuthAwareRaw(
+      `/api/accounts/steam-guard/export?username=${encodeURIComponent(tokenDetailState.username)}`,
+      {},
+      {operation: "导出 maFile", expectedContentTypes: ["application/json"]}
+    );
+    const blob = await response.blob();
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `${tokenDetailState.username}.maFile`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+    statusEl.textContent = "maFile 已导出";
+  } catch (err) {
+    statusEl.textContent = `导出失败：${err.message}`;
+    statusEl.className = "enroll-status error";
   }
 }
 
@@ -18114,56 +18196,23 @@ function initTokenDetailModal() {
 
   const closeModal = () => {
     modal.classList.add("hidden");
-    if (tokenDetailState.interval) { clearInterval(tokenDetailState.interval); tokenDetailState.interval = null; }
-    tokenDetailState.sharedSecret = null;
+    clearTokenCodeTimer();
+    tokenDetailState.recoveryCode = "";
+    tokenDetailState.recoveryVisible = false;
   };
 
   closeBtn.onclick = closeModal;
   const doneBtn = document.getElementById("tokenDetailDoneBtn");
   if (doneBtn) doneBtn.onclick = closeModal;
   modal.onclick = (e) => { if (e.target === modal) closeModal(); };
-
-  // Copy buttons
-  modal.querySelectorAll(".token-copy-btn[data-copy]").forEach(btn => {
-    btn.onclick = () => {
-      const targetId = btn.dataset.copy;
-      const el = document.getElementById(targetId);
-      const text = el.dataset.real || el.textContent;
-      navigator.clipboard.writeText(text).then(() => {
-        btn.textContent = "\u2713";
-        setTimeout(() => { btn.textContent = "\uD83D\uDCCB"; }, 1200);
-      }).catch(() => {});
-    };
-  });
-
-  // TOTP copy
   const totpCopyBtn = document.getElementById("tokenTotpCopyBtn");
-  if (totpCopyBtn) {
-    totpCopyBtn.onclick = () => {
-      const code = document.getElementById("tokenTotpCode").textContent;
-      navigator.clipboard.writeText(code).then(() => {
-        totpCopyBtn.textContent = "\u2713";
-        setTimeout(() => { totpCopyBtn.textContent = "\uD83D\uDCCB"; }, 1200);
-      }).catch(() => {});
-    };
-  }
-
-  // Toggle buttons
-  modal.querySelectorAll(".token-toggle-btn").forEach(btn => {
-    btn.onclick = () => {
-      const targetId = btn.dataset.field;
-      const el = document.getElementById(targetId);
-      if (el.classList.contains("masked")) {
-        el.textContent = el.dataset.real || "-";
-        el.classList.remove("masked");
-        btn.textContent = "\uD83D\uDD12";
-      } else {
-        el.textContent = "\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF";
-        el.classList.add("masked");
-        btn.textContent = "\uD83D\uDC41";
-      }
-    };
-  });
+  totpCopyBtn.onclick = () => copyTextWithFeedback(totpCopyBtn, document.getElementById("tokenTotpCode").textContent);
+  document.getElementById("tokenExportBtn").onclick = () => void exportGuardMaFile();
+  document.getElementById("tokenShowCodeBtn").onclick = () => void loadCurrentGuardCode();
+  document.getElementById("tokenShowRecoveryBtn").onclick = () => void loadRecoveryCode();
+  document.getElementById("tokenRecoveryRevealBtn").onclick = () => void revealRecoveryCode();
+  const recoveryCopyBtn = document.getElementById("tokenRecoveryCopyBtn");
+  recoveryCopyBtn.onclick = () => copyTextWithFeedback(recoveryCopyBtn, tokenDetailState.recoveryCode);
 }
 
 async function init() {

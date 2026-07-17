@@ -53,9 +53,25 @@ class AccountStore {
     );
   }
 
+  getCredentials(username) {
+    return this._withStore(
+      (store) => store.getSteamAccountCredentialsForUser(this.options.viewerUsername, username, {
+        includeAll: !this.options.viewerUsername
+      }),
+      {readOnly: true}
+    );
+  }
+
   getActive() {
     return this._withStore(
       (store) => store.getActiveSteamAccount(this.options.viewerUsername),
+      {readOnly: true}
+    );
+  }
+
+  getActiveCredentials() {
+    return this._withStore(
+      (store) => store.getActiveSteamAccountCredentials(this.options.viewerUsername),
       {readOnly: true}
     );
   }
@@ -69,6 +85,14 @@ class AccountStore {
       viewerUsername: this.options.viewerUsername,
       setActive: true
     }));
+  }
+
+  updateSteamGuard(username, guard) {
+    return this._withStore((store) => store.updateSteamGuard(
+      this.options.viewerUsername,
+      username,
+      guard
+    ));
   }
 
   updateRemark(username, remark) {

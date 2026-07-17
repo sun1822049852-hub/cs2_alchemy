@@ -86,7 +86,9 @@ async function refreshInventory({
   saveRawSnapshotFn = saveRawSnapshot
 }) {
   const accounts = accountStore || new AccountStore();
-  const active = username ? accounts.get(username) : accounts.getActive();
+  const active = username
+    ? (typeof accounts.getCredentials === "function" ? accounts.getCredentials(username) : accounts.get(username))
+    : (typeof accounts.getActiveCredentials === "function" ? accounts.getActiveCredentials() : accounts.getActive());
   if (!active) {
     throw new Error(`account not found: ${username || "(active)"}`);
   }
@@ -94,7 +96,12 @@ async function refreshInventory({
   const accountPassword = asString(password || active.password || "").trim();
   const tokens = tokenStore || new TokenStore();
   const refreshToken = tokens.get(accountName);
-  if (!refreshToken) {
+  const poolCanRecover = !!(
+    sessionPool
+    && typeof sessionPool.hasTokenRecovery === "function"
+    && sessionPool.hasTokenRecovery()
+  );
+  if (!refreshToken && !poolCanRecover) {
     throw createRefreshAuthError("login_key_missing", `login key missing: ${accountName}`);
   }
   const schemas = schemaStore || new SchemaStore();

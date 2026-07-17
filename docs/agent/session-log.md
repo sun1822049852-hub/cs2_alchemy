@@ -5670,3 +5670,22 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
   - 未检查其它 worktree，本轮结论只覆盖主工作区 `C:/Users/18220/Desktop/cs2_alchemy`。
   - 未 stage、未提交。
   - `csgo_skins.db`、`output/c5-wear-dry-run/` 是运行态/既有产物，不属于本轮余额改动，仍不处理。
+
+## 2026-07-18 Steam Guard coexist implementation close-out
+
+- 工作区：`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/steam-guard-coexist`
+- 分支：`codex/steam-guard-coexist`
+- 完成内容：
+  - 删除旧短信激活、finalize 和替换令牌流程，改为 Steam App 联合绑定状态机。
+  - 新增令牌导出、当前动态码、恢复码管理，并保持 secret 只在后端使用。
+  - 新增 refresh token 缺失或明确失效时的本地账号密码 + Guard TOTP 自动恢复、single-flight 和单次业务重试。
+  - 账号公开投影不再返回密码或完整 maFile；已有账号两阶段登录由后端读取保存密码。
+  - 修复默认 Node 测试中的旧 VM/CSS/DOM 夹具；未实施的 market-listing Phase 2 红灯规格不再进入默认套件。
+- 验证：
+  - `npm test` -> `PASS 111 node_sidecar tests in 46.1s`。
+  - 42 个变更或新增 JavaScript 文件通过 `node --check`。
+  - `git diff --check` 通过，仅有现有行尾转换警告。
+  - 未修改 registry 禁止路径。
+- 未验证：
+  - 默认 `npm test` 排除了浏览器交互测试。
+  - 未使用真实未绑定/已绑定 Steam 测试账号，因此真实邮箱码、Steam App 绑定和已有令牌拒绝路径仍需后续人工验证。

@@ -99,6 +99,13 @@ function createElement(documentRef, {value = "", classes = []} = {}) {
   };
 }
 
+function applyAllowedClientPermissionToButton(button, _permission, {disabled = false, title = ""} = {}) {
+  if (!button) return false;
+  button.disabled = !!disabled;
+  button.title = String(title || "").trim();
+  return true;
+}
+
 function loadAccountModalFns() {
   const source = extractBlock("function setAccountForm(", "function showPage(");
   const document = {activeElement: null};
@@ -123,7 +130,8 @@ function loadAccountModalFns() {
     Object,
     document,
     ui,
-    state
+    state,
+    applyClientPermissionToButton: applyAllowedClientPermissionToButton
   };
   vm.runInNewContext(source, context, {filename: APP_PATH});
   return context;
@@ -148,6 +156,7 @@ function loadLoginHarness({
   const modalSource = extractBlock("function setAccountForm(", "function showPage(");
   const loginSource = [
     extractFunctionSource("loginAndSave"),
+    extractFunctionSource("finishLoginSuccess"),
     extractFunctionSource("clearAccountForm"),
     extractFunctionSource("openAddAccountForm")
   ].join("\n\n");
@@ -193,6 +202,7 @@ function loadLoginHarness({
     document,
     ui,
     state,
+    applyClientPermissionToButton: applyAllowedClientPermissionToButton,
     guardGuestAction() {
       return true;
     },
@@ -275,13 +285,12 @@ function loadLoginHarness({
   return context;
 }
 
-function test_relogin_modal_locks_username_prefills_password_and_focuses_guard() {
+function test_relogin_modal_locks_username_uses_saved_password_and_focuses_guard() {
   const app = loadAccountModalFns();
   assert.equal(typeof app.openAccountReloginModal, "function");
 
   app.openAccountReloginModal({
     username: "countsteam01",
-    password: "SecretA",
     reason: "login_key_invalid"
   });
 
@@ -290,7 +299,7 @@ function test_relogin_modal_locks_username_prefills_password_and_focuses_guard()
   assert.match(app.ui.accountLoginHint.textContent, /重新登录|loginKey/i);
   assert.equal(app.ui.accountUsername.value, "countsteam01");
   assert.equal(app.ui.accountUsername.readOnly, true);
-  assert.equal(app.ui.accountPassword.value, "SecretA");
+  assert.equal(app.ui.accountPassword.value, "");
   assert.equal(app.ui.accountTotp.value, "");
   assert.equal(app.ui.loginSaveBtn.textContent, "重新登录");
   assert.equal(app.document.activeElement, app.ui.accountTotp);
@@ -399,7 +408,7 @@ async function test_login_overlay_becomes_visible_before_login_request_and_uses_
   const apiDeferred = createDeferred();
   const app = loadLoginHarness({
     apiImpl: async (pathName) => {
-      if (pathName === "/api/accounts/login-save") {
+      if (pathName === "/api/accounts/login-start") {
         return apiDeferred.promise;
       }
       return {ok: true};
@@ -417,7 +426,7 @@ async function test_login_overlay_becomes_visible_before_login_request_and_uses_
   assert.equal(
     app.calls.overlay.length > 0,
     true,
-    "login should surface the shared connecting overlay before awaiting /api/accounts/login-save"
+    "login should surface the shared connecting overlay before awaiting /api/accounts/login-start"
   );
   const firstOverlaySet = app.calls.overlay.find((entry) => entry.type === "set");
   assert.ok(firstOverlaySet, "expected a shared overlay set call during login");
@@ -428,18 +437,18 @@ async function test_login_overlay_becomes_visible_before_login_request_and_uses_
   assert.doesNotMatch(firstOverlayTitle, /连接/, "shared login overlay title should not fall back to the generic connect wording");
 
   const overlayIndex = app.calls.events.indexOf("overlay:set");
-  const apiIndex = app.calls.events.indexOf("api:/api/accounts/login-save");
+  const apiIndex = app.calls.events.indexOf("api:/api/accounts/login-start");
   assert.equal(overlayIndex >= 0 && apiIndex >= 0 && overlayIndex < apiIndex, true);
 
   apiDeferred.resolve({ok: true});
   await pending;
 }
 
-async function test_validation_failure_missing_totp_keeps_modal_and_skips_overlay() {
+async function test_validation_failure_missing_password_keeps_modal_and_skips_overlay() {
   const app = loadLoginHarness();
   app.openAddAccountForm();
   app.ui.accountUsername.value = "countsteam01";
-  app.ui.accountPassword.value = "SecretA";
+  app.ui.accountPassword.value = "";
   app.ui.accountTotp.value = "";
 
   await app.loginAndSave();
@@ -447,14 +456,14 @@ async function test_validation_failure_missing_totp_keeps_modal_and_skips_overla
   assert.equal(app.calls.api.length, 0);
   assert.equal(app.calls.overlay.length, 0);
   assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), false);
-  assert.equal(app.ui.accountStatus.textContent, "请输入令牌码");
+  assert.equal(app.ui.accountStatus.textContent, "请输入密码");
 }
 
 async function test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_while_login_pending() {
   const apiDeferred = createDeferred();
   const app = loadLoginHarness({
     apiImpl: async (pathName) => {
-      if (pathName === "/api/accounts/login-save") return apiDeferred.promise;
+      if (pathName === "/api/accounts/login-start") return apiDeferred.promise;
       return {ok: true};
     }
   });
@@ -483,12 +492,11 @@ async function test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_w
   const apiDeferredRelogin = createDeferred();
   app.api = async (pathName, options) => {
     app.calls.api.push({pathName, options});
-    if (pathName === "/api/accounts/login-save") return apiDeferredRelogin.promise;
+    if (pathName === "/api/accounts/login-start") return apiDeferredRelogin.promise;
     return {ok: true};
   };
   app.openAccountReloginModal({
     username: "countsteam01",
-    password: "SecretA",
     reason: "login_key_invalid"
   });
   app.ui.accountTotp.value = "ZXCV12";
@@ -501,6 +509,8 @@ async function test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_w
     reloginApiCountBeforePending + 1,
     "relogin entry should still use loginAndSave flow"
   );
+  const reloginRequest = app.calls.api[app.calls.api.length - 1];
+  assert.equal(JSON.parse(reloginRequest.options.body).password, "", "relogin should let the backend read the stored password");
   assert.equal(app.ui.loginSaveBtn.disabled, true, "relogin pending should keep loginSaveBtn visibly disabled");
   assert.equal(app.ui.clearAccountBtn.disabled, true, "relogin pending should keep clearAccountBtn visibly disabled");
   assert.equal(app.ui.accountLoginModalClose.disabled, true, "relogin pending should keep modal close control visibly disabled");
@@ -535,7 +545,7 @@ async function test_active_overlay_owner_blocks_login_request_and_reports_busy_s
 
   await app.loginAndSave();
 
-  assert.equal(app.calls.api.length, 0, "active non-login overlay owner should block /api/accounts/login-save");
+  assert.equal(app.calls.api.length, 0, "active non-login overlay owner should block /api/accounts/login-start");
   assert.equal(app.ui.accountLoginModal.classList.contains("hidden"), false, "blocked login should keep modal open");
   assert.match(app.ui.accountStatus.textContent, /当前有任务进行中，请稍后再试/);
 }
@@ -561,7 +571,11 @@ async function test_login_success_closes_overlay_and_modal_before_post_login_ref
   await app.loginAndSave();
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.equal(refreshStateSnapshots.length, 1);
+  assert.equal(
+    refreshStateSnapshots.length,
+    1,
+    `expected post-login refresh; events=${JSON.stringify(app.calls.events)} status=${app.ui.accountStatus.textContent}`
+  );
   assert.equal(
     refreshStateSnapshots[0].overlayOwnerAtRefreshStart,
     "",
@@ -751,7 +765,7 @@ async function test_switch_account_view_can_defer_component_queue_loading() {
 
 async function main() {
   await test_login_overlay_becomes_visible_before_login_request_and_uses_title_stage();
-  await test_validation_failure_missing_totp_keeps_modal_and_skips_overlay();
+  await test_validation_failure_missing_password_keeps_modal_and_skips_overlay();
   await test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_while_login_pending();
   await test_active_overlay_owner_blocks_login_request_and_reports_busy_status();
   await test_login_success_closes_overlay_and_modal_before_post_login_refresh();
@@ -759,7 +773,7 @@ async function main() {
   await test_login_failure_closes_overlay_and_keeps_modal_state();
   await test_post_login_refresh_relogin_required_updates_summary_and_auth_without_reopening_modal();
   await test_switch_account_view_can_defer_component_queue_loading();
-  test_relogin_modal_locks_username_prefills_password_and_focuses_guard();
+  test_relogin_modal_locks_username_uses_saved_password_and_focuses_guard();
   test_source_mentions_login_invalid_badge_and_relogin_helper();
   await test_do_refresh_opens_relogin_modal_for_invalid_login_key();
   console.log("account-relogin-modal tests passed");

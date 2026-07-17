@@ -17,7 +17,9 @@ async function redeemMissionRewardDebug({
   logger
 }) {
   const accounts = new AccountStore();
-  const active = accountName ? accounts.get(accountName) : accounts.getActive();
+  const active = accountName
+    ? (typeof accounts.getCredentials === "function" ? accounts.getCredentials(accountName) : accounts.get(accountName))
+    : (typeof accounts.getActiveCredentials === "function" ? accounts.getActiveCredentials() : accounts.getActive());
   if (!active) {
     throw new Error(`account not found: ${accountName || "(active)"}`);
   }

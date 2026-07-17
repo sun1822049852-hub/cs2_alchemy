@@ -89,9 +89,40 @@ async function test_fetch_trade_url_uses_access_token_fallback_before_giving_up(
   );
 }
 
+async function test_account_tools_surface_explicit_auth_rejection() {
+  const createTools = () => loadSteamAccountToolsWithHttpClientStub({
+    enhanceCookieString(cookieString) {
+      return cookieString;
+    },
+    buildSteamHeaders({cookieString}) {
+      return {Cookie: cookieString};
+    },
+    async steamGet() {
+      return {statusCode: 401, json: null, body: "unauthorized"};
+    }
+  });
+
+  await assert.rejects(
+    () => createTools().fetchBalance({
+      cookieString: "sessionid=test",
+      accessToken: "access-token",
+      steamId64: "76561197960265729"
+    }),
+    (err) => err && err.code === "refresh_token_rejected"
+  );
+  await assert.rejects(
+    () => createTools().fetchTradeUrl({
+      cookieString: "sessionid=test; steamLoginSecure=76561197960265729%7C%7Caccess-token",
+      steamId64: "76561197960265729"
+    }),
+    (err) => err && err.code === "refresh_token_rejected"
+  );
+}
+
 async function main() {
   test_enhance_cookie_string_injects_sessionid_when_missing();
   await test_fetch_trade_url_uses_access_token_fallback_before_giving_up();
+  await test_account_tools_surface_explicit_auth_rejection();
   console.log("steam-web-alignment tests passed");
 }
 

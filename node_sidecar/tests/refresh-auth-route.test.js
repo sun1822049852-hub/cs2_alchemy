@@ -99,18 +99,24 @@ function createFakeAccountStore(seedRows = []) {
     rows.set(String(row.username || "").trim(), {...row});
   }
   let active = list.find((row) => row && row.is_active)?.username || list[0].username;
+  const projectAccount = (row) => {
+    if (!row) return null;
+    const {password: _password, mafile_content: _mafileContent, ...publicRow} = row;
+    return {...publicRow, is_active: row.username === active};
+  };
   return {
     list() {
-      return Array.from(rows.values()).map((row) => ({
-        ...row,
-        is_active: row.username === active
-      }));
+      return Array.from(rows.values()).map((row) => projectAccount(row));
     },
     getActive() {
       const row = rows.get(String(active || "").trim());
-      return row ? {...row, is_active: true} : null;
+      return projectAccount(row);
     },
     get(username) {
+      const row = rows.get(String(username || "").trim());
+      return projectAccount(row);
+    },
+    getCredentials(username) {
       const row = rows.get(String(username || "").trim());
       return row ? {...row, is_active: row.username === active} : null;
     },
@@ -627,6 +633,55 @@ async function test_refresh_route_skips_retry_for_persisted_auth_invalid_state()
   }
 }
 
+async function test_guard_account_retries_despite_persisted_auth_invalid_state() {
+  let refreshCalls = 0;
+  const ctx = await startServer({
+    accounts: [{
+      username: "countsteam01",
+      password: "SecretA",
+      remark: "主号A",
+      steam_name: "Alpha",
+      steam_id: "steamid-alpha",
+      avatar_url: "https://example.com/a.png",
+      mafile_content: JSON.stringify({
+        shared_secret: Buffer.from("shared-secret").toString("base64"),
+        identity_secret: Buffer.from("identity-secret").toString("base64"),
+        revocation_code: "R12345",
+        device_id: "android:00000000-0000-0000-0000-000000000001"
+      }),
+      has_steam_guard: true,
+      is_active: true
+    }],
+    uiStateData: {
+      accounts: {
+        countsteam01: {
+          auth_state: "auth_invalid",
+          auth_reason: "login_key_invalid"
+        }
+      }
+    },
+    createServerOptionsFactory: ({tempDir}) => ({
+      refreshInventoryFn: async () => {
+        refreshCalls += 1;
+        const snapshotPath = path.join(tempDir, "guard-refresh-snapshot.json");
+        writeJson(snapshotPath, []);
+        return {account: "countsteam01", snapshot_path: snapshotPath};
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+    const response = await requestJson(ctx, "POST", "/api/refresh", {
+      body: {username: "countsteam01", include_hidden: "false"}
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.ok, true);
+    assert.equal(refreshCalls, 1);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
 async function test_login_save_clears_persisted_auth_invalid_state() {
   let loginCalls = 0;
   const ctx = await startServer({
@@ -680,6 +735,95 @@ async function test_login_save_clears_persisted_auth_invalid_state() {
   }
 }
 
+async function test_login_start_uses_saved_password_for_existing_account() {
+  let loginInput = null;
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async (input) => {
+        loginInput = input;
+        return {
+          done: false,
+          guard_type: "email_code",
+          guard_hint: "m***@example.com"
+        };
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {
+        username: "countsteam01",
+        password: ""
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.ok, true);
+    assert.equal(response.body.done, false);
+    assert.equal(response.body.guard_type, "email_code");
+    assert.ok(loginInput, "existing-account login should call the login service");
+    assert.equal(loginInput.username, "countsteam01");
+    assert.equal(loginInput.password, "SecretA");
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_login_submit_code_uses_saved_password_without_exposing_it() {
+  let submitInput = null;
+  let profileInput = null;
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      submitGuardCodeFn: async (input) => {
+        submitInput = input;
+        return {
+          done: true,
+          result: {
+            username: "countsteam01",
+            refresh_token: "refreshed-token",
+            steam_id64: "steamid-alpha"
+          }
+        };
+      },
+      resolveAccountProfileFn: async (input) => {
+        profileInput = input;
+        return {
+          username: input.username,
+          steam_id64: "steamid-alpha",
+          persona_name: "Alpha",
+          avatar_url_full: "https://example.com/a.png"
+        };
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-submit-code", {
+      body: {
+        username: "countsteam01",
+        code: "ABCDE",
+        password: ""
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.ok, true);
+    assert.ok(submitInput, "guard-code submission should call the pending login service");
+    assert.equal(submitInput.username, "countsteam01");
+    assert.equal(submitInput.code, "ABCDE");
+    assert.ok(profileInput, "successful guard-code submission should refresh the account profile");
+    assert.equal(profileInput.password, "SecretA");
+    assert.equal(JSON.stringify(response.body).includes("SecretA"), false);
+    assert.equal(Object.hasOwn(response.body.active || {}, "password"), false);
+    assert.equal(Object.hasOwn(response.body.accounts[0] || {}, "password"), false);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
 async function main() {
   await test_accounts_and_snapshot_routes_include_default_auth_state();
   await test_snapshot_account_route_can_persist_web_inventory_stub_artifact();
@@ -689,7 +833,10 @@ async function main() {
   await test_refresh_inventory_reports_connection_ready_before_component_preload_finishes();
   await test_refresh_route_returns_login_key_invalid_and_persists_auth_state();
   await test_refresh_route_skips_retry_for_persisted_auth_invalid_state();
+  await test_guard_account_retries_despite_persisted_auth_invalid_state();
   await test_login_save_clears_persisted_auth_invalid_state();
+  await test_login_start_uses_saved_password_for_existing_account();
+  await test_login_submit_code_uses_saved_password_without_exposing_it();
   console.log("refresh-auth-route tests passed");
 }
 

@@ -76,6 +76,13 @@ function createGlyphClassList() {
   };
 }
 
+function applyAllowedClientPermissionToButton(button, _permission, {disabled = false, title = ""} = {}) {
+  if (!button) return false;
+  button.disabled = !!disabled;
+  button.title = String(title || "").trim();
+  return true;
+}
+
 function loadRenderCraftPageFns(initialState = {}, {connected = false, executableCount = 1} = {}) {
   const source = [
     extractBlock("function isCraftRecipeEditLocked(", "function formatCraftSlotWear("),
@@ -105,6 +112,7 @@ function loadRenderCraftPageFns(initialState = {}, {connected = false, executabl
     Map,
     JSON,
     console,
+    applyClientPermissionToButton: applyAllowedClientPermissionToButton,
     state: {
       rows: [],
       currentAccountUsername: "acc-a",

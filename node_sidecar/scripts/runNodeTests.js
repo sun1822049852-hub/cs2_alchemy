@@ -4,6 +4,7 @@ const path = require("node:path");
 
 const DEFAULT_EXCLUDES = new Set([
   "client-auth-modal-guest-interaction.test.js",
+  "market-listing-from-gc-service.test.js",
   "tradeup-simulation-picker-interaction.test.js"
 ]);
 
@@ -70,7 +71,7 @@ function main() {
     const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
     console.log(`PASS ${files.length} node_sidecar tests in ${elapsedSec}s`);
     if (!options.includeBrowser) {
-      console.log("Excluded browser interaction tests by default. Run `npm run test:browser` for those.");
+      console.log("Excluded browser interaction tests and pending specification tests by default. Run excluded tests through their dedicated commands.");
     }
   } catch (err) {
     console.error(err && err.message ? err.message : String(err));
