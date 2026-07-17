@@ -38,6 +38,7 @@ function createLocalStorageStub() {
 function loadSimulationFns(initialState = {}) {
   const source = [
     extractConst("TRADEUP_SIMULATION_PRESETS_KEY"),
+    extractConst("TRADEUP_SIMULATION_BELOW_TARGET_SAFE_OFFSET"),
     extractBlock("function makeTradeupSimulationUid(", "function renderCraftPage(")
   ].join("\n");
   const localStorage = createLocalStorageStub();
@@ -249,9 +250,82 @@ function test_build_tradeup_simulation_derived_output_payload_tracks_primary_and
   );
 }
 
+function test_build_tradeup_simulation_derived_output_payload_uses_infinite_mode_at_zero_relative_wear() {
+  const mainMaterial = createSimulationItem({
+    markethashname: "AUG | 渐变琥珀 (Factory New)",
+    basemarkethashname: "AUG | 渐变琥珀",
+    collection: "2021 列车停放站收藏品",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 0.4
+  });
+  const app = loadSimulationFns({
+    simulationWorkspacePreset: {
+      id: "draft_zero_relative_wear",
+      name: "零相对磨损材料",
+      primary_output: null,
+      aux_output: null,
+      main_material: mainMaterial,
+      aux_material: null,
+      cover_output: null,
+      active_anchor_item: mainMaterial,
+      active_anchor_abs_wear: 0,
+      output_rows: [],
+      material_rows: [],
+      rows: [],
+      output_candidates: [],
+      warnings: [],
+      dirty: true
+    }
+  });
+
+  const payload = app.buildTradeupSimulationDerivedOutputPayload(app.state.simulationWorkspacePreset);
+
+  assert.ok(payload, "a selected material at its minimum wear should still produce a predictor payload");
+  assert.equal(payload.target_relative_wear, 0);
+  assert.equal(
+    payload.wear_approach_mode,
+    "infinite",
+    "zero relative wear cannot use below semantics and should explicitly select the exact boundary mode"
+  );
+}
+
+function test_build_tradeup_simulation_derived_output_payload_uses_infinite_mode_below_safe_offset() {
+  const mainMaterial = createSimulationItem({
+    markethashname: "AUG | 渐变琥珀 (Factory New)",
+    basemarkethashname: "AUG | 渐变琥珀",
+    collection: "2021 列车停放站收藏品",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 1
+  });
+  const app = loadSimulationFns({
+    simulationWorkspacePreset: {
+      id: "draft_near_zero_relative_wear",
+      main_material: mainMaterial,
+      active_anchor_item: mainMaterial,
+      active_anchor_abs_wear: 0.0000001,
+      material_rows: [],
+      rows: []
+    }
+  });
+
+  const payload = app.buildTradeupSimulationDerivedOutputPayload(app.state.simulationWorkspacePreset);
+
+  assert.ok(payload);
+  assert.equal(payload.target_relative_wear, 0.0000001);
+  assert.equal(
+    payload.wear_approach_mode,
+    "infinite",
+    "relative wear at the predictor below-target safety offset must use the exact boundary mode"
+  );
+}
+
 function main() {
   test_adopt_tradeup_simulation_derived_primary_output_keeps_existing_primary_and_adds_aux_output_for_aux_material_collection();
   test_build_tradeup_simulation_derived_output_payload_tracks_primary_and_aux_collections_without_fixed_split();
+  test_build_tradeup_simulation_derived_output_payload_uses_infinite_mode_at_zero_relative_wear();
+  test_build_tradeup_simulation_derived_output_payload_uses_infinite_mode_below_safe_offset();
   console.log("tradeup-simulation-derived-outputs tests passed");
 }
 

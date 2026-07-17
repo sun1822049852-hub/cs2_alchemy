@@ -11,6 +11,7 @@ const WEAR_INPUT_DECIMALS = 16;
 const TRADEUP_SIMULATION_WEAR_DECIMALS = 16;
 const TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS = 4;
 const TRADEUP_SIMULATION_RANGE_DECIMALS = 4;
+const TRADEUP_SIMULATION_BELOW_TARGET_SAFE_OFFSET = 0.0000001;
 const DEFAULT_CRAFT_ASSIST_WEAR_OFFSET = 0.00001;
 const CRAFT_ASSIST_PRESET_MIN_WIDTH = 186;
 const CRAFT_ASSIST_SPLIT_WIDTH = 4;
@@ -7038,6 +7039,7 @@ function applyTradeupSimulationSlotSelection({presetId, slot = "", item = null, 
   const slotName = normalizeTradeupSimulationSlotName(slot);
   const nextItem = sanitizeTradeupSimulationTargetItem(item);
   if (!slotName || !nextItem) return false;
+  const selectingMaterial = !isTradeupSimulationOutputSlot(slotName);
   const next = updateTradeupSimulationPresetRecord(presetId, (current) => ({
     ...current,
     [slotName]: nextItem,
@@ -7046,6 +7048,13 @@ function applyTradeupSimulationSlotSelection({presetId, slot = "", item = null, 
       : current.cover_output || (isTradeupSimulationOutputSlot(slotName) ? nextItem : null),
     active_anchor_item: nextItem,
     active_anchor_abs_wear: inheritTradeupSimulationAbsoluteWear(current, nextItem, absoluteWear),
+    ...(selectingMaterial ? {
+      output_rows: [],
+      material_rows: [],
+      rows: [],
+      output_candidates: [],
+      warnings: []
+    } : {}),
     dirty: true,
     updated_at: Date.now()
   }));
@@ -10352,13 +10361,17 @@ function buildTradeupSimulationDerivedOutputPayload(preset) {
     groups.push({collection, count});
   }
   if (!groups.length) return null;
-  return {
+  const payload = {
     required_count: 10,
     target_relative_wear: relativeWear,
     input_rarity: rarity,
     stattrak: false,
     groups
   };
+  if (relativeWear <= TRADEUP_SIMULATION_BELOW_TARGET_SAFE_OFFSET) {
+    payload.wear_approach_mode = "infinite";
+  }
+  return payload;
 }
 function getTradeupSimulationResolveTargetKey(item) {
   const normalized = sanitizeTradeupSimulationTargetItem(item);
@@ -10638,22 +10651,55 @@ async function searchTradeupSimulationItems(query) {
     renderTradeupSimulationPickerModal();
   }
 }
+function getTradeupSimulationDerivedOutputRequestKey(preset) {
+  const mainMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.main_material);
+  const auxMaterial = sanitizeTradeupSimulationTargetItem(preset && preset.aux_material);
+  const activeAnchor = sanitizeTradeupSimulationTargetItem(preset && preset.active_anchor_item);
+  const absoluteWear = Number(preset && preset.active_anchor_abs_wear);
+  return [
+    getTradeupSimulationItemKey(mainMaterial),
+    getTradeupSimulationItemKey(auxMaterial),
+    getTradeupSimulationItemKey(activeAnchor),
+    Number.isFinite(absoluteWear) ? String(absoluteWear) : ""
+  ].join("\u001f");
+}
 async function refreshTradeupSimulationDerivedOutputs(presetId) {
   const preset = getTradeupSimulationWorkspaceDraft(presetId)
     || getTradeupSimulationPresetById(presetId)
     || getActiveTradeupSimulationPreset();
   if (!preset) return false;
+  const recordFailure = (detail) => {
+    const message = String(detail || "产物推导失败").trim() || "产物推导失败";
+    updateTradeupSimulationPresetRecord(preset.id, (current) => ({
+      ...current,
+      warnings: [{
+        type: "derived_output_prediction_failed",
+        message: `材料已添加，但产物推导失败：${message}`
+      }],
+      updated_at: Date.now()
+    }));
+    renderSimulationPage();
+    return false;
+  };
   const payload = buildTradeupSimulationDerivedOutputPayload(preset);
-  if (!payload) return false;
+  if (!payload) return recordFailure("当前材料信息不足，无法生成预测参数");
+  const requestKey = getTradeupSimulationDerivedOutputRequestKey(preset);
+  const isCurrentRequest = () => {
+    const currentPreset = getTradeupSimulationWorkspaceDraft(preset.id)
+      || getTradeupSimulationPresetById(preset.id)
+      || getActiveTradeupSimulationPreset();
+    return !!currentPreset && getTradeupSimulationDerivedOutputRequestKey(currentPreset) === requestKey;
+  };
   try {
     const data = await api("/api/craft/predict-outcomes", {
       method: "POST",
       body: JSON.stringify(payload)
     });
+    if (!isCurrentRequest()) return false;
     const candidates = (Array.isArray(data && data.outcomes) ? data.outcomes : [])
       .map((entry) => mapTradeupSimulationPredictorOutcomeToItem(entry))
       .filter(Boolean);
-    if (!candidates.length) return false;
+    if (!candidates.length) return recordFailure("预测服务未返回可用产物");
     const updated = updateTradeupSimulationPresetRecord(preset.id, (current) => ({
       ...current,
       output_candidates: deepCopyPlain(candidates),
@@ -10666,8 +10712,10 @@ async function refreshTradeupSimulationDerivedOutputs(presetId) {
       candidates
     });
     return true;
-  } catch (_) {
-    return false;
+  } catch (err) {
+    if (!isCurrentRequest()) return false;
+    const message = String(err && err.message || err || "产物推导失败").trim() || "产物推导失败";
+    return recordFailure(message);
   }
 }
 function buildTradeupSimulationResolvePayloads(preset) {
@@ -11961,7 +12009,7 @@ function renderSimulationOutputGrid(preset) {
       ? String(preset.warnings[0].message || "").trim()
       : "等待根据当前槽位推导产物组合。";
     if (!selectedOutputs.length || warningText) {
-      sections.push(`<div class="simulation-row-empty">${warningText}</div>`);
+      sections.push(`<div class="simulation-row-empty">${escapeHtml(warningText)}</div>`);
     }
     ui.simulationOutputLane.innerHTML = sections.join("");
     return;
@@ -11983,7 +12031,7 @@ function renderSimulationOutputGrid(preset) {
 function renderSimulationMaterialGrid(preset) {
   if (!ui.simulationMaterialLane) return;
   const sections = [];
-  if (!preset || !(preset.cover_output || preset.primary_output)) {
+  if (!preset) {
     sections.push('<div class="simulation-row-empty">先添加主料或辅料，右侧会继续显示当前联动材料。</div>');
     ui.simulationMaterialLane.innerHTML = sections.join("");
     return;
@@ -11992,6 +12040,11 @@ function renderSimulationMaterialGrid(preset) {
     {slot: "main_material", item: sanitizeTradeupSimulationTargetItem(preset && preset.main_material)},
     {slot: "aux_material", item: sanitizeTradeupSimulationTargetItem(preset && preset.aux_material)}
   ].filter((entry) => entry.item);
+  if (!selectedMaterials.length && !(preset.cover_output || preset.primary_output)) {
+    sections.push('<div class="simulation-row-empty">先添加主料或辅料，右侧会继续显示当前联动材料。</div>');
+    ui.simulationMaterialLane.innerHTML = sections.join("");
+    return;
+  }
   const rows = Array.isArray(preset.material_rows) ? preset.material_rows : [];
   if (!rows.length) {
     if (selectedMaterials.length) {
@@ -12008,7 +12061,7 @@ function renderSimulationMaterialGrid(preset) {
       ? String(preset.warnings[0].message || "").trim()
       : "等待根据当前锚定物品生成材料。";
     if (!selectedMaterials.length || warningText) {
-      sections.push(`<div class="simulation-row-empty">${warningText}</div>`);
+      sections.push(`<div class="simulation-row-empty">${escapeHtml(warningText)}</div>`);
     }
     ui.simulationMaterialLane.innerHTML = sections.join("");
     return;
