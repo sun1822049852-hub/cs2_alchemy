@@ -29,6 +29,15 @@ function loadSavePromptFns(overrides = {}) {
     openCraftAssistPresetModal: overrides.openCraftAssistPresetModal || (async () => null),
     sanitizeTradeupSimulationDraftPayload: overrides.sanitizeTradeupSimulationDraftPayload || ((value) => value),
     persistTradeupSimulationPresets: overrides.persistTradeupSimulationPresets || (async () => true),
+    getTradeupSimulationPresetById: overrides.getTradeupSimulationPresetById || ((presetId) => context.state.simulationPresets.find((entry) => entry.id === presetId) || null),
+    updateTradeupSimulationPresetRecord: overrides.updateTradeupSimulationPresetRecord || ((presetId, updater) => {
+      const index = context.state.simulationPresets.findIndex((entry) => entry.id === presetId);
+      if (index < 0) return null;
+      context.state.simulationPresets[index] = updater({...context.state.simulationPresets[index]});
+      return context.state.simulationPresets[index];
+    }),
+    saveTradeupSimulationPresetsToStorage: overrides.saveTradeupSimulationPresetsToStorage || (() => {}),
+    renderSimulationPage: overrides.renderSimulationPage || (() => {}),
     setSummary: overrides.setSummary || (() => {}),
     showErrorToast: overrides.showErrorToast || (() => {}),
     String,
@@ -55,13 +64,15 @@ function createSimulationItem({
   };
 }
 
-async function test_save_active_tradeup_simulation_preset_opens_with_empty_name_even_when_draft_has_name() {
+async function test_existing_saved_tradeup_simulation_preset_saves_without_rename_prompt() {
   const primary = createSimulationItem();
-  let receivedInitialName = "__unset__";
+  let promptCount = 0;
   const app = loadSavePromptFns({
     state: {
+      simulationWorkspaceSourcePresetId: "preset_saved",
+      simulationPresets: [{id: "preset_saved", name: "旧配置名", primary_output: primary}],
       simulationWorkspacePreset: {
-        id: "draft_prompt_save",
+        id: "preset_saved",
         name: "旧配置名",
         primary_output: primary,
         cover_output: primary,
@@ -76,22 +87,75 @@ async function test_save_active_tradeup_simulation_preset_opens_with_empty_name_
         updated_at: 100
       }
     },
-    openCraftAssistPresetModal: async (initialName, options = {}) => {
-      receivedInitialName = String(initialName);
-      assert.equal(String(options.title || ""), "保存汰换配置");
-      return "  新配置名称  ";
+    openCraftAssistPresetModal: async () => {
+      promptCount += 1;
+      return "不应出现";
     }
   });
 
   const saved = await app.saveActiveTradeupSimulationPreset();
 
   assert.equal(saved, true);
-  assert.equal(receivedInitialName, "", "tradeup save prompt should open with an empty preset name instead of reusing the previous one");
+  assert.equal(promptCount, 0, "saving an existing preset must not reopen the rename modal");
+  assert.equal(app.state.simulationWorkspacePreset.name, "旧配置名");
+}
+
+async function test_new_tradeup_simulation_preset_still_prompts_for_a_name() {
+  const primary = createSimulationItem();
+  let receivedInitialName = "__unset__";
+  const app = loadSavePromptFns({
+    state: {
+      simulationWorkspaceSourcePresetId: "",
+      simulationWorkspacePreset: {
+        id: "draft_new",
+        name: "",
+        primary_output: primary
+      }
+    },
+    openCraftAssistPresetModal: async (initialName) => {
+      receivedInitialName = String(initialName);
+      return "新配置名称";
+    }
+  });
+
+  const saved = await app.saveActiveTradeupSimulationPreset();
+
+  assert.equal(saved, true);
+  assert.equal(receivedInitialName, "");
   assert.equal(app.state.simulationWorkspacePreset.name, "新配置名称");
 }
 
+async function test_saved_tradeup_simulation_preset_can_be_renamed_only_from_explicit_action() {
+  const primary = createSimulationItem();
+  let saveCount = 0;
+  const app = loadSavePromptFns({
+    state: {
+      simulationPresets: [{id: "preset_rename", name: "旧名称", primary_output: primary}],
+      simulationWorkspaceSourcePresetId: "preset_rename",
+      simulationWorkspacePreset: {id: "preset_rename", name: "旧名称", primary_output: primary}
+    },
+    openCraftAssistPresetModal: async (initialName, options) => {
+      assert.equal(initialName, "旧名称");
+      assert.equal(options.title, "重命名汰换配置");
+      return "新名称";
+    },
+    saveTradeupSimulationPresetsToStorage: () => {
+      saveCount += 1;
+    }
+  });
+
+  const renamed = await app.renameTradeupSimulationPreset("preset_rename");
+
+  assert.equal(renamed, true);
+  assert.equal(app.state.simulationPresets[0].name, "新名称");
+  assert.equal(app.state.simulationWorkspacePreset.name, "新名称");
+  assert.equal(saveCount, 1);
+}
+
 async function main() {
-  await test_save_active_tradeup_simulation_preset_opens_with_empty_name_even_when_draft_has_name();
+  await test_existing_saved_tradeup_simulation_preset_saves_without_rename_prompt();
+  await test_new_tradeup_simulation_preset_still_prompts_for_a_name();
+  await test_saved_tradeup_simulation_preset_can_be_renamed_only_from_explicit_action();
   console.log("tradeup-simulation-save-prompt tests passed");
 }
 

@@ -15,6 +15,20 @@ function extractBlock(startMarker, endMarker) {
   return APP_SOURCE.slice(start, end);
 }
 
+function resolveCraftAssistTargetWearPairForTest(targetWearValue, targetWearRawValue, {fallback = null} = {}) {
+  const rawText = String(targetWearRawValue == null ? "" : targetWearRawValue).trim();
+  const targetText = String(targetWearValue == null ? "" : targetWearValue).trim();
+  const candidate = rawText ? Number(rawText) : targetText ? Number(targetText) : Number.NaN;
+  if (Number.isFinite(candidate) && candidate >= 0 && candidate <= 1) {
+    return {target_wear_raw: rawText || String(candidate), target_wear: Math.fround(candidate)};
+  }
+  const fallbackValue = Number(fallback);
+  if (fallback != null && Number.isFinite(fallbackValue) && fallbackValue >= 0 && fallbackValue <= 1) {
+    return {target_wear_raw: String(fallbackValue), target_wear: Math.fround(fallbackValue)};
+  }
+  return null;
+}
+
 function createClassList(initial = []) {
   const set = new Set(initial);
   return {
@@ -335,6 +349,7 @@ function loadPanelFns(overrides = {}) {
     syncCraftSelectionListClearance: overrides.syncCraftSelectionListClearance,
     isCraftAssistPendingUiAction: overrides.isCraftAssistPendingUiAction,
     parseOptionalWear01: overrides.parseOptionalWear01,
+    resolveCraftAssistTargetWearPair: overrides.resolveCraftAssistTargetWearPair || resolveCraftAssistTargetWearPairForTest,
     normalizeCraftAssistTargetWearStep: overrides.normalizeCraftAssistTargetWearStep || ((value) => {
       const parsed = overrides.parseOptionalWear01 ? overrides.parseOptionalWear01(value) : Number(value);
       return parsed == null || !Number.isFinite(Number(parsed)) ? null : Math.fround(Math.max(0, Math.min(1, Number(parsed))));
@@ -408,6 +423,13 @@ function loadRenderListFns(overrides = {}) {
       }
       return numeric;
     }),
+    normalizeCraftAssistRoleCount: overrides.normalizeCraftAssistRoleCount || ((value, role, fallback) => {
+      const numeric = Math.trunc(Number(value));
+      if (String(role || "").trim() === "aux") {
+        return Number.isFinite(numeric) ? Math.max(0, Math.min(10, numeric)) : Math.max(0, Math.trunc(Number(fallback) || 0));
+      }
+      return Number.isFinite(numeric) && numeric > 0 ? Math.min(10, numeric) : Math.max(1, Math.trunc(Number(fallback) || 1));
+    }),
     craftAssistMaterialLimitFor: overrides.craftAssistMaterialLimitFor || (() => 10),
     calcCraftAssistLiveTotalCount: overrides.calcCraftAssistLiveTotalCount || ((materials) => {
       return (Array.isArray(materials) ? materials : []).reduce((sum, entry) => {
@@ -476,6 +498,7 @@ function loadCraftAssistDecimalInputFns(overrides = {}) {
       const numeric = Number(text);
       return Number.isFinite(numeric) ? numeric : null;
     }),
+    resolveCraftAssistTargetWearPair: overrides.resolveCraftAssistTargetWearPair || resolveCraftAssistTargetWearPairForTest,
     normalizeCraftAssistTargetWearStep: overrides.normalizeCraftAssistTargetWearStep || ((value) => {
       const text = String(value == null ? "" : value).trim();
       if (!text) return null;

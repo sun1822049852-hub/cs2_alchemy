@@ -2294,6 +2294,53 @@ async function test_duplicate_names_across_materials_fail_after_canonicalize_red
   assert.match(result.message, /材料数量之和必须等于 10，当前 5/);
 }
 
+async function test_zero_count_auxiliary_material_is_inactive() {
+  const q = Math.fround(0.27);
+  const targetStep = prevFloat32(q);
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    rows.push(makeRow({id: `zero-aux-main-${index}`, name: "Main Skin", relative: targetStep}));
+  }
+
+  const result = await runSelect({
+    rows,
+    targetWear: q,
+    wearApproachMode: "below",
+    wearOffsetPct: 0,
+    materials: [
+      {role: "main", count: 10, names: ["Main Skin"], wear_min: 0, wear_max: 1},
+      {role: "aux", count: 0, names: ["Catalog Only Auxiliary"], wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.item_ids.length, 10);
+}
+
+async function test_catalog_market_name_matches_localized_inventory_rows() {
+  const q = Math.fround(0.27);
+  const targetStep = prevFloat32(q);
+  const rows = [];
+  for (let index = 1; index <= 10; index += 1) {
+    const row = makeRow({id: `localized-catalog-${index}`, name: "FAMAS | Half Sleeve (Field-Tested)", relative: targetStep});
+    row.alchemy_name = "法玛斯 | 半袖式 (久经沙场)";
+    rows.push(row);
+  }
+
+  const result = await runSelect({
+    rows,
+    targetWear: q,
+    wearApproachMode: "below",
+    wearOffsetPct: 0,
+    materials: [
+      {role: "main", count: 10, names: ["FAMAS | Half Sleeve (Field-Tested)"], wear_min: 0, wear_max: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.item_ids.length, 10);
+}
+
 async function test_step_target_below_searches_previous_float32_step() {
   const q = Math.fround(0.27);
   const targetStep = prevFloat32(q);
@@ -3136,6 +3183,8 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
   await test_item_level_material_items_support_mixed_relative_absolute_filters_and_preserve_candidate_ordering();
   await test_prefilter_trace_uses_primary_name_projection_for_multi_item_materials();
   await test_duplicate_names_across_materials_fail_after_canonicalize_reduces_total_count();
+  await test_zero_count_auxiliary_material_is_inactive();
+  await test_catalog_market_name_matches_localized_inventory_rows();
   await test_final_validation_blocks_below_mode_when_result_crosses_original_target();
   await test_final_validation_below_raw_rejects_normalized_overall_between_conservative_and_original_target();
   await test_final_validation_skips_infinite_mode_cross_target_guard();

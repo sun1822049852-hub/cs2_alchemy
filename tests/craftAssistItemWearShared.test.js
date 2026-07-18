@@ -171,8 +171,8 @@ test("canonical normalize upgrades legacy payloads, ignores stale material-level
   assert.deepEqual(main.names, main.item_names);
   assert.equal(main.items.length, 2);
   assert.equal(main.items[0].wear_filter_mode, "relative");
-  assert.equal(main.items[0].wear_min, 0.123456);
-  assert.equal(main.items[0].wear_max, 0.234567);
+  assert.equal(main.items[0].wear_min, 0.123456789);
+  assert.equal(main.items[0].wear_max, 0.234567891);
   assert.equal(main.items[0].custom_range, true);
   assert.equal(main.items[0].id, second[0].items[0].id);
   assert.equal(main.items[1].id, second[0].items[1].id);
@@ -194,8 +194,8 @@ test("canonical normalize upgrades legacy payloads, ignores stale material-level
   assert.equal(aux.items[0].id, second[1].items[0].id);
   assert.equal(aux.items[0].custom_range, true);
   assert.equal(aux.items[0].wear_filter_mode, "relative");
-  assert.equal(aux.items[0].wear_min, 0.345678);
-  assert.equal(aux.items[0].wear_max, 0.567891);
+  assert.equal(aux.items[0].wear_min, 0.345678912);
+  assert.equal(aux.items[0].wear_max, 0.567891234);
   assert.equal(aux.items[1].id, "keep-explicit");
   assert.equal(aux.items[1].custom_range, false);
   assert.equal(aux.items[1].wear_filter_mode, "absolute");
@@ -229,6 +229,43 @@ test("canonical normalize keeps minted item ids stable when earlier id-less mate
   assert.equal(first[1].items[0].id, second[0].items[0].id);
 });
 
+test("canonical normalize keeps auxiliary zero counts and catalog metadata while main remains required", () => {
+  const canonical = normalizeCanonical([
+    {
+      id: "main-zero",
+      role: "main",
+      count: 0,
+      items: [{name: "Required Main", wear_filter_mode: "relative", wear_min: 0, wear_max: 1}]
+    },
+    {
+      id: "aux-zero",
+      role: "aux",
+      count: 0,
+      items: [{
+        name: "FAMAS | Half Sleeve (Field-Tested)",
+        display_name: "法玛斯 | 半袖式 (久经沙场)",
+        rarity: "军规级",
+        collection: "狩猎运动收藏品",
+        wear_filter_mode: "relative",
+        wear_min: 0.15,
+        wear_max: 0.38
+      }]
+    }
+  ], {rows: []});
+
+  assert.equal(canonical[0].count, 1);
+  assert.equal(canonical[1].count, 0);
+  assert.equal(canonical[1].items[0].display_name, "法玛斯 | 半袖式 (久经沙场)");
+  assert.equal(canonical[1].items[0].rarity, "军规级");
+  assert.equal(canonical[1].items[0].collection, "狩猎运动收藏品");
+
+  const projected = getSharedMethod("projectCraftAssistPersistedMaterials")(canonical);
+  assert.equal(projected[1].count, 0);
+  assert.equal(projected[1].items[0].display_name, "法玛斯 | 半袖式 (久经沙场)");
+  assert.equal(projected[1].items[0].rarity, "军规级");
+  assert.equal(projected[1].items[0].collection, "狩猎运动收藏品");
+});
+
 test("persisted projection strips runtime-only fields and shared cache/trace helpers reuse the canonical item projection", () => {
   const canonical = normalizeCanonical([LEGACY_MAIN_MATERIAL, NEW_AUX_MATERIAL]);
   const projectPersisted = getSharedMethod("projectCraftAssistPersistedMaterials");
@@ -246,16 +283,16 @@ test("persisted projection strips runtime-only fields and shared cache/trace hel
           id: canonical[0].items[0].id,
           name: "AK-47 | Slate (Field-Tested)",
           wear_filter_mode: "relative",
-          wear_min: 0.123456,
-          wear_max: 0.234567,
+          wear_min: 0.123456789,
+          wear_max: 0.234567891,
           custom_range: true
         },
         {
           id: canonical[0].items[1].id,
           name: "M4A1-S | Basilisk (Field-Tested)",
           wear_filter_mode: "relative",
-          wear_min: 0.123456,
-          wear_max: 0.234567,
+          wear_min: 0.123456789,
+          wear_max: 0.234567891,
           custom_range: true
         }
       ]
@@ -269,8 +306,8 @@ test("persisted projection strips runtime-only fields and shared cache/trace hel
           id: canonical[1].items[0].id,
           name: "USP-S | Cortex (Field-Tested)",
           wear_filter_mode: "relative",
-          wear_min: 0.345678,
-          wear_max: 0.567891,
+          wear_min: 0.345678912,
+          wear_max: 0.567891234,
           custom_range: true
         },
         {
@@ -295,15 +332,15 @@ test("persisted projection strips runtime-only fields and shared cache/trace hel
   assert.deepEqual(
     buildCacheTuple(canonical[1], 0.3333339),
     [
-      "0.333333",
+      "0.3333339000000000",
       "USP-S | Cortex (Field-Tested)",
       "relative",
-      "0.345678",
-      "0.567891",
+      "0.3456789120000000",
+      "0.5678912340000000",
       "P250 | Muertos (Factory New)",
       "absolute",
-      "0.000000",
-      "0.070000"
+      "0.0000000000000000",
+      "0.0700000000000000"
     ]
   );
 
@@ -343,7 +380,7 @@ test("resolveCraftAssistItemDefaultRange follows the resolver matrix for load/re
       ],
       expected: {
         wear_min: 0,
-        wear_max: 0.9,
+        wear_max: 0.8999999999999999,
         usedStoredFallback: false,
         resolvedCustomRange: false
       }

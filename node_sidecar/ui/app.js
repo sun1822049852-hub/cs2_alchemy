@@ -163,7 +163,7 @@ const ui = {
   craftLayout: document.getElementById("craftLayout"), craftSplitBar: document.getElementById("craftSplitBar"), craftRightPanel: document.getElementById("craftRightPanel"),
   craftExecutionOverlay: document.getElementById("craftExecutionOverlay"), craftExecutionProgress: document.getElementById("craftExecutionProgress"), craftExecutionOverlayPercent: document.getElementById("craftExecutionOverlayPercent"), craftExecutionOverlayTitle: document.getElementById("craftExecutionOverlayTitle"), craftExecutionOverlayDetail: document.getElementById("craftExecutionOverlayDetail"),
   simulationModeSavedBtn: document.getElementById("simulationModeSavedBtn"), simulationModeWorkspaceBtn: document.getElementById("simulationModeWorkspaceBtn"), simulationSavedPresets: document.getElementById("simulationSavedPresets"), simulationWorkspace: document.getElementById("simulationWorkspace"), simulationWorkspaceActionsBar: document.getElementById("simulationWorkspaceActionsBar"), simulationSavePresetBtn: document.getElementById("simulationSavePresetBtn"), simulationCancelEditBtn: document.getElementById("simulationCancelEditBtn"), simulationLayout: document.getElementById("simulationLayout"), simulationOutputPanel: document.getElementById("simulationOutputPanel"), simulationMaterialPanel: document.getElementById("simulationMaterialPanel"), simulationOutputRoleChooser: document.getElementById("simulationOutputRoleChooser"), simulationOutputRoleChooserText: document.getElementById("simulationOutputRoleChooserText"), simulationOutputRoleSplit: document.getElementById("simulationOutputRoleSplit"), simulationMaterialRoleChooser: document.getElementById("simulationMaterialRoleChooser"), simulationMaterialRoleChooserText: document.getElementById("simulationMaterialRoleChooserText"), simulationMaterialRoleSplit: document.getElementById("simulationMaterialRoleSplit"), simulationOutputLane: document.getElementById("simulationOutputLane"), simulationMaterialLane: document.getElementById("simulationMaterialLane"), simulationPickerModal: document.getElementById("simulationPickerModal"), simulationPickerTitle: document.getElementById("simulationPickerTitle"), simulationPickerRoleBadge: document.getElementById("simulationPickerRoleBadge"), simulationPickerHint: document.getElementById("simulationPickerHint"), simulationPickerMeta: document.getElementById("simulationPickerMeta"), simulationPickerSearchInput: document.getElementById("simulationPickerSearchInput"), simulationPickerSearchBtn: document.getElementById("simulationPickerSearchBtn"), simulationPickerSearchResults: document.getElementById("simulationPickerSearchResults"), simulationPickerClose: document.getElementById("simulationPickerClose"), simulationPickerCancelBtn: document.getElementById("simulationPickerCancelBtn"), simulationCardModal: document.getElementById("simulationCardModal"), simulationCardModalTitle: document.getElementById("simulationCardModalTitle"), simulationCardModalBody: document.getElementById("simulationCardModalBody"), simulationCardModalField: document.getElementById("simulationCardModalField"), simulationCardModalWearInput: document.getElementById("simulationCardModalWearInput"), simulationCardModalWearHint: document.getElementById("simulationCardModalWearHint"), simulationCardModalReadonlyNote: document.getElementById("simulationCardModalReadonlyNote"), simulationCardModalClose: document.getElementById("simulationCardModalClose"), simulationCardModalSaveBtn: document.getElementById("simulationCardModalSaveBtn"), simulationCardModalCancelBtn: document.getElementById("simulationCardModalCancelBtn"),
-  simExportCraftModal: document.getElementById("simExportCraftModal"), simExportCraftModalTitle: document.getElementById("simExportCraftModalTitle"), simExportCraftModalClose: document.getElementById("simExportCraftModalClose"), simExportCraftMaterialList: document.getElementById("simExportCraftMaterialList"), simExportCraftAddBtn: document.getElementById("simExportCraftAddBtn"), simExportCraftSearchPanel: document.getElementById("simExportCraftSearchPanel"), simExportCraftSearchInput: document.getElementById("simExportCraftSearchInput"), simExportCraftSearchBtn: document.getElementById("simExportCraftSearchBtn"), simExportCraftSearchResults: document.getElementById("simExportCraftSearchResults"), simExportCraftName: document.getElementById("simExportCraftName"), simExportCraftTargetWear: document.getElementById("simExportCraftTargetWear"), simExportCraftMainCount: document.getElementById("simExportCraftMainCount"), simExportCraftAuxCount: document.getElementById("simExportCraftAuxCount"), simExportCraftAuxCountRow: document.getElementById("simExportCraftAuxCountRow"), simExportCraftWearMin: document.getElementById("simExportCraftWearMin"), simExportCraftWearMax: document.getElementById("simExportCraftWearMax"), simExportCraftConfirmBtn: document.getElementById("simExportCraftConfirmBtn"), simExportCraftCancelBtn: document.getElementById("simExportCraftCancelBtn"),
+  simExportCraftModal: document.getElementById("simExportCraftModal"), simExportCraftModalTitle: document.getElementById("simExportCraftModalTitle"), simExportCraftModalClose: document.getElementById("simExportCraftModalClose"), simExportCraftMaterialList: document.getElementById("simExportCraftMaterialList"), simExportCraftAddBtn: document.getElementById("simExportCraftAddBtn"), simExportCraftSearchPanel: document.getElementById("simExportCraftSearchPanel"), simExportCraftSearchInput: document.getElementById("simExportCraftSearchInput"), simExportCraftSearchBtn: document.getElementById("simExportCraftSearchBtn"), simExportCraftSearchResults: document.getElementById("simExportCraftSearchResults"), simExportCraftName: document.getElementById("simExportCraftName"), simExportCraftTargetWear: document.getElementById("simExportCraftTargetWear"), simExportCraftMainCount: document.getElementById("simExportCraftMainCount"), simExportCraftAuxCount: document.getElementById("simExportCraftAuxCount"), simExportCraftAuxCountRow: document.getElementById("simExportCraftAuxCountRow"), simExportCraftWearMin: document.getElementById("simExportCraftWearMin"), simExportCraftWearMax: document.getElementById("simExportCraftWearMax"), simExportCraftAuxWearRow: document.getElementById("simExportCraftAuxWearRow"), simExportCraftAuxWearMin: document.getElementById("simExportCraftAuxWearMin"), simExportCraftAuxWearMax: document.getElementById("simExportCraftAuxWearMax"), simExportCraftConfirmBtn: document.getElementById("simExportCraftConfirmBtn"), simExportCraftCancelBtn: document.getElementById("simExportCraftCancelBtn"),
   batchCraftPage: document.getElementById("batchCraftPage"), navBatchCraft: document.getElementById("navBatchCraft"), batchCraftStatusText: document.getElementById("batchCraftStatusText"),
   batchCraftAddAccountBtn: document.getElementById("batchCraftAddAccountBtn"), batchCraftAccountPicker: document.getElementById("batchCraftAccountPicker"), batchCraftAccountListbox: document.getElementById("batchCraftAccountListbox"), batchCraftClearAccountsBtn: document.getElementById("batchCraftClearAccountsBtn"),
   batchCraftActiveAccountText: document.getElementById("batchCraftActiveAccountText"), batchCraftAccountCards: document.getElementById("batchCraftAccountCards"),
@@ -5807,6 +5807,14 @@ function normalizeCraftAssistEntryCount(value, fallback = 1) {
   if (!Number.isFinite(n)) return Math.max(1, Math.min(10, Math.trunc(Number(fallback) || 1)));
   return Math.max(1, Math.min(10, n));
 }
+function normalizeCraftAssistRoleCount(value, role, fallback = null) {
+  const normalizedRole = normalizeCraftAssistRole(role);
+  if (normalizedRole !== "aux") {
+    return normalizeCraftAssistEntryCount(value, fallback == null ? 1 : fallback);
+  }
+  const fallbackValue = fallback == null ? 0 : fallback;
+  return normalizeCraftAssistCount(value, fallbackValue);
+}
 function normalizeCraftAssistApplyCount(value, fallback = 1) {
   const n = Math.trunc(Number(value));
   if (!Number.isFinite(n)) return Math.max(1, Math.min(100, Math.trunc(Number(fallback) || 1)));
@@ -5944,7 +5952,7 @@ function normalizeCraftAssistMaterialEntry(entry, {targetWear = state.craftAssis
   if (!names.length) return null;
   const name = names[0];
   const role = normalizeCraftAssistRole(entry && entry.role);
-  const count = normalizeCraftAssistEntryCount(entry && entry.count, 1);
+  const count = normalizeCraftAssistRoleCount(entry && entry.count, role, role === "aux" ? 0 : 1);
   const defaultRange = makeCraftAssistDefaultRange(names, {useRelative, rows});
   const customRange = !!(entry && entry.custom_range);
   let wearMin = customRange
@@ -6009,12 +6017,21 @@ function projectCraftAssistPersistedMaterialsFromState(materials = state.craftAs
   }).map((entry) => ({
     id: String(entry && entry.id || "").trim(),
     role: normalizeCraftAssistRole(entry && entry.role),
-    count: normalizeCraftAssistEntryCount(entry && entry.count, 1),
+    count: normalizeCraftAssistRoleCount(entry && entry.count, entry && entry.role, normalizeCraftAssistRole(entry && entry.role) === "aux" ? 0 : 1),
     direction: normalizeCraftAssistDirection(entry && entry.role, entry && entry.direction),
     disable_direction_limit: !!(entry && entry.disable_direction_limit),
     items: craftAssistMaterialNames(entry).map((name, index) => ({
       id: `${String(entry && entry.id || "assist").trim() || "assist"}__${index + 1}`,
       name,
+      display_name: String(
+        Array.isArray(entry && entry.items) && entry.items[index] && entry.items[index].display_name || ""
+      ).trim(),
+      rarity: String(
+        Array.isArray(entry && entry.items) && entry.items[index] && entry.items[index].rarity || ""
+      ).trim(),
+      collection: String(
+        Array.isArray(entry && entry.items) && entry.items[index] && entry.items[index].collection || ""
+      ).trim(),
       wear_filter_mode: getCraftAssistFilterMode(),
       wear_min: clampWear01(entry && entry.wear_min, 0),
       wear_max: clampWear01(entry && entry.wear_max, 1),
@@ -6052,7 +6069,7 @@ function refreshCraftAssistMaterialRanges({rows = null, useRelative = getCraftAs
           names: [],
           name: "",
           role,
-          count: normalizeCraftAssistEntryCount(entry && entry.count, 1),
+          count: normalizeCraftAssistRoleCount(entry && entry.count, role, role === "aux" ? 0 : 1),
           direction: normalizeCraftAssistDirection(role, entry && entry.direction),
           disable_direction_limit: !!(entry && entry.disable_direction_limit),
           wear_min: wearMin,
@@ -6101,8 +6118,8 @@ function sanitizeCraftAssistPresetPayload(payload) {
     useRelative: filterMode !== "absolute",
     rows: getAllInventoryCraftableRows()
   }))
-    .filter((entry) => entry.count > 0);
-  if (!materials.length) return null;
+    .filter((entry) => normalizeCraftAssistRole(entry && entry.role) === "aux" || Number(entry && entry.count || 0) > 0);
+  if (!materials.some((entry) => Number(entry && entry.count || 0) > 0)) return null;
   const createdAt = Math.max(0, Number(source.created_at || 0) || 0);
   const updatedAt = Math.max(createdAt, Math.max(0, Number(source.updated_at || 0) || 0));
   return {
@@ -6159,11 +6176,15 @@ async function loadCraftAssistPresetsFromServer() {
     return null;
   }
 }
+let craftAssistPresetSaveChain = Promise.resolve();
 function saveCraftAssistPresetsToStorage() {
   const payload = normalizeCraftAssistPresetList(state.craftAssistPresets);
   state.craftAssistPresets = payload;
   writeCraftAssistPresetsToLocalStorage(payload);
-  void saveCraftAssistPresetsToServer(payload);
+  const serverPayload = JSON.parse(JSON.stringify(payload));
+  craftAssistPresetSaveChain = craftAssistPresetSaveChain
+    .catch(() => {})
+    .then(() => saveCraftAssistPresetsToServer(serverPayload));
 }
 async function loadCraftAssistPresetsFromStorage() {
   const localPresets = readCraftAssistPresetsFromLocalStorage();
@@ -6201,8 +6222,8 @@ function buildCurrentCraftAssistPresetSnapshot(name) {
   const targetWearPair = resolveCraftAssistTargetWearPair(state.craftAssistTargetWear, state.craftAssistTargetWearRaw);
   if (!targetWearPair) return null;
   const materials = projectCraftAssistPersistedMaterialsFromState(state.craftAssistMaterials)
-    .filter((entry) => entry.count > 0);
-  if (!materials.length) return null;
+    .filter((entry) => normalizeCraftAssistRole(entry && entry.role) === "aux" || Number(entry && entry.count || 0) > 0);
+  if (!materials.some((entry) => Number(entry && entry.count || 0) > 0)) return null;
   return sanitizeCraftAssistPresetPayload({
     id: makeCraftAssistUid("preset"),
     name: presetName,
@@ -6665,6 +6686,18 @@ async function saveActiveTradeupSimulationPreset() {
     setSummary("请先选择主产物", {isError: true});
     return false;
   }
+  const sourceId = String(state.simulationWorkspaceSourcePresetId || "").trim();
+  const existing = sourceId ? getTradeupSimulationPresetById(sourceId) : null;
+  if (existing) {
+    state.simulationWorkspacePreset = sanitizeTradeupSimulationDraftPayload({
+      ...(state.simulationWorkspacePreset && typeof state.simulationWorkspacePreset === "object"
+        ? state.simulationWorkspacePreset
+        : preset),
+      name: String(existing.name || preset.name || "").trim(),
+      dirty: true
+    });
+    return persistTradeupSimulationPresets({clearDirty: true});
+  }
   const presetName = await openCraftAssistPresetModal("", {
     title: "保存汰换配置",
     confirmText: "保存配方",
@@ -6686,6 +6719,42 @@ async function saveActiveTradeupSimulationPreset() {
     dirty: true
   });
   return persistTradeupSimulationPresets({clearDirty: true});
+}
+async function renameTradeupSimulationPreset(presetId) {
+  if (guardGuestAction({
+    reason: "当前为访客预览态，登录后可管理真实的汰换模拟配置。",
+    view: "login"
+  }) === false) {
+    return false;
+  }
+  if (state.simulationPersisting) return false;
+  const key = String(presetId || "").trim();
+  const current = getTradeupSimulationPresetById(key);
+  if (!current) return false;
+  const nextValue = await openCraftAssistPresetModal(String(current.name || "").trim(), {
+    title: "重命名汰换配置",
+    confirmText: "保存名称",
+    placeholder: "请输入配置名称",
+    emptyMessage: "请先输入配置名称",
+    onEmpty(message) {
+      setSummary(message, {isError: true});
+      showErrorToast(message);
+    }
+  });
+  if (nextValue == null) return false;
+  const nextName = String(nextValue || "").trim();
+  if (!nextName) return false;
+  const list = Array.isArray(state.simulationPresets) ? [...state.simulationPresets] : [];
+  const index = list.findIndex((entry) => String(entry && entry.id || "").trim() === key);
+  if (index < 0) return false;
+  list[index] = {...list[index], name: nextName, updated_at: Date.now()};
+  state.simulationPresets = list;
+  if (String(state.simulationWorkspaceSourcePresetId || "").trim() === key && state.simulationWorkspacePreset) {
+    state.simulationWorkspacePreset = {...state.simulationWorkspacePreset, name: nextName, updated_at: Date.now()};
+  }
+  saveTradeupSimulationPresetsToStorage();
+  renderSimulationPage();
+  return true;
 }
 async function cancelTradeupSimulationEditing() {
   state.simulationViewMode = "saved";
@@ -7191,6 +7260,9 @@ function craftAssistMaterialItems(material) {
     .map((item, index) => ({
       id: String(item && item.id || `${materialId}__${index + 1}`).trim() || `${materialId}__${index + 1}`,
       name: String(item && item.name || "").trim(),
+      display_name: String(item && item.display_name || "").trim(),
+      rarity: String(item && item.rarity || "").trim(),
+      collection: String(item && item.collection || "").trim(),
       wear_filter_mode: normalizeCraftAssistFilterMode(item && item.wear_filter_mode),
       wear_min: clampWear01(item && item.wear_min, 0),
       wear_max: clampWear01(item && item.wear_max, 1),
@@ -7216,7 +7288,7 @@ function coalesceCraftAssistMaterialRoleBuckets(materials, {source = "renormaliz
       });
     }
     const bucket = buckets.get(role);
-    bucket.count += normalizeCraftAssistEntryCount(material && material.count, 1);
+    bucket.count += normalizeCraftAssistRoleCount(material && material.count, role, role === "aux" ? 0 : 1);
     if (!bucket.id) {
       bucket.id = String(material && material.id || "").trim();
     }
@@ -7241,7 +7313,7 @@ function coalesceCraftAssistMaterialRoleBuckets(materials, {source = "renormaliz
       const normalized = normalizeCraftAssistMaterialForUi({
         id: bucket.id || "",
         role,
-        count: normalizeCraftAssistEntryCount(bucket.count, 1),
+        count: normalizeCraftAssistRoleCount(bucket.count, role, role === "aux" ? 0 : 1),
         direction: bucket.direction,
         disable_direction_limit: bucket.disable_direction_limit,
         items: bucket.items
@@ -7253,11 +7325,12 @@ function coalesceCraftAssistMaterialRoleBuckets(materials, {source = "renormaliz
     })
     .filter(Boolean);
 }
-function createCraftAssistMaterialItem(name) {
+function createCraftAssistMaterialItem(name, displayName = "") {
   const itemName = String(name || "").trim();
   if (!itemName) return null;
   return {
     name: itemName,
+    display_name: String(displayName || "").trim(),
     wear_filter_mode: getCraftAssistFilterMode(),
     wear_min: 0,
     wear_max: 1,
@@ -7666,6 +7739,9 @@ function renderCraftAssistList() {
         : craftAssistMaterialNames(material).map((name, index) => ({
           id: `${materialId}__${index + 1}`,
           name,
+          display_name: "",
+          rarity: "",
+          collection: "",
           wear_filter_mode: filterModeOf(typeof getCraftAssistFilterMode === "function" ? getCraftAssistFilterMode() : "relative"),
           wear_min: 0,
           wear_max: 1,
@@ -7675,6 +7751,9 @@ function renderCraftAssistList() {
         .map((materialItem, index) => ({
           id: String(materialItem && materialItem.id || `${materialId}__${index + 1}`).trim() || `${materialId}__${index + 1}`,
           name: String(materialItem && materialItem.name || "").trim(),
+          display_name: String(materialItem && materialItem.display_name || "").trim(),
+          rarity: String(materialItem && materialItem.rarity || "").trim(),
+          collection: String(materialItem && materialItem.collection || "").trim(),
           wear_filter_mode: filterModeOf(materialItem && materialItem.wear_filter_mode),
           wear_min: clampWearToRange(materialItem && materialItem.wear_min, 0, 1, 0),
           wear_max: clampWearToRange(materialItem && materialItem.wear_max, 0, 1, 1),
@@ -7790,12 +7869,12 @@ function renderCraftAssistList() {
     qtyShell.className = "craft-assist-head-qty-shell";
     const qtyInput = document.createElement("input");
     qtyInput.type = "number";
-    qtyInput.min = "1";
+    qtyInput.min = role === "aux" ? "0" : "1";
     qtyInput.max = "10";
     qtyInput.step = "1";
     qtyInput.setAttribute("aria-label", "数量");
-    const qtyFallback = 1;
-    qtyInput.value = String(normalizeCraftAssistEntryCount(material && material.count, qtyFallback));
+    const qtyFallback = role === "aux" ? 0 : 1;
+    qtyInput.value = String(normalizeCraftAssistRoleCount(material && material.count, role, qtyFallback));
     const commitQtyValue = (rawValue) => {
       const mode = craftAssistMaterialLimitFor(state.craftAssistMaterials);
       const currentId = String(materialId || "").trim();
@@ -7804,13 +7883,14 @@ function renderCraftAssistList() {
           .filter((entry) => String(entry && entry.id || "").trim() !== currentId)
       );
       const maxAllowed = Math.max(0, mode - otherTotal);
-      if (maxAllowed <= 0) {
-        qtyInput.value = String(normalizeCraftAssistEntryCount(material && material.count, 1));
+      const minAllowed = role === "aux" ? 0 : 1;
+      if (maxAllowed < minAllowed) {
+        qtyInput.value = String(normalizeCraftAssistRoleCount(material && material.count, role, qtyFallback));
         setCraftStatus(`材料数量上限 ${mode}，请先调整其他词条数量`, true);
-        return normalizeCraftAssistEntryCount(material && material.count, 1);
+        return normalizeCraftAssistRoleCount(material && material.count, role, qtyFallback);
       }
-      const requested = normalizeCraftAssistEntryCount(rawValue, material && material.count);
-      const nextCount = Math.max(1, Math.min(requested, maxAllowed));
+      const requested = normalizeCraftAssistRoleCount(rawValue, role, material && material.count);
+      const nextCount = Math.max(minAllowed, Math.min(requested, maxAllowed));
       if (requested > maxAllowed) {
         setCraftStatus(`材料数量上限 ${mode}，该项最多可填 ${maxAllowed}`, true);
       }
@@ -7837,7 +7917,7 @@ function renderCraftAssistList() {
     decrementBtn.setAttribute("aria-label", "减少数量");
     decrementBtn.onclick = (evt) => {
       if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
-      const current = normalizeCraftAssistEntryCount(qtyInput.value, material && material.count);
+      const current = normalizeCraftAssistRoleCount(qtyInput.value, role, material && material.count);
       commitQtyValue(current - 1);
     };
     const incrementBtn = document.createElement("button");
@@ -7847,7 +7927,7 @@ function renderCraftAssistList() {
     incrementBtn.setAttribute("aria-label", "增加数量");
     incrementBtn.onclick = (evt) => {
       if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
-      const current = normalizeCraftAssistEntryCount(qtyInput.value, material && material.count);
+      const current = normalizeCraftAssistRoleCount(qtyInput.value, role, material && material.count);
       commitQtyValue(current + 1);
     };
     qtyShell.append(qtyInput, qtySpin);
@@ -7878,12 +7958,13 @@ function renderCraftAssistList() {
       cardHead.className = "craft-assist-material-card-head";
       const cardTitle = document.createElement("div");
       cardTitle.className = "craft-assist-material-card-title";
-      cardTitle.textContent = materialItem.name;
+      const materialDisplayName = String(materialItem.display_name || materialItem.name || "").trim();
+      cardTitle.textContent = materialDisplayName;
       const cardRemove = document.createElement("button");
       cardRemove.type = "button";
       cardRemove.className = "craft-assist-material-card-remove";
-      cardRemove.title = `删除该物品：${materialItem.name}`;
-      cardRemove.setAttribute("aria-label", `删除该物品：${materialItem.name}`);
+      cardRemove.title = `删除该物品：${materialDisplayName}`;
+      cardRemove.setAttribute("aria-label", `删除该物品：${materialDisplayName}`);
       cardRemove.textContent = "×";
       cardRemove.onclick = (evt) => {
         if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
@@ -7898,7 +7979,7 @@ function renderCraftAssistList() {
       const modeWrap = document.createElement("div");
       modeWrap.className = "craft-assist-mode-toggle";
       modeWrap.setAttribute("role", "group");
-      modeWrap.setAttribute("aria-label", `${materialItem.name} 磨损模式`);
+      modeWrap.setAttribute("aria-label", `${materialDisplayName} 磨损模式`);
       const modeGroupName = `craftAssistCardMode_${materialId}_${materialItem.id}`;
       const makeModeOption = (value, labelText) => {
         const option = document.createElement("label");
@@ -7946,7 +8027,7 @@ function renderCraftAssistList() {
       minInput.inputMode = "decimal";
       minInput.placeholder = formatRangeWear(itemRange.custom_range ? itemRange.wear_min : constraintMin);
       minInput.value = "";
-      minInput.setAttribute("aria-label", `${materialItem.name} ${minText} 输入`);
+      minInput.setAttribute("aria-label", `${materialDisplayName} ${minText} 输入`);
       const maxRow = document.createElement("div");
       maxRow.className = "craft-assist-range-row";
       const maxLabel = document.createElement("span");
@@ -7957,7 +8038,7 @@ function renderCraftAssistList() {
       maxInput.inputMode = "decimal";
       maxInput.placeholder = formatRangeWear(itemRange.custom_range ? itemRange.wear_max : constraintMax);
       maxInput.value = "";
-      maxInput.setAttribute("aria-label", `${materialItem.name} ${maxText} 输入`);
+      maxInput.setAttribute("aria-label", `${materialDisplayName} ${maxText} 输入`);
       const commitRange = () => {
         const normalizeRangeText = (input) => {
           const raw = String(input && input.value || "").trim();
@@ -8034,11 +8115,11 @@ function renderCraftAssistList() {
 }
 function calcCraftAssistMaterialTotalCount(materials) {
   return (Array.isArray(materials) ? materials : [])
-    .reduce((sum, item) => sum + normalizeCraftAssistEntryCount(item && item.count, 1), 0);
+    .reduce((sum, item) => sum + normalizeCraftAssistRoleCount(item && item.count, item && item.role, normalizeCraftAssistRole(item && item.role) === "aux" ? 0 : 1), 0);
 }
 function calcCraftAssistLiveTotalCount(materials = state.craftAssistMaterials) {
   return (Array.isArray(materials) ? materials : [])
-    .reduce((sum, item) => sum + normalizeCraftAssistEntryCount(item && item.count, 1), 0);
+    .reduce((sum, item) => sum + normalizeCraftAssistRoleCount(item && item.count, item && item.role, normalizeCraftAssistRole(item && item.role) === "aux" ? 0 : 1), 0);
 }
 function validateCraftAssistMaterialEntriesForSave(materials = state.craftAssistMaterials) {
   const list = Array.isArray(materials) ? materials : [];
@@ -8563,17 +8644,12 @@ function renderCraftAssistPresetPanel() {
     name.className = "craft-assist-preset-name";
     name.textContent = String(preset && preset.name || "未命名配置");
 
-    const count = (Array.isArray(preset && preset.materials) ? preset.materials : [])
-      .reduce((sum, material) => sum + normalizeCraftAssistEntryCount(material && material.count, 1), 0);
     const meta = document.createElement("div");
     meta.className = "craft-assist-preset-meta";
-    const metaTop = document.createElement("div");
-    metaTop.className = "craft-assist-preset-meta-top";
-    metaTop.textContent = `材料 ${(preset && preset.materials && preset.materials.length) || 0} 项 / ${count} 件 | ${formatCraftAssistPresetTime(preset && preset.updated_at)}`;
     const metaWear = document.createElement("div");
     metaWear.className = "craft-assist-preset-meta-wear";
     metaWear.textContent = `wear: ${wearTextFull(preset && preset.target_wear)}`;
-    meta.append(metaTop, metaWear);
+    meta.append(metaWear);
     const body = document.createElement("div");
     body.className = "craft-assist-preset-body";
     body.append(name, meta);
@@ -8689,7 +8765,7 @@ function normalizeCraftAssistMaterialsForRun({materials = state.craftAssistMater
     useRelative: normalizeCraftAssistFilterMode(wearFilterMode) !== "absolute",
     rows: getAllInventoryCraftableRows()
   })
-    .filter((entry) => craftAssistMaterialNames(entry).length > 0 && normalizeCraftAssistEntryCount(entry && entry.count, 1) > 0);
+    .filter((entry) => craftAssistMaterialNames(entry).length > 0 && normalizeCraftAssistRoleCount(entry && entry.count, entry && entry.role, 0) > 0);
   return projectCraftAssistPersistedMaterialsFromState(normalized);
 }
 async function applyCraftAssistAutoSelection({accountUsername = "", sourcePresetName = "", draftSnapshot = null, pendingUiAction = "", pendingPresetId = ""} = {}) {
@@ -10538,17 +10614,21 @@ function renderTradeupSimulationPickerResults() {
       : `<div class="simulation-row-empty">${context.emptyText}</div>`;
     return;
   }
-  ui.simulationPickerSearchResults.innerHTML = results.map((item, index) => {
+  const visibleResults = results
+    .map((item, index) => ({item, index}))
+    .filter(({item}) => !getTradeupSimulationPickerBlockedMessage(preset, slot, item));
+  if (!visibleResults.length) {
+    ui.simulationPickerSearchResults.innerHTML = '<div class="simulation-row-empty">没有可添加的匹配物品</div>';
+    return;
+  }
+  ui.simulationPickerSearchResults.innerHTML = visibleResults.map(({item, index}) => {
     const {artUrl, artStyleAttr} = getTradeupSimulationArtProps(item);
-    const pickerRestrictionMessage = getTradeupSimulationPickerBlockedMessage(preset, slot, item);
-    const disabled = !!pickerRestrictionMessage;
     const itemLabel = String(item && (item.basename || item.basemarkethashname || item.markethashname) || "").trim();
     const rarityVisual = getTradeupSimulationRarityVisuals(item && item.rarity);
     const metaText = String(item && item.collection || "").trim() || "未标记收藏品";
     const rarityStyleAttr = ` style="--simulation-picker-rarity-color:${escapeHtmlAttribute(rarityVisual.color)}"`;
-    const disabledAttr = disabled ? ' disabled aria-disabled="true"' : "";
     return `
-      <button class="simulation-picker-item${disabled ? " is-disabled" : ""}" type="button" data-simulation-pick-index="${index}"${rarityStyleAttr}${disabledAttr}>
+      <button class="simulation-picker-item" type="button" data-simulation-pick-index="${index}"${rarityStyleAttr}>
         <span class="simulation-picker-item-layout">
           <span class="simulation-picker-item-art${artUrl ? " has-image" : ""}"${artStyleAttr}>
             <span class="simulation-card-wear-badge simulation-picker-rarity-badge">${escapeHtml(rarityVisual.label)}</span>
@@ -10560,7 +10640,6 @@ function renderTradeupSimulationPickerResults() {
               <span class="simulation-picker-art-meta">${escapeHtml(metaText)}</span>
             </span>
           </span>
-          ${pickerRestrictionMessage ? `<span class="simulation-picker-item-warning"><span class="simulation-picker-art-warning">${escapeHtml(pickerRestrictionMessage)}</span></span>` : ""}
         </span>
       </button>
     `;
@@ -10866,7 +10945,7 @@ function renderSimulationSavedPresets() {
       titleText: summary.presetName,
       sublineHtml: renderTradeupSimulationSavedCardSubline(summary.collectionText),
       extraClasses: `simulation-saved-card${active ? " simulation-anchor-active" : ""}`,
-      extraArtHtml: `<button class="simulation-saved-export-btn" type="button" data-simulation-export-preset-id="${String(preset && preset.id || "").trim()}" aria-label="导出到快速选材" title="导出到快速选材">⇥</button><button class="simulation-saved-remove-btn" type="button" data-simulation-delete-preset-id="${String(preset && preset.id || "").trim()}" aria-label="删除该配方" title="删除该配方">×</button>`,
+      extraArtHtml: `<button class="simulation-saved-rename-btn" type="button" data-simulation-rename-preset-id="${String(preset && preset.id || "").trim()}" aria-label="重命名该配方" title="重命名该配方">✎</button><button class="simulation-saved-export-btn" type="button" data-simulation-export-preset-id="${String(preset && preset.id || "").trim()}" aria-label="导出到快速选材" title="导出到快速选材">⇥</button><button class="simulation-saved-remove-btn" type="button" data-simulation-delete-preset-id="${String(preset && preset.id || "").trim()}" aria-label="删除该配方" title="删除该配方">×</button>`,
       dataAttrs: `data-simulation-preset-id="${String(preset && preset.id || "").trim()}"`,
       ariaLabel: `查看已保存配方 ${summary.presetName}`,
       actionBadgeText: "",
@@ -10887,6 +10966,16 @@ function renderSimulationSavedPresets() {
   for (const card of ui.simulationSavedPresets.querySelectorAll("[data-simulation-preset-id]")) {
     const removeBtn = card.querySelector("[data-simulation-delete-preset-id]");
     const exportBtn = card.querySelector("[data-simulation-export-preset-id]");
+    const renameBtn = card.querySelector("[data-simulation-rename-preset-id]");
+    if (renameBtn) {
+      renameBtn.onclick = async (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        const presetId = String(renameBtn.getAttribute("data-simulation-rename-preset-id") || "").trim();
+        if (!presetId) return;
+        await renameTradeupSimulationPreset(presetId);
+      };
+    }
     if (exportBtn) {
       exportBtn.onclick = async (evt) => {
         evt.preventDefault();
@@ -10967,8 +11056,9 @@ function extractSimExportCraftMaterials(preset) {
   const rows = Array.isArray(preset && preset.material_rows) ? preset.material_rows : [];
   const seen = new Set();
   const out = [];
-  for (const row of rows) {
+  for (const [rowIndex, row] of rows.entries()) {
     const materials = Array.isArray(row && row.materials) ? row.materials : [];
+    const rowCollection = String(row && (row.collection || row.collection_key) || "").trim();
     for (const item of materials) {
       const t = sanitizeTradeupSimulationTargetItem(item);
       if (!t) continue;
@@ -10976,15 +11066,18 @@ function extractSimExportCraftMaterials(preset) {
       if (!key || seen.has(key)) continue;
       seen.add(key);
       const col = String(t.collection || "").trim();
-      let role = "main";
+      const mainKey = String(mainMat && mainMat.markethashname || "").trim();
+      const auxKey = String(auxMat && auxMat.markethashname || "").trim();
+      let role = rowIndex > 0 ? "aux" : "main";
+      if (mainCollection && col === mainCollection) role = "main";
       if (auxCollection && col === auxCollection && col !== mainCollection) role = "aux";
-      else if (auxCollection && col === auxCollection && col === mainCollection) {
-        const auxKey = String(auxMat && auxMat.markethashname || "").trim();
-        if (key === auxKey) role = "aux";
-      }
+      if (rowCollection && mainCollection && rowCollection !== mainCollection && !auxCollection) role = "aux";
+      if (mainKey && key === mainKey) role = "main";
+      if (auxKey && key === auxKey) role = "aux";
       out.push({
         markethashname: key,
         basename: String(t.basename || t.basemarkethashname || key).trim(),
+        display_name: String(t.name || t.basename || t.basemarkethashname || key).trim(),
         role,
         artUrl: String(t.goods_icon_url || t.goods_share_thumbnail_url || "").trim(),
         collection: col
@@ -10996,14 +11089,14 @@ function extractSimExportCraftMaterials(preset) {
       const mk = String(mainMat.markethashname || "").trim();
       if (mk && !seen.has(mk)) {
         seen.add(mk);
-        out.push({markethashname: mk, basename: String(mainMat.basename || mainMat.basemarkethashname || mk).trim(), role: "main", artUrl: String(mainMat.goods_icon_url || "").trim(), collection: mainCollection});
+        out.push({markethashname: mk, basename: String(mainMat.basename || mainMat.basemarkethashname || mk).trim(), display_name: String(mainMat.name || mainMat.basename || mk).trim(), role: "main", artUrl: String(mainMat.goods_icon_url || "").trim(), collection: mainCollection});
       }
     }
     if (auxMat) {
       const mk = String(auxMat.markethashname || "").trim();
       if (mk && !seen.has(mk)) {
         seen.add(mk);
-        out.push({markethashname: mk, basename: String(auxMat.basename || auxMat.basemarkethashname || mk).trim(), role: "aux", artUrl: String(auxMat.goods_icon_url || "").trim(), collection: auxCollection});
+        out.push({markethashname: mk, basename: String(auxMat.basename || auxMat.basemarkethashname || mk).trim(), display_name: String(auxMat.name || auxMat.basename || mk).trim(), role: "aux", artUrl: String(auxMat.goods_icon_url || "").trim(), collection: auxCollection});
       }
     }
   }
@@ -11016,7 +11109,7 @@ function renderSimExportCraftMaterialList() {
     return;
   }
   ui.simExportCraftMaterialList.innerHTML = simExportCraftMaterials.map((m, i) => {
-    const label = String(m.basename || m.markethashname || "").trim();
+    const label = String(m.display_name || m.basename || m.markethashname || "").trim();
     const shortLabel = label.length > 36 ? label.slice(0, 34) + "…" : label;
     const role = m.role === "aux" ? "aux" : "main";
     const roleText = role === "aux" ? "辅料" : "主料";
@@ -11051,6 +11144,9 @@ function syncSimExportCraftAuxVisibility() {
   const hasAux = simExportCraftMaterials.some((m) => m.role === "aux");
   if (ui.simExportCraftAuxCountRow) {
     ui.simExportCraftAuxCountRow.classList.toggle("hidden", !hasAux);
+  }
+  if (ui.simExportCraftAuxWearRow) {
+    ui.simExportCraftAuxWearRow.classList.toggle("hidden", !hasAux);
   }
   if (!hasAux && ui.simExportCraftMainCount) {
     ui.simExportCraftMainCount.value = "10";
@@ -11102,6 +11198,8 @@ function openSimExportCraftModal(preset) {
   if (ui.simExportCraftAuxCount) ui.simExportCraftAuxCount.value = hasAux ? "5" : "0";
   if (ui.simExportCraftWearMin) ui.simExportCraftWearMin.value = "0";
   if (ui.simExportCraftWearMax) ui.simExportCraftWearMax.value = "1";
+  if (ui.simExportCraftAuxWearMin) ui.simExportCraftAuxWearMin.value = "0";
+  if (ui.simExportCraftAuxWearMax) ui.simExportCraftAuxWearMax.value = "1";
   syncSimExportCraftAuxVisibility();
   renderSimExportCraftMaterialList();
   if (!ui.simExportCraftModal) return Promise.resolve(null);
@@ -11132,14 +11230,19 @@ function confirmSimExportCraftModal() {
   }
   const mainCount = Math.max(1, Math.min(10, Math.round(Number(ui.simExportCraftMainCount && ui.simExportCraftMainCount.value || 0) || 0)));
   const auxCount = Math.max(0, Math.min(9, Math.round(Number(ui.simExportCraftAuxCount && ui.simExportCraftAuxCount.value || 0) || 0)));
-  const rawWearMin = parseOptionalWear01(ui.simExportCraftWearMin && ui.simExportCraftWearMin.value);
-  const rawWearMax = parseOptionalWear01(ui.simExportCraftWearMax && ui.simExportCraftWearMax.value);
-  const wearMin = rawWearMin != null ? clampWear01(rawWearMin, 0) : 0;
-  const wearMax = rawWearMax != null ? clampWear01(rawWearMax, 1) : 1;
-  const finalWearMin = Math.min(wearMin, wearMax);
-  const finalWearMax = Math.max(wearMin, wearMax);
-  const mainNames = simExportCraftMaterials.filter((m) => m.role !== "aux").map((m) => m.markethashname);
-  const auxNames = simExportCraftMaterials.filter((m) => m.role === "aux").map((m) => m.markethashname);
+  const readRange = (minInput, maxInput) => {
+    const rawMin = parseOptionalWear01(minInput && minInput.value);
+    const rawMax = parseOptionalWear01(maxInput && maxInput.value);
+    const min = rawMin != null ? clampWear01(rawMin, 0) : 0;
+    const max = rawMax != null ? clampWear01(rawMax, 1) : 1;
+    return {min: Math.min(min, max), max: Math.max(min, max)};
+  };
+  const mainRange = readRange(ui.simExportCraftWearMin, ui.simExportCraftWearMax);
+  const auxRange = readRange(ui.simExportCraftAuxWearMin, ui.simExportCraftAuxWearMax);
+  const mainEntries = simExportCraftMaterials.filter((m) => m.role !== "aux");
+  const auxEntries = simExportCraftMaterials.filter((m) => m.role === "aux");
+  const mainNames = mainEntries.map((m) => m.markethashname);
+  const auxNames = auxEntries.map((m) => m.markethashname);
   const materials = [];
   if (mainNames.length) {
     materials.push({
@@ -11150,15 +11253,16 @@ function confirmSimExportCraftModal() {
       disable_direction_limit: false,
       names: mainNames,
       name: mainNames[0],
-      wear_min: finalWearMin,
-      wear_max: finalWearMax,
+      wear_min: mainRange.min,
+      wear_max: mainRange.max,
       custom_range: true,
-      items: mainNames.map((n, idx) => ({
+      items: mainEntries.map((entry, idx) => ({
         id: `preset_material_main_${idx + 1}`,
-        name: n,
+        name: entry.markethashname,
+        display_name: String(entry.display_name || "").trim(),
         wear_filter_mode: "relative",
-        wear_min: finalWearMin,
-        wear_max: finalWearMax,
+        wear_min: mainRange.min,
+        wear_max: mainRange.max,
         custom_range: true
       }))
     });
@@ -11172,15 +11276,16 @@ function confirmSimExportCraftModal() {
       disable_direction_limit: false,
       names: auxNames,
       name: auxNames[0],
-      wear_min: finalWearMin,
-      wear_max: finalWearMax,
+      wear_min: auxRange.min,
+      wear_max: auxRange.max,
       custom_range: true,
-      items: auxNames.map((n, idx) => ({
+      items: auxEntries.map((entry, idx) => ({
         id: `preset_material_aux_${idx + 1}`,
-        name: n,
+        name: entry.markethashname,
+        display_name: String(entry.display_name || "").trim(),
         wear_filter_mode: "relative",
-        wear_min: finalWearMin,
-        wear_max: finalWearMax,
+        wear_min: auxRange.min,
+        wear_max: auxRange.max,
         custom_range: true
       }))
     });
@@ -11249,7 +11354,7 @@ function renderSimExportCraftSearchResults() {
     const t = sanitizeTradeupSimulationTargetItem(item);
     if (!t) return "";
     const key = String(t.markethashname || "").trim();
-    const label = String(t.basename || t.basemarkethashname || key).trim();
+    const label = String(t.name || t.basename || t.basemarkethashname || key).trim();
     const shortLabel = label.length > 40 ? label.slice(0, 38) + "…" : label;
     const exists = existingKeys.has(key);
     return `<button class="sim-export-craft-search-item${exists ? " is-disabled" : ""}" type="button" data-sim-export-search-idx="${i}"${exists ? ' disabled' : ''} title="${escapeHtmlAttribute(label)}">${escapeHtml(shortLabel)}${exists ? " (已添加)" : ""}</button>`;
@@ -11267,6 +11372,7 @@ function renderSimExportCraftSearchResults() {
       simExportCraftMaterials.push({
         markethashname: key,
         basename: String(t.basename || t.basemarkethashname || key).trim(),
+        display_name: String(t.name || t.basename || t.basemarkethashname || key).trim(),
         role: "main",
         artUrl: String(t.goods_icon_url || t.goods_share_thumbnail_url || "").trim(),
         collection: String(t.collection || "").trim()
@@ -14315,28 +14421,376 @@ function closeBatchCraftPresetPopover() {
     _batchCraftPopoverCleanup = null;
   }
 }
+function getBatchCraftPresetMaterialItems(material) {
+  const source = Array.isArray(material && material.items) && material.items.length
+    ? material.items
+    : Array.isArray(material && material.names)
+      ? material.names.map((name) => ({name}))
+      : material && material.name
+        ? [{name: material.name}]
+        : [];
+  return source
+    .map((item) => ({
+      ...item,
+      name: String(item && item.name || "").trim(),
+      display_name: String(item && item.display_name || "").trim()
+    }))
+    .filter((item) => item.name);
+}
+function normalizeBatchCraftPresetRoleCount(value, role, hasItems = true) {
+  const normalizedRole = normalizeCraftAssistRole(role);
+  if (normalizedRole === "aux" && !hasItems) return 0;
+  const numeric = Math.round(Number(value));
+  const fallback = normalizedRole === "aux" ? 0 : 1;
+  const resolved = Number.isFinite(numeric) ? numeric : fallback;
+  const maximum = normalizedRole === "aux" ? 9 : 10;
+  return Math.max(fallback, Math.min(maximum, resolved));
+}
+function getBatchCraftPresetRoleMaterial(preset, role) {
+  const normalizedRole = normalizeCraftAssistRole(role);
+  const materials = Array.isArray(preset && preset.materials) ? preset.materials : [];
+  return materials.find((entry) => normalizeCraftAssistRole(entry && entry.role) === normalizedRole) || null;
+}
+function syncBatchCraftPresetRoleCounts(preset, changedRole = "aux") {
+  const main = getBatchCraftPresetRoleMaterial(preset, "main");
+  const aux = getBatchCraftPresetRoleMaterial(preset, "aux");
+  const mainHasItems = getBatchCraftPresetMaterialItems(main).length > 0;
+  const auxHasItems = getBatchCraftPresetMaterialItems(aux).length > 0;
+  const previousMainCount = main && main.count;
+  const previousAuxCount = aux && aux.count;
+  if (!main || !mainHasItems) {
+    if (aux) aux.count = 0;
+    return {
+      main_count: 0,
+      aux_count: 0,
+      changed: Number(previousAuxCount || 0) !== 0
+    };
+  }
+  let mainCount = normalizeBatchCraftPresetRoleCount(main.count, "main", true);
+  let auxCount = normalizeBatchCraftPresetRoleCount(aux && aux.count, "aux", auxHasItems);
+  if (!auxHasItems) {
+    auxCount = 0;
+    mainCount = 10;
+  } else if (normalizeCraftAssistRole(changedRole) === "main") {
+    auxCount = 10 - mainCount;
+  } else {
+    mainCount = 10 - auxCount;
+  }
+  main.count = mainCount;
+  if (aux) aux.count = auxCount;
+  return {
+    main_count: mainCount,
+    aux_count: auxCount,
+    changed: Number(previousMainCount) !== mainCount || Number(previousAuxCount || 0) !== auxCount
+  };
+}
+function isBatchCraftPresetRoleCountEditable(preset, role) {
+  const normalizedRole = normalizeCraftAssistRole(role);
+  const main = getBatchCraftPresetRoleMaterial(preset, "main");
+  const aux = getBatchCraftPresetRoleMaterial(preset, "aux");
+  const mainHasItems = getBatchCraftPresetMaterialItems(main).length > 0;
+  const auxHasItems = getBatchCraftPresetMaterialItems(aux).length > 0;
+  if (!mainHasItems || !auxHasItems) return false;
+  if (normalizedRole === "aux") return true;
+  return normalizeBatchCraftPresetRoleCount(aux && aux.count, "aux", true) > 0;
+}
+function getBatchCraftPresetSelectedNames(preset) {
+  const materials = Array.isArray(preset && preset.materials) ? preset.materials : [];
+  return new Set(materials.flatMap((entry) => getBatchCraftPresetMaterialItems(entry).flatMap((item) => [
+    String(item && item.name || "").trim(),
+    String(item && item.display_name || "").trim()
+  ])).filter(Boolean));
+}
+function getBatchCraftPresetLockedRarity(preset, groups = buildCraftAssistParentGroups()) {
+  const materials = Array.isArray(preset && preset.materials) ? preset.materials : [];
+  const groupList = Array.isArray(groups) ? groups : [];
+  const groupsByName = new Map();
+  for (const entry of groupList) {
+    const name = String(entry && entry.name || "").trim();
+    if (name) groupsByName.set(name, entry);
+  }
+  return materials
+    .flatMap((entry) => getBatchCraftPresetMaterialItems(entry))
+    .map((item) => {
+      const explicit = String(item && item.rarity || "").trim();
+      if (explicit) return explicit;
+      const group = groupsByName.get(String(item && item.name || "").trim())
+        || groupsByName.get(String(item && item.display_name || "").trim());
+      return String(group && group.rarity || "").trim();
+    })
+    .find(Boolean) || "";
+}
+function getBatchCraftPresetPickerGroups(preset, role, query = "", groups = buildCraftAssistParentGroups()) {
+  const selectedNames = getBatchCraftPresetSelectedNames(preset);
+  const groupList = Array.isArray(groups) ? groups : [];
+  const lockedRarity = getBatchCraftPresetLockedRarity(preset, groupList);
+  const normalizedQuery = String(query || "").trim().toLocaleLowerCase();
+  return groupList.filter((entry) => {
+    const name = String(entry && entry.name || "").trim();
+    if (!name || selectedNames.has(name)) return false;
+    const rarity = String(entry && entry.rarity || "").trim();
+    if (lockedRarity && rarity && rarity !== lockedRarity) return false;
+    if (!normalizedQuery) return true;
+    const haystack = `${name} ${String(entry && entry.collection || "")}`.toLocaleLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+}
+function getBatchCraftPresetCatalogItems(preset, role, query = "", items = [], groups = buildCraftAssistParentGroups()) {
+  const normalizedQuery = String(query || "").trim().toLocaleLowerCase();
+  if (!normalizedQuery) return [];
+  const selectedNames = getBatchCraftPresetSelectedNames(preset);
+  const lockedRarity = getBatchCraftPresetLockedRarity(preset, groups);
+  return (Array.isArray(items) ? items : []).filter((entry) => {
+    const marketName = String(entry && entry.markethashname || "").trim();
+    const displayName = String(entry && entry.name || "").trim();
+    if (!marketName || selectedNames.has(marketName) || selectedNames.has(displayName)) return false;
+    if (entry && entry.is_tradeup_restricted === true) return false;
+    if (String(entry && entry.tradeup_restriction_reason || "").trim()) return false;
+    const rarity = String(entry && entry.rarity || "").trim();
+    if (lockedRarity && rarity !== lockedRarity) return false;
+    const haystack = `${marketName} ${displayName} ${String(entry && entry.collection || "")}`.toLocaleLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+}
+function addBatchCraftPresetMaterialName(preset, role, name, details = {}) {
+  const key = String(name || "").trim();
+  if (!key || !preset || typeof preset !== "object") return false;
+  const normalizedRole = normalizeCraftAssistRole(role);
+  const displayName = String(details && details.display_name || "").trim();
+  const candidateNames = new Set([key, displayName].filter(Boolean));
+  const materials = Array.isArray(preset.materials) ? preset.materials : (preset.materials = []);
+  if (materials.some((entry) => getBatchCraftPresetMaterialItems(entry).some((item) => (
+    candidateNames.has(String(item && item.name || "").trim())
+    || candidateNames.has(String(item && item.display_name || "").trim())
+  )))) return false;
+  let bucket = materials.find((entry) => normalizeCraftAssistRole(entry && entry.role) === normalizedRole) || null;
+  if (!bucket) {
+    bucket = {
+      id: `batch-preset-${normalizedRole}`,
+      role: normalizedRole,
+      count: normalizedRole === "aux" ? 0 : 1,
+      items: []
+    };
+    materials.push(bucket);
+  }
+  const items = getBatchCraftPresetMaterialItems(bucket);
+  const nextItem = {
+    id: `${String(bucket.id || `batch-preset-${normalizedRole}`).trim()}__${items.length + 1}`,
+    name: key,
+    wear_filter_mode: "relative",
+    wear_min: 0,
+    wear_max: 1,
+    custom_range: false
+  };
+  if (displayName) nextItem.display_name = displayName;
+  const rarity = String(details && details.rarity || "").trim();
+  if (rarity) nextItem.rarity = rarity;
+  const collection = String(details && details.collection || "").trim();
+  if (collection) nextItem.collection = collection;
+  items.push(nextItem);
+  bucket.items = items;
+  saveCraftAssistPresetsToStorage();
+  return true;
+}
+function removeBatchCraftPresetMaterialName(preset, role, name) {
+  const key = String(name || "").trim();
+  if (!key || !preset || !Array.isArray(preset.materials)) return false;
+  const normalizedRole = normalizeCraftAssistRole(role);
+  const index = preset.materials.findIndex((entry) => normalizeCraftAssistRole(entry && entry.role) === normalizedRole);
+  if (index < 0) return false;
+  const bucket = preset.materials[index];
+  const items = getBatchCraftPresetMaterialItems(bucket);
+  const nextItems = items.filter((item) => item.name !== key);
+  if (nextItems.length === items.length) return false;
+  if (nextItems.length) bucket.items = nextItems;
+  else preset.materials.splice(index, 1);
+  saveCraftAssistPresetsToStorage();
+  return true;
+}
 function showBatchCraftPresetPopover(preset, anchorEl) {
   closeBatchCraftPresetPopover();
   const materials = Array.isArray(preset && preset.materials) ? preset.materials : [];
+  const initialCountSync = syncBatchCraftPresetRoleCounts(preset, "aux");
+  if (initialCountSync.changed) saveCraftAssistPresetsToStorage();
   const pop = document.createElement("div");
   pop.className = "batch-craft-preset-popover";
+  const positionPopover = () => {
+    if (!pop.isConnected || !anchorEl || !anchorEl.isConnected) return;
+    const rect = anchorEl.getBoundingClientRect();
+    const popW = pop.offsetWidth;
+    const popH = pop.offsetHeight;
+    let left = rect.right + 6;
+    let top = rect.top;
+    if (left + popW > window.innerWidth - 8) left = rect.left - popW - 6;
+    left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+    if (top + popH > window.innerHeight - 8) top = Math.max(8, window.innerHeight - popH - 8);
+    pop.style.position = "fixed";
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+  };
 
   const title = document.createElement("div");
   title.className = "batch-craft-preset-popover-title";
   title.textContent = String(preset && preset.name || "未命名配置");
   pop.append(title);
 
-  let hasItems = false;
-  for (const mat of materials) {
-    const role = normalizeCraftAssistRole(mat && mat.role);
+  const pickerPanel = document.createElement("div");
+  pickerPanel.className = "batch-craft-popover-picker hidden";
+  const pickerHead = document.createElement("div");
+  pickerHead.className = "batch-craft-popover-picker-head";
+  const pickerTitle = document.createElement("span");
+  const pickerClose = document.createElement("button");
+  pickerClose.type = "button";
+  pickerClose.className = "batch-craft-popover-picker-close";
+  pickerClose.title = "关闭搜索";
+  pickerClose.setAttribute("aria-label", "关闭搜索");
+  pickerClose.textContent = "×";
+  pickerHead.append(pickerTitle, pickerClose);
+  const pickerInput = document.createElement("input");
+  pickerInput.type = "search";
+  pickerInput.className = "batch-craft-popover-search-input";
+  pickerInput.placeholder = "搜索全部符合的枪械";
+  const pickerSections = document.createElement("div");
+  pickerSections.className = "batch-craft-popover-picker-sections";
+  const catalogSection = document.createElement("section");
+  catalogSection.className = "batch-craft-popover-picker-section";
+  const catalogLabel = document.createElement("div");
+  catalogLabel.className = "batch-craft-popover-picker-section-title";
+  catalogLabel.textContent = "全部符合物品";
+  const catalogResults = document.createElement("div");
+  catalogResults.className = "batch-craft-popover-picker-results";
+  catalogSection.append(catalogLabel, catalogResults);
+  const warehouseSection = document.createElement("section");
+  warehouseSection.className = "batch-craft-popover-picker-section";
+  const warehouseLabel = document.createElement("div");
+  warehouseLabel.className = "batch-craft-popover-picker-section-title";
+  warehouseLabel.textContent = "仓库快捷选择";
+  const warehouseResults = document.createElement("div");
+  warehouseResults.className = "batch-craft-popover-picker-results";
+  warehouseSection.append(warehouseLabel, warehouseResults);
+  pickerSections.append(catalogSection, warehouseSection);
+  pickerPanel.append(pickerHead, pickerInput, pickerSections);
+  let activePickerRole = "";
+  let pickerCatalogItems = [];
+  let pickerCatalogLoading = false;
+  let pickerCatalogError = "";
+  let pickerSearchSeq = 0;
+  const appendPickerEmpty = (target, text) => {
+    const empty = document.createElement("div");
+    empty.className = "batch-craft-popover-picker-empty";
+    empty.textContent = text;
+    target.append(empty);
+  };
+  const renderPickerResults = () => {
+    const role = normalizeCraftAssistRole(activePickerRole);
     const roleText = role === "main" ? "主料" : "辅料";
-    const names = Array.isArray(mat && mat.items) && mat.items.length
-      ? mat.items.map((it) => String(it && it.name || "").trim()).filter(Boolean)
-      : Array.isArray(mat && mat.names) ? mat.names.map((n) => String(n || "").trim()).filter(Boolean)
-      : mat && mat.name ? [String(mat.name).trim()] : [];
-    const count = mat && mat.count != null ? mat.count : 1;
-    if (!names.length) continue;
-    hasItems = true;
+    pickerTitle.textContent = `添加${roleText}`;
+    catalogResults.replaceChildren();
+    warehouseResults.replaceChildren();
+    const query = String(pickerInput.value || "").trim();
+    if (!query) {
+      appendPickerEmpty(catalogResults, "输入关键词搜索全部符合的物品");
+    } else if (pickerCatalogLoading) {
+      appendPickerEmpty(catalogResults, "搜索中...");
+    } else if (pickerCatalogError) {
+      appendPickerEmpty(catalogResults, pickerCatalogError);
+    } else {
+      const catalogItems = getBatchCraftPresetCatalogItems(
+        preset,
+        role,
+        query,
+        pickerCatalogItems
+      ).slice(0, 50);
+      if (!catalogItems.length) {
+        appendPickerEmpty(catalogResults, "没有匹配的可用物品");
+      }
+      for (const entry of catalogItems) {
+        const marketName = String(entry && entry.markethashname || "").trim();
+        const displayName = String(entry && entry.name || marketName).trim();
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "batch-craft-popover-picker-item";
+        button.textContent = displayName;
+        button.title = [marketName, entry && entry.collection, entry && entry.rarity].map((value) => String(value || "").trim()).filter(Boolean).join(" · ");
+        button.onclick = (event) => {
+          event.stopPropagation();
+          if (!addBatchCraftPresetMaterialName(preset, role, marketName, {
+            display_name: displayName,
+            rarity: entry && entry.rarity,
+            collection: entry && entry.collection
+          })) return;
+          showBatchCraftPresetPopover(preset, anchorEl);
+        };
+        catalogResults.append(button);
+      }
+    }
+    const groups = getBatchCraftPresetPickerGroups(preset, role, pickerInput.value).slice(0, 80);
+    if (!groups.length) {
+      appendPickerEmpty(warehouseResults, "没有匹配的仓库物品");
+    }
+    for (const entry of groups) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "batch-craft-popover-picker-item";
+      button.textContent = `${String(entry.name || "").trim()}（${Math.max(0, Number(entry.count || 0) || 0)}）`;
+      button.title = String(entry.collection || entry.rarity || "").trim();
+      button.onclick = (event) => {
+        event.stopPropagation();
+        if (!addBatchCraftPresetMaterialName(preset, role, entry.name, {
+          display_name: entry.name,
+          rarity: entry.rarity,
+          collection: entry.collection
+        })) return;
+        showBatchCraftPresetPopover(preset, anchorEl);
+      };
+      warehouseResults.append(button);
+    }
+    positionPopover();
+  };
+  const searchPickerCatalog = async () => {
+    const query = String(pickerInput.value || "").trim();
+    pickerSearchSeq += 1;
+    const requestSeq = pickerSearchSeq;
+    pickerCatalogError = "";
+    if (!query) {
+      pickerCatalogItems = [];
+      pickerCatalogLoading = false;
+      renderPickerResults();
+      return;
+    }
+    pickerCatalogLoading = true;
+    renderPickerResults();
+    try {
+      const data = await api(`/api/simulation/tradeup/search-items?q=${encodeURIComponent(query)}`);
+      if (requestSeq !== pickerSearchSeq) return;
+      pickerCatalogItems = Array.isArray(data && data.items) ? data.items : [];
+      pickerCatalogLoading = false;
+      renderPickerResults();
+    } catch (error) {
+      if (requestSeq !== pickerSearchSeq) return;
+      pickerCatalogItems = [];
+      pickerCatalogLoading = false;
+      pickerCatalogError = String(error && error.message || "目录搜索失败，请重试").trim() || "目录搜索失败，请重试";
+      renderPickerResults();
+    }
+  };
+  pickerInput.oninput = () => { void searchPickerCatalog(); };
+  pickerClose.onclick = (event) => {
+    event.stopPropagation();
+    pickerSearchSeq += 1;
+    pickerPanel.classList.add("hidden");
+    activePickerRole = "";
+    positionPopover();
+  };
+
+  let hasItems = false;
+  for (const role of ["main", "aux"]) {
+    const mat = materials.find((entry) => normalizeCraftAssistRole(entry && entry.role) === role) || null;
+    const roleText = role === "main" ? "主料" : "辅料";
+    const materialItems = getBatchCraftPresetMaterialItems(mat);
+    const names = materialItems.map((item) => item.name);
+    const count = normalizeBatchCraftPresetRoleCount(mat && mat.count, role, materialItems.length > 0);
+    if (names.length) hasItems = true;
 
     /* --- role group card --- */
     const group = document.createElement("div");
@@ -14363,21 +14817,27 @@ function showBatchCraftPresetPopover(preset, anchorEl) {
     const qtyInput = document.createElement("input");
     qtyInput.type = "number";
     qtyInput.className = "batch-craft-popover-qty-input";
-    qtyInput.min = "1";
-    qtyInput.max = "10";
+    qtyInput.min = role === "aux" ? "0" : "1";
+    qtyInput.max = role === "aux" ? "9" : "10";
     qtyInput.step = "1";
     qtyInput.value = String(count);
+    const countEditable = isBatchCraftPresetRoleCountEditable(preset, role);
+    qtyInput.disabled = !countEditable;
     const qtyInc = document.createElement("button");
     qtyInc.type = "button";
     qtyInc.className = "batch-craft-popover-qty-step increment";
     qtyInc.textContent = "+";
     qtyInc.title = "增加数量";
+    qtyDec.disabled = !countEditable;
+    qtyInc.disabled = !countEditable;
 
     const commitQty = (val) => {
-      const n = Math.max(1, Math.min(10, Math.round(Number(val) || 1)));
-      qtyInput.value = String(n);
+      if (!mat || !isBatchCraftPresetRoleCountEditable(preset, role)) return;
+      const n = normalizeBatchCraftPresetRoleCount(val, role, materialItems.length > 0);
       mat.count = n;
+      syncBatchCraftPresetRoleCounts(preset, role);
       saveCraftAssistPresetsToStorage();
+      showBatchCraftPresetPopover(preset, anchorEl);
     };
     qtyDec.onclick = (e) => { e.stopPropagation(); commitQty(Number(qtyInput.value) - 1); };
     qtyInc.onclick = (e) => { e.stopPropagation(); commitQty(Number(qtyInput.value) + 1); };
@@ -14385,17 +14845,56 @@ function showBatchCraftPresetPopover(preset, anchorEl) {
     qtyInput.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); commitQty(qtyInput.value); qtyInput.blur(); } };
 
     qtyShell.append(qtyLabel, qtyDec, qtyInput, qtyInc);
-    head.append(qtyShell);
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "batch-craft-popover-add";
+    addButton.textContent = "+";
+    addButton.title = `搜索并添加${roleText}`;
+    addButton.setAttribute("aria-label", `搜索并添加${roleText}`);
+    addButton.onclick = (event) => {
+      event.stopPropagation();
+      activePickerRole = role;
+      pickerInput.value = "";
+      pickerPanel.classList.remove("hidden");
+      renderPickerResults();
+      positionPopover();
+      requestAnimationFrame(() => pickerInput.focus());
+    };
+    const headActions = document.createElement("div");
+    headActions.className = "batch-craft-popover-head-actions";
+    headActions.append(qtyShell, addButton);
+    head.append(headActions);
     group.append(head);
 
     /* item cards */
     const cardList = document.createElement("div");
     cardList.className = "batch-craft-popover-card-list";
-    for (const n of names) {
+    if (!materialItems.length) {
+      const empty = document.createElement("div");
+      empty.className = "batch-craft-popover-group-empty";
+      empty.textContent = `点击 + 添加${roleText}`;
+      cardList.append(empty);
+    }
+    for (const materialItem of materialItems) {
+      const name = String(materialItem.name || "").trim();
+      const displayName = String(materialItem.display_name || name).trim();
       const card = document.createElement("div");
       card.className = "batch-craft-popover-card";
-      card.textContent = n;
-      card.title = n;
+      const cardName = document.createElement("span");
+      cardName.textContent = displayName;
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "batch-craft-popover-card-remove";
+      removeButton.textContent = "×";
+      removeButton.title = `移除${displayName}`;
+      removeButton.setAttribute("aria-label", `移除${displayName}`);
+      removeButton.onclick = (event) => {
+        event.stopPropagation();
+        if (!removeBatchCraftPresetMaterialName(preset, role, name)) return;
+        showBatchCraftPresetPopover(preset, anchorEl);
+      };
+      card.append(cardName, removeButton);
+      card.title = displayName;
       cardList.append(card);
     }
     group.append(cardList);
@@ -14404,24 +14903,15 @@ function showBatchCraftPresetPopover(preset, anchorEl) {
   if (!hasItems) {
     const empty = document.createElement("div");
     empty.className = "batch-craft-preset-popover-empty";
-    empty.textContent = "无物品数据";
+    empty.textContent = "使用每组右侧的 + 从仓库添加物品";
     pop.append(empty);
   }
+  pop.append(pickerPanel);
 
   document.body.append(pop);
   _batchCraftPopover = pop;
 
-  /* 定位：锚点右侧 */
-  const rect = anchorEl.getBoundingClientRect();
-  let left = rect.right + 6;
-  let top = rect.top;
-  const popW = pop.offsetWidth;
-  const popH = pop.offsetHeight;
-  if (left + popW > window.innerWidth - 8) left = rect.left - popW - 6;
-  if (top + popH > window.innerHeight - 8) top = Math.max(8, window.innerHeight - popH - 8);
-  pop.style.position = "fixed";
-  pop.style.left = left + "px";
-  pop.style.top = top + "px";
+  positionPopover();
 
   /* 点击外部关闭 */
   const onClickOutside = (e) => {
@@ -16901,6 +17391,11 @@ async function webInvFetchInventory() {
   if (!username) return;
   if (ui.webInvFetchBtn) { ui.webInvFetchBtn.disabled = true; ui.webInvFetchBtn.textContent = "拉取中..."; }
   try {
+    const connectivity = await api("/api/network/steam-precheck");
+    if (!connectivity || connectivity.reachable !== true) {
+      alert("无法连接外网，请使用加速器");
+      return;
+    }
     const data = await api(`/api/accounts/${encodeURIComponent(username)}/inventory`);
     if (data.ok && data.items) {
       webInvState.inventoryCache.set(username, {

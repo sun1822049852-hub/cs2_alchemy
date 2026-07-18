@@ -4655,9 +4655,10 @@ select.small {
   border-radius: 0;
   background: transparent;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-content: start;
+  align-items: start;
   gap: 8px;
   flex: 1 1 auto;
   min-height: 0;
@@ -4685,8 +4686,8 @@ select.small {
   gap: 8px;
   flex: 0 0 auto;
   width: 100%;
-  max-width: 172px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   position: relative;
   overflow: hidden;
   cursor: grab;
@@ -5553,7 +5554,7 @@ select.small {
 }
 
 .craft-queue-item.done.deletable {
-  padding-right: 40px;
+  padding-right: 8px;
 }
 
 .craft-queue-item.done > button:not(.craft-queue-card-delete) {
@@ -5606,10 +5607,29 @@ select.small {
 
 .craft-queue-result-card-grid .simulation-output-card {
   width: 100%;
+  height: 140px;
+  position: relative;
+  overflow: hidden;
 }
 
 .craft-queue-result-card-grid .simulation-card-art {
-  height: 100px;
+  position: absolute;
+  inset: 0;
+  height: auto;
+}
+
+.craft-queue-result-card-grid .simulation-card-content {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 22px 10px 10px;
+  background: linear-gradient(180deg, transparent 0%, rgba(6, 10, 16, 0.88) 72%);
+}
+
+.craft-queue-item.done .craft-queue-card-delete-floating {
+  z-index: 6;
 }
 
 .craft-queue-group {
@@ -8827,6 +8847,38 @@ body.theme-inkblue .batch-craft-popover-card {
   border-color: var(--ops-border-soft);
   color: var(--ops-text-main);
 }
+body.theme-inkblue :is(.batch-craft-popover-add, .batch-craft-popover-picker-close) {
+  background: var(--ops-control-bg);
+  border-color: var(--ops-border-soft);
+  color: var(--ops-accent);
+}
+body.theme-inkblue .batch-craft-popover-card-remove {
+  color: #e7a3a3;
+}
+body.theme-inkblue .batch-craft-popover-picker {
+  border-color: var(--ops-border-soft);
+}
+body.theme-inkblue .batch-craft-popover-search-input {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+}
+body.theme-inkblue .batch-craft-popover-picker-section-title {
+  background: var(--ops-surface-strong);
+  color: var(--ops-text-dim);
+}
+body.theme-inkblue .batch-craft-popover-picker-item {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--ops-border-soft);
+  color: var(--ops-text-main);
+}
+body.theme-inkblue .batch-craft-popover-picker-item:hover {
+  border-color: var(--ops-accent);
+  background: rgba(243, 199, 121, 0.08);
+}
+body.theme-inkblue :is(.batch-craft-popover-group-empty, .batch-craft-popover-picker-empty) {
+  color: var(--ops-text-dim);
+}
 body.theme-inkblue .batch-craft-split-bar::after {
   background: rgba(243, 199, 121, 0.18);
 }
@@ -9378,9 +9430,10 @@ body.theme-inkblue #batchCraftPage :is(.batch-craft-preset-list, .batch-craft-qu
 .batch-craft-preset-popover {
   position: absolute;
   z-index: 120;
-  min-width: 220px;
-  max-width: 360px;
-  max-height: 380px;
+  min-width: 340px;
+  width: min(520px, calc(100vw - 24px));
+  max-width: 520px;
+  max-height: min(620px, calc(100vh - 24px));
   overflow-y: auto;
   background: #fff;
   border: 1px solid #d6dfeb;
@@ -9472,6 +9525,34 @@ body.theme-inkblue #batchCraftPage :is(.batch-craft-preset-list, .batch-craft-qu
   background: #fff;
   color: #1f2937;
 }
+.batch-craft-popover-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.batch-craft-popover-add,
+.batch-craft-popover-picker-close,
+.batch-craft-popover-card-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #c8d6e7;
+  border-radius: 50%;
+  background: #fff;
+  color: #315b8d;
+  cursor: pointer;
+  line-height: 1;
+}
+.batch-craft-popover-add:hover,
+.batch-craft-popover-picker-close:hover,
+.batch-craft-popover-card-remove:hover {
+  border-color: #7ea6d8;
+  background: #edf4fc;
+}
 #batchCraftPage .batch-craft-popover-qty-input {
   width: 36px;
   min-width: 36px;
@@ -9495,10 +9576,96 @@ body.theme-inkblue #batchCraftPage :is(.batch-craft-preset-list, .batch-craft-qu
   background: #fff;
   padding: 3px 8px;
   font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
+}
+.batch-craft-popover-card > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.batch-craft-popover-card-remove {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: transparent;
+  color: #9b4a4a;
+  font-size: 12px;
+}
+.batch-craft-popover-group-empty,
+.batch-craft-popover-picker-empty {
+  padding: 6px 4px;
+  color: #8290a3;
+  font-size: 11px;
+}
+.batch-craft-popover-picker {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #d6dfeb;
+}
+.batch-craft-popover-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.batch-craft-popover-search-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid #c8d6e7;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2937;
+}
+.batch-craft-popover-picker-sections {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  margin-top: 6px;
+  overflow: auto;
+}
+.batch-craft-popover-picker-section {
+  min-width: 0;
+}
+.batch-craft-popover-picker-section-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 3px 4px;
+  background: #f4f7fb;
+  color: #52657c;
+  font-size: 10px;
+  font-weight: 600;
+}
+.batch-craft-popover-picker-results {
+  display: grid;
+  gap: 3px;
+  margin-top: 3px;
+}
+.batch-craft-popover-picker-item {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d6e2f0;
+  border-radius: 5px;
+  background: #f8fbff;
+  color: #26384d;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.batch-craft-popover-picker-item:hover {
+  border-color: #8cadd2;
+  background: #edf4fc;
 }
 .batch-craft-preset-popover-item {
   padding: 4px 12px;
@@ -10670,6 +10837,30 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
 .simulation-saved-export-btn:hover {
   border-color: rgba(255, 255, 255, 0.32);
   background: linear-gradient(180deg, rgba(40, 43, 50, 0.98) 0%, rgba(12, 14, 18, 1) 100%);
+  color: var(--ops-accent-strong, #f3c779);
+}
+.simulation-saved-rename-btn {
+  position: absolute;
+  top: 10px;
+  right: 78px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(28, 30, 36, 0.96) 0%, rgba(8, 9, 12, 0.98) 100%);
+  color: #d8e2f1;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+.simulation-saved-rename-btn:hover {
+  border-color: rgba(255, 255, 255, 0.32);
   color: var(--ops-accent-strong, #f3c779);
 }
 

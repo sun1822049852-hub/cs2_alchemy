@@ -384,7 +384,7 @@ function seedAuthStore({dbPath, accountsFilePath}) {
   }
 }
 
-async function withScopedServer({username, permissions}, run) {
+async function withScopedServer({username, permissions, serverOptions = {}}, run) {
   const tempDir = makeTempDir();
   const originalPaths = {...PATHS};
   const dbPath = path.join(tempDir, "csgo_skins.db");
@@ -437,7 +437,8 @@ async function withScopedServer({username, permissions}, run) {
     const createServer = loadCreateServer({calls});
     const server = createServer({
       licenseRuntimeFactory: () => createLicenseRuntime({username, permissions}),
-      licenseConfigFactory: () => ({authMode: "debug_bundle"})
+      licenseConfigFactory: () => ({authMode: "debug_bundle"}),
+      ...serverOptions
     });
     try {
       const address = await listen(server);
@@ -854,6 +855,56 @@ async function test_account_tool_routes_skip_unbound_accounts_before_steam_calls
   });
 }
 
+async function test_ban_check_accepts_legacy_steam_id_field_as_steamid64() {
+  const accountStore = {
+    get(username) {
+      return username === "legacy-id-account"
+        ? {username, steam_id: "76561198759710801", steam_id64: ""}
+        : null;
+    }
+  };
+  await withScopedServer({
+    username: "member_a",
+    permissions: accountReadPermissions(),
+    serverOptions: {
+      accountStoreFactory: () => accountStore
+    }
+  }, async ({port, calls}) => {
+    const response = await requestJson({
+      port,
+      method: "POST",
+      route: "/api/accounts/check-bans",
+      body: {usernames: ["legacy-id-account"]}
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(calls.checkBansBatch[0].steamIds, ["76561198759710801"]);
+    assert.equal(response.body.results[0].username, "legacy-id-account");
+  });
+}
+
+async function test_steam_network_precheck_returns_sanitized_contract() {
+  await withScopedServer({
+    username: "member_a",
+    permissions: accountReadPermissions(),
+    serverOptions: {
+      steamNetworkPrecheck: async () => ({ok: false, detail: "private upstream diagnostic"})
+    }
+  }, async ({port}) => {
+    const response = await requestJson({
+      port,
+      route: "/api/network/steam-precheck"
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, {
+      ok: true,
+      reachable: false,
+      reason: "steam_unreachable"
+    });
+  });
+}
+
 async function test_super_admin_can_access_unbound_steam_accounts() {
   await withScopedServer({
     username: "admin",
@@ -927,6 +978,8 @@ async function main() {
   await test_fetch_balance_failure_does_not_fall_back_to_steam_cm_balance();
   await test_fetch_balance_reports_unpersisted_source_metadata_when_local_persist_fails();
   await test_account_tool_routes_skip_unbound_accounts_before_steam_calls();
+  await test_ban_check_accepts_legacy_steam_id_field_as_steamid64();
+  await test_steam_network_precheck_returns_sanitized_contract();
   await test_super_admin_can_access_unbound_steam_accounts();
   await test_unknown_dev_user_keeps_legacy_single_user_scope();
   console.log("account-scope-route tests passed");

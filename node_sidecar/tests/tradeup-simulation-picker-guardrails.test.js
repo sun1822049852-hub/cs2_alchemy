@@ -137,7 +137,7 @@ function createSearchResultsStub() {
   };
 }
 
-function test_render_tradeup_simulation_picker_results_marks_mismatched_rarity_candidates_disabled_with_footer_warning() {
+function test_render_tradeup_simulation_picker_results_hides_mismatched_rarity_candidates() {
   const lockedItem = createSimulationItem({
     markethashname: "Five-SeveN | 混沌点阵 (Field-Tested)",
     basemarkethashname: "Five-SeveN | 混沌点阵",
@@ -181,29 +181,11 @@ function test_render_tradeup_simulation_picker_results_marks_mismatched_rarity_c
 
   app.renderTradeupSimulationPickerResults();
 
-  assert.equal(
-    app.ui.simulationPickerSearchResults.innerHTML.includes("simulation-picker-item is-disabled"),
-    true,
-    "mismatched-rarity picker candidates should render disabled before the user clicks them"
-  );
-  assert.equal(
-    app.ui.simulationPickerSearchResults.innerHTML.includes('disabled aria-disabled="true"'),
-    true,
-    "mismatched-rarity picker candidates should carry the native disabled attribute"
-  );
-  assert.equal(
-    app.ui.simulationPickerSearchResults.innerHTML.includes("单配方需同一稀有度：当前为 军规级，不能添加 工业级"),
-    true,
-    "mismatched-rarity picker candidates should surface the full rarity-lock warning inline"
-  );
-  assert.equal(
-    app.ui.simulationPickerSearchResults.innerHTML.includes("simulation-picker-item-warning"),
-    true,
-    "blocked picker candidates should pull the warning into the card footer instead of squeezing it inside the artwork mask"
-  );
+  assert.equal(app.ui.simulationPickerSearchResults.innerHTML.includes("P90 | 潜管作品"), false);
+  assert.match(app.ui.simulationPickerSearchResults.innerHTML, /没有可添加的匹配物品/);
 }
 
-function test_render_tradeup_simulation_picker_results_marks_limited_collection_candidates_disabled_with_footer_warning() {
+function test_render_tradeup_simulation_picker_results_hides_limited_collection_candidates() {
   const app = loadSimulationFns({
     simulationPickerMode: "main_material",
     simulationPickerQuery: "热处理",
@@ -223,26 +205,13 @@ function test_render_tradeup_simulation_picker_results_marks_limited_collection_
 
   app.renderTradeupSimulationPickerResults();
 
-  assert.equal(
-    app.ui.simulationPickerSearchResults.innerHTML.includes("simulation-picker-item is-disabled"),
-    true,
-    "limited-edition collection candidates should stay disabled in the picker"
-  );
-  assert.equal(
-    app.ui.simulationPickerSearchResults.innerHTML.includes("限量版物品不能加入炼金"),
-    true,
-    "limited-edition collection candidates should show the alchemy restriction warning inline"
-  );
-  assert.equal(
-    app.ui.simulationPickerSearchResults.innerHTML.includes("simulation-picker-item-warning"),
-    true,
-    "limited-edition collection candidates should also render the warning in the footer area"
-  );
+  assert.equal(app.ui.simulationPickerSearchResults.innerHTML.includes("Desert Eagle | Heat Treated"), false);
+  assert.match(app.ui.simulationPickerSearchResults.innerHTML, /没有可添加的匹配物品/);
 }
 
 function main() {
-  test_render_tradeup_simulation_picker_results_marks_mismatched_rarity_candidates_disabled_with_footer_warning();
-  test_render_tradeup_simulation_picker_results_marks_limited_collection_candidates_disabled_with_footer_warning();
+  test_render_tradeup_simulation_picker_results_hides_mismatched_rarity_candidates();
+  test_render_tradeup_simulation_picker_results_hides_limited_collection_candidates();
   console.log("tradeup-simulation-picker-guardrails tests passed");
 }
 

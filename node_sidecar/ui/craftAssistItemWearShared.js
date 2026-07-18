@@ -74,6 +74,16 @@
     return Math.max(1, Math.min(REQUIRED_COUNT, numeric));
   }
 
+  function normalizeCraftAssistRoleCount(value, role, fallback) {
+    if (normalizeCraftAssistRole(role) !== "aux") {
+      return normalizeCraftAssistEntryCount(value, fallback);
+    }
+    const numeric = Math.trunc(Number(value));
+    const fallbackValue = Math.max(0, Math.min(REQUIRED_COUNT, Math.trunc(Number(fallback) || 0)));
+    if (!Number.isFinite(numeric)) return fallbackValue;
+    return Math.max(0, Math.min(REQUIRED_COUNT, numeric));
+  }
+
   function normalizePersistedId(value) {
     return asString(value).trim();
   }
@@ -119,7 +129,8 @@
     let min = null;
     let max = null;
     for (const row of Array.isArray(rows) ? rows : []) {
-      if (itemDisplayName(row) !== key) continue;
+      const rowNames = [itemDisplayName(row), asString(row && row.name).trim()];
+      if (!rowNames.includes(key)) continue;
       const rowMin = Number(row && row.minfloat);
       const rowMax = Number(row && row.maxfloat);
       if (!Number.isFinite(rowMin) || !Number.isFinite(rowMax) || rowMax <= rowMin) continue;
@@ -312,17 +323,25 @@
       for (const item of Array.isArray(material && material.items) ? material.items : []) {
         const name = asString(item && item.name).trim();
         if (!name) continue;
-        items.push({
+        const persistedItem = {
           id: normalizePersistedId(item && item.id),
           name,
           wear_filter_mode: normalizeCraftAssistFilterMode(item && item.wear_filter_mode),
           wear_min: truncateNumber(clampWear01(item && item.wear_min, 0), WEAR_INPUT_DECIMALS),
           wear_max: truncateNumber(clampWear01(item && item.wear_max, 1), WEAR_INPUT_DECIMALS),
           custom_range: !!(item && item.custom_range)
-        });
+        };
+        const displayName = asString(item && item.display_name).trim();
+        if (displayName) persistedItem.display_name = displayName;
+        const rarity = asString(item && item.rarity).trim();
+        if (rarity) persistedItem.rarity = rarity;
+        const collection = asString(item && item.collection).trim();
+        if (collection) persistedItem.collection = collection;
+        items.push(persistedItem);
       }
       if (!items.length) continue;
-      const entry = {id: normalizePersistedId(material && material.id), role: normalizeCraftAssistRole(material && material.role), count: normalizeCraftAssistEntryCount(material && material.count, 1), items};
+      const role = normalizeCraftAssistRole(material && material.role);
+      const entry = {id: normalizePersistedId(material && material.id), role, count: normalizeCraftAssistRoleCount(material && material.count, role, role === "aux" ? 0 : 1), items};
       if (hasOwn(material, "direction")) entry.direction = normalizeCraftAssistDirection(entry.role, material && material.direction);
       if (material && material.disable_direction_limit === true) entry.disable_direction_limit = true;
       out.push(entry);
@@ -363,6 +382,9 @@
         ? entry.items.map((item) => ({
           id: normalizePersistedId(item && item.id),
           name: item && item.name,
+          display_name: item && item.display_name,
+          rarity: item && item.rarity,
+          collection: item && item.collection,
           wear_filter_mode: normalizeCraftAssistFilterMode(item && item.wear_filter_mode),
           wear_min: item && item.wear_min,
           wear_max: item && item.wear_max,
@@ -394,21 +416,32 @@
           customRange: !!(rawItem && rawItem.custom_range),
           source
         });
-        items.push({
+        const normalizedItem = {
           id: normalizePersistedId(rawItem && rawItem.id) || mintCraftAssistItemId({materialId, materialIndex, itemIndex: items.length, name}),
           name,
           wear_filter_mode: normalizeCraftAssistFilterMode(rawItem && rawItem.wear_filter_mode),
           wear_min: resolved.wear_min,
           wear_max: resolved.wear_max,
           custom_range: resolved.resolvedCustomRange
-        });
+        };
+        const displayName = asString(rawItem && rawItem.display_name).trim();
+        if (displayName) normalizedItem.display_name = displayName;
+        const rarity = asString(rawItem && rawItem.rarity).trim();
+        if (rarity) normalizedItem.rarity = rarity;
+        const collection = asString(rawItem && rawItem.collection).trim();
+        if (collection) normalizedItem.collection = collection;
+        items.push(normalizedItem);
       }
       if (!items.length) continue;
       const projection = buildTraceProjectionFromNames(items.map((item) => item.name), "");
       const material = {
         id: materialId,
         role,
-        count: normalizeCraftAssistEntryCount(entry && (entry.count_limit != null ? entry.count_limit : entry && entry.count), 1),
+        count: normalizeCraftAssistRoleCount(
+          entry && (entry.count_limit != null ? entry.count_limit : entry && entry.count),
+          role,
+          role === "aux" ? 0 : 1
+        ),
         items,
         item_names: projection.item_names,
         primary_name: projection.primary_name,

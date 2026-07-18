@@ -24,7 +24,15 @@ function testPresetCardsDoNotShrinkVertically() {
   );
 }
 
-function testPresetCardsShrinkToContentWidth() {
+function testPresetCardsStretchAndWrapResponsively() {
+  const listBlock = extractCssBlock(".craft-assist-preset-list");
+  assert.equal(/display:\s*grid;/.test(listBlock), true, "preset list should use grid layout");
+  assert.equal(
+    /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(160px,\s*1fr\)\);/.test(listBlock),
+    true,
+    "preset list should stretch cards and add columns when the rail becomes wide enough"
+  );
+
   const block = extractCssBlock(".craft-assist-preset-item");
   assert.equal(
     /width:\s*100%;/.test(block),
@@ -32,14 +40,14 @@ function testPresetCardsShrinkToContentWidth() {
     "preset cards should fill the available card track so the new footer can align its action row consistently"
   );
   assert.equal(
-    /max-width:\s*172px;/.test(block),
+    /max-width:\s*none;/.test(block),
     true,
-    "preset cards should still cap themselves to a stable compact width inside the preset rail"
+    "preset cards should not keep the old compact width cap"
   );
   assert.equal(
-    /margin:\s*0 auto;/.test(block),
+    /margin:\s*0;/.test(block),
     true,
-    "preset cards should stay centered inside the preset rail"
+    "preset cards should fill their responsive grid track"
   );
 }
 
@@ -61,7 +69,7 @@ function testPresetFooterCentersAgainstCardShell() {
 
 function main() {
   testPresetCardsDoNotShrinkVertically();
-  testPresetCardsShrinkToContentWidth();
+  testPresetCardsStretchAndWrapResponsively();
   testPresetFooterCentersAgainstCardShell();
   console.log("craft-assist-preset-layout tests passed");
 }

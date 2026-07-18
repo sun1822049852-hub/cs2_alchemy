@@ -773,7 +773,7 @@ async function test_switching_simulation_mode_tabs_preserves_unsaved_workspace_d
   });
 }
 
-async function test_limited_collection_picker_items_stay_disabled_and_ignore_clicks() {
+async function test_limited_collection_picker_items_are_hidden_when_valid_matches_remain() {
   await withBrowserPage(async ({cdp}) => {
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 1280,
@@ -789,39 +789,28 @@ async function test_limited_collection_picker_items_stay_disabled_and_ignore_cli
     await cdp.evaluate(`document.getElementById("simulationMaterialRoleChooser").click();`);
     await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
     await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "Heat Treated"; document.getElementById("simulationPickerSearchBtn").click();`);
-    await waitForCondition(cdp, `(() => Array.from(document.querySelectorAll(".simulation-picker-item")).some((item) => item.classList.contains("is-disabled") && String(item.querySelector(".simulation-picker-art-warning")?.textContent || "").includes("限量版物品不能加入炼金")))()`);
-    await sleep(300);
-
-    const beforeClick = await cdp.evaluate(`(() => {
-      const blocked = Array.from(document.querySelectorAll('.simulation-picker-item')).find((item) => item.classList.contains('is-disabled') && String(item.querySelector('.simulation-picker-art-warning')?.textContent || '').includes('限量版物品不能加入炼金'));
-      return {
-        found: !!blocked,
-        disabled: !!(blocked && blocked.disabled),
-        ariaDisabled: blocked ? String(blocked.getAttribute('aria-disabled') || '').trim() : '',
-        warningText: blocked ? String((blocked.querySelector('.simulation-picker-art-warning') || {}).textContent || '').trim() : '',
-        materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
-      };
-    })()`);
-
-    assert.ok(beforeClick && beforeClick.found, "expected a disabled limited-edition picker card");
-    assert.equal(beforeClick.disabled, true, "limited-edition picker cards should carry the native disabled attribute");
-    assert.equal(beforeClick.ariaDisabled, "true", "limited-edition picker cards should also expose aria-disabled for accessibility");
-    assert.equal(beforeClick.warningText.includes("限量版物品不能加入炼金"), true, "limited-edition picker cards should show the inline restriction warning");
-    assert.equal(beforeClick.materialCardCount, 0, "before clicking the blocked card there should be no selected material cards");
-
-    await cdp.evaluate(`(() => {
-      const blocked = Array.from(document.querySelectorAll('.simulation-picker-item')).find((item) => item.classList.contains('is-disabled') && String(item.querySelector('.simulation-picker-art-warning')?.textContent || '').includes('限量版物品不能加入炼金'));
-      if (blocked) blocked.click();
+    await waitForCondition(cdp, `(() => {
+      const results = document.getElementById("simulationPickerSearchResults");
+      const text = String(results && results.textContent || "").trim();
+      return !!results
+        && document.querySelectorAll('#simulationPickerSearchResults .simulation-picker-item').length > 0
+        && text.includes("狩猎运动收藏品")
+        && !text.includes("限量版物品");
     })()`);
     await sleep(300);
 
-    const afterClick = await cdp.evaluate(`(() => ({
+    const state = await cdp.evaluate(`(() => ({
+      resultCount: document.querySelectorAll('#simulationPickerSearchResults .simulation-picker-item').length,
+      resultText: String(document.getElementById('simulationPickerSearchResults').textContent || '').trim(),
       modalHidden: document.getElementById('simulationPickerModal').classList.contains('hidden'),
       materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
     }))()`);
 
-    assert.equal(afterClick.modalHidden, false, "clicking a disabled limited-edition picker card should not close the picker");
-    assert.equal(afterClick.materialCardCount, 0, "clicking a disabled limited-edition picker card should not add anything to the material lane");
+    assert.equal(state.resultCount > 0, true, "valid matches should remain selectable after restricted items are filtered");
+    assert.equal(state.resultText.includes("狩猎运动收藏品"), true, "the valid Heat Treated match should remain visible");
+    assert.equal(state.resultText.includes("限量版物品"), false, "limited-edition matches should be removed from the DOM");
+    assert.equal(state.modalHidden, false, "filtered search results should keep the picker open");
+    assert.equal(state.materialCardCount, 0, "filtered limited-edition items must not reach the material lane");
   });
 }
 
@@ -1074,7 +1063,7 @@ async function test_material_chooser_can_switch_to_a_different_collection() {
   });
 }
 
-async function test_material_picker_disables_mixed_rarity_candidates_without_closing_modal() {
+async function test_material_picker_hides_mixed_rarity_candidates_without_closing_modal() {
   await withBrowserPage(async ({cdp}) => {
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 1280,
@@ -1098,10 +1087,12 @@ async function test_material_picker_disables_mixed_rarity_candidates_without_clo
       if (!first) return null;
       const badge = first.querySelector('.simulation-picker-rarity-badge');
       return {
-        rarity: String(badge && badge.textContent || '').trim()
+        rarity: String(badge && badge.textContent || '').trim(),
+        allRarities: Array.from(new Set(Array.from(document.querySelectorAll('.simulation-picker-rarity-badge')).map((node) => String(node.textContent || '').trim()).filter(Boolean)))
       };
     })()`);
     assert.ok(lockedPick && lockedPick.rarity, "expected first picker result to expose a rarity badge");
+    assert.equal(lockedPick.allRarities.some((rarity) => rarity !== lockedPick.rarity), true, "the initial result set should include another rarity so filtering is observable");
 
     await cdp.evaluate(`document.querySelector(".simulation-picker-item").click();`);
     await waitForCondition(cdp, `document.getElementById("simulationPickerModal").classList.contains("hidden")`);
@@ -1113,71 +1104,20 @@ async function test_material_picker_disables_mixed_rarity_candidates_without_clo
     await waitForCondition(cdp, `document.querySelectorAll(".simulation-picker-item").length > 0`);
     await sleep(300);
 
-    const mismatchState = await cdp.evaluate(`(() => {
-      const lockedRarity = ${JSON.stringify(lockedPick.rarity)};
-      const items = Array.from(document.querySelectorAll('.simulation-picker-item'));
-      const mismatchIndex = items.findIndex((item) => {
-        const badge = item.querySelector('.simulation-picker-rarity-badge');
-        const rarity = String(badge && badge.textContent || '').trim();
-        return rarity && rarity !== lockedRarity;
-      });
-      const mismatchItem = mismatchIndex >= 0 ? items[mismatchIndex] : null;
-      const mismatchBadge = mismatchItem ? mismatchItem.querySelector('.simulation-picker-rarity-badge') : null;
+    const filteredState = await cdp.evaluate(`(() => {
       return {
-        mismatchIndex,
-        mismatchRarity: String(mismatchBadge && mismatchBadge.textContent || '').trim()
-      };
-    })()`);
-    assert.ok(
-      mismatchState && mismatchState.mismatchIndex >= 0 && mismatchState.mismatchRarity,
-      "expected the collection search results to contain at least one item with a different rarity so the lock can be validated"
-    );
-
-    const blockedBeforeClick = await cdp.evaluate(`(() => {
-      const items = Array.from(document.querySelectorAll('.simulation-picker-item'));
-      const target = items[${Number(mismatchState.mismatchIndex) || 0}];
-      const footer = target ? target.querySelector('.simulation-picker-item-warning') : null;
-      const warning = footer ? footer.querySelector('.simulation-picker-art-warning') : null;
-      return {
-        found: !!target,
-        disabled: !!(target && target.disabled),
-        ariaDisabled: target ? String(target.getAttribute('aria-disabled') || '').trim() : '',
-        hasFooterWarning: !!footer,
-        warningText: warning ? String(warning.textContent || '').trim() : '',
-        materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
-      };
-    })()`);
-
-    assert.ok(blockedBeforeClick && blockedBeforeClick.found, "expected a mismatched-rarity picker card to remain visible in the result list");
-    assert.equal(blockedBeforeClick.disabled, true, "mismatched-rarity picker cards should be disabled before the user clicks them");
-    assert.equal(blockedBeforeClick.ariaDisabled, "true", "mismatched-rarity picker cards should expose aria-disabled for accessibility");
-    assert.equal(blockedBeforeClick.hasFooterWarning, true, "mismatched-rarity picker cards should render the warning in the footer area");
-    assert.equal(blockedBeforeClick.warningText.includes("单配方需同一稀有度"), true, "mismatched-rarity picker cards should explain the same-rarity restriction");
-    assert.equal(blockedBeforeClick.warningText.includes(lockedPick.rarity), true, "the footer warning should mention the currently locked rarity");
-    assert.equal(blockedBeforeClick.warningText.includes(mismatchState.mismatchRarity), true, "the footer warning should mention the rejected rarity");
-
-    await cdp.evaluate(`(() => {
-      const items = Array.from(document.querySelectorAll('.simulation-picker-item'));
-      const target = items[${Number(mismatchState.mismatchIndex) || 0}];
-      if (target) target.click();
-    })()`);
-    await sleep(400);
-
-    const blockedAfterClick = await cdp.evaluate(`(() => {
-      const modal = document.getElementById('simulationPickerModal');
-      const toast = document.querySelector('.error-toast.show .error-toast-text') || document.querySelector('.error-toast .error-toast-text');
-      return {
-        modalHidden: !!(modal && modal.classList.contains('hidden')),
+        visibleRarities: Array.from(new Set(Array.from(document.querySelectorAll('.simulation-picker-rarity-badge')).map((node) => String(node.textContent || '').trim()).filter(Boolean))),
+        modalHidden: document.getElementById('simulationPickerModal').classList.contains('hidden'),
         modalTitle: String((document.getElementById('simulationPickerTitle') || {}).textContent || '').trim(),
-        toastText: toast ? String(toast.textContent || '').trim() : '',
         materialCardCount: document.querySelectorAll('#simulationMaterialLane [data-simulation-card-role="material"]').length
       };
     })()`);
 
-    assert.equal(blockedAfterClick.modalHidden, false, "clicking a disabled mismatched-rarity picker card should not close the picker");
-    assert.equal(blockedAfterClick.modalTitle, "选择辅料", "blocked material selection should keep the current slot context");
-    assert.equal(blockedAfterClick.toastText.includes("单配方需同一稀有度"), false, "disabled mismatched-rarity picker cards should be blocked in-place instead of showing the old toast");
-    assert.equal(blockedAfterClick.materialCardCount, blockedBeforeClick.materialCardCount, "clicking a disabled mismatched-rarity picker card should not add anything to the material lane");
+    assert.equal(filteredState.modalHidden, false, "filtered search results should keep the picker open");
+    assert.equal(filteredState.modalTitle, "选择辅料", "the rarity filter should preserve the current slot context");
+    assert.equal(filteredState.visibleRarities.length > 0, true, "matching-rarity candidates should remain available");
+    assert.equal(filteredState.visibleRarities.every((rarity) => rarity === lockedPick.rarity), true, "different-rarity candidates should be removed from the DOM");
+    assert.equal(filteredState.materialCardCount >= 1, true, "the already selected main material should remain visible while choosing auxiliary material");
   });
 }
 
@@ -1538,10 +1478,10 @@ async function main() {
   await test_clicking_search_result_populates_output_lane_immediately();
   await test_switching_pages_preserves_unsaved_simulation_workspace_draft();
   await test_switching_simulation_mode_tabs_preserves_unsaved_workspace_draft();
-  await test_limited_collection_picker_items_stay_disabled_and_ignore_clicks();
+  await test_limited_collection_picker_items_are_hidden_when_valid_matches_remain();
   await test_material_chooser_defaults_to_next_empty_slot();
   await test_material_chooser_can_switch_to_a_different_collection();
-  await test_material_picker_disables_mixed_rarity_candidates_without_closing_modal();
+  await test_material_picker_hides_mixed_rarity_candidates_without_closing_modal();
   await test_output_lane_expands_selected_output_collections();
   await test_picker_search_results_take_real_scrollable_height();
   await test_picker_search_results_render_compact_three_column_cards();

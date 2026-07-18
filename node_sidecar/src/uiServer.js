@@ -8,6 +8,7 @@ const {AppAuthStore} = require("./appAuthStore");
 const {TokenStore} = require("./tokenStore");
 const {UiStateStore} = require("./uiStateStore");
 const {loginAndSaveToken, startLoginSession, submitGuardCode, removePendingSession} = require("./authService");
+const {precheckAuthApi} = require("./networkPrecheck");
 const {parseMaFile, generateTotp} = require("./maFileParser");
 const {refreshWebCookie, refreshWebCookieFromToken} = require("./steamWebSession");
 const {fetchFullInventory} = require("./inventoryService");
@@ -2336,6 +2337,21 @@ async function handleApi(req, res, urlObj, deps = {}) {
       return true;
     }
 
+    if (pathname === "/api/network/steam-precheck" && req.method === "GET") {
+      if (!requirePermission(res, auth, "inventory.read")) return true;
+      const checkSteamNetwork = typeof deps.steamNetworkPrecheck === "function"
+        ? deps.steamNetworkPrecheck
+        : precheckAuthApi;
+      const checked = await checkSteamNetwork({logger, force: true, timeoutMs: 4000});
+      const reachable = !!(checked && checked.ok);
+      writeJson(res, 200, {
+        ok: true,
+        reachable,
+        reason: reachable ? "" : "steam_unreachable"
+      });
+      return true;
+    }
+
     if (pathname === "/api/events" && req.method === "GET") {
       const username = asString(urlObj.searchParams.get("username") || "").trim();
       if (username && !requireSteamAccountAccess(res, auth, username)) {
@@ -3250,6 +3266,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     if (!requirePermission(res, auth, "inventory.refresh")) {
       return true;
     }
+
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const componentId = asString(body.component_id).trim();
@@ -4775,7 +4792,8 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const id64Map = new Map();
       for (const u of usernames) {
         const acc = accountStore.get(u);
-        if (acc && acc.steam_id64) id64Map.set(acc.steam_id64, u);
+        const steamId64 = asString(acc && (acc.steam_id64 || acc.steam_id) || "").trim();
+        if (steamId64) id64Map.set(steamId64, u);
       }
 
       if (id64Map.size === 0) {
@@ -5158,6 +5176,7 @@ function createServer(options = {}) {
     loginAndSaveTokenFn: options.loginAndSaveTokenFn,
     refreshRuntime: serverRefreshRuntime,
     resolveAccountProfileFn: options.resolveAccountProfileFn,
+    steamNetworkPrecheck: options.steamNetworkPrecheck,
     tradeupSimulationCatalog: options.tradeupSimulationCatalog,
     tradeupSimulationService: options.tradeupSimulationService,
     uiStateStoreFactory: options.uiStateStoreFactory

@@ -424,7 +424,7 @@ function normalizeCraftAssistMaterialsForRun(materials, {rows = null, legacyWear
     rows,
     source: "renormalize",
     legacyWearFilterMode
-  });
+  }).filter((material) => Number(material && material.count || 0) > 0);
 }
 
 function nthWeekdayOfMonthUtc(year, month, weekday, nth) {
@@ -522,10 +522,14 @@ function buildCraftAssistRowsByName(rows) {
   for (const row of Array.isArray(rows) ? rows : []) {
     const id = rowAssetId(row);
     if (!id) continue;
-    const name = itemDisplayName(row);
-    if (!name) continue;
-    if (!map.has(name)) map.set(name, []);
-    map.get(name).push(row);
+    const names = new Set([
+      itemDisplayName(row),
+      asString(row && row.name).trim()
+    ].filter(Boolean));
+    for (const name of names) {
+      if (!map.has(name)) map.set(name, []);
+      map.get(name).push(row);
+    }
   }
   return map;
 }

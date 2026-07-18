@@ -47,11 +47,25 @@ function test_web_inventory_page_uses_account_inventory_route() {
   );
 }
 
+function test_web_inventory_checks_steam_connectivity_before_fetching_inventory() {
+  const start = JS.indexOf("async function webInvFetchInventory()");
+  const end = JS.indexOf("function webInvSelectAll()", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const source = JS.slice(start, end);
+  const precheckIndex = source.indexOf('/api/network/steam-precheck');
+  const inventoryIndex = source.indexOf('/api/accounts/${encodeURIComponent(username)}/inventory');
+  assert.ok(precheckIndex >= 0, "inventory fetch should call the Steam connectivity precheck route");
+  assert.ok(precheckIndex < inventoryIndex, "connectivity must be checked before the inventory request");
+  assert.match(source, /请使用加速器/);
+}
+
 function main() {
   test_init_does_not_call_missing_web_inventory_bootstrap_helper();
   test_init_calls_defined_web_inventory_event_binder();
   test_web_inventory_accounts_use_loaded_accounts_state();
   test_web_inventory_page_uses_account_inventory_route();
+  test_web_inventory_checks_steam_connectivity_before_fetching_inventory();
   console.log("web-inventory-bootstrap tests passed");
 }
 
