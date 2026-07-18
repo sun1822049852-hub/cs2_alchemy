@@ -5689,3 +5689,19 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
 - 未验证：
   - 默认 `npm test` 排除了浏览器交互测试。
   - 未使用真实未绑定/已绑定 Steam 测试账号，因此真实邮箱码、Steam App 绑定和已有令牌拒绝路径仍需后续人工验证。
+
+## 2026-07-18 Steam Guard main merge close-out
+
+- 工作区：`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/steam-guard-coexist`
+- 分支：`codex/steam-guard-coexist`
+- 合并内容：
+  - 将 `main` 的 `b3ae8a65263fa4f09ceab3cbc660c8dbf68b85c9` 合入 Guard 分支。
+  - 合并没有产生冲突；保留了 Guard 联合绑定/令牌恢复实现和主分支的模拟零磨损边界修复。
+  - 主工作区的未提交 UI、配方、运行态和文档改动没有参与合并。
+- 验证：
+  - `npm test` -> `PASS 111 node_sidecar tests in 50.8s`。
+  - 45 个相对共同基线变更的 JavaScript 文件通过 `node --check`。
+  - `git diff --cached --check` 通过。
+- 未验证：
+  - 默认测试仍排除浏览器交互测试。
+  - 未使用真实未绑定/已绑定 Steam 测试账号验证邮箱码、Steam App 绑定和已有令牌拒绝路径。

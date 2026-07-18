@@ -1424,21 +1424,21 @@ async function test_picker_wide_weapon_cards_reduce_mid_gap() {
 
     await cdp.evaluate(`document.getElementById("simulationOutputRoleChooser").click();`);
     await waitForCondition(cdp, `!document.getElementById("simulationPickerModal").classList.contains("hidden")`);
-    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "蓝色裂纹"; document.getElementById("simulationPickerSearchBtn").click();`);
-    await waitForCondition(cdp, `(() => Array.from(document.querySelectorAll(".simulation-picker-item")).some((item) => String(item.querySelector(".simulation-picker-art-title")?.textContent || "").trim().includes("蓝色裂纹")))()`);
+    await cdp.evaluate(`document.getElementById("simulationPickerSearchInput").value = "二西莫夫"; document.getElementById("simulationPickerSearchBtn").click();`);
+    await waitForCondition(cdp, `(() => Array.from(document.querySelectorAll(".simulation-picker-item")).some((item) => String(item.querySelector(".simulation-picker-art-title")?.textContent || "").trim().includes("AWP | 二西莫夫")))()`);
     await waitForCondition(cdp, `(() => {
-      const item = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('蓝色裂纹'));
+      const item = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('AWP | 二西莫夫'));
       const thumb = item ? item.querySelector('.simulation-picker-item-thumb') : null;
       return !!(thumb && thumb.complete && thumb.naturalWidth > 0 && thumb.naturalHeight > 0);
     })()`);
     await waitForCondition(cdp, `(() => {
-      const item = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('蓝色裂纹'));
+      const item = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('AWP | 二西莫夫'));
       const thumb = item ? item.querySelector('.simulation-picker-item-thumb') : null;
       return !!(thumb && thumb.classList.contains('is-wide'));
     })()`);
 
     const pickerState = await cdp.evaluate(`(() => {
-      const target = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('蓝色裂纹'));
+      const target = Array.from(document.querySelectorAll('.simulation-picker-item')).find((entry) => String(entry.querySelector('.simulation-picker-art-title')?.textContent || '').trim().includes('AWP | 二西莫夫'));
       const art = target ? target.querySelector('.simulation-picker-item-art') : null;
       const thumb = target ? target.querySelector('.simulation-picker-item-thumb') : null;
       const mask = target ? target.querySelector('.simulation-picker-art-mask') : null;
@@ -1455,7 +1455,7 @@ async function test_picker_wide_weapon_cards_reduce_mid_gap() {
     })()`);
 
     assert.ok(pickerState, "expected wide-weapon picker card metrics");
-    assert.equal(pickerState.titleText.includes("蓝色裂纹"), true, "expected the inspected picker card to target the wide weapon case");
+    assert.equal(pickerState.titleText.includes("AWP | 二西莫夫"), true, "expected the inspected picker card to target the wide weapon case");
     assert.equal(pickerState.thumbWideClass, true, "wide picker thumbnails should receive a dedicated layout class");
     assert.equal(pickerState.gapRatio >= -0.04 && pickerState.gapRatio <= 0.06, true, "wide weapon picker cards should remove the large mid-gap without sinking too far under the lower caption mask");
     assert.equal(pickerState.thumbBottomRatio >= 0.68 && pickerState.thumbBottomRatio <= 0.84, true, "wide weapon picker art should extend further downward while staying within the intended lower-band range");

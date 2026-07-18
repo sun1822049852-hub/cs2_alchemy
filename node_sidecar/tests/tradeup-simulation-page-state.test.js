@@ -40,6 +40,7 @@ function loadSimulationFns(initialState = {}) {
     extractConst("TRADEUP_SIMULATION_PRESETS_KEY"),
     extractConst("TRADEUP_SIMULATION_WEAR_DECIMALS"),
     extractConst("TRADEUP_SIMULATION_MODAL_WEAR_DECIMALS"),
+    extractConst("TRADEUP_SIMULATION_BELOW_TARGET_SAFE_OFFSET"),
     extractBlock("function makeTradeupSimulationUid(", "function renderCraftPage(")
   ].join("\n");
   const localStorage = createLocalStorageStub();
@@ -2292,6 +2293,337 @@ function test_render_simulation_card_modal_renders_without_role_label_reference_
   assert.doesNotMatch(app.ui.simulationCardModalBody.innerHTML, /主料|辅料|主产物|辅产物/);
 }
 
+async function test_refresh_tradeup_simulation_derived_outputs_surfaces_prediction_failure_without_dropping_material() {
+  const app = loadSimulationFns();
+  const mainMaterial = createSimulationItem({
+    markethashname: "AUG | 渐变琥珀 (Factory New)",
+    basemarkethashname: "AUG | 渐变琥珀",
+    rarity: "军规级",
+    collection: "2021 列车停放站收藏品",
+    minfloat: 0,
+    maxfloat: 0.4
+  });
+  app.state.simulationWorkspacePreset = {
+    id: "draft_prediction_failure",
+    name: "预测失败仍保留材料",
+    primary_output: null,
+    aux_output: null,
+    main_material: mainMaterial,
+    aux_material: null,
+    cover_output: null,
+    active_anchor_item: mainMaterial,
+    active_anchor_abs_wear: 0,
+    output_rows: [],
+    material_rows: [],
+    rows: [],
+    output_candidates: [],
+    warnings: [],
+    dirty: true
+  };
+  app.api = async () => {
+    throw new Error("预测服务暂时不可用");
+  };
+  let renderCount = 0;
+  app.renderSimulationPage = () => {
+    renderCount += 1;
+  };
+
+  const refreshed = await app.refreshTradeupSimulationDerivedOutputs("draft_prediction_failure");
+
+  assert.equal(refreshed, false);
+  assert.equal(app.state.simulationWorkspacePreset.main_material.markethashname, mainMaterial.markethashname);
+  assert.match(
+    String(app.state.simulationWorkspacePreset.warnings[0]?.message || ""),
+    /预测服务暂时不可用/,
+    "prediction errors should remain visible instead of being swallowed"
+  );
+  assert.equal(renderCount, 1, "recording a prediction failure should refresh the visible workspace state");
+}
+
+async function test_refresh_tradeup_simulation_derived_outputs_surfaces_missing_invalid_and_empty_outcomes() {
+  const responses = [
+    {label: "missing", value: {ok: true}},
+    {label: "invalid type", value: {ok: true, outcomes: {}}},
+    {label: "empty", value: {ok: true, outcomes: []}}
+  ];
+  for (const scenario of responses) {
+    const app = loadSimulationFns();
+    const mainMaterial = createSimulationItem({
+      markethashname: "AUG | 渐变琥珀 (Factory New)",
+      basemarkethashname: "AUG | 渐变琥珀",
+      rarity: "军规级",
+      collection: "2021 列车停放站收藏品",
+      minfloat: 0,
+      maxfloat: 0.4
+    });
+    app.state.simulationWorkspacePreset = {
+      id: `draft_${scenario.label.replaceAll(" ", "_")}_outcomes`,
+      main_material: mainMaterial,
+      active_anchor_item: mainMaterial,
+      active_anchor_abs_wear: 0,
+      output_rows: [],
+      material_rows: [],
+      rows: [],
+      output_candidates: [],
+      warnings: []
+    };
+    app.api = async () => scenario.value;
+    let renderCount = 0;
+    app.renderSimulationPage = () => {
+      renderCount += 1;
+    };
+
+    const refreshed = await app.refreshTradeupSimulationDerivedOutputs(app.state.simulationWorkspacePreset.id);
+
+    assert.equal(refreshed, false, `${scenario.label} outcomes should fail derivation`);
+    assert.match(
+      String(app.state.simulationWorkspacePreset.warnings[0]?.message || ""),
+      /未返回可用产物/,
+      `${scenario.label} outcomes should produce a visible warning`
+    );
+    assert.equal(renderCount, 1, `${scenario.label} outcomes should refresh the workspace warning`);
+  }
+}
+
+async function test_refresh_tradeup_simulation_derived_outputs_ignores_stale_failure_after_material_change() {
+  const app = loadSimulationFns();
+  const firstMaterial = createSimulationItem({
+    markethashname: "AUG | 渐变琥珀 (Factory New)",
+    basemarkethashname: "AUG | 渐变琥珀",
+    rarity: "军规级",
+    collection: "2021 列车停放站收藏品",
+    minfloat: 0,
+    maxfloat: 0.4
+  });
+  app.state.simulationWorkspacePreset = {
+    id: "draft_stale_prediction_failure",
+    main_material: firstMaterial,
+    active_anchor_item: firstMaterial,
+    active_anchor_abs_wear: 0,
+    output_rows: [],
+    material_rows: [],
+    rows: [],
+    output_candidates: [],
+    warnings: []
+  };
+  let rejectFirstRequest = null;
+  app.api = () => new Promise((resolve, reject) => {
+    rejectFirstRequest = reject;
+  });
+  app.renderSimulationPage = () => {};
+
+  const pendingRefresh = app.refreshTradeupSimulationDerivedOutputs("draft_stale_prediction_failure");
+  await flushMicrotasks();
+  assert.equal(typeof rejectFirstRequest, "function");
+
+  app.applyTradeupSimulationSlotSelection({
+    slot: "main_material",
+    item: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      rarity: "军规级",
+      collection: "狂牙大行动收藏品",
+      minfloat: 0,
+      maxfloat: 1
+    }),
+    absoluteWear: 0.22
+  });
+  rejectFirstRequest(new Error("旧材料预测失败"));
+  await pendingRefresh;
+
+  assert.equal(app.state.simulationWorkspacePreset.main_material.basemarkethashname, "Five-SeveN | 混沌点阵");
+  assert.deepEqual(
+    app.state.simulationWorkspacePreset.warnings,
+    [],
+    "a late failure from the previous material selection must not overwrite the current workspace state"
+  );
+}
+
+async function test_refresh_tradeup_simulation_derived_outputs_ignores_stale_success_after_material_change() {
+  const app = loadSimulationFns();
+  const firstMaterial = createSimulationItem({
+    markethashname: "AUG | 渐变琥珀 (Factory New)",
+    basemarkethashname: "AUG | 渐变琥珀",
+    rarity: "军规级",
+    collection: "2021 列车停放站收藏品",
+    minfloat: 0,
+    maxfloat: 0.4
+  });
+  app.state.simulationWorkspacePreset = {
+    id: "draft_stale_prediction_success",
+    main_material: firstMaterial,
+    active_anchor_item: firstMaterial,
+    active_anchor_abs_wear: 0,
+    output_rows: [],
+    material_rows: [],
+    rows: [],
+    output_candidates: [],
+    warnings: []
+  };
+  let resolveFirstRequest = null;
+  app.api = () => new Promise((resolve) => {
+    resolveFirstRequest = resolve;
+  });
+
+  const pendingRefresh = app.refreshTradeupSimulationDerivedOutputs("draft_stale_prediction_success");
+  await flushMicrotasks();
+  assert.equal(typeof resolveFirstRequest, "function");
+
+  app.applyTradeupSimulationSlotSelection({
+    slot: "main_material",
+    item: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      rarity: "军规级",
+      collection: "狂牙大行动收藏品",
+      minfloat: 0,
+      maxfloat: 1
+    }),
+    absoluteWear: 0.22
+  });
+  resolveFirstRequest({
+    ok: true,
+    outcomes: [{
+      markethashname: "AWP | 旧产物 (Factory New)",
+      name: "AWP | 旧产物 (Factory New)",
+      base_name: "AWP | 旧产物",
+      collection_display: "2021 列车停放站收藏品",
+      minfloat: 0,
+      maxfloat: 1
+    }]
+  });
+  await pendingRefresh;
+
+  assert.equal(app.state.simulationWorkspacePreset.main_material.basemarkethashname, "Five-SeveN | 混沌点阵");
+  assert.deepEqual(app.state.simulationWorkspacePreset.output_candidates, []);
+  assert.equal(app.state.simulationWorkspacePreset.primary_output, null);
+}
+
+function test_apply_tradeup_simulation_material_selection_invalidates_stale_derived_projection() {
+  const primary = createSimulationItem({
+    markethashname: "USP-S | Cortex (Minimal Wear)",
+    basemarkethashname: "USP-S | Cortex"
+  });
+  const app = loadSimulationFns({
+    simulationWorkspacePreset: {
+      id: "draft_stale_projection",
+      name: "旧派生结果",
+      primary_output: primary,
+      cover_output: primary,
+      main_material: createSimulationItem({
+        markethashname: "旧材料 (Field-Tested)",
+        basemarkethashname: "旧材料",
+        rarity: "军规级"
+      }),
+      active_anchor_item: primary,
+      active_anchor_abs_wear: 0.118,
+      output_rows: [{collection: "旧收藏品", outputs: [primary]}],
+      material_rows: [{collection: "旧收藏品", materials: [{markethashname: "旧材料"}]}],
+      rows: [{collection: "旧收藏品"}],
+      output_candidates: [primary],
+      warnings: [{type: "old_warning", message: "旧警告"}],
+      dirty: false
+    }
+  });
+
+  const updated = app.applyTradeupSimulationSlotSelection({
+    slot: "main_material",
+    item: createSimulationItem({
+      markethashname: "Five-SeveN | 混沌点阵 (Minimal Wear)",
+      basemarkethashname: "Five-SeveN | 混沌点阵",
+      rarity: "军规级"
+    }),
+    absoluteWear: 0.222
+  });
+
+  assert.equal(updated, true);
+  assert.equal(app.state.simulationWorkspacePreset.cover_output.basemarkethashname, "USP-S | Cortex");
+  assert.deepEqual(app.state.simulationWorkspacePreset.output_rows, []);
+  assert.deepEqual(app.state.simulationWorkspacePreset.material_rows, []);
+  assert.deepEqual(app.state.simulationWorkspacePreset.rows, []);
+  assert.deepEqual(app.state.simulationWorkspacePreset.output_candidates, []);
+  assert.deepEqual(app.state.simulationWorkspacePreset.warnings, []);
+}
+
+function test_render_simulation_material_grid_shows_selected_material_before_output_derivation() {
+  const app = loadSimulationFns();
+  app.preferredRowSkinImageUrl = () => "";
+  const mainMaterial = createSimulationItem({
+    markethashname: "AUG | 渐变琥珀 (Factory New)",
+    basemarkethashname: "AUG | 渐变琥珀",
+    collection: "2021 列车停放站收藏品",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 0.4
+  });
+  const preset = {
+    id: "draft_selected_material_without_output",
+    name: "已选材料待推导",
+    primary_output: null,
+    aux_output: null,
+    main_material: mainMaterial,
+    aux_material: null,
+    cover_output: null,
+    active_anchor_item: mainMaterial,
+    active_anchor_abs_wear: 0,
+    output_rows: [],
+    material_rows: [],
+    rows: [],
+    output_candidates: [],
+    warnings: [{type: "prediction_pending", message: "正在根据当前材料推导产物"}],
+    dirty: true
+  };
+  app.state.simulationWorkspacePreset = preset;
+  app.ui.simulationMaterialLane = {innerHTML: ""};
+
+  app.renderSimulationMaterialGrid(preset);
+
+  assert.match(app.ui.simulationMaterialLane.innerHTML, /data-simulation-card-role="material"/);
+  assert.match(app.ui.simulationMaterialLane.innerHTML, /AUG \| 渐变琥珀/);
+  assert.doesNotMatch(
+    app.ui.simulationMaterialLane.innerHTML,
+    /先添加主料或辅料/,
+    "the empty-workspace hint must not replace a material the user has already selected"
+  );
+}
+
+function test_render_simulation_grids_escape_prediction_warning() {
+  const app = loadSimulationFns();
+  app.preferredRowSkinImageUrl = () => "";
+  const mainMaterial = createSimulationItem({
+    markethashname: "AUG | 渐变琥珀 (Factory New)",
+    basemarkethashname: "AUG | 渐变琥珀",
+    collection: "2021 列车停放站收藏品",
+    rarity: "军规级",
+    minfloat: 0,
+    maxfloat: 0.4
+  });
+  const preset = {
+    main_material: mainMaterial,
+    aux_material: null,
+    primary_output: null,
+    cover_output: null,
+    active_anchor_item: mainMaterial,
+    active_anchor_abs_wear: 0,
+    material_rows: [],
+    warnings: [{
+      type: "derived_output_prediction_failed",
+      message: '<img src=x onerror="alert(1)">'
+    }]
+  };
+  app.state.simulationWorkspacePreset = preset;
+  app.ui.simulationMaterialLane = {innerHTML: ""};
+  app.ui.simulationOutputLane = {innerHTML: ""};
+
+  app.renderSimulationMaterialGrid(preset);
+  app.renderSimulationOutputGrid(preset);
+
+  assert.doesNotMatch(app.ui.simulationMaterialLane.innerHTML, /<img src=x/);
+  assert.match(app.ui.simulationMaterialLane.innerHTML, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+  assert.doesNotMatch(app.ui.simulationOutputLane.innerHTML, /<img src=x/);
+  assert.match(app.ui.simulationOutputLane.innerHTML, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+}
+
 async function main() {
   test_normalize_tradeup_simulation_preset_list_preserves_dual_slot_shape();
   test_normalize_tradeup_simulation_preset_list_migrates_legacy_target_into_primary_cover();
@@ -2309,10 +2641,15 @@ async function main() {
   await test_load_tradeup_simulation_presets_from_server_keeps_valid_presets_beyond_legacy_invalid_cap();
   test_apply_tradeup_simulation_slot_selection_sets_cover_for_primary_output();
   test_build_tradeup_simulation_derived_output_payload_ignores_restricted_material_grouping();
+  await test_refresh_tradeup_simulation_derived_outputs_surfaces_prediction_failure_without_dropping_material();
+  await test_refresh_tradeup_simulation_derived_outputs_surfaces_missing_invalid_and_empty_outcomes();
+  await test_refresh_tradeup_simulation_derived_outputs_ignores_stale_failure_after_material_change();
+  await test_refresh_tradeup_simulation_derived_outputs_ignores_stale_success_after_material_change();
   test_sanitize_tradeup_simulation_draft_payload_replaces_lowest_output_anchor();
   test_open_tradeup_simulation_picker_modal_records_slot_context();
   test_adopt_tradeup_simulation_derived_primary_output_uses_random_cover_when_missing();
   test_apply_tradeup_simulation_slot_selection_preserves_cover_when_material_changes();
+  test_apply_tradeup_simulation_material_selection_invalidates_stale_derived_projection();
   test_render_simulation_lane_section_marks_single_card_rows();
   test_build_tradeup_simulation_saved_card_summary_uses_wear_tier_and_relative_wear();
   await test_save_active_tradeup_simulation_preset_uses_prompted_name_before_persisting();
@@ -2321,6 +2658,8 @@ async function main() {
   test_render_simulation_selected_output_card_applies_wear_tone_class_to_badge();
   test_render_simulation_selected_output_card_applies_factory_new_tone_class_to_bar();
   test_render_simulation_selected_material_card_applies_wear_tone_classes();
+  test_render_simulation_material_grid_shows_selected_material_before_output_derivation();
+  test_render_simulation_grids_escape_prediction_warning();
   test_render_tradeup_simulation_selection_style_card_preserves_explicit_wear_tone_spacing();
   test_sim_export_craft_preset_converts_anchor_absolute_wear_to_relative_target_wear();
   await test_delete_tradeup_simulation_preset_removes_saved_entry_and_persists();

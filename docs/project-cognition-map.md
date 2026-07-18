@@ -36,10 +36,10 @@
 
 ## 覆盖范围与未覆盖范围
 
-- `last verified`: `2026-05-30`（全项目审查覆盖）；VPK dev-only 打包边界小范围补验为 `2026-05-31`；地图结构补全和主工作区只读入口核对为 `2026-07-06`；VOM/POR 边界、权限 owner、库存传播边和军械库链路的定向静态核对为 `2026-07-13`。
-- `scope/coverage`: 覆盖当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 的静态只读扫描、已审切片结论、2026-05-28 对 Skin DB 同步/C5 磨损来源链路的定向实现验证，以及 2026-05-30 项目审查修复的授权、账号范围、前端权限、批量炼金、运行态 JSON、代理、Admin Console、打包预检等直接影响区；另覆盖 2026-05-31 VPK dev-only 打包边界小范围补验。2026-07-06 只补齐地图结构、状态口径和主要业务文件职责导航；2026-07-13 只核对 VOM 分类、license/AppAuthStore owner 边界、inventory/component/craft/wallet 的高价值传播入口和军械库兑换源码/测试路径。
-- `validation method`: 静态路径核对、切片整理、定向 Node 测试、`admin_console npm test`、`node_sidecar` packaging preflight、2026-05-31 VPK CLI help；2026-07-06 只读核对 `AGENTS.md`、`git worktree list --porcelain`、当前主工作区 `git status --short`、现有地图和关键源码入口/服务导出；2026-07-13 对照最新 `verified-operation-map` skill 与 POR schema，并只读核对所列关键源码/测试定位及 workflow-state audit（exit `0`）。audit 只证明 workflow state 输入完整，不证明地图业务内容正确。本轮未运行测试或真实运行态。
-- `未覆盖`: 未检查其它 worktree 的源码和 diff；未读取真实账号、Steam session、真实 DB 内容或外部交易状态；未访问 Steam、BUFF、SteamDT、C5 等外部服务；未做真实 UI 运行态截图/DOM 验证；未证明 `node_sidecar npm test` 全量通过；未建立任何 POR；未完成全部状态传播边/消费者/失败旁路盘点；未判断当前工作区既有未提交业务改动是否正确。
+- `last verified`: `2026-05-30`（全项目审查覆盖）；VPK dev-only 打包边界小范围补验为 `2026-05-31`；地图结构补全和主工作区只读入口核对为 `2026-07-06`；VOM/POR 边界、权限 owner、库存传播边和军械库链路的定向静态核对为 `2026-07-13`；模拟材料零磨损边界和即时卡片投影补验为 `2026-07-17`。
+- `scope/coverage`: 覆盖当前主工作区 `C:/Users/18220/Desktop/cs2_alchemy` 的静态只读扫描、已审切片结论、2026-05-28 对 Skin DB 同步/C5 磨损来源链路的定向实现验证，以及 2026-05-30 项目审查修复的授权、账号范围、前端权限、批量炼金、运行态 JSON、代理、Admin Console、打包预检等直接影响区；另覆盖 2026-05-31 VPK dev-only 打包边界小范围补验。2026-07-06 只补齐地图结构、状态口径和主要业务文件职责导航；2026-07-13 只核对 VOM 分类、license/AppAuthStore owner 边界、inventory/component/craft/wallet 的高价值传播入口和军械库兑换源码/测试路径；2026-07-17 只覆盖模拟材料选择、零相对磨损预测模式、预测失败 warning 和材料卡消费入口。
+- `validation method`: 静态路径核对、切片整理、定向 Node 测试、`admin_console npm test`、`node_sidecar` packaging preflight、2026-05-31 VPK CLI help；2026-07-06 只读核对 `AGENTS.md`、`git worktree list --porcelain`、当前主工作区 `git status --short`、现有地图和关键源码入口/服务导出；2026-07-13 对照最新 `verified-operation-map` skill 与 POR schema，并只读核对所列关键源码/测试定位及 workflow-state audit（exit `0`）。audit 只证明 workflow state 输入完整，不证明地图业务内容正确。2026-07-17 运行模拟派生产物、页面状态和完整 picker 交互测试，并以真实本地 catalog/predictor payload 验证零磨损 `infinite` 边界；本次未运行全仓库测试或真实 Steam 操作。
+- `未覆盖`: 未检查其它 worktree 的源码和 diff；未读取真实账号、Steam session、真实 DB 内容或外部交易状态；未访问 Steam、BUFF、SteamDT、C5 等外部服务；未做全项目端到端 UI 运行态验证（仅完成 2026-07-17 模拟 picker 完整浏览器交互测试）；未证明 `node_sidecar npm test` 全量通过；未建立任何 POR；未完成全部状态传播边/消费者/失败旁路盘点；未判断当前工作区既有未提交业务改动是否正确。
 - `其它 worktree 未检查`: `C:/Users/18220/.config/superpowers/worktrees/cs2_alchemy/feature-skin-db-sync`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/craft-outcome-predictor`、`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/skin-price-columns`。
 
 ## 快速导航总览
@@ -204,10 +204,10 @@
 
 ### 5. 炼金、预测、模拟与多账号汰换
 
-- `scope/coverage`: 炼金页高风险链路包括选物品/配方队列、辅助选材 `/api/craft/assist-select`、产物预测 `/api/craft/predict-outcomes`、真实执行 `/api/craft/tradeup` 或 `/api/craft/tradeup-with-components`。真实执行返回会回写当前 UI 库存 rows。多账号汰换复用炼金 preset 和 assist/tradeup 接口，按账号切换 active account 并逐个执行。汰换模拟是非真实执行链路，使用 `/api/simulation/tradeup/*`，preset 同步到 localStorage 和 `/api/ui-state/tradeup-simulation-presets`。
+- `scope/coverage`: 炼金页高风险链路包括选物品/配方队列、辅助选材 `/api/craft/assist-select`、产物预测 `/api/craft/predict-outcomes`、真实执行 `/api/craft/tradeup` 或 `/api/craft/tradeup-with-components`。真实执行返回会回写当前 UI 库存 rows。多账号汰换复用炼金 preset 和 assist/tradeup 接口，按账号切换 active account 并逐个执行。汰换模拟是非真实执行链路，使用 `/api/simulation/tradeup/*`，preset 同步到 localStorage 和 `/api/ui-state/tradeup-simulation-presets`；材料槽选择是立即可见的 UI 真源，不依赖派生产物成功；相对磨损小于等于 predictor `below` 安全偏移边界 `1e-7` 时显式使用 `infinite`，其余仍沿用默认 `below`。材料变更会失效旧派生 rows/candidates，旧预测响应不得覆盖新选择；API throw 以及 outcomes missing/type/empty 都只写已转义 warning，不得移除已选材料。
 - `source links`: `node_sidecar/src/uiServer.js`、`node_sidecar/ui/app.js`、`node_sidecar/src/services/craftAssistService.js`、`node_sidecar/src/services/craftService.js`、`node_sidecar/src/services/craftOutcomePredictor.js`、`node_sidecar/src/services/craftTradeupWithComponentsService.js`、`node_sidecar/src/services/tradeupSimulationService.js`、`node_sidecar/src/services/tradeupSimulationCatalog.js`、`inventory_ui_state.json`。
-- `last verified`: `2026-05-30`
-- `validation method`: 静态切片整理；运行 batch craft assist/execution writeback、component batch route、craft component service、candidate service、frontend permission UI 定向测试；未执行真实炼金、模拟或多账号流程。
+- `last verified`: `2026-05-30`；模拟材料即时投影、零/近零预测边界、失败 envelope 和旧请求 freshness 的直接影响范围为 `2026-07-17`。
+- `validation method`: 静态切片整理；运行 batch craft assist/execution writeback、component batch route、craft component service、candidate service、frontend permission UI 定向测试；2026-07-17 运行派生产物、页面状态、picker guardrail、保存提示、predictor 契约和完整真实浏览器 picker 交互测试；新增测试覆盖 `target_relative_wear` 为 `0`/`1e-7`、API throw、outcomes missing/type/empty、旧 success/failure response、旧派生 projection 清理和双栏 warning escape。未执行真实炼金或多账号执行。
 - `owner/maintainer`: 炼金、模拟和多账号工作流维护者。
 - `update triggers`: 改 craft preset、assist-select、predict-outcomes、tradeup 执行、模拟 preset、UI rows 回写、账号锁或多账号切换。
 - `stale signals`: 模拟链路开始触发真实账号动作；真实执行不再回写 UI rows；preset 存储位置变化；多账号流程改为并发执行。
