@@ -121,8 +121,8 @@ npm run build:win
 
 用途分成两条：
 
-- 完整入口：先调用 SteamDT base info 接口抓取全量基础信息，保存为新的 `steam_base_info_*.json`，再重建 `csgo_skins.db`，最后自动补齐缺失的收藏品/品质、磨损区间、商品图片
-- JSON 重建入口：直接把现有 `steam_base_info_*.json` 里的全量饰品数据按当前数据库格式重建到 `csgo_skins.db`，并自动过滤非枪械物品（胶囊、音乐盒、探员、Sticker Slab、裸刀等），随后继续补齐缺失的收藏品/品质、磨损区间、商品图片
+- 完整入口：先调用 SteamDT base info 接口抓取全量饰品基础信息，保存为新的 `steam_base_info_*.json`，再重建 `csgo_skins.db`，最后自动补齐缺失的收藏品/品质、磨损区间和商品图片
+- JSON 重建入口：直接把现有 `steam_base_info_*.json` 里的全量饰品数据按当前数据库格式重建到 `csgo_skins.db`。符合炼金范围的枪械、刀具和手套记录为正常炼金条目；箱子、贴纸、钥匙、胶囊、音乐盒、探员、Sticker Slab、裸刀等非炼金条目也会保留，并标记为 `inventory_display_only=1`、`alchemy_type=不能炼金`
 
 脚本每次执行前会自动备份当前数据库。
 
@@ -131,10 +131,11 @@ npm run build:win
 - 对用户来说仍是一个重建入口
 - 对代码内部来说，当前实际流程是：
   1. 自动创建或迁移 `skin` 表结构
-  2. 导入 SteamDT 基础信息
-  3. 通过 BUFF 补齐收藏品/品质
-  4. 通过 BUFF 补齐磨损区间
-  5. 通过 BUFF 补齐商品图片
+  2. 导入 SteamDT 基础信息中的名称、市场名称和平台 ID
+  3. 区分正常炼金条目和 `inventory_display_only` 展示条目；展示条目保留在皮肤库中，但不进入炼金候选
+  4. 对正常炼金条目通过 BUFF 补齐收藏品/品质
+  5. 对正常炼金条目优先通过 C5 补齐磨损区间，失败时回退 BUFF
+  6. 对缺少图片的条目依次尝试本地静态映射、Steam CDN 和 BUFF
 
 三部曲命令行用法：
 
@@ -165,8 +166,10 @@ Windows 一键三部曲：
 JSON 重建命令行用法：
 
 ```powershell
-node tools/rebuildSkinDb.js --json "C:/Users/18220/Desktop/smelter/data/steam_base_info_20260315_232059.json" --db "C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db"
+node tools/rebuildSkinDb.js --json "C:/Users/18220/Desktop/cs2_alchemy/data/steam_base_info_20260718_120000.json" --db "C:/Users/18220/Desktop/cs2_alchemy/csgo_skins.db"
 ```
+
+`--json` 输入必须是 SteamDT base info 接口返回并保存的数组快照。
 
 Windows 一键 JSON 重建：
 
@@ -174,7 +177,7 @@ Windows 一键 JSON 重建：
 .\update_skin_db.bat
 ```
 
-默认直接双击或执行 `.\update_skin_db.bat` 时，会自动选 `C:\Users\18220\Desktop\smelter\data` 目录下最新的 `steam_base_info_*.json`。
+默认直接双击或执行 `.\update_skin_db.bat` 时，会自动选择当前项目 `data/` 目录下最新的 `steam_base_info_*.json`。如果目录中没有快照，脚本会明确报错；此时应先运行 `.\fetch_and_update_skin_db.bat` 从 SteamDT 抓取，或显式传入一个已保存的 SteamDT JSON 快照。不会再读取旧 `smelter` 项目的数据目录。
 
 如果要指定新的 JSON 文件：
 

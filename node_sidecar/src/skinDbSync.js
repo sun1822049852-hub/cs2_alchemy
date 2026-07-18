@@ -9,8 +9,7 @@ const {
 const {createSkinDetailEnrichmentService} = require("./services/skinDetailEnrichmentService");
 const {buildSkinFamilyKey} = require("./services/skinFamilyKey");
 
-const DEFAULT_JSON_DIR = "C:/Users/18220/Desktop/smelter/data";
-const DEFAULT_JSON_PATH = "C:/Users/18220/Desktop/smelter/data/steam_base_info_20260315_232059.json";
+const DEFAULT_JSON_DIR = path.resolve(__dirname, "..", "..", "data");
 
 const WEAR_SUFFIX_MAP = [
   {cn: "崭新出厂", en: "Factory New"},
@@ -813,7 +812,7 @@ async function syncSkinDb({
 function buildCliOptions(argv = []) {
   const args = Array.isArray(argv) ? [...argv] : [];
   const options = {
-    jsonPath: findLatestSteamBaseInfoJson(),
+    jsonPath: "",
     dbPath: path.resolve(__dirname, "..", "..", "csgo_skins.db")
   };
   for (let i = 0; i < args.length; i += 1) {
@@ -828,6 +827,9 @@ function buildCliOptions(argv = []) {
       options.dbPath = next;
       i += 1;
     }
+  }
+  if (!options.jsonPath) {
+    options.jsonPath = findLatestSteamBaseInfoJson();
   }
   return options;
 }
@@ -848,19 +850,25 @@ function loadItemsFromJson(jsonPath) {
 function findLatestSteamBaseInfoJson(dirPath = DEFAULT_JSON_DIR) {
   const targetDir = asString(dirPath).trim();
   if (!targetDir || !fs.existsSync(targetDir)) {
-    return DEFAULT_JSON_PATH;
+    throw new Error(
+      `steamdt_base_info_json_not_found: ${targetDir || DEFAULT_JSON_DIR}; ` +
+      "run node tools/fetchAndRebuildSkinDb.js or pass --json with a saved SteamDT response"
+    );
   }
   const files = fs.readdirSync(targetDir)
     .filter((name) => /^steam_base_info_\d{8}_\d{6}\.json$/i.test(name))
     .sort();
   if (!files.length) {
-    return DEFAULT_JSON_PATH;
+    throw new Error(
+      `steamdt_base_info_json_not_found: ${targetDir}; ` +
+      "run node tools/fetchAndRebuildSkinDb.js or pass --json with a saved SteamDT response"
+    );
   }
   return path.join(targetDir, files[files.length - 1]);
 }
 
 module.exports = {
-  DEFAULT_JSON_PATH,
+  DEFAULT_JSON_DIR,
   isImportableSkin,
   assignAlchemyTypes: assignAlchemyTypesShared,
   syncSkinDb,

@@ -5,9 +5,11 @@ const path = require("node:path");
 const {DatabaseSync} = require("node:sqlite");
 
 const {
+  DEFAULT_JSON_DIR,
   isImportableSkin,
   syncSkinDb,
   assignAlchemyTypes,
+  buildCliOptions,
   findLatestSteamBaseInfoJson
 } = require("../node_sidecar/src/skinDbSync");
 
@@ -506,7 +508,36 @@ async function test_syncSkinDb_creates_price_columns_for_empty_db_path() {
   assert.equal(row.youpinprice_updated_at, null);
 }
 
+function test_defaultSteamBaseInfoDirectory_isProjectLocal() {
+  assert.equal(
+    DEFAULT_JSON_DIR,
+    path.resolve(__dirname, "..", "data")
+  );
+}
+
+function test_findLatestSteamBaseInfoJson_rejectsEmptyDirectoryWithoutFallback() {
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "steam-base-info-empty-"));
+  assert.throws(
+    () => findLatestSteamBaseInfoJson(emptyDir),
+    (error) => {
+      assert.match(error.message, /steamdt_base_info_json_not_found/);
+      assert.match(error.message, /fetchAndRebuildSkinDb\.js/);
+      assert.match(error.message, /--json/);
+      return true;
+    }
+  );
+}
+
+function test_buildCliOptions_acceptsExplicitSteamdtSnapshotWithoutDefaultSnapshot() {
+  const explicitJsonPath = path.join(os.tmpdir(), "steam_base_info_manual.json");
+  const options = buildCliOptions(["--json", explicitJsonPath]);
+  assert.equal(options.jsonPath, explicitJsonPath);
+}
+
 async function runTests() {
+  test_defaultSteamBaseInfoDirectory_isProjectLocal();
+  test_findLatestSteamBaseInfoJson_rejectsEmptyDirectoryWithoutFallback();
+  test_buildCliOptions_acceptsExplicitSteamdtSnapshotWithoutDefaultSnapshot();
   assert.equal(isImportableSkin({marketHashName: "AK-47 | Redline (Field-Tested)"}), true);
   assert.equal(isImportableSkin({marketHashName: "StatTrak™ AK-47 | Redline (Field-Tested)"}), true);
   assert.equal(isImportableSkin({marketHashName: "★ Bayonet | Autotronic (Factory New)"}), true);
