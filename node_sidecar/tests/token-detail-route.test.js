@@ -50,7 +50,7 @@ async function stopServer(ctx) {
   await new Promise((resolve) => ctx.server.close(resolve));
 }
 
-function requestJson(ctx, method, route, {body = null} = {}) {
+function requestJson(ctx, method, route, {body = null, headers = {}} = {}) {
   return new Promise((resolve, reject) => {
     const payload = body == null ? "" : JSON.stringify(body);
     const req = http.request({
@@ -58,12 +58,15 @@ function requestJson(ctx, method, route, {body = null} = {}) {
       port: ctx.port,
       method,
       path: route,
-      headers: payload
-        ? {
+      headers: {
+        ...(payload
+          ? {
             "Content-Type": "application/json",
             "Content-Length": Buffer.byteLength(payload)
           }
-        : {}
+          : {}),
+        ...headers
+      }
     }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
@@ -121,6 +124,13 @@ async function test_token_detail_redacts_raw_tokens_but_keeps_totp_contract() {
     assert.equal(response.body.steamData.shared_secret, sharedSecret);
     assert.equal(response.body.steamData.access_token, "[REDACTED]");
     assert.equal(response.body.steamData.Session.SteamLoginSecure, "[REDACTED]");
+
+    const reboundHost = `attacker.example:${ctx.port}`;
+    const reboundResponse = await requestJson(ctx, "GET", "/api/accounts/token-detail?username=demo", {
+      headers: {Host: reboundHost, Origin: `http://${reboundHost}`}
+    });
+    assert.equal(reboundResponse.statusCode, 403);
+    assert.equal(reboundResponse.body.reason, "local_host_required");
   } finally {
     await stopServer(ctx);
   }

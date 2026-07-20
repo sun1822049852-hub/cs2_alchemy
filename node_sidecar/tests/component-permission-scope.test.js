@@ -47,7 +47,7 @@ function createMutableLicenseRuntime({username, permissions}) {
         user: {
           id: `user_${current.username}`,
           username: current.username,
-          membership_plan: "pro"
+          membership_plan: "member"
         },
         permissions: current.permissions.slice(),
         featureFlags: {},
@@ -294,11 +294,6 @@ async function expectPermissionDenied(response) {
   assert.equal(response.body.reason, "permission_denied");
 }
 
-async function expectAccountScopeDenied(response) {
-  assert.equal(response.statusCode, 403);
-  assert.equal(response.body.reason, "account_scope_denied");
-}
-
 async function test_component_routes_require_inventory_refresh_permission() {
   await withComponentServer({
     username: "member_a",
@@ -343,12 +338,18 @@ async function test_component_routes_require_inventory_refresh_permission() {
   });
 }
 
-async function test_component_routes_reject_wrong_account_user() {
+async function test_component_routes_allow_any_saved_steam_account() {
   await withComponentServer({
     username: "member_a",
     permissions: fullComponentPermissions()
   }, async ({port}) => {
-    await expectAccountScopeDenied(await requestJson({
+    const candidates = await requestJson({
+      port,
+      route: "/api/component/deposit-candidates?username=countsteam02&component_id=component-1"
+    });
+    assert.equal(candidates.statusCode, 200);
+
+    const deposit = await requestJson({
       port,
       method: "POST",
       route: "/api/component/deposit",
@@ -357,12 +358,10 @@ async function test_component_routes_reject_wrong_account_user() {
         component_id: "component-1",
         item_ids: ["asset-1"]
       }
-    }));
-    await expectAccountScopeDenied(await requestJson({
-      port,
-      route: "/api/component/deposit-candidates?username=countsteam02&component_id=component-1"
-    }));
-    await expectAccountScopeDenied(await requestJson({
+    });
+    assert.equal(deposit.statusCode, 202);
+
+    const withdraw = await requestJson({
       port,
       method: "POST",
       route: "/api/component/withdraw",
@@ -371,15 +370,18 @@ async function test_component_routes_reject_wrong_account_user() {
         component_id: "component-1",
         item_ids: ["asset-1"]
       }
-    }));
-    await expectAccountScopeDenied(await requestJson({
+    });
+    assert.equal(withdraw.statusCode, 202);
+
+    const tasks = await requestJson({
       port,
       route: "/api/component/tasks?username=countsteam02"
-    }));
+    });
+    assert.equal(tasks.statusCode, 200);
   });
 }
 
-async function test_component_task_cancel_rejects_wrong_account_owner() {
+async function test_component_task_cancel_is_not_bound_to_legacy_local_user() {
   await withComponentServer({
     username: "member_b",
     permissions: fullComponentPermissions()
@@ -399,23 +401,37 @@ async function test_component_task_cancel_rejects_wrong_account_owner() {
     assert.equal(typeof jobId, "string");
     assert.notEqual(jobId, "");
 
+    const queuedSecond = await requestJson({
+      port,
+      method: "POST",
+      route: "/api/component/deposit",
+      body: {
+        username: "countsteam02",
+        component_id: "component-3",
+        item_ids: ["asset-3"]
+      }
+    });
+    assert.equal(queuedSecond.statusCode, 202);
+    const queuedJobId = queuedSecond.body.job && queuedSecond.body.job.job_id;
+
     runtime.setUser("member_a", fullComponentPermissions());
-    const denied = await requestJson({
+    const cancelled = await requestJson({
       port,
       method: "POST",
       route: "/api/component/tasks/cancel",
       body: {
-        job_id: jobId
+        job_id: queuedJobId
       }
     });
-    await expectAccountScopeDenied(denied);
+    assert.equal(cancelled.statusCode, 200);
+    assert.equal(cancelled.body.ok, true);
   });
 }
 
 async function main() {
   await test_component_routes_require_inventory_refresh_permission();
-  await test_component_routes_reject_wrong_account_user();
-  await test_component_task_cancel_rejects_wrong_account_owner();
+  await test_component_routes_allow_any_saved_steam_account();
+  await test_component_task_cancel_is_not_bound_to_legacy_local_user();
   console.log("component-permission-scope tests passed");
 }
 

@@ -13,7 +13,7 @@ function makeTempDir() {
 }
 
 function createLicenseRuntime({
-  membershipPlan = "trial",
+  membershipPlan = "inactive",
   refreshCredential = "remote_refresh_token"
 } = {}) {
   const permissions = [
@@ -38,10 +38,7 @@ function createLicenseRuntime({
         featureFlags: {
           simulation_enabled: true,
           craft_enabled: permissions.includes(FEATURE_CODES.CRAFT_USE),
-          steam_binding_mode: membershipPlan === "member" ? "unlimited" : "single_locked",
-          steam_binding_limit: membershipPlan === "member" ? -1 : 1,
-          trial_active: membershipPlan === "trial",
-          trial_expires_at: membershipPlan === "trial" ? "2026-04-15T00:00:00.000Z" : ""
+          membership_expires_at: ""
         },
         expiresAt: "2099-01-01T00:15:00.000Z",
         expiresInMs: 86400000
@@ -284,7 +281,7 @@ function loadCreateServer({
 
 async function startServer({
   authClient,
-  membershipPlan = "trial",
+  membershipPlan = "inactive",
   refreshCredential = "remote_refresh_token",
   authMode = "prod_login",
   loginResponse,
@@ -303,7 +300,7 @@ async function startServer({
     controlPlaneAuthClientFactory: () => authClient,
     licenseConfigFactory: () => ({
       authMode,
-      controlPlaneBaseUrl: "https://auth.example.com",
+      controlPlaneBaseUrl: "http://127.0.0.1:8787",
       machineIdFile
     })
   });
@@ -358,7 +355,7 @@ async function requestJson(ctx, method, route, {body = null} = {}) {
   });
 }
 
-async function test_login_save_rejects_second_trial_binding_without_writing_local_account() {
+async function test_prod_login_save_does_not_call_removed_binding_service() {
   const checkCalls = [];
   const error = new Error("当前账号允许绑定的 Steam 数量已达上限");
   error.code = "steam_binding_limit_reached";
@@ -366,7 +363,7 @@ async function test_login_save_rejects_second_trial_binding_without_writing_loca
   const ctx = await startServer({
     authClient: {
       getCapabilities() {
-        return {configured: true, baseUrl: "https://auth.example.com"};
+        return {configured: true, baseUrl: "http://127.0.0.1:8787"};
       },
       async checkOrBindSteamAccount(args = {}) {
         checkCalls.push({...args});
@@ -393,23 +390,22 @@ async function test_login_save_rejects_second_trial_binding_without_writing_loca
         totp: "123456"
       }
     });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.body.reason, "steam_binding_limit_reached");
-    assert.equal(ctx.state.accounts.has("steam_account_b"), false);
-    assert.equal(ctx.state.upsertCalls.length, 0);
-    assert.equal(checkCalls.length, 1);
+    assert.equal(response.statusCode, 200);
+    assert.equal(ctx.state.accounts.has("steam_account_b"), true);
+    assert.equal(ctx.state.upsertCalls.length, 1);
+    assert.equal(checkCalls.length, 0);
   } finally {
     await stopServer(ctx);
   }
 }
 
-async function test_login_save_reuses_license_refresh_credential_for_binding_check() {
+async function test_prod_login_save_does_not_need_binding_refresh_credential() {
   const checkCalls = [];
   const ctx = await startServer({
     refreshCredential: "remote_refresh_token",
     authClient: {
       getCapabilities() {
-        return {configured: true, baseUrl: "https://auth.example.com"};
+        return {configured: true, baseUrl: "http://127.0.0.1:8787"};
       },
       async checkOrBindSteamAccount(args = {}) {
         checkCalls.push({...args});
@@ -434,11 +430,7 @@ async function test_login_save_reuses_license_refresh_credential_for_binding_che
       }
     });
     assert.equal(response.statusCode, 200);
-    assert.equal(checkCalls.length, 1);
-    assert.equal(checkCalls[0].refreshCredential, "remote_refresh_token");
-    assert.equal(checkCalls[0].deviceId, ctx.deviceId);
-    assert.equal(checkCalls[0].steamId, "76561198000000001");
-    assert.equal(checkCalls[0].steamAccountName, "steam_account_a");
+    assert.equal(checkCalls.length, 0);
     assert.equal(ctx.state.accounts.has("steam_account_a"), true);
   } finally {
     await stopServer(ctx);
@@ -452,7 +444,7 @@ async function test_login_save_skips_binding_check_for_dev_auto_bundle() {
     refreshCredential: "",
     authClient: {
       getCapabilities() {
-        return {configured: true, baseUrl: "https://auth.example.com"};
+        return {configured: true, baseUrl: "http://127.0.0.1:8787"};
       },
       async checkOrBindSteamAccount(args = {}) {
         checkCalls.push({...args});
@@ -485,8 +477,8 @@ async function test_login_save_skips_binding_check_for_dev_auto_bundle() {
 }
 
 async function main() {
-  await test_login_save_rejects_second_trial_binding_without_writing_local_account();
-  await test_login_save_reuses_license_refresh_credential_for_binding_check();
+  await test_prod_login_save_does_not_call_removed_binding_service();
+  await test_prod_login_save_does_not_need_binding_refresh_credential();
   await test_login_save_skips_binding_check_for_dev_auto_bundle();
   console.log("account-binding-policy tests passed");
 }

@@ -5,7 +5,11 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
-const {stableJsonStringify, FEATURE_CODES} = require("../../shared/licensePolicy");
+const {
+  stableJsonStringify,
+  FEATURE_CODES,
+  LICENSE_SNAPSHOT_POLICY
+} = require("../../shared/licensePolicy");
 const {configureRuntimePaths} = require("../src/constants");
 const {UiStateStore} = require("../src/uiStateStore");
 const {LicenseStore} = require("../src/licenseStore");
@@ -28,7 +32,7 @@ function createSnapshot(overrides = {}) {
     sub: "user_1",
     username: "member_a",
     device_id: "device_alpha",
-    membership_plan: "pro",
+    membership_plan: "member",
     permissions: [
       FEATURE_CODES.ACCOUNTS_READ,
       FEATURE_CODES.ACCOUNTS_WRITE,
@@ -37,9 +41,13 @@ function createSnapshot(overrides = {}) {
     ],
     feature_flags: {},
     policy_version: 1,
+    iss: LICENSE_SNAPSHOT_POLICY.issuer,
+    aud: LICENSE_SNAPSHOT_POLICY.audience,
+    token_type: LICENSE_SNAPSHOT_POLICY.tokenType,
+    key_id: LICENSE_SNAPSHOT_POLICY.keyId,
     jti: "snap_1",
     iat: "2026-04-12T11:00:00.000Z",
-    exp: "2026-04-12T11:30:00.000Z",
+    exp: "2026-04-12T11:15:00.000Z",
     ...overrides
   };
 }

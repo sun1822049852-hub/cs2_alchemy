@@ -1,6 +1,7 @@
 ﻿const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const {randomUUID} = require("node:crypto");
 const {URL} = require("url");
 const {execSync} = require("child_process");
 const {AccountStore} = require("./accountStore");
@@ -44,15 +45,13 @@ const {
   enrichInventoryDisplayOnlyImages
 } = require("./services/inventoryDisplayImageEnrichment");
 const {DedupLogger} = require("./logger");
-const {hashCraftPermitPayload} = require("../../shared/craftPermitPolicy");
 const {getLicenseConfig} = require("./licenseConfig");
 const {createControlPlaneAuthClient} = require("./controlPlaneAuthClient");
-const {createCraftPermitEnforcer} = require("./craftPermitEnforcer");
 const {resolveDeviceId} = require("./deviceIdentity");
 const {LicenseStore} = require("./licenseStore");
 const {createLicenseEnforcer} = require("./licenseEnforcer");
 const {createLicenseScheduler} = require("./licenseScheduler");
-const {bootstrapDevLicense} = require("./devLicenseBootstrap");
+const {bootstrapDevLicense, createDevLicenseBundle} = require("./devLicenseBootstrap");
 const {asString, toInt, nowString} = require("./utils");
 const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./constants");
 const { sellItem, getPriceOverview, calculateBuyerPrice, calculateSellerPrice, getMarketConfirmations, confirmMarketListings } = require("./steamMarketService");
@@ -80,6 +79,9 @@ const CRAFT_ASSIST_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 let craftAssistWorkerPool = null;
 const snapshotRowsLoader = createSnapshotRowsLoader({limit: 6});
 const activeCraftRuns = new Map();
+const craftOperationRecords = new Map();
+const CRAFT_OPERATION_RECORD_LIMIT = 1000;
+const CRAFT_OPERATION_RECORD_TTL_MS = 60 * 60 * 1000;
 let shutdownHooksInstalled = false;
 let runtimeBootstrapped = false;
 let defaultCraftOutcomePredictor = null;
@@ -332,6 +334,9 @@ function getLicenseRuntime(deps = {}) {
     refreshIntervalMs: config.refreshIntervalMs,
     refreshThresholdMs: config.refreshIntervalMs,
     refreshFn: async () => {
+      if (config.authMode === "dev_auto_bundle") {
+        return createDevLicenseBundle({config, deviceId});
+      }
       const authClient = getControlPlaneAuthClient(deps);
       if (!authClient || typeof authClient.refresh !== "function") {
         return null;
@@ -352,7 +357,7 @@ function getLicenseRuntime(deps = {}) {
         return {
           ...result.bundle,
           refresh_credential: asString(result.refreshCredential || refreshCredential).trim() || refreshCredential,
-          source: "remote_refresh"
+          source: "local_control_plane_refresh"
         };
       } catch (err) {
         logger.warn("ui_server", `license refresh failed: ${asString(err && err.message ? err.message : err)}`);
@@ -403,18 +408,6 @@ function getControlPlaneAuthClient(deps = {}) {
   return deps.__controlPlaneAuthClient;
 }
 
-function getCraftPermitEnforcer(deps = {}) {
-  if (deps.__craftPermitEnforcer) {
-    return deps.__craftPermitEnforcer;
-  }
-  const config = getClientLicenseConfig(deps);
-  deps.__craftPermitEnforcer = createCraftPermitEnforcer({
-    publicKeyFile: config.publicKeyFile,
-    deviceId: getClientDeviceId(deps)
-  });
-  return deps.__craftPermitEnforcer;
-}
-
 function getCraftAssistWorkerPool() {
   if (!CRAFT_ASSIST_USE_WORKER_POOL) {
     return null;
@@ -451,6 +444,7 @@ function createActiveCraftRunController({username, runId}) {
 function registerActiveCraftRun({username, runId}) {
   const key = asString(username).trim();
   if (!key) return null;
+  if (activeCraftRuns.has(key)) return null;
   const controller = createActiveCraftRunController({username: key, runId});
   activeCraftRuns.set(key, controller);
   return controller;
@@ -468,6 +462,79 @@ function releaseActiveCraftRun(username, controller) {
   if (activeCraftRuns.get(key) === controller) {
     activeCraftRuns.delete(key);
   }
+}
+
+function resolveCraftOperationId(body = {}) {
+  const supplied = asString(body && body.operation_id).trim();
+  if (!supplied) {
+    return randomUUID();
+  }
+  if (supplied.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(supplied)) {
+    const err = new Error("operation_id 格式无效");
+    err.code = "invalid_operation_id";
+    throw err;
+  }
+  return supplied;
+}
+
+function pruneCraftOperationRecords(now = Date.now()) {
+  for (const [operationId, record] of craftOperationRecords.entries()) {
+    if (record.completedAt && now - record.completedAt > CRAFT_OPERATION_RECORD_TTL_MS) {
+      craftOperationRecords.delete(operationId);
+    }
+  }
+  while (craftOperationRecords.size > CRAFT_OPERATION_RECORD_LIMIT) {
+    const oldestCompleted = Array.from(craftOperationRecords.entries())
+      .filter(([, record]) => record.completedAt)
+      .sort((left, right) => left[1].completedAt - right[1].completedAt)[0];
+    if (!oldestCompleted) break;
+    craftOperationRecords.delete(oldestCompleted[0]);
+  }
+}
+
+async function runCraftOperation({username, operationId, execute}) {
+  pruneCraftOperationRecords();
+  const existing = craftOperationRecords.get(operationId);
+  if (existing) {
+    if (existing.username !== username) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          reason: "operation_id_conflict",
+          message: "operation_id 已被其他账号使用",
+          operation_id: operationId
+        }
+      };
+    }
+    return existing.promise;
+  }
+
+  const controller = registerActiveCraftRun({username, runId: operationId});
+  if (!controller) {
+    return {
+      status: 409,
+      payload: {
+        ok: false,
+        reason: "craft_already_running",
+        message: "当前 Steam 账号已有炼金任务正在执行",
+        operation_id: operationId
+      }
+    };
+  }
+
+  const record = {username, completedAt: 0, promise: null};
+  record.promise = (async () => {
+    try {
+      return await execute(controller);
+    } finally {
+      record.completedAt = Date.now();
+      releaseActiveCraftRun(username, controller);
+      pruneCraftOperationRecords();
+    }
+  })();
+  craftOperationRecords.set(operationId, record);
+  return record.promise;
 }
 
 function logEncodingEnvironment() {
@@ -521,8 +588,23 @@ function ensureRuntimeBootstrapped() {
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
+    let byteLength = 0;
+    let tooLarge = false;
+    req.on("data", (chunk) => {
+      byteLength += chunk.byteLength;
+      if (byteLength > 64 * 1024) {
+        tooLarge = true;
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => {
+      if (tooLarge) {
+        const error = new Error("JSON body exceeds 64KiB");
+        error.code = "request_body_too_large";
+        reject(error);
+        return;
+      }
       if (!chunks.length) {
         resolve({});
         return;
@@ -531,11 +613,43 @@ function readJsonBody(req) {
         const raw = Buffer.concat(chunks).toString("utf8");
         resolve(raw ? JSON.parse(raw) : {});
       } catch (err) {
-        reject(new Error(`invalid json body: ${err.message}`));
+        const error = new Error(`invalid json body: ${err.message}`);
+        error.code = "invalid_json";
+        reject(error);
       }
     });
     req.on("error", reject);
   });
+}
+
+function validateLocalApiRequest(req) {
+  const host = asString(req && req.headers && req.headers.host).trim().toLowerCase();
+  const localPort = Number(req && req.socket && req.socket.localPort) || 0;
+  const allowedHosts = new Set([
+    `127.0.0.1:${localPort}`,
+    `localhost:${localPort}`,
+    `[::1]:${localPort}`
+  ]);
+  if (!localPort || !allowedHosts.has(host)) {
+    return {status: 403, reason: "local_host_required", message: "本地 API 仅接受回环地址请求"};
+  }
+  const method = asString(req && req.method).toUpperCase();
+  const origin = asString(req && req.headers && req.headers.origin).trim();
+  const fetchSite = asString(req && req.headers && req.headers["sec-fetch-site"]).trim().toLowerCase();
+  if ((origin && origin !== `http://${host}`) || fetchSite === "cross-site") {
+    return {status: 403, reason: "cross_origin_request_denied", message: "拒绝跨站本地请求"};
+  }
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return null;
+  const declaredLength = Number(req && req.headers && req.headers["content-length"]) || 0;
+  if (declaredLength > 64 * 1024) {
+    return {status: 413, reason: "request_body_too_large", message: "JSON 请求体不能超过 64KiB"};
+  }
+  const hasBody = declaredLength > 0 || !!(req && req.headers && req.headers["transfer-encoding"]);
+  const contentType = asString(req && req.headers && req.headers["content-type"]).trim().toLowerCase();
+  if (hasBody && !/^application\/json(?:\s*;|$)/.test(contentType)) {
+    return {status: 415, reason: "json_content_type_required", message: "请求体必须使用 application/json"};
+  }
+  return null;
 }
 
 function writeJson(res, status, payload, extraHeaders = {}) {
@@ -649,20 +763,10 @@ function resolveRequestAuth(req, deps = {}) {
   const stateUsername = state && state.ok && state.user
     ? asString(state.user.username).trim()
     : "";
-  let localUser = null;
-  if (store && stateUsername && typeof store.getUserByUsername === "function") {
-    try {
-      localUser = store.getUserByUsername(stateUsername);
-    } catch (_) {
-      localUser = null;
-    }
-  }
-  const accountViewerUsername = localUser ? asString(localUser.username).trim() : "";
   const user = state && state.ok && state.user
     ? {
         username: stateUsername,
-        display_name: asString(localUser && localUser.display_name ? localUser.display_name : state.user.username).trim(),
-        is_super_admin: !!(localUser && localUser.is_super_admin)
+        display_name: asString(state.user.username).trim()
       }
     : null;
   return {
@@ -674,16 +778,13 @@ function resolveRequestAuth(req, deps = {}) {
     user,
     permissions: Array.isArray(state && state.permissions) ? state.permissions : [],
     membership: state && state.user && state.user.membership_plan ? [state.user.membership_plan] : [],
-    accountViewerUsername
+    accountViewerUsername: ""
   };
 }
 
 function hasPermission(auth, code) {
   if (!auth || !auth.user) {
     return false;
-  }
-  if (auth.user.is_super_admin) {
-    return true;
   }
   return auth.permissions.includes(asString(code).trim());
 }
@@ -765,89 +866,6 @@ function writeClientAuthError(res, err, fallbackMessage = "认证请求失败") 
   });
 }
 
-function normalizeCraftPermitFailure(result) {
-  const code = asString(result && result.code).trim() || "craft_permission_denied";
-  const message = asString(result && result.message).trim() || "当前账号未获得炼金执行授权";
-  if (code === "permit_expired") {
-    return {status: 410, reason: code, message};
-  }
-  if ([
-    "device_mismatch",
-    "action_mismatch",
-    "account_username_mismatch",
-    "payload_hash_mismatch"
-  ].includes(code)) {
-    return {status: 409, reason: code, message};
-  }
-  if (["public_key_missing", "invalid_signature", "permit_invalid"].includes(code)) {
-    return {status: 502, reason: code, message};
-  }
-  return {status: 403, reason: code, message};
-}
-
-async function requireCraftExecutionPermit(res, auth, deps, action, body = {}) {
-  const config = getClientLicenseConfig(deps);
-  if (!config.requireRemoteCraftPermit) {
-    return true;
-  }
-  const runtime = auth && auth.licenseRuntime;
-  const currentBundle = runtime && typeof runtime.readBundle === "function" ? runtime.readBundle() : null;
-  const refreshCredential = asString(currentBundle && currentBundle.refresh_credential).trim();
-  if (!refreshCredential) {
-    writeJson(res, 503, {
-      ok: false,
-      reason: "craft_permit_unavailable",
-      message: "当前客户端缺少执行授权凭证，请重新登录"
-    });
-    return false;
-  }
-  const authClient = getControlPlaneAuthClient(deps);
-  if (!authClient || typeof authClient.issueCraftPermit !== "function") {
-    writeJson(res, 503, {
-      ok: false,
-      reason: "craft_auth_unavailable",
-      message: "认证服务暂时不可用，暂无法执行炼金"
-    });
-    return false;
-  }
-  const accountUsername = asString(body && body.username).trim();
-  const deviceId = getClientDeviceId(deps);
-  const payloadHash = hashCraftPermitPayload(action, body);
-  let permit = null;
-  try {
-    const response = await authClient.issueCraftPermit({
-      refreshCredential,
-      deviceId,
-      action,
-      accountUsername,
-      payloadHash
-    });
-    permit = response && response.permit && typeof response.permit === "object" ? response.permit : null;
-  } catch (err) {
-    writeJson(res, Math.max(400, Number(err && err.status) || 503), {
-      ok: false,
-      reason: asString(err && err.code || "craft_auth_unavailable").trim() || "craft_auth_unavailable",
-      message: asString(err && err.message || "认证服务暂时不可用，暂无法执行炼金").trim() || "认证服务暂时不可用，暂无法执行炼金"
-    });
-    return false;
-  }
-  const evaluation = getCraftPermitEnforcer(deps).evaluatePermit(permit, {
-    action,
-    accountUsername,
-    payloadHash
-  });
-  if (evaluation.ok) {
-    return true;
-  }
-  const failure = normalizeCraftPermitFailure(evaluation);
-  writeJson(res, failure.status, {
-    ok: false,
-    reason: failure.reason,
-    message: failure.message
-  });
-  return false;
-}
-
 function requireSteamAccountAccess(res, auth, username) {
   const key = asString(username).trim();
   if (!key) {
@@ -863,10 +881,7 @@ function requireSteamAccountAccess(res, auth, username) {
 
 function canAccessSteamAccount(auth, username) {
   const key = asString(username).trim();
-  if (!key) {
-    return false;
-  }
-  return !!(auth && auth.store && auth.store.canAccessSteamAccount(resolveAccountViewerUsername(auth), key));
+  return !!(auth && auth.user && key);
 }
 
 function filterComponentTaskSnapshotForAuth(snapshot, auth) {
@@ -2105,7 +2120,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     if (pathname === "/api/client-auth/login" && req.method === "POST") {
       const body = await readJsonBody(req);
       const username = asString(body && body.username).trim();
-      const password = asString(body && body.password).trim();
+      const password = asString(body && body.password);
       if (!username) {
         writeJson(res, 400, {ok: false, reason: "username_required", message: "username is required"});
         return true;
@@ -2123,19 +2138,19 @@ async function handleApi(req, res, urlObj, deps = {}) {
           clientVersion: asString(body && body.client_version).trim()
         });
         if (!result || !result.bundle || typeof result.bundle !== "object") {
-          writeJson(res, 502, {ok: false, reason: "bundle_missing", message: "远端认证成功但未返回授权包"});
+          writeJson(res, 502, {ok: false, reason: "bundle_missing", message: "本地控制台登录成功但未返回授权包"});
           return true;
         }
         const state = auth.licenseRuntime.importBundle({
           ...result.bundle,
           refresh_credential: asString(result.refreshCredential).trim(),
-          source: "remote_login"
+          source: "local_control_plane_login"
         });
         if (!state || !state.ok) {
           writeJson(res, 502, {
             ok: false,
             reason: asString(state && state.code || "license_invalid").trim() || "license_invalid",
-            message: asString(state && state.message || "远端授权写入本地失败").trim() || "远端授权写入本地失败"
+            message: asString(state && state.message || "控制台授权写入本地失败").trim() || "控制台授权写入本地失败"
           });
           return true;
         }
@@ -2191,7 +2206,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
           email: asString(body && body.email).trim(),
           code: asString(body && body.code).trim(),
           username: asString(body && body.username).trim(),
-          password: asString(body && body.password).trim()
+          password: asString(body && body.password)
         });
         writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
       } catch (err) {
@@ -2235,19 +2250,27 @@ async function handleApi(req, res, urlObj, deps = {}) {
           email: asString(body && body.email).trim(),
           verificationTicket: asString(body && body.verification_ticket).trim(),
           username: asString(body && body.username).trim(),
-          password: asString(body && body.password).trim(),
-          deviceId: asString(body && body.device_id).trim()
+          password: asString(body && body.password),
+          deviceId: resolveDeviceId(config.machineIdFile)
         });
-        if (result && result.bundle) {
-          const licenseRuntime = deps && deps.auth && deps.auth.licenseRuntime;
-          if (licenseRuntime && typeof licenseRuntime.importBundle === "function") {
-            licenseRuntime.importBundle({
-              ...result.bundle,
-              refresh_credential: result.refreshCredential || ""
-            });
-          }
+        if (!result || !result.bundle || typeof result.bundle !== "object") {
+          writeJson(res, 502, {ok: false, reason: "bundle_missing", message: "注册成功但本地控制平面未返回授权包"});
+          return true;
         }
-        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+        const state = auth.licenseRuntime.importBundle({
+          ...result.bundle,
+          refresh_credential: asString(result.refreshCredential).trim(),
+          source: "local_control_plane_register"
+        });
+        if (!state || !state.ok) {
+          writeJson(res, 502, {
+            ok: false,
+            reason: asString(state && state.code || "license_invalid").trim() || "license_invalid",
+            message: asString(state && state.message || "注册授权写入本地失败").trim() || "注册授权写入本地失败"
+          });
+          return true;
+        }
+        writeJson(res, 200, buildClientAuthStatePayload(state, deps));
       } catch (err) {
         writeClientAuthError(res, err, "注册完成失败");
       }
@@ -2275,7 +2298,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         const result = await authClient.resetPassword({
           email: asString(body && body.email).trim(),
           code: asString(body && body.code).trim(),
-          newPassword: asString(body && body.new_password).trim()
+          newPassword: asString(body && body.new_password)
         });
         writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
       } catch (err) {
@@ -2318,6 +2341,17 @@ async function handleApi(req, res, urlObj, deps = {}) {
       return true;
     }
 
+    if (pathname === "/api/membership/products" && req.method === "GET") {
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.getMembershipProducts();
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true, products: []});
+      } catch (err) {
+        writeClientAuthError(res, err, "读取充值商品失败");
+      }
+      return true;
+    }
+
     if (pathname.startsWith("/api/auth/")) {
       writeJson(res, 410, {
         ok: false,
@@ -2349,6 +2383,84 @@ async function handleApi(req, res, urlObj, deps = {}) {
         reachable,
         reason: reachable ? "" : "steam_unreachable"
       });
+      return true;
+    }
+
+    if (pathname === "/api/membership/redeem" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const code = asString(body && body.code).trim().toUpperCase();
+      if (!code) {
+        writeJson(res, 400, {ok: false, reason: "activation_code_required", message: "请输入激活码"});
+        return true;
+      }
+      const currentBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function"
+        ? auth.licenseRuntime.readBundle()
+        : null;
+      const refreshCredential = asString(currentBundle && currentBundle.refresh_credential).trim();
+      if (!refreshCredential) {
+        writeJson(res, 401, {ok: false, reason: "refresh_credential_missing", message: "登录状态已失效，请重新登录"});
+        return true;
+      }
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.redeemActivationCode({
+          refreshCredential,
+          deviceId: getClientDeviceId(deps),
+          code
+        });
+        if (!result || !result.bundle || typeof result.bundle !== "object") {
+          writeJson(res, 502, {ok: false, reason: "bundle_missing", message: "兑换成功但未返回新的授权包"});
+          return true;
+        }
+        const state = auth.licenseRuntime.importBundle({
+          ...result.bundle,
+          refresh_credential: asString(result.refreshCredential || refreshCredential).trim(),
+          source: "activation_code_redeem"
+        });
+        if (!state || !state.ok) {
+          writeJson(res, 502, {
+            ok: false,
+            reason: asString(state && state.code || "license_invalid").trim() || "license_invalid",
+            message: asString(state && state.message || "新授权包写入本地失败").trim() || "新授权包写入本地失败"
+          });
+          return true;
+        }
+        writeJson(res, 200, {
+          ...buildClientAuthStatePayload(state, deps),
+          message: "激活码兑换成功"
+        });
+      } catch (err) {
+        writeClientAuthError(res, err, "激活码兑换失败");
+      }
+      return true;
+    }
+
+    if (pathname === "/api/membership/checkout" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const productId = asString(body && body.product_id).trim();
+      if (!productId) {
+        writeJson(res, 400, {ok: false, reason: "product_required", message: "请选择充值商品"});
+        return true;
+      }
+      const currentBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function"
+        ? auth.licenseRuntime.readBundle()
+        : null;
+      const refreshCredential = asString(currentBundle && currentBundle.refresh_credential).trim();
+      if (!refreshCredential) {
+        writeJson(res, 401, {ok: false, reason: "refresh_credential_missing", message: "登录状态已失效，请重新登录"});
+        return true;
+      }
+      try {
+        const authClient = getControlPlaneAuthClient(deps);
+        const result = await authClient.checkoutMembership({
+          refreshCredential,
+          deviceId: getClientDeviceId(deps),
+          productId
+        });
+        writeJson(res, 200, result && typeof result === "object" ? result : {ok: true});
+      } catch (err) {
+        writeClientAuthError(res, err, "创建支付订单失败");
+      }
       return true;
     }
 
@@ -2581,9 +2693,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
         const accountStore = getViewerAccountStore(auth, deps);
         const existed = accountStore.get(username);
         const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
-        const authClient = getControlPlaneAuthClient(deps);
-        const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
-
         let profile = null;
         try {
           profile = await resolveAccountProfileFn({
@@ -2599,33 +2708,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
           logger.warn("ui_server", `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`);
         }
         const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
-        if (requiresBindingCheck) {
-          if (!nextSteamId) {
-            writeJson(res, 502, {ok: false, reason: "steam_id_missing", message: "\u767b\u5f55\u6210\u529f\u4f46\u672a\u83b7\u53d6\u5230 SteamID\uff0c\u65e0\u6cd5\u6821\u9a8c\u7ed1\u5b9a\u8d44\u683c"});
-            return true;
-          }
-          const runtimeBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function" ? auth.licenseRuntime.readBundle() : null;
-          const refreshCredential = asString(runtimeBundle && runtimeBundle.refresh_credential).trim();
-          if (!refreshCredential || !authClient || typeof authClient.checkOrBindSteamAccount !== "function") {
-            writeJson(res, 503, {ok: false, reason: "steam_binding_auth_unavailable", message: "\u8ba4\u8bc1\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528"});
-            return true;
-          }
-          try {
-            const binding = await authClient.checkOrBindSteamAccount({
-              refreshCredential,
-              deviceId: getClientDeviceId(deps),
-              steamId: nextSteamId,
-              steamAccountName: username
-            });
-            if (!binding || binding.ok === false) {
-              writeJson(res, 409, {ok: false, reason: asString(binding && (binding.reason || binding.code) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(binding && binding.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
-              return true;
-            }
-          } catch (bindingErr) {
-            writeJson(res, Math.max(400, Number(bindingErr && bindingErr.status) || 409), {ok: false, reason: asString(bindingErr && (bindingErr.code || (bindingErr.data && bindingErr.data.reason)) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(bindingErr && bindingErr.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
-            return true;
-          }
-        }
         const nextSteamName = asString(profile && profile.persona_name || "").trim();
         const nextAvatarUrl = pickProfileAvatarUrl(profile);
         accountStore.upsert({
@@ -2683,9 +2765,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const accountStore = getViewerAccountStore(auth, deps);
       const existed = accountStore.get(username);
       const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
-      const authClient = getControlPlaneAuthClient(deps);
-      const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
-
       let profile = null;
       try {
         profile = await resolveAccountProfileFn({
@@ -2701,33 +2780,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
         logger.warn("ui_server", `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`);
       }
       const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
-      if (requiresBindingCheck) {
-        if (!nextSteamId) {
-          writeJson(res, 502, {ok: false, reason: "steam_id_missing", message: "\u767b\u5f55\u6210\u529f\u4f46\u672a\u83b7\u53d6\u5230 SteamID\uff0c\u65e0\u6cd5\u6821\u9a8c\u7ed1\u5b9a\u8d44\u683c"});
-          return true;
-        }
-        const runtimeBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function" ? auth.licenseRuntime.readBundle() : null;
-        const refreshCredential = asString(runtimeBundle && runtimeBundle.refresh_credential).trim();
-        if (!refreshCredential || !authClient || typeof authClient.checkOrBindSteamAccount !== "function") {
-          writeJson(res, 503, {ok: false, reason: "steam_binding_auth_unavailable", message: "\u8ba4\u8bc1\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528"});
-          return true;
-        }
-        try {
-          const binding = await authClient.checkOrBindSteamAccount({
-            refreshCredential,
-            deviceId: getClientDeviceId(deps),
-            steamId: nextSteamId,
-            steamAccountName: username
-          });
-          if (!binding || binding.ok === false) {
-            writeJson(res, 409, {ok: false, reason: asString(binding && (binding.reason || binding.code) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(binding && binding.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
-            return true;
-          }
-        } catch (bindingErr) {
-          writeJson(res, Math.max(400, Number(bindingErr && bindingErr.status) || 409), {ok: false, reason: asString(bindingErr && (bindingErr.code || (bindingErr.data && bindingErr.data.reason)) || "steam_binding_denied").trim() || "steam_binding_denied", message: asString(bindingErr && bindingErr.message || "\u5f53\u524d\u8d26\u53f7\u4e0d\u5141\u8bb8\u7ed1\u5b9a\u65b0\u7684 Steam \u8d26\u53f7").trim()});
-          return true;
-        }
-      }
       const nextSteamName = asString(profile && profile.persona_name || "").trim();
       const nextAvatarUrl = pickProfileAvatarUrl(profile);
       accountStore.upsert({
@@ -2786,9 +2838,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const accountStore = getViewerAccountStore(auth, deps);
       const existed = accountStore.get(username);
       const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
-      const authClient = getControlPlaneAuthClient(deps);
-      const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
-
       let profile = null;
       try {
         profile = await resolveAccountProfileFn({
@@ -2807,64 +2856,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
         );
       }
       const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
-      if (requiresBindingCheck) {
-        if (!nextSteamId) {
-          writeJson(res, 502, {
-            ok: false,
-            reason: "steam_id_missing",
-            message: "登录成功但未获取到 SteamID，无法校验绑定资格"
-          });
-          return true;
-        }
-        const runtimeBundle = auth.licenseRuntime && typeof auth.licenseRuntime.readBundle === "function"
-          ? auth.licenseRuntime.readBundle()
-          : null;
-        const refreshCredential = asString(runtimeBundle && runtimeBundle.refresh_credential).trim();
-        if (!refreshCredential) {
-          writeJson(res, 503, {
-            ok: false,
-            reason: "steam_binding_auth_unavailable",
-            message: "当前客户端缺少绑定校验凭证，请重新登录后重试"
-          });
-          return true;
-        }
-        if (!authClient || typeof authClient.checkOrBindSteamAccount !== "function") {
-          writeJson(res, 503, {
-            ok: false,
-            reason: "steam_binding_auth_unavailable",
-            message: "认证服务暂时不可用，暂无法校验 Steam 绑定资格"
-          });
-          return true;
-        }
-        let binding = null;
-        try {
-          binding = await authClient.checkOrBindSteamAccount({
-            refreshCredential,
-            deviceId: getClientDeviceId(deps),
-            steamId: nextSteamId,
-            steamAccountName: username
-          });
-        } catch (bindingErr) {
-          writeJson(res, Math.max(400, Number(bindingErr && bindingErr.status) || 409), {
-            ok: false,
-            reason: asString(bindingErr && (bindingErr.code || (bindingErr.data && bindingErr.data.reason)) || "steam_binding_denied").trim()
-              || "steam_binding_denied",
-            message: asString(bindingErr && bindingErr.message || "当前账号不允许绑定新的 Steam 账号").trim()
-              || "当前账号不允许绑定新的 Steam 账号"
-          });
-          return true;
-        }
-        if (!binding || binding.ok === false) {
-          writeJson(res, 409, {
-            ok: false,
-            reason: asString(binding && (binding.reason || binding.code) || "steam_binding_denied").trim()
-              || "steam_binding_denied",
-            message: asString(binding && binding.message || "当前账号不允许绑定新的 Steam 账号").trim()
-              || "当前账号不允许绑定新的 Steam 账号"
-          });
-          return true;
-        }
-      }
 
       const nextSteamName = asString(profile && profile.persona_name || "").trim();
       const nextAvatarUrl = pickProfileAvatarUrl(profile);
@@ -3632,24 +3623,29 @@ async function handleApi(req, res, urlObj, deps = {}) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
     }
-    if (!await requireCraftExecutionPermit(res, auth, deps, "craft.tradeup.with_components.execute", body)) {
+    let operationId = "";
+    try {
+      operationId = resolveCraftOperationId(body);
+    } catch (err) {
+      writeJson(res, 400, {ok: false, reason: "invalid_operation_id", message: asString(err && err.message)});
       return true;
     }
-    try {
-      const allowCoolingRaw = body.allow_cooling;
-      const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
-      const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
-      const prepareOnlyRaw = body.prepare_only;
-      const prepareOnlyText = asString(prepareOnlyRaw).trim().toLowerCase();
-      const prepareOnly = prepareOnlyRaw === true || prepareOnlyRaw === 1 || prepareOnlyText === "1" || prepareOnlyText === "true";
-      const recipeCount = Array.isArray(body.recipes) ? body.recipes.length : 0;
-      const progressRunId = `craft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const activeRun = registerActiveCraftRun({username, runId: progressRunId});
-      logger.info(
-        "ui_server",
-        `craft-with-components request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0} prepare_only=${prepareOnly ? 1 : 0}`
-      );
-      try {
+    const outcome = await runCraftOperation({
+      username,
+      operationId,
+      execute: async (activeRun) => {
+        const allowCoolingRaw = body.allow_cooling;
+        const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
+        const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
+        const prepareOnlyRaw = body.prepare_only;
+        const prepareOnlyText = asString(prepareOnlyRaw).trim().toLowerCase();
+        const prepareOnly = prepareOnlyRaw === true || prepareOnlyRaw === 1 || prepareOnlyText === "1" || prepareOnlyText === "true";
+        const recipeCount = Array.isArray(body.recipes) ? body.recipes.length : 0;
+        logger.info(
+          "ui_server",
+          `craft-with-components request: account=${username} operation=${operationId} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0} prepare_only=${prepareOnly ? 1 : 0}`
+        );
+        try {
         const payload = await craftTradeupWithComponentsService.runTradeUpWithComponents({
           username,
           password: body.password,
@@ -3660,7 +3656,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
           onProgress: (progress) => {
             refreshRuntime.emitSse("craft_component_progress", {
               username,
-              run_id: progressRunId,
+              run_id: operationId,
               ...progress
             });
           }
@@ -3677,38 +3673,49 @@ async function handleApi(req, res, urlObj, deps = {}) {
             `craft-with-components blocked: account=${username} ready=${toInt(payload && payload.ready_recipe_count, 0)} skipped=${toInt(payload && payload.skipped_recipe_count, 0)} paused=${payload && payload.paused ? 1 : 0} msg=${asString(payload && payload.message ? payload.message : "")}`
           );
         }
-        writeJson(res, status, {
-          ok: status === 200,
-          ...payload,
-          component: buildComponentSummary(payload.rows || [])
-        });
-      } finally {
-        releaseActiveCraftRun(username, activeRun);
+          return {
+            status,
+            payload: {
+              ok: status === 200,
+              ...payload,
+              component: buildComponentSummary(payload.rows || []),
+              operation_id: operationId
+            }
+          };
+        } catch (err) {
+          if (err && err.craft_payload) {
+            const payload = err.craft_payload;
+            logger.warn(
+              "ui_server",
+              `craft-with-components partial: account=${username} completed=${Array.isArray(payload && payload.completed_steps) ? payload.completed_steps.length : 0} msg=${asString(err && err.message ? err.message : err)}`
+            );
+            return {
+              status: 409,
+              payload: {
+                ok: false,
+                ...payload,
+                component: buildComponentSummary(payload.rows || []),
+                message: asString(err && err.message ? err.message : err),
+                operation_id: operationId
+              }
+            };
+          }
+          const status = err && err.code === "snapshot_missing"
+            ? 409
+            : (err && err.code === "bad_request" ? 400 : 500);
+          logger.warn("ui_server", `craft-with-components failed: account=${username} status=${status} msg=${asString(err && err.message ? err.message : err)}`);
+          return {
+            status,
+            payload: {
+              ok: false,
+              message: asString(err && err.message ? err.message : err),
+              operation_id: operationId
+            }
+          };
+        }
       }
-    } catch (err) {
-      if (err && err.craft_payload) {
-        const payload = err.craft_payload;
-        logger.warn(
-          "ui_server",
-          `craft-with-components partial: account=${username} completed=${Array.isArray(payload && payload.completed_steps) ? payload.completed_steps.length : 0} msg=${asString(err && err.message ? err.message : err)}`
-        );
-        writeJson(res, 409, {
-          ok: false,
-          ...payload,
-          component: buildComponentSummary(payload.rows || []),
-          message: asString(err && err.message ? err.message : err)
-        });
-        return true;
-      }
-      const status = err && err.code === "snapshot_missing"
-        ? 409
-        : (err && err.code === "bad_request" ? 400 : 500);
-      logger.warn("ui_server", `craft-with-components failed: account=${username} status=${status} msg=${asString(err && err.message ? err.message : err)}`);
-      writeJson(res, status, {
-        ok: false,
-        message: asString(err && err.message ? err.message : err)
-      });
-    }
+    });
+    writeJson(res, outcome.status, outcome.payload);
     return true;
   }
 
@@ -3757,70 +3764,90 @@ async function handleApi(req, res, urlObj, deps = {}) {
       writeJson(res, 409, {ok: false, message: "当前账号未连接，请先连接并刷新库存"});
       return true;
     }
-    if (!requestUsesComponentSourceRecipes(body) && !await requireCraftExecutionPermit(res, auth, deps, "craft.tradeup.execute", body)) {
+    let operationId = "";
+    try {
+      operationId = resolveCraftOperationId(body);
+    } catch (err) {
+      writeJson(res, 400, {ok: false, reason: "invalid_operation_id", message: asString(err && err.message)});
       return true;
     }
-    try {
-      const allowCoolingRaw = body.allow_cooling;
-      const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
-      const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
-      const hasRecipes = Array.isArray(body.recipes) && body.recipes.length > 0;
-      const recipeCount = hasRecipes ? body.recipes.length : (Array.isArray(body.item_ids) && body.item_ids.length ? 1 : 0);
-      if (requestUsesComponentSourceRecipes(body)) {
-        const message = "检测到组件来源物品，必须走“先取出组件物品再汰换”的执行链，请重新执行";
-        logger.warn("ui_server", `craft blocked: account=${username} reason=component_route_required recipes=${recipeCount}`);
-        writeJson(res, 409, {
-          ok: false,
-          reason: "component_route_required",
-          message
-        });
-        return true;
+    const outcome = await runCraftOperation({
+      username,
+      operationId,
+      execute: async () => {
+        try {
+          const allowCoolingRaw = body.allow_cooling;
+          const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
+          const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
+          const hasRecipes = Array.isArray(body.recipes) && body.recipes.length > 0;
+          const recipeCount = hasRecipes ? body.recipes.length : (Array.isArray(body.item_ids) && body.item_ids.length ? 1 : 0);
+          if (requestUsesComponentSourceRecipes(body)) {
+            const message = "检测到组件来源物品，必须走“先取出组件物品再汰换”的执行链，请重新执行";
+            logger.warn("ui_server", `craft blocked: account=${username} reason=component_route_required recipes=${recipeCount}`);
+            return {
+              status: 409,
+              payload: {ok: false, reason: "component_route_required", message, operation_id: operationId}
+            };
+          }
+          logger.info("ui_server", `craft request: account=${username} operation=${operationId} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0}`);
+          const payload = hasRecipes
+            ? await craftService.runTradeUpBatch({
+              username,
+              password: body.password,
+              recipes: body.recipes,
+              allowCooling
+            })
+            : await craftService.runTradeUp({
+              username,
+              password: body.password,
+              itemIds: body.item_ids,
+              allowCooling
+            });
+          logger.info(
+            "ui_server",
+            `craft success: account=${username} recipes=${toInt(payload && payload.recipe_count, 0)} steps=${Array.isArray(payload && payload.steps) ? payload.steps.length : 0} gained=${Array.isArray(payload && payload.gained_ids) ? payload.gained_ids.length : 0}`
+          );
+          return {
+            status: 200,
+            payload: {
+              ok: true,
+              ...payload,
+              component: buildComponentSummary(payload.rows || []),
+              operation_id: operationId
+            }
+          };
+        } catch (err) {
+          if (err && err.craft_payload) {
+            const payload = err.craft_payload;
+            logger.warn(
+              "ui_server",
+              `craft partial: account=${username} completed=${Array.isArray(payload && payload.completed_steps) ? payload.completed_steps.length : 0} failed_step=${toInt(payload && payload.failed_step, 0)} msg=${asString(err && err.message ? err.message : err)}`
+            );
+            return {
+              status: 409,
+              payload: {
+                ok: false,
+                ...payload,
+                component: buildComponentSummary(payload.rows || []),
+                message: asString(err && err.message ? err.message : err),
+                operation_id: operationId
+              }
+            };
+          }
+          const status = err && err.code === "bad_request" ? 400 : 500;
+          logger.warn("ui_server", `craft failed: account=${username} status=${status} msg=${asString(err && err.message ? err.message : err)}`);
+          return {
+            status,
+            payload: {
+              ok: false,
+              message: asString(err && err.message ? err.message : err),
+              operation_id: operationId
+            }
+          };
+        }
       }
-      logger.info("ui_server", `craft request: account=${username} recipes=${recipeCount} allow_cooling=${allowCooling ? 1 : 0}`);
-      const payload = hasRecipes
-        ? await craftService.runTradeUpBatch({
-          username,
-          password: body.password,
-          recipes: body.recipes,
-          allowCooling
-        })
-        : await craftService.runTradeUp({
-          username,
-          password: body.password,
-          itemIds: body.item_ids,
-          allowCooling
-        });
-      logger.info(
-        "ui_server",
-        `craft success: account=${username} recipes=${toInt(payload && payload.recipe_count, 0)} steps=${Array.isArray(payload && payload.steps) ? payload.steps.length : 0} gained=${Array.isArray(payload && payload.gained_ids) ? payload.gained_ids.length : 0}`
-      );
-      writeJson(res, 200, {
-        ok: true,
-        ...payload,
-        component: buildComponentSummary(payload.rows || [])
-      });
-    } catch (err) {
-      if (err && err.craft_payload) {
-        const payload = err.craft_payload;
-        logger.warn(
-          "ui_server",
-          `craft partial: account=${username} completed=${Array.isArray(payload && payload.completed_steps) ? payload.completed_steps.length : 0} failed_step=${toInt(payload && payload.failed_step, 0)} msg=${asString(err && err.message ? err.message : err)}`
-        );
-        writeJson(res, 409, {
-          ok: false,
-          ...payload,
-          component: buildComponentSummary(payload.rows || []),
-          message: asString(err && err.message ? err.message : err)
-        });
-        return true;
-      }
-      const status = err && err.code === "bad_request" ? 400 : 500;
-      logger.warn("ui_server", `craft failed: account=${username} status=${status} msg=${asString(err && err.message ? err.message : err)}`);
-      writeJson(res, status, {
-        ok: false,
-        message: asString(err && err.message ? err.message : err)
-      });
-    }
+    });
+    writeJson(res, outcome.status, outcome.payload);
     return true;
   }
 
@@ -4107,8 +4134,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*"
+      Connection: "keep-alive"
     });
 
     const sendSse = (event, data) => {
@@ -4216,8 +4242,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*"
+      Connection: "keep-alive"
     });
 
     const sendSse = (event, data) => {
@@ -4359,8 +4384,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*"
+      Connection: "keep-alive"
     });
 
     const sendSse = (event, data) => {
@@ -4598,8 +4622,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "*"
+        Connection: "keep-alive"
       });
       const sendSse = (event, data) => {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -4744,8 +4767,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "*"
+        Connection: "keep-alive"
       });
       const sendSse = (event, data) => {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -4822,8 +4844,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         res.writeHead(200, {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "Access-Control-Allow-Origin": "*"
+          Connection: "keep-alive"
         });
         const sendSse = (event, data) => {
           res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -4956,8 +4977,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "*"
+        Connection: "keep-alive"
       });
       const sendSse = (event, data) => {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -5185,6 +5205,15 @@ function createServer(options = {}) {
     try {
       const urlObj = new URL(req.url, "http://127.0.0.1");
       if (urlObj.pathname.startsWith("/api/")) {
+        const apiRequestError = validateLocalApiRequest(req);
+        if (apiRequestError) {
+          writeJson(res, apiRequestError.status, {
+            ok: false,
+            reason: apiRequestError.reason,
+            message: apiRequestError.message
+          });
+          return;
+        }
         const hit = await handleApi(req, res, urlObj, apiDeps);
         if (!hit) {
           writeJson(res, 404, {ok: false, message: "not found"});
@@ -5202,6 +5231,14 @@ function createServer(options = {}) {
       res.writeHead(200, {"Content-Type": guessContentType(filePath)});
       res.end(buf);
     } catch (err) {
+      if (err && err.code === "request_body_too_large") {
+        writeJson(res, 413, {ok: false, reason: "request_body_too_large", message: "JSON 请求体不能超过 64KiB"});
+        return;
+      }
+      if (err && err.code === "invalid_json") {
+        writeJson(res, 400, {ok: false, reason: "invalid_json", message: "JSON 请求体格式不正确"});
+        return;
+      }
       writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err)});
     }
   });

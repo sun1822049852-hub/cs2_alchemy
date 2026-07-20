@@ -25,7 +25,7 @@ function createLicenseRuntime({username, permissions}) {
     user: {
       id: `user_${username}`,
       username,
-      membership_plan: "pro"
+      membership_plan: "member"
     },
     permissions: Array.isArray(permissions) ? permissions.slice() : [],
     featureFlags: {},
@@ -468,7 +468,7 @@ function accountReadPermissions() {
   ];
 }
 
-async function test_bound_user_only_lists_bound_steam_accounts() {
+async function test_control_plane_user_lists_all_saved_steam_accounts() {
   await withScopedServer({
     username: "member_a",
     permissions: accountReadPermissions()
@@ -480,12 +480,12 @@ async function test_bound_user_only_lists_bound_steam_accounts() {
     assert.equal(response.statusCode, 200);
     assert.deepEqual(
       response.body.accounts.map((row) => row.username),
-      ["countsteam01"]
+      ["countsteam01", "countsteam02"]
     );
   });
 }
 
-async function test_unbound_user_cannot_select_wrong_steam_account() {
+async function test_control_plane_user_can_select_any_saved_steam_account() {
   await withScopedServer({
     username: "member_a",
     permissions: accountReadPermissions()
@@ -498,12 +498,11 @@ async function test_unbound_user_cannot_select_wrong_steam_account() {
         username: "countsteam02"
       }
     });
-    assert.equal(response.statusCode, 403);
-    assert.equal(response.body.reason, "account_scope_denied");
+    assert.equal(response.statusCode, 200);
   });
 }
 
-async function test_trade_routes_stop_before_external_calls_for_unbound_account() {
+async function test_trade_routes_allow_any_saved_steam_account() {
   await withScopedServer({
     username: "member_a",
     permissions: accountReadPermissions()
@@ -519,8 +518,7 @@ async function test_trade_routes_stop_before_external_calls_for_unbound_account(
       }
     });
     assert.equal(sendResponse.statusCode, 200);
-    assert.equal(sendResponse.events[0].event, "error");
-    assert.equal(sendResponse.events[0].data.message, "发送方账号不存在");
+    assert.equal(sendResponse.events.some((event) => event.event === "done" && event.data.ok), true);
 
     const acceptResponse = await requestJson({
       port,
@@ -531,8 +529,8 @@ async function test_trade_routes_stop_before_external_calls_for_unbound_account(
         tradeofferIds: ["offer-1"]
       }
     });
-    assert.equal(acceptResponse.statusCode, 400);
-    assert.equal(acceptResponse.body.message, "账号不存在");
+    assert.equal(acceptResponse.statusCode, 200);
+    assert.equal(acceptResponse.body.ok, true);
 
     const cancelResponse = await requestJson({
       port,
@@ -543,23 +541,22 @@ async function test_trade_routes_stop_before_external_calls_for_unbound_account(
         tradeofferIds: ["offer-1"]
       }
     });
-    assert.equal(cancelResponse.statusCode, 400);
-    assert.equal(cancelResponse.body.message, "账号不存在");
+    assert.equal(cancelResponse.statusCode, 200);
+    assert.equal(cancelResponse.body.ok, true);
 
-    assert.equal(calls.refreshWebCookie.length, 0);
-    assert.equal(calls.sendTradeOffer.length, 0);
-    assert.equal(calls.acceptTradeOffer.length, 0);
-    assert.equal(calls.cancelTradeOffer.length, 0);
-    assert.equal(calls.confirmTradeOffer.length, 0);
+    assert.equal(calls.refreshWebCookie.length > 0, true);
+    assert.equal(calls.sendTradeOffer.length, 1);
+    assert.equal(calls.acceptTradeOffer.length, 1);
+    assert.equal(calls.cancelTradeOffer.length, 1);
   });
 }
 
-async function test_market_routes_stop_before_external_calls_for_unbound_account() {
+async function test_market_routes_allow_any_saved_steam_account() {
   await withScopedServer({
     username: "member_a",
     permissions: accountReadPermissions()
   }, async ({port, calls}) => {
-    const sellResponse = await requestJson({
+    const sellResponse = await requestSse({
       port,
       method: "POST",
       route: "/api/market/batch-sell",
@@ -574,8 +571,8 @@ async function test_market_routes_stop_before_external_calls_for_unbound_account
         ]
       }
     });
-    assert.equal(sellResponse.statusCode, 404);
-    assert.equal(sellResponse.body.message, "账号不存在");
+    assert.equal(sellResponse.statusCode, 200);
+    assert.equal(sellResponse.events.some((event) => event.event === "done"), true);
 
     const confirmationsResponse = await requestJson({
       port,
@@ -585,8 +582,8 @@ async function test_market_routes_stop_before_external_calls_for_unbound_account
         username: "countsteam02"
       }
     });
-    assert.equal(confirmationsResponse.statusCode, 404);
-    assert.equal(confirmationsResponse.body.message, "账号不存在");
+    assert.equal(confirmationsResponse.statusCode, 200);
+    assert.equal(confirmationsResponse.body.ok, true);
 
     const confirmListingsResponse = await requestJson({
       port,
@@ -597,13 +594,13 @@ async function test_market_routes_stop_before_external_calls_for_unbound_account
         confirmationIds: ["conf-1"]
       }
     });
-    assert.equal(confirmListingsResponse.statusCode, 404);
-    assert.equal(confirmListingsResponse.body.message, "账号不存在");
+    assert.equal(confirmListingsResponse.statusCode, 200);
+    assert.equal(confirmListingsResponse.body.ok, true);
 
-    assert.equal(calls.refreshWebCookie.length, 0);
-    assert.equal(calls.sellItem.length, 0);
-    assert.equal(calls.getMarketConfirmations.length, 0);
-    assert.equal(calls.confirmMarketListings.length, 0);
+    assert.equal(calls.refreshWebCookie.length > 0, true);
+    assert.equal(calls.sellItem.length, 1);
+    assert.equal(calls.getMarketConfirmations.length, 1);
+    assert.equal(calls.confirmMarketListings.length, 1);
   });
 }
 
@@ -793,7 +790,7 @@ async function test_fetch_balance_reports_unpersisted_source_metadata_when_local
   });
 }
 
-async function test_account_tool_routes_skip_unbound_accounts_before_steam_calls() {
+async function test_account_tool_routes_include_all_saved_accounts() {
   await withScopedServer({
     username: "member_a",
     permissions: accountReadPermissions()
@@ -809,10 +806,10 @@ async function test_account_tool_routes_skip_unbound_accounts_before_steam_calls
     assert.equal(bansResponse.statusCode, 200);
     assert.deepEqual(
       bansResponse.body.results.map((row) => row.username),
-      ["countsteam01"]
+      ["countsteam01", "countsteam02"]
     );
     assert.equal(calls.checkBansBatch.length, 1);
-    assert.deepEqual(calls.checkBansBatch[0].steamIds, ["76561198000000001"]);
+    assert.deepEqual(calls.checkBansBatch[0].steamIds, ["76561198000000001", "76561198000000002"]);
 
     const balanceResponse = await requestJson({
       port,
@@ -827,11 +824,11 @@ async function test_account_tool_routes_skip_unbound_accounts_before_steam_calls
       balanceResponse.body.results.map((row) => ({username: row.username, success: row.success})),
       [
         {username: "countsteam01", success: true},
-        {username: "countsteam02", success: false}
+        {username: "countsteam02", success: true}
       ]
     );
-    assert.equal(calls.fetchBalance.length, 1);
-    assert.equal(calls.refreshWebCookie.length, 1);
+    assert.equal(calls.fetchBalance.length, 2);
+    assert.equal(calls.refreshWebCookie.length, 2);
 
     const tradeUrlResponse = await requestSse({
       port,
@@ -847,11 +844,11 @@ async function test_account_tool_routes_skip_unbound_accounts_before_steam_calls
       urlResults.map((event) => ({username: event.data.username, success: event.data.success})),
       [
         {username: "countsteam01", success: true},
-        {username: "countsteam02", success: false}
+        {username: "countsteam02", success: true}
       ]
     );
-    assert.equal(calls.fetchTradeUrl.length, 1);
-    assert.equal(calls.refreshWebCookie.length, 2);
+    assert.equal(calls.fetchTradeUrl.length, 2);
+    assert.equal(calls.refreshWebCookie.length, 4);
   });
 }
 
@@ -905,7 +902,7 @@ async function test_steam_network_precheck_returns_sanitized_contract() {
   });
 }
 
-async function test_super_admin_can_access_unbound_steam_accounts() {
+async function test_legacy_local_super_admin_cannot_bypass_signed_permissions() {
   await withScopedServer({
     username: "admin",
     permissions: []
@@ -914,21 +911,8 @@ async function test_super_admin_can_access_unbound_steam_accounts() {
       port,
       route: "/api/accounts"
     });
-    assert.equal(accounts.statusCode, 200);
-    assert.deepEqual(
-      accounts.body.accounts.map((row) => row.username),
-      ["countsteam01", "countsteam02"]
-    );
-
-    const selected = await requestJson({
-      port,
-      method: "POST",
-      route: "/api/ui-state/last-selected",
-      body: {
-        username: "countsteam02"
-      }
-    });
-    assert.equal(selected.statusCode, 200);
+    assert.equal(accounts.statusCode, 403);
+    assert.equal(accounts.body.reason, "permission_denied");
   });
 }
 
@@ -970,17 +954,17 @@ async function test_unknown_dev_user_keeps_legacy_single_user_scope() {
 }
 
 async function main() {
-  await test_bound_user_only_lists_bound_steam_accounts();
-  await test_unbound_user_cannot_select_wrong_steam_account();
-  await test_trade_routes_stop_before_external_calls_for_unbound_account();
-  await test_market_routes_stop_before_external_calls_for_unbound_account();
+  await test_control_plane_user_lists_all_saved_steam_accounts();
+  await test_control_plane_user_can_select_any_saved_steam_account();
+  await test_trade_routes_allow_any_saved_steam_account();
+  await test_market_routes_allow_any_saved_steam_account();
   await test_fetch_balance_persists_steam_store_source_metadata();
   await test_fetch_balance_failure_does_not_fall_back_to_steam_cm_balance();
   await test_fetch_balance_reports_unpersisted_source_metadata_when_local_persist_fails();
-  await test_account_tool_routes_skip_unbound_accounts_before_steam_calls();
+  await test_account_tool_routes_include_all_saved_accounts();
   await test_ban_check_accepts_legacy_steam_id_field_as_steamid64();
   await test_steam_network_precheck_returns_sanitized_contract();
-  await test_super_admin_can_access_unbound_steam_accounts();
+  await test_legacy_local_super_admin_cannot_bypass_signed_permissions();
   await test_unknown_dev_user_keeps_legacy_single_user_scope();
   console.log("account-scope-route tests passed");
 }

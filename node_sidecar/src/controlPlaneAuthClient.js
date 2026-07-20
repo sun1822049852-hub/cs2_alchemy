@@ -49,11 +49,13 @@ async function readJsonResponse(response) {
 
 function createControlPlaneAuthClient({
   baseUrl = "",
-  fetchFn = globalThis.fetch
+  fetchFn = globalThis.fetch,
+  requestTimeoutMs = 10 * 1000
 } = {}) {
   const normalizedBaseUrl = asString(baseUrl).trim().replace(/\/+$/g, "");
   let baseUrlError = null;
   let secureBaseUrl = "";
+  const timeoutMs = Math.max(1, Number(requestTimeoutMs) || 10 * 1000);
   try {
     secureBaseUrl = assertSecureControlPlaneBaseUrl(normalizedBaseUrl);
   } catch (err) {
@@ -69,9 +71,85 @@ function createControlPlaneAuthClient({
     }
     throw buildClientAuthError({
       code: "auth_service_not_configured",
-      message: "未配置远端认证服务地址",
+      message: "未配置本地控制平面地址",
       status: 503
     });
+  }
+
+  function buildTimeoutError() {
+    return buildClientAuthError({
+      code: "auth_request_timeout",
+      message: "本地控制平面请求超时",
+      status: 504
+    });
+  }
+
+  async function requestJsonWithTimeout(url, options = {}) {
+    const controller = new AbortController();
+    let timeoutId = null;
+    let timedOut = false;
+    const timeoutError = buildTimeoutError();
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reject(timeoutError);
+      }, timeoutMs);
+    });
+    try {
+      const result = await Promise.race([
+        (async () => {
+          const response = await fetchFn(url, {...options, signal: controller.signal});
+          const data = await readJsonResponse(response);
+          return {response, data};
+        })(),
+        timeout
+      ]);
+      if (timedOut) throw timeoutError;
+      return result;
+    } catch (err) {
+      if (timedOut) throw timeoutError;
+      throw err;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  async function getJson(pathname) {
+    assertConfigured();
+    if (typeof fetchFn !== "function") {
+      throw buildClientAuthError({
+        code: "fetch_unavailable",
+        message: "当前运行时不支持本地控制平面请求",
+        status: 500
+      });
+    }
+    let result;
+    try {
+      result = await requestJsonWithTimeout(joinUrl(normalizedBaseUrl, pathname), {
+        method: "GET",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+    } catch (err) {
+      if (err && err.code === "auth_request_timeout") throw err;
+      throw buildClientAuthError({
+        code: "auth_service_unreachable",
+        message: asString(err && err.message ? err.message : err).trim() || "本地控制平面不可达",
+        status: 503
+      });
+    }
+    const {response, data} = result;
+    if (!response.ok || data.ok === false) {
+      throw buildClientAuthError({
+        code: asString(data.code || data.reason || "auth_request_failed").trim() || "auth_request_failed",
+        message: asString(data.message || "控制平面请求失败").trim() || "控制平面请求失败",
+        status: Number(response.status) || 500,
+        data
+      });
+    }
+    return data;
   }
 
   async function postJson(pathname, payload) {
@@ -79,13 +157,13 @@ function createControlPlaneAuthClient({
     if (typeof fetchFn !== "function") {
       throw buildClientAuthError({
         code: "fetch_unavailable",
-        message: "当前运行时不支持远端认证请求",
+        message: "当前运行时不支持本地控制平面请求",
         status: 500
       });
     }
-    let response;
+    let result;
     try {
-      response = await fetchFn(joinUrl(normalizedBaseUrl, pathname), {
+      result = await requestJsonWithTimeout(joinUrl(normalizedBaseUrl, pathname), {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -93,13 +171,14 @@ function createControlPlaneAuthClient({
         body: JSON.stringify(payload || {})
       });
     } catch (err) {
+      if (err && err.code === "auth_request_timeout") throw err;
       throw buildClientAuthError({
         code: "auth_service_unreachable",
-        message: asString(err && err.message ? err.message : err).trim() || "远端认证服务不可达",
+        message: asString(err && err.message ? err.message : err).trim() || "本地控制平面不可达",
         status: 503
       });
     }
-    const data = await readJsonResponse(response);
+    const {response, data} = result;
     if (!response.ok || data.ok === false) {
       throw buildClientAuthError({
         code: asString(data.code || data.reason || "auth_request_failed").trim() || "auth_request_failed",
@@ -121,7 +200,7 @@ function createControlPlaneAuthClient({
     async login({username = "", password = "", deviceId = "", clientVersion = ""} = {}) {
       const data = await postJson("/api/auth/login", {
         username: asString(username).trim(),
-        password: asString(password).trim(),
+        password: asString(password),
         device_id: asString(deviceId).trim(),
         client_version: asString(clientVersion).trim()
       });
@@ -143,44 +222,38 @@ function createControlPlaneAuthClient({
         refreshCredential: normalized.refreshCredential
       };
     },
-    async issueCraftPermit({
-      refreshCredential = "",
-      deviceId = "",
-      action = "",
-      accountUsername = "",
-      payloadHash = ""
-    } = {}) {
-      const data = await postJson("/api/auth/craft-permit", {
-        refresh_token: asString(refreshCredential).trim(),
-        device_id: asString(deviceId).trim(),
-        action: asString(action).trim(),
-        account_username: asString(accountUsername).trim(),
-        payload_hash: asString(payloadHash).trim()
-      });
+    async getMembershipProducts() {
+      const data = await getJson("/api/auth/membership/products");
       return {
-        permit: data.permit && typeof data.permit === "object" ? {...data.permit} : null
+        ...data,
+        products: Array.isArray(data.products)
+          ? data.products
+          : (Array.isArray(data.items) ? data.items : [])
       };
     },
-    async checkOrBindSteamAccount({
+    async redeemActivationCode({
       refreshCredential = "",
       deviceId = "",
-      steamId = "",
-      steamAccountName = ""
+      code = ""
     } = {}) {
-      const data = await postJson("/api/auth/steam-binding/check-or-bind", {
+      const data = await postJson("/api/auth/membership/redeem", {
         refresh_token: asString(refreshCredential).trim(),
         device_id: asString(deviceId).trim(),
-        steam_id: asString(steamId).trim(),
-        steam_account_name: asString(steamAccountName).trim()
+        code: asString(code).trim()
       });
+      const normalized = normalizeBundleAndRefresh(data);
       return {
-        ok: data.ok !== false,
-        bindingMode: asString(data.binding_mode).trim(),
-        bindingLimit: Number(data.binding_limit),
-        boundCount: Number(data.bound_count) || 0,
-        matchedExisting: !!data.matched_existing,
-        message: asString(data.message).trim()
+        user: data.user && typeof data.user === "object" ? data.user : null,
+        bundle: normalized.bundle,
+        refreshCredential: normalized.refreshCredential
       };
+    },
+    async checkoutMembership({refreshCredential = "", deviceId = "", productId = ""} = {}) {
+      return postJson("/api/auth/payment/checkout", {
+        refresh_token: asString(refreshCredential).trim(),
+        device_id: asString(deviceId).trim(),
+        product_id: asString(productId).trim()
+      });
     },
     async logout({refreshCredential = ""} = {}) {
       return postJson("/api/auth/logout", {
@@ -198,19 +271,11 @@ function createControlPlaneAuthClient({
         email: asString(email).trim(),
         code: asString(code).trim(),
         username: asString(username).trim(),
-        password: asString(password).trim()
+        password: asString(password)
       });
     },
     async getRegistrationReadiness() {
-      assertConfigured();
-      if (typeof fetchFn !== "function") {
-        throw buildClientAuthError({code: "fetch_unavailable", message: "当前运行时不支持远端认证请求", status: 500});
-      }
-      const response = await fetchFn(joinUrl(normalizedBaseUrl, "/api/auth/register/readiness"), {
-        method: "GET",
-        headers: {"Accept": "application/json"}
-      });
-      return readJsonResponse(response);
+      return getJson("/api/auth/register/readiness");
     },
     async verifyRegisterCode({email = "", code = "", registerSessionId = ""} = {}) {
       return postJson("/api/auth/register/verify-code", {
@@ -224,12 +289,14 @@ function createControlPlaneAuthClient({
         email: asString(email).trim(),
         verification_ticket: asString(verificationTicket).trim(),
         username: asString(username).trim(),
-        password: asString(password).trim(),
+        password: asString(password),
         device_id: asString(deviceId).trim()
       });
+      const normalized = normalizeBundleAndRefresh(data);
       return {
-        ...data,
-        ...normalizeBundleAndRefresh(data)
+        user: data.user && typeof data.user === "object" ? data.user : null,
+        bundle: normalized.bundle,
+        refreshCredential: normalized.refreshCredential
       };
     },
     async sendResetCode({email = ""} = {}) {
@@ -241,7 +308,7 @@ function createControlPlaneAuthClient({
       return postJson("/api/auth/password/reset", {
         email: asString(email).trim(),
         code: asString(code).trim(),
-        new_password: asString(newPassword).trim()
+        new_password: asString(newPassword)
       });
     }
   };

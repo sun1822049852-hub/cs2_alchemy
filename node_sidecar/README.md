@@ -68,15 +68,15 @@ npm run ui:desktop
 release / 安装包说明：
 
 - packaged 客户端默认走 `prod_login`
-- 当前分支打出的 packaged 客户端默认连接 `http://8.138.39.139`
+- release 配置不内置 control plane 地址
 - packaged 首次启动时，会把 `client_config.json`、`schema_cache.json`、`csgo_skins.db` 从安装包资源复制到 Electron `userData` 目录
-- 如需改成远端认证服务，可在用户目录下创建或修改 `client_config.json`
+- 当前版本只连接本机 control plane，不保留远端服务兼容路径
 
 示例：
 
 ```json
 {
-  "control_plane_base_url": "https://auth.example.com"
+  "control_plane_base_url": "http://127.0.0.1:8787"
 }
 ```
 
@@ -91,7 +91,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1 `
   -Username dev_local `
-  -Plan elite `
+  -Plan member `
   -TtlMinutes 43200
 ```
 

@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const {FEATURE_CODES} = require("../shared/licensePolicy");
+const {FEATURE_CODES, LICENSE_SNAPSHOT_POLICY} = require("../shared/licensePolicy");
 const {resolveDeviceId} = require("../node_sidecar/src/deviceIdentity");
 const {getLicenseConfig} = require("../node_sidecar/src/licenseConfig");
 const {createSignedLicenseBundle} = require("../node_sidecar/src/licenseBundleIssuer");
@@ -14,7 +14,7 @@ function parseArgs(argv = []) {
     outFile: path.resolve(process.cwd(), "tmp", "client_license_bundle.json"),
     username: "member_a",
     userId: "user_1",
-    membershipPlan: "pro",
+    membershipPlan: "member",
     ttlMinutes: 15,
     deviceId: resolveDeviceId(config.machineIdFile),
     permissions: Object.values(FEATURE_CODES),
@@ -45,7 +45,10 @@ function parseArgs(argv = []) {
       continue;
     }
     if (item === "--plan" && args[i + 1]) {
-      options.membershipPlan = String(args[i + 1] || "").trim() || options.membershipPlan;
+      const membershipPlan = String(args[i + 1] || "").trim();
+      if (["inactive", "member"].includes(membershipPlan)) {
+        options.membershipPlan = membershipPlan;
+      }
       i += 1;
       continue;
     }
@@ -88,7 +91,8 @@ function main() {
     process.exit(1);
   }
   const now = new Date();
-  const exp = new Date(now.getTime() + options.ttlMinutes * 60 * 1000);
+  const requestedTtlMs = options.ttlMinutes * 60 * 1000;
+  const exp = new Date(now.getTime() + Math.min(requestedTtlMs, LICENSE_SNAPSHOT_POLICY.maxTtlMs));
   const privateKeyPem = fs.readFileSync(options.privateKeyFile, "utf8");
   const privateKey = crypto.createPrivateKey(privateKeyPem);
   const bundle = createSignedLicenseBundle({
@@ -99,7 +103,11 @@ function main() {
       device_id: options.deviceId,
       membership_plan: options.membershipPlan,
       permissions: options.permissions,
-      feature_flags: options.featureFlags,
+      feature_flags: {...options.featureFlags, membership_expires_at: ""},
+      iss: LICENSE_SNAPSHOT_POLICY.issuer,
+      aud: LICENSE_SNAPSHOT_POLICY.audience,
+      token_type: LICENSE_SNAPSHOT_POLICY.tokenType,
+      key_id: LICENSE_SNAPSHOT_POLICY.keyId,
       policy_version: 1,
       jti: `local_${Date.now()}`,
       iat: now.toISOString(),

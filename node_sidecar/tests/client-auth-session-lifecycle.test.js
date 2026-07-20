@@ -5,7 +5,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
-const {stableJsonStringify, FEATURE_CODES} = require("../../shared/licensePolicy");
+const {stableJsonStringify, FEATURE_CODES, LICENSE_SNAPSHOT_POLICY} = require("../../shared/licensePolicy");
 const {createServer} = require("../src/uiServer");
 const {resolveDeviceId} = require("../src/deviceIdentity");
 
@@ -21,8 +21,8 @@ function writeJson(filePath, value) {
 function createSignedBundle(privateKey, deviceId, {
   jti,
   expMsFromNow,
-  username = "member_remote",
-  membershipPlan = "free",
+  username = "member_local",
+  membershipPlan = "inactive",
   permissions = [
     FEATURE_CODES.ACCOUNTS_READ,
     FEATURE_CODES.ACCOUNTS_WRITE,
@@ -46,6 +46,10 @@ function createSignedBundle(privateKey, deviceId, {
     jti: String(jti || "snap_default"),
     iat: issuedAt.toISOString(),
     exp: expiresAt.toISOString()
+    ,iss: LICENSE_SNAPSHOT_POLICY.issuer
+    ,aud: LICENSE_SNAPSHOT_POLICY.audience
+    ,token_type: LICENSE_SNAPSHOT_POLICY.tokenType
+    ,key_id: LICENSE_SNAPSHOT_POLICY.keyId
   };
   return {
     snapshot,
@@ -76,7 +80,7 @@ async function startServer({
     licenseConfigFactory: () => ({
       authMode: "prod_login",
       configFile: clientConfigFile,
-      controlPlaneBaseUrl: "https://auth.example.com",
+      controlPlaneBaseUrl: "http://127.0.0.1:8787",
       publicKeyFile,
       machineIdFile,
       licenseStateFile,
@@ -162,12 +166,12 @@ async function waitFor(predicate, {timeoutMs = 1500, intervalMs = 50} = {}) {
 async function test_client_refreshes_bundle_before_expiry_using_saved_refresh_credential() {
   const refreshCalls = [];
   const ctx = await startServer({
-    refreshIntervalMs: 60,
+    refreshIntervalMs: 5000,
     authClientFactory: ({privateKey, deviceId}) => ({
       getCapabilities() {
         return {
           configured: true,
-          baseUrl: "https://auth.example.com"
+          baseUrl: "http://127.0.0.1:8787"
         };
       },
       async login() {
@@ -178,8 +182,7 @@ async function test_client_refreshes_bundle_before_expiry_using_saved_refresh_cr
           },
           bundle: createSignedBundle(privateKey, deviceId, {
             jti: "snap_1",
-            // The scheduler floors intervals to 1000ms, so this enters the 60ms refresh window on the first tick.
-            expMsFromNow: 1000
+            expMsFromNow: 15000
           }),
           refreshCredential: "refresh_token_1"
         };
@@ -214,7 +217,7 @@ async function test_client_refreshes_bundle_before_expiry_using_saved_refresh_cr
     assert.equal(login.body.authenticated, true);
 
     const refreshed = await waitFor(() => refreshCalls.length > 0, {
-      timeoutMs: 1500,
+      timeoutMs: 15000,
       intervalMs: 50
     });
 
@@ -235,14 +238,14 @@ async function test_client_refreshes_bundle_before_expiry_using_saved_refresh_cr
   }
 }
 
-async function test_client_logout_sends_saved_refresh_credential_to_remote_service() {
+async function test_client_logout_sends_saved_refresh_credential_to_local_control_plane() {
   const logoutCalls = [];
   const ctx = await startServer({
     authClientFactory: ({privateKey, deviceId}) => ({
       getCapabilities() {
         return {
           configured: true,
-          baseUrl: "https://auth.example.com"
+          baseUrl: "http://127.0.0.1:8787"
         };
       },
       async login() {
@@ -290,7 +293,7 @@ async function test_client_logout_sends_saved_refresh_credential_to_remote_servi
 
 async function main() {
   await test_client_refreshes_bundle_before_expiry_using_saved_refresh_credential();
-  await test_client_logout_sends_saved_refresh_credential_to_remote_service();
+  await test_client_logout_sends_saved_refresh_credential_to_local_control_plane();
   console.log("client-auth-session-lifecycle tests passed");
 }
 

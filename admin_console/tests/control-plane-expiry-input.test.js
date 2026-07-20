@@ -16,10 +16,14 @@ function test_expiry_editor_uses_separate_date_and_time_inputs() {
     true,
     "会员到期编辑器应提供独立时间输入"
   );
+  const userEditor = INDEX_SOURCE.slice(
+    INDEX_SOURCE.indexOf('for="userExpiryDate"'),
+    INDEX_SOURCE.indexOf('id="membershipMeta"')
+  );
   assert.equal(
-    INDEX_SOURCE.includes('type="datetime-local"'),
+    userEditor.includes('type="datetime-local"'),
     false,
-    "Firefox 下不应继续依赖 datetime-local 作为唯一输入控件"
+    "用户会员到期编辑器不应依赖 datetime-local 作为唯一输入控件"
   );
 }
 

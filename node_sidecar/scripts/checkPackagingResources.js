@@ -100,8 +100,8 @@ function checkPackageDependencies(projectRoot) {
 
 function checkPackagingResources({projectRoot}) {
   const clientConfig = requireJsonObject(projectRoot, "node_sidecar/build/client_config.release.json");
-  if (!String(clientConfig.control_plane_base_url || clientConfig.controlPlaneBaseUrl || "").trim()) {
-    throw new Error("Release client config must define control_plane_base_url");
+  if (String(clientConfig.control_plane_base_url || clientConfig.controlPlaneBaseUrl || "").trim()) {
+    throw new Error("Release client config must not embed control_plane_base_url");
   }
 
   const schema = requireJsonObject(projectRoot, "node_sidecar/build/schema_cache.seed.json");
@@ -120,7 +120,6 @@ function checkPackagingResources({projectRoot}) {
   requireFile(projectRoot, "node_sidecar/build/icon.ico", {minBytes: 1024});
   requireFile(projectRoot, "shared/licensePolicy.js");
   requireFile(projectRoot, "shared/featureCodes.js");
-  requireFile(projectRoot, "shared/craftPermitPolicy.js");
   requireTextIncludes(
     projectRoot,
     "keys/client_license_public.pem",

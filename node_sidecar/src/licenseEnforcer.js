@@ -50,7 +50,7 @@ function createLicenseEnforcer({publicKey = null, publicKeyFile = "", deviceId =
       if (!snapshot || !signature) {
         return buildResult();
       }
-      const validation = validateSnapshot(snapshot);
+      const validation = validateSnapshot(snapshot, {now});
       if (!validation.ok) {
         return buildResult({
           code: "license_invalid",

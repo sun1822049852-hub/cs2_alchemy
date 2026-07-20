@@ -29,33 +29,20 @@ node main_ui_node_desktop.js
 
 说明：
 
-- 仓库根目录桌面入口默认走 `prod_login`，用于真实登录、远端控制台联调和后续打包链路
+- 仓库根目录桌面入口默认走 `prod_login`，并连接本机 `http://127.0.0.1:8787` 控制台
 - 如需开发直通 `dev_auto_bundle`，请使用根目录 `run-dev.bat`，或执行 `powershell -ExecutionPolicy Bypass -File .\scripts\start-client-dev.ps1`
-- 如需一键连后台，请直接双击根目录 `connect console.cmd`
 - 仓库根目录不再提供任何 CLI 入口；如需命令行能力，请直接执行 `node node_sidecar/src/main.js ...` 或 `cd node_sidecar` 后使用对应 `npm run ...`
 - packaged 客户端仍固定走 `prod_login`，不会继承本地开发直通态
 - 新注册用户默认开放账号、库存、刷新与汰换模拟
 - 真实炼金执行仍需要控制台单独下发 `craft.use`
 
-如果要让未打包客户端连接远端控制台，可通过以下任一方式配置：
+本项目当前只使用本地 control plane。正式登录前先启动 `admin_console`，客户端默认连接：
 
-- 在启动前设置环境变量 `CONTROL_PLANE_BASE_URL`
-- 在项目根目录创建或修改 `client_config.json`
-
-示例：
-
-```json
-{
-  "control_plane_base_url": "https://8.138.39.139"
-}
+```text
+http://127.0.0.1:8787
 ```
 
-说明：
-
-- 上面的公网地址只用于客户端业务认证接口（`/api/auth/*`）
-- 正式远端认证地址必须使用 HTTPS；HTTP 仅保留给 `127.0.0.1` / `localhost` 这类本机开发或 SSH 隧道
-- 后台管理入口不应通过公网地址访问
-- 管理员请使用 `admin_console/tools/connectAdminConsole.cmd` 建立 SSH 隧道后，再访问本机 `http://127.0.0.1:8787/admin`
+后台管理入口为 `http://127.0.0.1:8787/admin`。不再保留公网服务器、SSH 连接器或远端部署配置。
 
 ## 浏览器模式
 
@@ -104,10 +91,8 @@ npm run build:win
 - `pack:win` 生成 unpacked 目录，便于先做本地烟测
 - `build:win` 生成 NSIS 安装包
 - packaged 客户端默认使用 `prod_login`
-- 当前分支打出的 packaged 客户端会内置默认远端控制台 `https://8.138.39.139`
+- release 配置不内置服务地址；主工作区正式启动器会显式注入本地控制台 `http://127.0.0.1:8787`
 - packaged 首次启动时，会把 `client_config.json`、`schema_cache.json`、`csgo_skins.db` 从安装包资源复制到 Electron `userData` 目录
-- 如需改成其他远端认证服务，可编辑用户目录下的 `client_config.json`，写入新的 `control_plane_base_url`
-- 自定义公网远端认证地址也必须使用 HTTPS；只有本机开发或 SSH 隧道地址允许使用 HTTP
 - packaged 可写状态会落到 Electron `userData` 目录，不再写安装目录
 
 ## 皮肤库更新

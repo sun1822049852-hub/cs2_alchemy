@@ -32,7 +32,7 @@
             </div>
             <div class="form-row">
               <label for="clientLoginPassword">密码</label>
-              <input id="clientLoginPassword" type="password" autocomplete="current-password" placeholder="请输入密码" />
+              <input id="clientLoginPassword" type="password" minlength="12" maxlength="128" autocomplete="current-password" placeholder="请输入密码" />
             </div>
             <div class="app-auth-actions">
               <button id="clientLoginSubmitBtn" type="button">登录并获取授权</button>
@@ -56,7 +56,7 @@
             </div>
             <div class="form-row">
               <label for="clientRegisterPassword">密码</label>
-              <input id="clientRegisterPassword" type="password" autocomplete="new-password" placeholder="请设置登录密码" />
+              <input id="clientRegisterPassword" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="请设置登录密码" />
             </div>
             <div class="app-auth-actions">
               <button id="clientRegisterSubmitBtn" type="button">注册账号</button>
@@ -76,7 +76,7 @@
             </div>
             <div class="form-row">
               <label for="clientResetPassword">新密码</label>
-              <input id="clientResetPassword" type="password" autocomplete="new-password" placeholder="请输入新密码" />
+              <input id="clientResetPassword" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="请输入新密码" />
             </div>
             <div class="app-auth-actions">
               <button id="clientResetSubmitBtn" type="button">重置密码</button>
@@ -116,6 +116,7 @@
           <button class="nav-btn" data-page="simulationPage" id="navSimulation">汰换模拟</button>
           <button class="nav-btn" data-page="batchCraftPage" id="navBatchCraft">多账号汰换</button>
           <button class="nav-btn" data-page="webInventoryPage" id="navWebInventory">库存管理</button>
+          <button id="navMembership" class="nav-btn nav-btn-bottom" data-page="membershipPage">会员充值</button>
         </aside>
       </div>
 
@@ -792,6 +793,61 @@
               </div>
             </main>
           </div>
+        </section>
+
+        <section class="page hidden membership-page" id="membershipPage">
+          <header class="membership-header">
+            <div>
+              <h1>会员充值</h1>
+              <p>管理当前会员状态，或使用激活码延长会员时间。</p>
+            </div>
+            <button id="membershipRefreshBtn" class="membership-refresh-btn" type="button">刷新商品</button>
+          </header>
+
+          <dl class="membership-summary" aria-label="当前会员状态">
+            <div>
+              <dt>当前档位</dt>
+              <dd id="membershipPlanValue">-</dd>
+            </div>
+            <div>
+              <dt>会员到期</dt>
+              <dd id="membershipExpiresValue">-</dd>
+            </div>
+            <div>
+              <dt>剩余时间</dt>
+              <dd id="membershipRemainingValue">-</dd>
+            </div>
+          </dl>
+
+          <div class="membership-content">
+            <section class="membership-products-section" aria-labelledby="membershipProductsTitle">
+              <div class="membership-section-heading">
+                <div>
+                  <h2 id="membershipProductsTitle">充值商品</h2>
+                  <p>支付接入后，可从这里选择会员时长。</p>
+                </div>
+              </div>
+              <div id="membershipProductList" class="membership-product-list"></div>
+            </section>
+
+            <section class="membership-redeem-section" aria-labelledby="membershipRedeemTitle">
+              <div class="membership-section-heading">
+                <div>
+                  <h2 id="membershipRedeemTitle">兑换激活码</h2>
+                  <p>激活码兑换成功后，会员状态会立即更新。</p>
+                </div>
+              </div>
+              <div class="membership-redeem-form">
+                <label for="membershipActivationCode">激活码</label>
+                <div class="membership-redeem-row">
+                  <input id="membershipActivationCode" type="text" maxlength="64" autocomplete="off" spellcheck="false" placeholder="CS2-XXXX-XXXX-XXXX-XXXX" />
+                  <button id="membershipRedeemBtn" type="button">兑换</button>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div id="membershipStatus" class="membership-status" aria-live="polite">正在读取充值商品...</div>
         </section>
       </main>
     </div>

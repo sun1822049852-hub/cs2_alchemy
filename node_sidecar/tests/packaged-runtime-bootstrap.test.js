@@ -21,11 +21,11 @@ function test_resolve_packaged_default_control_plane_base_url_reads_packaged_cli
   try {
     const configPath = path.join(rootDir, "client_config.json");
     fs.writeFileSync(configPath, JSON.stringify({
-      control_plane_base_url: "https://8.138.39.139"
+      control_plane_base_url: "http://127.0.0.1:8787"
     }, null, 2), "utf8");
     assert.equal(
       resolvePackagedDefaultControlPlaneBaseUrl({rootDir}),
-      "https://8.138.39.139"
+      "http://127.0.0.1:8787"
     );
   } finally {
     fs.rmSync(rootDir, {recursive: true, force: true});
@@ -37,7 +37,7 @@ function test_ensure_packaged_runtime_files_copies_seed_resources_to_writable_ro
   const writableRoot = makeTempDir("cs2-packaged-user-");
   try {
     fs.writeFileSync(path.join(rootDir, "client_config.json"), JSON.stringify({
-      control_plane_base_url: "https://8.138.39.139"
+      control_plane_base_url: "http://127.0.0.1:8787"
     }, null, 2), "utf8");
     fs.writeFileSync(path.join(rootDir, "schema_cache.json"), JSON.stringify({
       weapons: {ak47: {id: 7}}
@@ -55,7 +55,7 @@ function test_ensure_packaged_runtime_files_copies_seed_resources_to_writable_ro
       ["client_config.json", "csgo_skins.db", "schema_cache.json"]
     );
     assert.equal(
-      readText(path.join(writableRoot, "client_config.json")).includes("8.138.39.139"),
+      readText(path.join(writableRoot, "client_config.json")).includes("127.0.0.1"),
       true
     );
     assert.equal(
@@ -77,7 +77,7 @@ function test_ensure_packaged_runtime_files_preserves_existing_user_config() {
   const writableRoot = makeTempDir("cs2-packaged-user-");
   try {
     fs.writeFileSync(path.join(rootDir, "client_config.json"), JSON.stringify({
-      control_plane_base_url: "https://8.138.39.139"
+      control_plane_base_url: "http://127.0.0.1:8787"
     }, null, 2), "utf8");
     fs.writeFileSync(path.join(writableRoot, "client_config.json"), JSON.stringify({
       control_plane_base_url: "https://custom.example.com"

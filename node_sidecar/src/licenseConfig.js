@@ -25,20 +25,6 @@ function resolveAuthMode(value) {
   return "";
 }
 
-function resolveBoolean(value, fallback = false) {
-  const text = String(value || "").trim().toLowerCase();
-  if (!text) {
-    return fallback;
-  }
-  if (["1", "true", "yes", "on"].includes(text)) {
-    return true;
-  }
-  if (["0", "false", "no", "off"].includes(text)) {
-    return false;
-  }
-  return fallback;
-}
-
 function readClientConfig(filePath) {
   const target = String(filePath || "").trim();
   if (!target) {
@@ -62,20 +48,6 @@ function getLicenseConfig(overrides = {}) {
   const defaultAuthMode = resolveAuthMode(value.defaultAuthMode || process.env.CLIENT_DEFAULT_AUTH_MODE || "") || "debug_bundle";
   const requestedAuthMode = resolveAuthMode(value.authMode || process.env.CLIENT_AUTH_MODE || "");
   const authMode = requestedAuthMode || defaultAuthMode;
-  const explicitRequireRemoteCraftPermit = Object.prototype.hasOwnProperty.call(value, "requireRemoteCraftPermit")
-    ? value.requireRemoteCraftPermit
-    : undefined;
-  const configuredRequireRemoteCraftPermit = explicitRequireRemoteCraftPermit !== undefined
-    ? explicitRequireRemoteCraftPermit
-    : (
-      process.env.CLIENT_REQUIRE_REMOTE_CRAFT_PERMIT
-      || fileConfig.requireRemoteCraftPermit
-      || fileConfig.require_remote_craft_permit
-    );
-  const requireRemoteCraftPermit = resolveBoolean(
-    configuredRequireRemoteCraftPermit,
-    authMode === "prod_login"
-  );
   const publicKeyFile = value.publicKeyFile
     || process.env.CONTROL_PLANE_PUBLIC_KEY_FILE
     || path.join(PATHS.ROOT_DIR, "keys", "client_license_public.pem");
@@ -90,7 +62,6 @@ function getLicenseConfig(overrides = {}) {
   return {
     authMode,
     allowManualImport: authMode === "debug_bundle",
-    requireRemoteCraftPermit,
     controlPlaneBaseUrl: normalizedControlPlaneBaseUrl,
     publicKeyFile: path.resolve(publicKeyFile),
     devLicensePrivateKeyFile: path.resolve(devLicensePrivateKeyFile),
@@ -101,7 +72,7 @@ function getLicenseConfig(overrides = {}) {
     devLicenseTtlMinutes: resolveNumber(value.devLicenseTtlMinutes || process.env.CLIENT_DEV_LICENSE_TTL_MINUTES, 30 * 24 * 60),
     devLicenseUsername: String(value.devLicenseUsername || process.env.CLIENT_DEV_LICENSE_USERNAME || "dev_local").trim() || "dev_local",
     devLicenseUserId: String(value.devLicenseUserId || process.env.CLIENT_DEV_LICENSE_USER_ID || "dev_local_user").trim() || "dev_local_user",
-    devLicenseMembershipPlan: String(value.devLicenseMembershipPlan || process.env.CLIENT_DEV_LICENSE_PLAN || "elite").trim() || "elite"
+    devLicenseMembershipPlan: String(value.devLicenseMembershipPlan || process.env.CLIENT_DEV_LICENSE_PLAN || "member").trim() || "member"
   };
 }
 

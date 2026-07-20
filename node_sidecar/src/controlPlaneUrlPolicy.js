@@ -2,10 +2,10 @@ const {asString} = require("./utils");
 
 function buildControlPlaneUrlError({
   code = "invalid_control_plane_base_url",
-  message = "远端认证服务地址无效",
+  message = "本地控制台地址无效",
   status = 400
 } = {}) {
-  const error = new Error(asString(message).trim() || "远端认证服务地址无效");
+  const error = new Error(asString(message).trim() || "本地控制台地址无效");
   error.code = asString(code).trim() || "invalid_control_plane_base_url";
   error.status = Number(status) || 400;
   return error;
@@ -36,7 +36,7 @@ function parseControlPlaneUrl(value) {
   } catch (_) {
     throw buildControlPlaneUrlError({
       code: "invalid_control_plane_base_url",
-      message: "远端认证服务地址格式无效",
+      message: "本地控制台地址格式无效",
       status: 400
     });
   }
@@ -47,22 +47,12 @@ function assertSecureControlPlaneBaseUrl(value) {
   if (!parsed) {
     return "";
   }
-  if (parsed.protocol === "https:") {
-    return asString(value).trim().replace(/\/+$/g, "");
-  }
   if (parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname)) {
     return asString(value).trim().replace(/\/+$/g, "");
   }
-  if (parsed.protocol === "http:") {
-    throw buildControlPlaneUrlError({
-      code: "insecure_control_plane_base_url",
-      message: "正式远端认证服务地址必须使用 HTTPS；HTTP 仅允许 localhost/127.0.0.1 本机隧道",
-      status: 400
-    });
-  }
   throw buildControlPlaneUrlError({
-    code: "invalid_control_plane_base_url",
-    message: "远端认证服务地址只支持 HTTPS，或本机 HTTP 隧道",
+    code: "non_local_control_plane_base_url",
+    message: "控制台只允许使用 localhost、127.0.0.1 或 ::1 的本机 HTTP 地址",
     status: 400
   });
 }

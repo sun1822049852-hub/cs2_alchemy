@@ -78,7 +78,7 @@ function getMailConfig({env = process.env, envFile = ""} = {}) {
     refreshSessionDays: parseInteger(source.AUTH_REFRESH_SESSION_DAYS, DEFAULTS.REFRESH_SESSION_DAYS),
     adminSessionHours: parseInteger(source.ADMIN_SESSION_HOURS, DEFAULTS.ADMIN_SESSION_HOURS),
     privateKeyFile: asString(source.CONTROL_PLANE_PRIVATE_KEY_FILE).trim() || PATHS.DEFAULT_PRIVATE_KEY_FILE,
-    host: asString(source.AUTH_SERVICE_HOST).trim() || DEFAULTS.AUTH_SERVICE_HOST,
+    host: DEFAULTS.AUTH_SERVICE_HOST,
     port: parseInteger(source.AUTH_SERVICE_PORT, DEFAULTS.AUTH_SERVICE_PORT)
   };
   return {

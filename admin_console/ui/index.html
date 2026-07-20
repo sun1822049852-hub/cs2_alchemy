@@ -3,33 +3,24 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CS2 Alchemy Admin Console</title>
+    <title>CS2 Alchemy 管理控制台</title>
     <link rel="stylesheet" href="/admin/vendor/tabler/tabler.min.css">
     <link rel="stylesheet" href="/admin/styles.css">
   </head>
   <body>
     <div id="adminConsoleApp" class="page">
       <aside class="navbar navbar-vertical navbar-expand-lg shell-sidebar">
-        <div class="container-fluid">
+        <div class="container-fluid shell-sidebar-inner">
           <h1 class="navbar-brand navbar-brand-autodark">
             <span class="brand-mark">CA</span>
-            <span class="brand-copy">
-              <strong>CS2 Alchemy</strong>
-              <small>Admin Console</small>
-            </span>
+            <span class="brand-copy"><strong>CS2 Alchemy</strong><small>管理控制台</small></span>
           </h1>
-          <div class="navbar-nav flex-column">
-            <div class="nav-item">
-              <span class="nav-link active">
-                <span class="nav-link-title">用户权限控制</span>
-              </span>
-            </div>
-            <div class="nav-item">
-              <span class="nav-link">
-                <span class="nav-link-title">会员到期与功能开关</span>
-              </span>
-            </div>
-          </div>
+          <nav id="workspaceNav" class="navbar-nav flex-column workspace-nav" aria-label="控制台功能">
+            <button class="nav-link active" type="button" data-view="users"><span class="nav-link-title">用户管理</span></button>
+            <button class="nav-link" type="button" data-view="activationCodes"><span class="nav-link-title">激活码管理</span></button>
+            <button class="nav-link" type="button" data-view="products"><span class="nav-link-title">充值商品</span></button>
+            <button class="nav-link" type="button" data-view="orders"><span class="nav-link-title">订单管理</span></button>
+          </nav>
           <div class="sidebar-footer">
             <div class="text-secondary" id="sessionSummary">尚未登录</div>
             <button id="logoutButton" class="btn btn-outline-light btn-sm mt-3" type="button" hidden>退出控制台</button>
@@ -38,159 +29,128 @@
       </aside>
 
       <div class="page-wrapper">
-        <div class="page-header d-print-none border-bottom-0">
-          <div class="container-xl">
-            <div class="row g-2 align-items-center">
-              <div class="col">
-                <div class="page-pretitle">Remote Control Plane</div>
-                <h2 class="page-title">会员、权限与设备会话控制台</h2>
-              </div>
-            </div>
+        <header class="page-header border-bottom">
+          <div class="container-xl py-3">
+            <div class="page-pretitle">Local Control Plane</div>
+            <h2 id="workspaceTitle" class="page-title">用户管理</h2>
           </div>
-        </div>
+        </header>
 
-        <div class="page-body">
+        <main class="page-body">
           <div class="container-xl">
+            <div id="globalMessage" class="alert d-none" role="status"></div>
+
             <section id="authPanel" class="row justify-content-center">
               <div class="col-md-8 col-lg-5">
-                <div class="card">
-                  <div class="card-body p-4 p-md-5">
-                    <div class="text-center mb-4">
-                      <div class="auth-badge">Tabler Shell</div>
-                      <h2 id="authTitle" class="card-title mb-2">管理员登录</h2>
-                      <p id="authHint" class="text-secondary m-0">使用控制台管理员账号进入管理面。</p>
-                    </div>
-
-                    <div id="authMessage" class="alert auth-alert d-none" role="alert"></div>
-
-                    <form id="bootstrapForm" class="stacked-form" hidden>
-                      <div class="mb-3">
-                        <label class="form-label" for="bootstrapUsername">管理员用户名</label>
-                        <input id="bootstrapUsername" class="form-control" value="admin" autocomplete="username">
-                      </div>
-                      <div class="mb-3">
-                        <label class="form-label" for="bootstrapPassword">管理员密码</label>
-                        <input id="bootstrapPassword" class="form-control" type="password" autocomplete="new-password">
-                      </div>
-                      <button class="btn btn-primary w-100" type="submit">初始化超级管理员</button>
-                    </form>
-
-                    <form id="loginForm" class="stacked-form" hidden>
-                      <div class="mb-3">
-                        <label class="form-label" for="loginUsername">管理员用户名</label>
-                        <input id="loginUsername" class="form-control" value="admin" autocomplete="username">
-                      </div>
-                      <div class="mb-3">
-                        <label class="form-label" for="loginPassword">管理员密码</label>
-                        <input id="loginPassword" class="form-control" type="password" autocomplete="current-password">
-                      </div>
-                      <button class="btn btn-primary w-100" type="submit">登录控制台</button>
-                    </form>
-                  </div>
-                </div>
+                <div class="card auth-card"><div class="card-body p-4">
+                  <h2 id="authTitle" class="card-title mb-2">管理员登录</h2>
+                  <p id="authHint" class="text-secondary">使用本地控制台管理员账号登录。</p>
+                  <div id="authMessage" class="alert d-none" role="alert"></div>
+                  <form id="bootstrapForm" class="stacked-form" hidden>
+                    <label class="form-label" for="bootstrapUsername">管理员用户名</label>
+                    <input id="bootstrapUsername" class="form-control mb-3" value="admin" autocomplete="username">
+                    <label class="form-label" for="bootstrapPassword">管理员密码</label>
+                    <input id="bootstrapPassword" class="form-control mb-3" type="password" minlength="12" maxlength="128" autocomplete="new-password">
+                    <button class="btn btn-primary w-100" type="submit">初始化超级管理员</button>
+                  </form>
+                  <form id="loginForm" class="stacked-form" hidden>
+                    <label class="form-label" for="loginUsername">管理员用户名</label>
+                    <input id="loginUsername" class="form-control mb-3" value="admin" autocomplete="username">
+                    <label class="form-label" for="loginPassword">管理员密码</label>
+                    <input id="loginPassword" class="form-control mb-3" type="password" autocomplete="current-password">
+                    <button class="btn btn-primary w-100" type="submit">登录控制台</button>
+                  </form>
+                </div></div>
               </div>
             </section>
 
             <section id="workspace" hidden>
-              <div class="row row-deck row-cards mb-3">
-                <div id="statsGrid" class="col-12"></div>
-              </div>
+              <div id="statsGrid" class="stats-strip mb-3"></div>
 
-              <div class="row row-cards">
-                <div class="col-lg-7">
-                  <div class="card">
-                    <div class="card-header">
-                      <div>
-                        <h3 class="card-title">用户列表</h3>
-                        <p class="card-subtitle">查看用户会员状态、剩余天数和最终权限。</p>
-                      </div>
-                    </div>
-                    <div class="table-responsive">
-                      <div id="usersList"></div>
-                    </div>
-                  </div>
+              <section id="usersView" class="workspace-view">
+                <div class="toolbar-band mb-3">
+                  <form id="bulkGrantForm" class="toolbar-form">
+                    <strong>批量授权</strong>
+                    <input id="bulkGrantDays" class="form-control form-control-sm" type="number" min="1" max="3650" placeholder="会员天数" required>
+                    <button class="btn btn-primary btn-sm" type="submit">增加天数</button>
+                  </form>
+                  <label class="form-check mb-0"><input id="showArchivedUsers" class="form-check-input" type="checkbox"><span class="form-check-label">显示归档用户</span></label>
+                  <button class="btn btn-outline-primary btn-sm ms-auto" type="button" data-action="toggle-create-user">创建用户</button>
                 </div>
 
-                <div class="col-lg-5">
-                  <div class="card mb-3">
-                    <div class="card-header">
-                      <div>
-                        <h3 class="card-title">用户详情</h3>
-                        <p id="detailHint" class="card-subtitle">选择左侧用户后即可调整会员与权限。</p>
-                      </div>
-                    </div>
-                    <div class="card-body">
-                      <form id="userForm" hidden>
-                        <div class="row g-3">
-                          <div class="col-md-6">
-                            <label class="form-label" for="userPlan">会员计划</label>
-                            <select id="userPlan" class="form-select"></select>
-                          </div>
-                          <div class="col-md-6">
-                            <label class="form-label" for="userStatus">账号状态</label>
-                            <select id="userStatus" class="form-select">
-                              <option value="active">active</option>
-                              <option value="disabled">disabled</option>
-                            </select>
-                          </div>
-                          <div class="col-12">
-                            <label class="form-label" for="userExpiryDate">会员到期时间</label>
-                            <div class="row g-2">
-                              <div class="col-sm-7">
-                                <input id="userExpiryDate" class="form-control" type="date">
-                              </div>
-                              <div class="col-sm-5">
-                                <input id="userExpiryTime" class="form-control" type="time" step="60" value="23:59">
-                              </div>
-                            </div>
-                            <div class="form-hint">先选日期；若不调整时间，默认按 23:59 到期。</div>
-                          </div>
-                          <div class="col-12">
-                            <div id="membershipMeta" class="alert alert-secondary py-2 px-3 mb-0"></div>
-                          </div>
-                          <div class="col-12">
-                            <label class="form-label">全功能开关</label>
-                            <div id="permissionList" class="permission-list"></div>
-                          </div>
-                        </div>
-                        <div class="mt-4">
-                          <button class="btn btn-primary w-100" type="submit">保存用户配置</button>
-                        </div>
-                      </form>
-                    </div>
+                <form id="createUserForm" class="card compact-form mb-3" hidden>
+                  <div class="card-header"><h3 class="card-title">创建终端用户</h3></div>
+                  <div class="card-body form-grid">
+                    <div><label class="form-label" for="createUsername">用户名</label><input id="createUsername" class="form-control" required></div>
+                    <div><label class="form-label" for="createEmail">邮箱</label><input id="createEmail" class="form-control" type="email" required></div>
+                    <div><label class="form-label" for="createPassword">初始密码</label><input id="createPassword" class="form-control" type="password" minlength="12" maxlength="128" required></div>
+                    <div><label class="form-label" for="createMembershipDays">初始会员天数</label><input id="createMembershipDays" class="form-control" type="number" min="0" max="3650" value="0"></div>
                   </div>
+                  <div class="card-footer text-end"><button class="btn btn-primary" type="submit">创建用户</button></div>
+                </form>
 
-                  <div class="card">
-                    <div class="card-header">
-                      <div>
-                        <h3 class="card-title">设备会话</h3>
-                        <p class="card-subtitle">吊销指定设备的 refresh session。</p>
-                      </div>
-                    </div>
-                    <div class="card-body">
-                      <div id="deviceList"></div>
-                    </div>
+                <div class="user-workbench">
+                  <div class="card users-pane">
+                    <div class="card-header"><div><h3 class="card-title">终端用户</h3><p class="card-subtitle">选择用户后编辑账号、会员和权限。</p></div></div>
+                    <div id="usersList" class="table-responsive"></div>
                   </div>
-
-                  <div class="card mt-3">
-                    <div class="card-header">
-                      <div>
-                        <h3 class="card-title">Steam 绑定资格</h3>
-                        <p class="card-subtitle">查看当前已占用的 Steam 绑定，并手动释放单个绑定资格。</p>
+                  <div class="detail-stack">
+                    <div class="card">
+                      <div class="card-header"><div><h3 class="card-title">用户详情</h3><p id="detailHint" class="card-subtitle">尚未选择用户。</p></div></div>
+                      <div class="card-body">
+                        <form id="userForm" hidden>
+                          <div class="form-grid">
+                            <div><label class="form-label" for="userPlan">会员计划</label><select id="userPlan" class="form-select"></select></div>
+                            <div><label class="form-label" for="userStatus">账号状态</label><select id="userStatus" class="form-select"><option value="active">active</option><option value="disabled">disabled</option></select></div>
+                            <div class="span-2"><label class="form-label" for="userExpiryDate">会员到期时间</label><div class="expiry-grid"><input id="userExpiryDate" class="form-control" type="date"><input id="userExpiryTime" class="form-control" type="time" step="60" value="23:59"></div></div>
+                          </div>
+                          <div id="membershipMeta" class="alert alert-secondary py-2 px-3 my-3"></div>
+                          <label class="form-label">功能权限</label><div id="permissionList" class="permission-list"></div>
+                          <div class="action-row mt-3"><button class="btn btn-primary" type="submit">保存用户配置</button><button id="archiveUserButton" class="btn btn-outline-danger" type="button">归档用户</button><button id="restoreUserButton" class="btn btn-outline-success" type="button" hidden>恢复用户</button></div>
+                        </form>
                       </div>
                     </div>
-                    <div class="card-body">
-                      <div id="bindingList"></div>
-                    </div>
+                    <div class="card"><div class="card-header"><h3 class="card-title">重置密码</h3></div><div class="card-body"><form id="resetPasswordForm" class="inline-form"><input id="resetPasswordValue" class="form-control" type="password" minlength="12" maxlength="128" placeholder="输入 12–128 位新密码"><button class="btn btn-outline-primary" type="submit">使用输入密码</button><button id="generatePasswordButton" class="btn btn-outline-secondary" type="button">生成随机密码</button></form><div id="generatedPasswordResult" class="one-time-result mt-3" hidden></div></div></div>
+                    <div class="card"><div class="card-header"><div><h3 class="card-title">设备会话</h3><p class="card-subtitle">吊销后该设备需要重新登录。</p></div></div><div id="deviceList" class="card-body"></div></div>
                   </div>
                 </div>
-              </div>
+              </section>
+
+              <section id="activationCodesView" class="workspace-view" hidden>
+                <form id="activationCodeForm" class="toolbar-band mb-3">
+                  <strong>生成激活码</strong>
+                  <input id="activationDays" class="form-control form-control-sm" type="number" min="1" max="3650" placeholder="会员天数" required>
+                  <input id="activationCount" class="form-control form-control-sm" type="number" min="1" max="500" value="1" aria-label="生成数量" required>
+                  <input id="activationExpiresAt" class="form-control form-control-sm" type="datetime-local" aria-label="激活码失效时间">
+                  <button class="btn btn-primary btn-sm" type="submit">生成</button>
+                </form>
+                <div id="activationResult" class="card one-time-card mb-3" hidden><div class="card-header"><div><h3 class="card-title">一次性生成结果</h3><p class="card-subtitle">原始激活码仅在此处展示一次。</p></div><div class="ms-auto action-row"><button class="btn btn-outline-primary btn-sm" type="button" data-action="copy-activation-codes">复制全部</button><button class="btn btn-outline-primary btn-sm" type="button" data-action="export-activation-codes">导出激活码</button><button class="btn btn-ghost-secondary btn-sm" type="button" data-action="dismiss-activation-result">关闭</button></div></div><pre id="activationResultCodes" class="one-time-codes"></pre></div>
+                <div class="card"><div class="card-header"><div><h3 class="card-title">激活码与批次</h3><p class="card-subtitle">筛选状态并撤销未使用的激活码。</p></div><select id="activationStatusFilter" class="form-select form-select-sm filter-select"><option value="">全部状态</option><option value="unused">未使用</option><option value="used">已使用</option><option value="expired">已过期</option><option value="revoked">已撤销</option></select></div><div id="activationCodesList" class="table-responsive"></div></div>
+              </section>
+
+              <section id="productsView" class="workspace-view" hidden>
+                <form id="productForm" class="card compact-form mb-3">
+                  <div class="card-header"><h3 id="productFormTitle" class="card-title">创建充值商品</h3><button class="btn btn-ghost-secondary btn-sm ms-auto" type="button" data-action="reset-product-form">清空</button></div>
+                  <div class="card-body product-grid">
+                    <input id="productName" class="form-control" placeholder="商品名称" required>
+                    <input id="productDescription" class="form-control" placeholder="商品描述">
+                    <input id="productDays" class="form-control" type="number" min="1" max="3650" placeholder="会员天数" required>
+                    <input id="productPriceCents" class="form-control" type="number" min="0" placeholder="价格（分）" required>
+                    <input id="productSortOrder" class="form-control" type="number" value="0" placeholder="排序">
+                    <label class="form-check form-switch mb-0"><input id="productEnabled" class="form-check-input" type="checkbox" checked><span class="form-check-label">启用</span></label>
+                  </div><div class="card-footer text-end"><button class="btn btn-primary" type="submit">保存商品</button></div>
+                </form>
+                <div class="card"><div class="card-header"><h3 class="card-title">充值商品模板</h3></div><div id="productsList" class="table-responsive"></div></div>
+              </section>
+
+              <section id="ordersView" class="workspace-view" hidden>
+                <div class="card"><div class="card-header"><div><h3 class="card-title">订单</h3><p class="card-subtitle">当前为只读列表，支付接入后展示真实订单。</p></div></div><div id="ordersList" class="table-responsive"></div></div>
+              </section>
             </section>
           </div>
-        </div>
+        </main>
       </div>
     </div>
-
     <script defer src="/admin/vendor/tabler/tabler.min.js"></script>
     <script src="/admin/app.js"></script>
   </body>

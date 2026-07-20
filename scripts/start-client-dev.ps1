@@ -3,7 +3,7 @@ param(
   [string]$PrivateKeyFile = "",
   [string]$PublicKeyFile = "",
   [string]$Username = "dev_local",
-  [string]$Plan = "elite",
+  [string]$Plan = "member",
   [int]$TtlMinutes = 43200,
   [switch]$NoLaunch
 )

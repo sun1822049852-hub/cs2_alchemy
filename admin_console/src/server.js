@@ -7,9 +7,14 @@ const {getMailConfig} = require("./mailConfig");
 const {createMailService} = require("./mailService");
 const {createEntitlementSigner} = require("./entitlementSigner");
 const {DEFAULTS, PATHS} = require("./constants");
-const {FEATURE_CODES} = require("../../shared/featureCodes");
 const {validatePassword, validateUsername} = require("../../shared/validation");
 const {asString} = require("../../node_sidecar/src/utils");
+
+const JSON_BODY_LIMIT_BYTES = 64 * 1024;
+const ADMIN_SESSION_COOKIE = "admin_session";
+const ADMIN_CSRF_COOKIE = "admin_csrf";
+const ADMIN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -46,10 +51,28 @@ function writeError(res, status, reason, message) {
 }
 
 function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
+  if (req._jsonBodyPromise) {
+    return req._jsonBodyPromise;
+  }
+  req._jsonBodyPromise = new Promise((resolve, reject) => {
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
+    let byteLength = 0;
+    let tooLarge = false;
+    req.on("data", (chunk) => {
+      byteLength += chunk.byteLength;
+      if (byteLength > JSON_BODY_LIMIT_BYTES) {
+        tooLarge = true;
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => {
+      if (tooLarge) {
+        const error = new Error("JSON body exceeds 64KiB");
+        error.code = "request_body_too_large";
+        reject(error);
+        return;
+      }
       const raw = Buffer.concat(chunks).toString("utf8").trim();
       if (!raw) {
         resolve({});
@@ -58,21 +81,75 @@ function readJsonBody(req) {
       try {
         resolve(JSON.parse(raw));
       } catch (err) {
-        reject(err);
+        const error = new Error("invalid JSON body");
+        error.code = "invalid_json";
+        reject(error);
       }
     });
     req.on("error", reject);
   });
+  return req._jsonBodyPromise;
 }
 
 function createCodeGenerator() {
   return () => String(crypto.randomInt(100000, 1000000));
 }
 
-function readBearerToken(req) {
-  const auth = asString(req && req.headers && req.headers.authorization).trim();
-  const match = auth.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : "";
+function readCookie(req, name) {
+  const raw = asString(req && req.headers && req.headers.cookie);
+  for (const item of raw.split(";")) {
+    const separator = item.indexOf("=");
+    if (separator < 0 || item.slice(0, separator).trim() !== name) continue;
+    try {
+      return decodeURIComponent(item.slice(separator + 1).trim());
+    } catch (_) {
+      return "";
+    }
+  }
+  return "";
+}
+
+function setAdminCookies(res, sessionToken, csrfToken, maxAgeSeconds) {
+  const suffix = `Path=/; SameSite=Strict; Max-Age=${Math.max(0, Number(maxAgeSeconds) || 0)}`;
+  res.setHeader("Set-Cookie", [
+    `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(sessionToken)}; HttpOnly; ${suffix}`,
+    `${ADMIN_CSRF_COOKIE}=${encodeURIComponent(csrfToken)}; ${suffix}`
+  ]);
+}
+
+function setSecurityHeaders(res) {
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+}
+
+function validateLocalApiRequest(req) {
+  const host = asString(req && req.headers && req.headers.host).trim().toLowerCase();
+  const localPort = Number(req && req.socket && req.socket.localPort) || 0;
+  const allowedHosts = new Set([
+    `127.0.0.1:${localPort}`,
+    `localhost:${localPort}`,
+    `[::1]:${localPort}`
+  ]);
+  if (!localPort || !allowedHosts.has(host)) {
+    return {status: 403, reason: "local_host_required", message: "本地 API 仅接受回环地址请求"};
+  }
+  const method = asString(req && req.method).toUpperCase();
+  const origin = asString(req && req.headers && req.headers.origin).trim();
+  const fetchSite = asString(req && req.headers && req.headers["sec-fetch-site"]).trim().toLowerCase();
+  if ((origin && origin !== `http://${host}`) || fetchSite === "cross-site") {
+    return {status: 403, reason: "cross_origin_request_denied", message: "拒绝跨站本地请求"};
+  }
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return null;
+  const declaredLength = Number(req && req.headers && req.headers["content-length"]) || 0;
+  const hasBody = declaredLength > 0 || !!(req && req.headers && req.headers["transfer-encoding"]);
+  const contentType = asString(req && req.headers && req.headers["content-type"]).trim().toLowerCase();
+  if (hasBody && !/^application\/json(?:\s*;|$)/.test(contentType)) {
+    return {status: 415, reason: "json_content_type_required", message: "请求体必须使用 application/json"};
+  }
+  return null;
 }
 
 function resolveAdminAsset(urlPath = "") {
@@ -124,49 +201,79 @@ function createServer({
 
   function issueUserBundle({user, deviceId, refreshCredential, source}) {
     const entitlements = store.resolveUserEntitlements({userId: user.id, now: now()});
+    if (!entitlements) {
+      throw new Error("entitlements_missing");
+    }
     return signer.issueBundle({
       user: {
         ...user,
-        membership_plan: entitlements ? entitlements.membership_plan : user.membership_plan
+        membership_plan: entitlements.membership_plan,
+        membership_expires_at: entitlements.membership_expires_at
       },
       deviceId,
-      permissions: entitlements ? entitlements.permissions : undefined,
-      featureFlags: entitlements ? entitlements.feature_flags : undefined,
+      permissions: entitlements.permissions,
+      featureFlags: entitlements.feature_flags,
       refreshCredential,
       source
     });
   }
 
-  function issueCraftPermit({user, deviceId, action, accountUsername, payloadHash}) {
-    return signer.issueCraftPermit({
-      user,
-      deviceId,
-      action,
-      accountUsername,
-      payloadHash,
-      ttlSeconds: Math.max(1, Number(config.craftPermitTtlSeconds) || DEFAULTS.CRAFT_PERMIT_TTL_SECONDS),
-      source: "remote_craft_permit"
-    });
-  }
-
   function resolveAdminSessionFromRequest(req) {
-    const token = readBearerToken(req);
+    const token = readCookie(req, ADMIN_SESSION_COOKIE);
     if (!token) {
       return {ok: false, reason: "admin_auth_required"};
     }
     return store.resolveAdminSession({
       sessionToken: token,
+      idleTimeoutMs: ADMIN_IDLE_TIMEOUT_MS,
       now: now()
     });
   }
 
-  function requireAdminSession(req, res) {
+  function requireAdminSession(req, res, {superAdmin = false} = {}) {
     const resolved = resolveAdminSessionFromRequest(req);
     if (!resolved.ok) {
       writeError(res, 401, resolved.reason, "请先登录控制台管理员账号");
       return null;
     }
+    if (superAdmin && !resolved.user.is_super_admin) {
+      writeError(res, 403, "super_admin_required", "该操作仅限超级管理员");
+      return null;
+    }
     return resolved;
+  }
+
+  function requireAdminCsrf(req, res, admin) {
+    const csrfToken = asString(req && req.headers && req.headers["x-csrf-token"]);
+    if (!csrfToken || !store.verifyAdminCsrf({sessionId: admin.session.id, csrfToken})) {
+      writeError(res, 403, "csrf_invalid", "CSRF 校验失败");
+      return false;
+    }
+    return true;
+  }
+
+  function getClientIp(req) {
+    return asString(req.socket && req.socket.remoteAddress).trim();
+  }
+
+  function getLoginRateLimit(scene, username, req) {
+    return store.getLoginRateLimit({
+      scene,
+      username,
+      ip: getClientIp(req),
+      windowMs: LOGIN_WINDOW_MS,
+      now: now()
+    });
+  }
+
+  function recordLogin(scene, username, req, success) {
+    store.recordLoginAttempt({
+      scene,
+      username,
+      success,
+      ip: getClientIp(req),
+      now: now()
+    });
   }
 
   function maskEmail(email) {
@@ -234,18 +341,40 @@ function createServer({
     writeJson(res, 200, responsePayload);
   }
 
-  function listAdminUsersPayload() {
-    return store.listClientUsers({now: now()}).map((user) => ({
+  function listAdminUsersPayload({includeArchived = false} = {}) {
+    return store.listClientUsers({now: now(), includeArchived}).map((user) => ({
       ...user,
       entitlements: store.resolveUserEntitlements({userId: user.id, now: now()}),
       active_device_count: store.listUserDeviceSessions({userId: user.id}).length
     }));
   }
 
+  function normalizeProduct(product) {
+    return product ? {...product, enabled: !!product.is_enabled} : null;
+  }
+
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
+    setSecurityHeaders(res);
+    const url = new URL(req.url || "/", "http://127.0.0.1");
     const pathname = url.pathname;
     try {
+      const method = asString(req.method).toUpperCase();
+      if (pathname.startsWith("/api/")) {
+        const apiRequestError = validateLocalApiRequest(req);
+        if (apiRequestError) {
+          writeError(res, apiRequestError.status, apiRequestError.reason, apiRequestError.message);
+          return;
+        }
+      }
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        const declaredLength = Number(req.headers["content-length"]) || 0;
+        if (declaredLength > JSON_BODY_LIMIT_BYTES) {
+          writeError(res, 413, "request_body_too_large", "JSON 请求体不能超过 64KiB");
+          return;
+        }
+        await readJsonBody(req);
+      }
+
       if (pathname === "/admin" || pathname === "/admin/" || pathname.startsWith("/admin/")) {
         serveAdminAsset(res, pathname);
         return;
@@ -282,9 +411,10 @@ function createServer({
         }
         const body = await readJsonBody(req);
         const username = asString(body && body.username).trim() || "admin";
-        const password = asString(body && body.password).trim();
-        if (!password) {
-          writeError(res, 400, "password_required", "管理员密码不能为空");
+        const password = asString(body && body.password);
+        const passwordCheck = validatePassword(password);
+        if (!passwordCheck.ok) {
+          writeError(res, 400, passwordCheck.reason, passwordCheck.message);
           return;
         }
         const user = store.createOrUpdateAdminUser({
@@ -304,33 +434,49 @@ function createServer({
       if (req.method === "POST" && pathname === "/api/admin/login") {
         const body = await readJsonBody(req);
         const username = asString(body && body.username).trim() || "admin";
-        const password = asString(body && body.password).trim();
+        const password = asString(body && body.password);
         if (!password) {
           writeError(res, 400, "password_required", "管理员密码不能为空");
           return;
         }
+        const limit = getLoginRateLimit("admin", username, req);
+        if (limit.limited) {
+          writeError(res, 429, "login_rate_limited", "登录失败次数过多，请15分钟后再试");
+          return;
+        }
         const auth = store.authenticateAdminUser({username, password});
+        recordLogin("admin", username, req, auth.ok);
         if (!auth.ok) {
+          store.appendAuditEvent({
+            actorType: "anonymous", action: "admin.login_failed", targetType: "admin_user",
+            targetId: username, ip: getClientIp(req), now: now()
+          });
           writeError(res, 401, auth.reason, "管理员账号或密码错误");
           return;
         }
         const session = store.createAdminSession({
           adminUserId: auth.user.id,
-          ttlHours: config.adminSessionHours,
+          ttlHours: Math.min(8, Math.max(1, Number(config.adminSessionHours) || 8)),
           now: now()
         });
+        store.appendAuditEvent({
+          actorType: "admin", actorId: auth.user.id, action: "admin.login_succeeded",
+          targetType: "admin_user", targetId: auth.user.id, ip: getClientIp(req), now: now()
+        });
+        const maxAgeSeconds = Math.min(8, Math.max(1, Number(config.adminSessionHours) || 8)) * 60 * 60;
+        setAdminCookies(res, session.session_token, session.csrf_token, maxAgeSeconds);
         writeJson(res, 200, {
           ok: true,
           message: "管理员登录成功",
           user: auth.user,
-          session_token: session.session_token,
+          csrf_token: session.csrf_token,
           expires_at: session.expires_at
         });
         return;
       }
 
       if (req.method === "GET" && pathname === "/api/admin/session") {
-        const token = readBearerToken(req);
+        const token = readCookie(req, ADMIN_SESSION_COOKIE);
         if (!token) {
           writeJson(res, 200, {
             ok: true,
@@ -341,53 +487,61 @@ function createServer({
         }
         const resolved = store.resolveAdminSession({
           sessionToken: token,
+          idleTimeoutMs: ADMIN_IDLE_TIMEOUT_MS,
           now: now()
         });
         if (!resolved.ok) {
           writeError(res, 401, resolved.reason, "控制台登录态已失效");
           return;
         }
+        const csrfToken = readCookie(req, ADMIN_CSRF_COOKIE);
         writeJson(res, 200, {
           ok: true,
           authenticated: true,
           user: resolved.user,
+          csrf_token: store.verifyAdminCsrf({sessionId: resolved.session.id, csrfToken}) ? csrfToken : "",
           expires_at: resolved.session.expires_at
         });
         return;
       }
 
       if (req.method === "POST" && pathname === "/api/admin/logout") {
-        const token = readBearerToken(req);
+        const token = readCookie(req, ADMIN_SESSION_COOKIE);
         if (!token) {
+          setAdminCookies(res, "", "", 0);
           writeJson(res, 200, {ok: true, message: "已退出"});
           return;
         }
-        const result = store.revokeAdminSession({
-          sessionToken: token,
-          now: now()
-        });
-        if (!result.ok) {
-          writeError(res, 401, result.reason, "控制台登录态已失效");
+        const admin = requireAdminSession(req, res);
+        if (!admin || !requireAdminCsrf(req, res, admin)) {
           return;
         }
+        store.revokeAdminSession({sessionToken: token, now: now()});
+        setAdminCookies(res, "", "", 0);
         writeJson(res, 200, {ok: true, message: "已退出"});
         return;
       }
 
       if (pathname.startsWith("/api/admin/")) {
-        const admin = requireAdminSession(req, res);
+        const admin = requireAdminSession(req, res, {superAdmin: true});
         if (!admin) {
+          return;
+        }
+        if (!["GET", "HEAD", "OPTIONS"].includes(asString(req.method).toUpperCase())
+          && !requireAdminCsrf(req, res, admin)) {
           return;
         }
 
         if (req.method === "GET" && pathname === "/api/admin/overview") {
           const users = store.listClientUsers({now: now()});
+          const products = store.listProducts();
           writeJson(res, 200, {
             ok: true,
             stats: {
               total_users: users.length,
               active_users: users.filter((item) => item.status === "active").length,
-              plans: store.listMembershipPlans().length
+              plans: store.listMembershipPlans().length,
+              enabled_products: products.filter((item) => item.is_enabled).length
             },
             admin: admin.user
           });
@@ -405,8 +559,169 @@ function createServer({
         if (req.method === "GET" && pathname === "/api/admin/users") {
           writeJson(res, 200, {
             ok: true,
-            items: listAdminUsersPayload()
+            items: listAdminUsersPayload({includeArchived: url.searchParams.get("include_archived") === "1"})
           });
+          return;
+        }
+
+        if (req.method === "POST" && pathname === "/api/admin/users") {
+          const body = await readJsonBody(req);
+          const email = asString(body && body.email).trim().toLowerCase();
+          const username = asString(body && body.username).trim();
+          const password = asString(body && body.password);
+          if (!isValidEmail(email)) {
+            writeError(res, 400, "email_invalid", "邮箱格式不正确");
+            return;
+          }
+          const usernameCheck = validateUsername(username);
+          if (!usernameCheck.ok) {
+            writeError(res, 400, usernameCheck.reason, usernameCheck.message);
+            return;
+          }
+          const passwordCheck = validatePassword(password);
+          if (!passwordCheck.ok) {
+            writeError(res, 400, passwordCheck.reason, passwordCheck.message);
+            return;
+          }
+          if (store.getClientUserByEmail(email) || store.getClientUserByUsername(username)) {
+            writeError(res, 409, "user_already_exists", "邮箱或用户名已存在");
+            return;
+          }
+          const result = store.createManagedClientUser({
+            email,
+            username,
+            password,
+            membershipDays: Number(body && body.membership_days) || 0,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!result.ok) {
+            writeError(res, 400, result.reason, "创建用户失败");
+            return;
+          }
+          writeJson(res, 201, {ok: true, user: result.user});
+          return;
+        }
+
+        if (req.method === "POST" && pathname === "/api/admin/users/bulk-grant") {
+          const body = await readJsonBody(req);
+          const result = store.bulkGrantMembership({
+            userIds: body && body.user_ids,
+            days: body && body.days,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!result.ok) {
+            writeError(res, result.reason === "user_not_found" ? 404 : 400, result.reason, "批量授权失败");
+            return;
+          }
+          writeJson(res, 200, {ok: true, items: result.items});
+          return;
+        }
+
+        if (req.method === "GET" && pathname === "/api/admin/activation-codes") {
+          writeJson(res, 200, {
+            ok: true,
+            items: store.listActivationCodes({
+              status: asString(url.searchParams.get("status")).trim(),
+              batchId: asString(url.searchParams.get("batch_id")).trim(),
+              now: now()
+            })
+          });
+          return;
+        }
+
+        if (req.method === "POST" && pathname === "/api/admin/activation-codes") {
+          const body = await readJsonBody(req);
+          const result = store.generateActivationCodes({
+            count: body && body.count,
+            days: body && body.days,
+            expiresAt: body && body.expires_at,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!result.ok) {
+            writeError(res, 400, result.reason, "激活码生成失败");
+            return;
+          }
+          writeJson(res, 201, result);
+          return;
+        }
+
+        const activationCodeRevokeMatch = pathname.match(/^\/api\/admin\/activation-codes\/(\d+)\/revoke$/);
+        if (req.method === "POST" && activationCodeRevokeMatch) {
+          const result = store.revokeActivationCode({
+            activationCodeId: Number(activationCodeRevokeMatch[1]) || 0,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!result.ok) {
+            writeError(res, result.reason === "activation_code_not_found" ? 404 : 409, result.reason, "激活码撤销失败");
+            return;
+          }
+          writeJson(res, 200, {ok: true});
+          return;
+        }
+
+        if (req.method === "GET" && pathname === "/api/admin/products") {
+          writeJson(res, 200, {ok: true, items: store.listProducts().map(normalizeProduct)});
+          return;
+        }
+
+        if (req.method === "POST" && pathname === "/api/admin/products") {
+          const body = await readJsonBody(req);
+          const product = store.createProduct({
+            name: body && body.name,
+            description: body && body.description,
+            membershipDays: body && body.membership_days,
+            priceCents: body && body.price_cents,
+            isEnabled: body && body.is_enabled === undefined ? body && body.enabled : body && body.is_enabled,
+            sortOrder: body && body.sort_order,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          writeJson(res, 201, {ok: true, product: normalizeProduct(product)});
+          return;
+        }
+
+        const productMatch = pathname.match(/^\/api\/admin\/products\/(\d+)$/);
+        if (req.method === "DELETE" && productMatch) {
+          const result = store.deleteProduct({
+            productId: Number(productMatch[1]) || 0,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!result.ok) {
+            writeError(res, result.reason === "product_not_found" ? 404 : 409, result.reason,
+              result.reason === "product_in_use" ? "商品已被订单引用，只能停用" : "商品不存在");
+            return;
+          }
+          writeJson(res, 200, {ok: true});
+          return;
+        }
+        if (req.method === "PATCH" && productMatch) {
+          const body = await readJsonBody(req);
+          const product = store.updateProduct({
+            productId: Number(productMatch[1]) || 0,
+            name: body && body.name,
+            description: body && body.description,
+            membershipDays: body && body.membership_days,
+            priceCents: body && body.price_cents,
+            isEnabled: body && body.is_enabled === undefined ? body && body.enabled : body && body.is_enabled,
+            sortOrder: body && body.sort_order,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!product) {
+            writeError(res, 404, "product_not_found", "商品不存在");
+            return;
+          }
+          writeJson(res, 200, {ok: true, product: normalizeProduct(product)});
+          return;
+        }
+
+        if (req.method === "GET" && pathname === "/api/admin/orders") {
+          writeJson(res, 200, {ok: true, items: store.listOrders()});
           return;
         }
 
@@ -447,47 +762,65 @@ function createServer({
           return;
         }
 
-        const steamBindingRevokeMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/steam-bindings\/(\d+)\/revoke$/);
-        if (req.method === "POST" && steamBindingRevokeMatch) {
-          const userId = Number(steamBindingRevokeMatch[1]) || 0;
-          const bindingId = Number(steamBindingRevokeMatch[2]) || 0;
-          const user = store.getClientUserById(userId, {now: now()});
-          if (!user) {
-            writeError(res, 404, "user_not_found", "用户不存在");
-            return;
-          }
-          const body = await readJsonBody(req);
-          const revoked = store.revokeUserSteamBindingById({
-            userId,
-            bindingId,
-            note: asString(body && body.note).trim(),
+        const userRestoreMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/restore$/);
+        if (req.method === "POST" && userRestoreMatch) {
+          const result = store.restoreClientUser({
+            userId: Number(userRestoreMatch[1]) || 0,
+            adminUserId: admin.user.id,
             now: now()
           });
-          if (!revoked.ok) {
-            writeError(res, 404, revoked.reason, "Steam 绑定资格不存在");
+          if (!result.ok) {
+            writeError(res, result.reason === "user_not_found" ? 404 : 409, result.reason, "恢复用户失败");
             return;
           }
-          writeJson(res, 200, {ok: true, message: "Steam 绑定资格已解除"});
+          writeJson(res, 200, {ok: true, user: result.user});
           return;
         }
 
-        const steamBindingsMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/steam-bindings$/);
-        if (req.method === "GET" && steamBindingsMatch) {
-          const userId = Number(steamBindingsMatch[1]) || 0;
-          const user = store.getClientUserById(userId, {now: now()});
-          if (!user) {
-            writeError(res, 404, "user_not_found", "用户不存在");
+        const userResetPasswordMatch = pathname.match(/^\/api\/admin\/users\/(\d+)\/reset-password$/);
+        if (req.method === "POST" && userResetPasswordMatch) {
+          const body = await readJsonBody(req);
+          const generated = body && body.generate === true;
+          const newPassword = generated
+            ? crypto.randomBytes(18).toString("base64url")
+            : asString(body && (body.new_password === undefined ? body.password : body.new_password));
+          const passwordCheck = validatePassword(newPassword);
+          if (!passwordCheck.ok) {
+            writeError(res, 400, passwordCheck.reason, passwordCheck.message);
+            return;
+          }
+          const result = store.resetClientUserPassword({
+            userId: Number(userResetPasswordMatch[1]) || 0,
+            newPassword,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!result.ok) {
+            writeError(res, 404, result.reason, "用户不存在");
             return;
           }
           writeJson(res, 200, {
             ok: true,
-            user,
-            items: store.listUserSteamBindings({userId})
+            user: result.user,
+            ...(generated ? {generated_password: newPassword} : {})
           });
           return;
         }
 
         const userMatch = pathname.match(/^\/api\/admin\/users\/(\d+)$/);
+        if (req.method === "DELETE" && userMatch) {
+          const result = store.archiveClientUser({
+            userId: Number(userMatch[1]) || 0,
+            adminUserId: admin.user.id,
+            now: now()
+          });
+          if (!result.ok) {
+            writeError(res, 404, result.reason, "用户不存在");
+            return;
+          }
+          writeJson(res, 200, {ok: true, user: result.user});
+          return;
+        }
         if (req.method === "PATCH" && userMatch) {
           const userId = Number(userMatch[1]) || 0;
           const body = await readJsonBody(req);
@@ -497,6 +830,8 @@ function createServer({
             membershipPlan: asString(body && body.membership_plan).trim(),
             membershipExpiresAt: asString(body && body.membership_expires_at).trim(),
             permissionOverrides: Array.isArray(body && body.permission_overrides) ? body.permission_overrides : null,
+            adminUserId: admin.user.id,
+            auditIp: getClientIp(req),
             now: now()
           });
           if (!updated.ok) {
@@ -514,6 +849,11 @@ function createServer({
         }
 
         writeError(res, 404, "not_found", "route not found");
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/auth/membership/products") {
+        writeJson(res, 200, {ok: true, items: store.listProducts({enabledOnly: true}).map(normalizeProduct)});
         return;
       }
 
@@ -565,7 +905,7 @@ function createServer({
         const email = asString(body && body.email).trim().toLowerCase();
         const verificationTicket = asString(body && body.verification_ticket).trim();
         const username = asString(body && body.username).trim();
-        const password = asString(body && body.password).trim();
+        const password = asString(body && body.password);
         const deviceId = asString(body && body.device_id).trim();
         if (!isValidEmail(email)) {
           writeError(res, 400, "email_invalid", "邮箱格式不正确");
@@ -599,11 +939,10 @@ function createServer({
           return;
         }
         const registerNow = now();
-        const trialExpiresAt = new Date(registerNow.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const user = store.createClientUser({
           email, username, password,
-          membershipPlan: "trial",
-          membershipExpiresAt: trialExpiresAt,
+          membershipPlan: "inactive",
+          membershipExpiresAt: "",
           now: registerNow
         });
         const session = store.createRefreshSession({
@@ -620,7 +959,7 @@ function createServer({
             user,
             deviceId: deviceId || "unknown",
             refreshCredential: session.refresh_token,
-            source: "remote_register"
+            source: "local_register"
           }),
           refresh_token: session.refresh_token
         });
@@ -632,7 +971,7 @@ function createServer({
         const email = asString(body && body.email).trim().toLowerCase();
         const code = asString(body && body.code).trim();
         const username = asString(body && body.username).trim();
-        const password = asString(body && body.password).trim();
+        const password = asString(body && body.password);
         if (!isValidEmail(email)) {
           writeError(res, 400, "email_invalid", "邮箱格式不正确");
           return;
@@ -665,11 +1004,10 @@ function createServer({
           return;
         }
         const registerNow = now();
-        const trialExpiresAt = new Date(registerNow.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const user = store.createClientUser({
           email, username, password,
-          membershipPlan: "trial",
-          membershipExpiresAt: trialExpiresAt,
+          membershipPlan: "inactive",
+          membershipExpiresAt: "",
           now: registerNow
         });
         writeJson(res, 200, {
@@ -683,19 +1021,19 @@ function createServer({
       if (req.method === "POST" && pathname === "/api/auth/login") {
         const body = await readJsonBody(req);
         const username = asString(body && body.username).trim();
-        const password = asString(body && body.password).trim();
+        const password = asString(body && body.password);
         const deviceId = asString(body && body.device_id).trim();
         if (!username || !password || !deviceId) {
           writeError(res, 400, "login_payload_invalid", "用户名、密码、device_id 不能为空");
           return;
         }
-        const clientIp = asString(req.socket && req.socket.remoteAddress).trim();
-        if (store.isLoginLocked({username, maxAttempts: 5, windowMs: 15 * 60 * 1000, now: now()})) {
-          writeError(res, 429, "login_locked", "登录失败次数过多，请15分钟后再试");
+        const limit = getLoginRateLimit("client", username, req);
+        if (limit.limited) {
+          writeError(res, 429, "login_rate_limited", "登录失败次数过多，请15分钟后再试");
           return;
         }
         const auth = store.authenticateClientUser({username, password});
-        store.recordLoginAttempt({username, success: auth.ok, ip: clientIp, now: now()});
+        recordLogin("client", username, req, auth.ok);
         if (!auth.ok) {
           writeError(res, 401, auth.reason, "用户名或密码错误");
           return;
@@ -714,7 +1052,7 @@ function createServer({
             user: auth.user,
             deviceId,
             refreshCredential: session.refresh_token,
-            source: "remote_login"
+            source: "local_login"
           }),
           refresh_token: session.refresh_token
         });
@@ -748,22 +1086,20 @@ function createServer({
             user: rotated.user,
             deviceId,
             refreshCredential: rotated.refresh_token,
-            source: "remote_refresh"
+            source: "local_refresh"
           }),
           refresh_token: rotated.refresh_token
         });
         return;
       }
 
-      if (req.method === "POST" && pathname === "/api/auth/craft-permit") {
+      if (req.method === "POST" && pathname === "/api/auth/membership/redeem") {
         const body = await readJsonBody(req);
         const refreshToken = asString(body && body.refresh_token).trim();
         const deviceId = asString(body && body.device_id).trim();
-        const action = asString(body && body.action).trim();
-        const accountUsername = asString(body && body.account_username).trim();
-        const payloadHash = asString(body && body.payload_hash).trim();
-        if (!refreshToken || !deviceId || !action || !accountUsername || !payloadHash) {
-          writeError(res, 400, "craft_permit_payload_invalid", "refresh_token、device_id、action、account_username、payload_hash 不能为空");
+        const code = asString(body && body.code).trim();
+        if (!refreshToken || !deviceId || !code) {
+          writeError(res, 400, "activation_code_payload_invalid", "refresh_token、device_id 与激活码不能为空");
           return;
         }
         const access = store.resolveClientAccess({
@@ -776,54 +1112,46 @@ function createServer({
           writeError(res, status, access.reason, access.reason === "device_mismatch" ? "设备绑定不匹配" : "refresh_token 无效");
           return;
         }
-        const permissions = Array.isArray(access.entitlements && access.entitlements.permissions)
-          ? access.entitlements.permissions
-          : [];
-        if (!permissions.includes(FEATURE_CODES.CRAFT_USE)) {
-          writeError(res, 403, "craft_permission_denied", "当前账号未获得炼金执行授权");
+        const redeemed = store.redeemActivationCode({userId: access.user.id, code, now: now()});
+        if (!redeemed.ok) {
+          const status = redeemed.reason === "activation_code_not_found" ? 404 : 409;
+          writeError(res, status, redeemed.reason, "激活码无效、不可用或已兑换");
           return;
         }
         writeJson(res, 200, {
           ok: true,
-          permit: issueCraftPermit({
-            user: access.user,
+          message: "激活码兑换成功",
+          user: redeemed.user,
+          access_bundle: issueUserBundle({
+            user: redeemed.user,
             deviceId,
-            action,
-            accountUsername,
-            payloadHash
-          })
+            refreshCredential: refreshToken,
+            source: "activation_code_redeem"
+          }),
+          refresh_token: refreshToken
         });
         return;
       }
 
-      if (req.method === "POST" && pathname === "/api/auth/steam-binding/check-or-bind") {
+      if (req.method === "POST" && pathname === "/api/auth/payment/checkout") {
         const body = await readJsonBody(req);
         const refreshToken = asString(body && body.refresh_token).trim();
         const deviceId = asString(body && body.device_id).trim();
-        const steamId = asString(body && body.steam_id).trim();
-        const steamAccountName = asString(body && body.steam_account_name).trim();
-        if (!refreshToken || !deviceId || !steamId) {
-          writeError(res, 400, "steam_binding_payload_invalid", "refresh_token、device_id、steam_id 不能为空");
+        if (!refreshToken || !deviceId) {
+          writeError(res, 400, "checkout_payload_invalid", "refresh_token 与 device_id 不能为空");
           return;
         }
-        const requestNow = now();
         const access = store.resolveClientAccess({
           refreshToken,
           deviceId,
-          now: requestNow
+          now: now()
         });
         if (!access.ok) {
           const status = access.reason === "device_mismatch" ? 409 : 401;
           writeError(res, status, access.reason, access.reason === "device_mismatch" ? "设备绑定不匹配" : "refresh_token 无效");
           return;
         }
-        const result = store.checkOrBindSteamAccount({
-          userId: access.user.id,
-          steamId,
-          steamAccountName,
-          now: requestNow
-        });
-        writeJson(res, result && result.ok ? 200 : 409, result);
+        writeError(res, 501, "payment_not_configured", "支付方式暂未开放");
         return;
       }
 
@@ -855,7 +1183,7 @@ function createServer({
         const body = await readJsonBody(req);
         const email = asString(body && body.email).trim().toLowerCase();
         const code = asString(body && body.code).trim();
-        const newPassword = asString(body && body.new_password).trim();
+        const newPassword = asString(body && body.new_password);
         if (!isValidEmail(email)) {
           writeError(res, 400, "email_invalid", "邮箱格式不正确");
           return;
@@ -877,6 +1205,7 @@ function createServer({
         const updated = store.updateClientPassword({
           email,
           newPassword,
+          ip: getClientIp(req),
           now: now()
         });
         if (!updated.ok) {
@@ -888,6 +1217,10 @@ function createServer({
       }
 
       if (req.method === "POST" && pathname === "/api/dev/mail/test") {
+        const admin = requireAdminSession(req, res, {superAdmin: true});
+        if (!admin || !requireAdminCsrf(req, res, admin)) {
+          return;
+        }
         if (!config.configured) {
           writeError(res, 503, "mail_service_not_configured", "邮件服务未配置");
           return;
@@ -909,6 +1242,19 @@ function createServer({
 
       writeError(res, 404, "not_found", "route not found");
     } catch (err) {
+      if (err && err.code === "invalid_json") {
+        writeError(res, 400, "invalid_json", "JSON 请求体格式不正确");
+        return;
+      }
+      if (err && err.code === "request_body_too_large") {
+        writeError(res, 413, "request_body_too_large", "JSON 请求体不能超过 64KiB");
+        return;
+      }
+      const message = asString(err && err.message).trim();
+      if (["membership_days_invalid", "price_cents_invalid", "product name is required"].includes(message)) {
+        writeError(res, 400, message.replaceAll(" ", "_"), "请求参数无效");
+        return;
+      }
       writeError(res, 500, "internal_error", asString(err && err.message).trim() || "internal error");
     }
   });

@@ -25,7 +25,6 @@ function makePackagingFixture({omit = []} = {}) {
     "node_sidecar/build/schema_cache.seed.json",
     "shared/licensePolicy.js",
     "shared/featureCodes.js",
-    "shared/craftPermitPolicy.js",
     "keys/client_license_public.pem"
   ];
 

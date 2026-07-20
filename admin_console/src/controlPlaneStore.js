@@ -6,7 +6,9 @@ const {asString} = require("../../node_sidecar/src/utils");
 
 const LEGACY_MEMBERSHIP_PLAN_CODE_MAP = Object.freeze({
   free: "inactive",
-  pro: "standard",
+  trial: "member",
+  standard: "member",
+  pro: "member",
   elite: "member"
 });
 
@@ -37,19 +39,7 @@ const DEFAULT_MEMBERSHIP_PLANS = [
   {
     code: "member",
     name: "Member",
-    description: "Unlimited Steam bindings with craft execution",
-    permissions: [...DEFAULT_ACTIVE_PERMISSIONS]
-  },
-  {
-    code: "standard",
-    name: "Standard",
-    description: "Single Steam binding with craft execution",
-    permissions: [...DEFAULT_ACTIVE_PERMISSIONS]
-  },
-  {
-    code: "trial",
-    name: "Trial",
-    description: "Seven-day single-binding trial with craft execution",
+    description: "Membership with craft execution",
     permissions: [...DEFAULT_ACTIVE_PERMISSIONS]
   }
 ];
@@ -85,24 +75,40 @@ function hashCode(code) {
   return crypto.createHash("sha256").update(asString(code).trim()).digest("hex");
 }
 
-function hashPassword(password) {
-  const secret = asString(password).trim();
-  if (!secret) {
-    throw new Error("password is required");
+function hashPassword(password, {enforcePolicy = true} = {}) {
+  const secret = asString(password);
+  const length = [...secret].length;
+  if (enforcePolicy && (length < 12 || length > 128)) {
+    throw new Error("password_length_invalid");
   }
   const salt = crypto.randomBytes(16).toString("hex");
-  const digest = crypto.scryptSync(secret, salt, 64).toString("hex");
-  return `scrypt$${salt}$${digest}`;
+  const params = {N: 2 ** 15, r: 8, p: 3, maxmem: 64 * 1024 * 1024};
+  const digest = crypto.scryptSync(secret, salt, 64, params).toString("hex");
+  return `scrypt$v2$${params.N}$${params.r}$${params.p}$${salt}$${digest}`;
 }
 
 function verifyPassword(password, encoded) {
-  const secret = asString(password).trim();
+  const secret = asString(password);
   const stored = asString(encoded).trim();
-  const [algo, salt, digest] = stored.split("$");
-  if (algo !== "scrypt" || !salt || !digest || !secret) {
+  if (!secret) {
     return false;
   }
-  const computed = crypto.scryptSync(secret, salt, 64);
+  const parts = stored.split("$");
+  let salt = "";
+  let digest = "";
+  let options = undefined;
+  if (parts.length === 3 && parts[0] === "scrypt") {
+    [, salt, digest] = parts;
+  } else if (parts.length === 7 && parts[0] === "scrypt" && parts[1] === "v2") {
+    const [, , n, r, p, storedSalt, storedDigest] = parts;
+    salt = storedSalt;
+    digest = storedDigest;
+    options = {N: Number(n), r: Number(r), p: Number(p), maxmem: 64 * 1024 * 1024};
+  }
+  if (!salt || !digest) {
+    return false;
+  }
+  const computed = crypto.scryptSync(secret, salt, 64, options);
   const expected = Buffer.from(digest, "hex");
   if (computed.length !== expected.length) {
     return false;
@@ -110,8 +116,27 @@ function verifyPassword(password, encoded) {
   return crypto.timingSafeEqual(computed, expected);
 }
 
+function passwordHashNeedsUpgrade(encoded) {
+  return !asString(encoded).trim().startsWith("scrypt$v2$");
+}
+
 function hashToken(token) {
   return crypto.createHash("sha256").update(asString(token).trim()).digest("hex");
+}
+
+function addDays(base, days) {
+  return new Date(parseTimeMs(base) + Number(days) * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function normalizeActivationCode(value) {
+  return asString(value).trim().toUpperCase();
+}
+
+function generateActivationCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(16);
+  const text = [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
+  return `CS2-${text.slice(0, 4)}-${text.slice(4, 8)}-${text.slice(8, 12)}-${text.slice(12, 16)}`;
 }
 
 function normalizeFeatureCode(value) {
@@ -137,13 +162,10 @@ function calculateRemainingMembershipDays(expiresAt = "", now = new Date()) {
 
 function isMembershipActive(planCode = "", expiresAt = "", now = new Date()) {
   const code = normalizeMembershipPlanCode(planCode);
-  if (code === "inactive") {
+  if (code !== "member") {
     return false;
   }
   const expiresAtMs = parseTimeMs(expiresAt);
-  if (code === "trial" && !expiresAtMs) {
-    return false;
-  }
   if (!expiresAtMs) {
     return true;
   }
@@ -177,6 +199,7 @@ function sanitizeClientUser(row, {now = new Date()} = {}) {
     email: asString(row.email).trim(),
     username: asString(row.username).trim(),
     status: asString(row.status).trim() || "active",
+    archived_at: asString(row.archived_at).trim(),
     membership_plan: membershipPlan,
     membership_expires_at: membershipExpiresAt,
     remaining_membership_days: calculateRemainingMembershipDays(membershipExpiresAt, now),
@@ -231,6 +254,8 @@ function sanitizeDeviceSession(row) {
     last_used_at: asString(row.last_used_at).trim(),
     expires_at: asString(row.expires_at).trim(),
     revoked_at: asString(row.revoked_at).trim()
+    ,family_id: asString(row.family_id).trim()
+    ,parent_session_id: Number(row.parent_session_id) || 0
   };
 }
 
@@ -240,6 +265,8 @@ class ControlPlaneStore {
     this.db = new DatabaseSync(this.dbPath);
     this.db.exec("PRAGMA foreign_keys = ON");
     this.ensureSchema();
+    this.migrateRefreshSessionFamilies();
+    this.migrateLegacyMembershipPlans();
     this.ensureDefaultMembershipPlans();
   }
 
@@ -284,6 +311,7 @@ class ControlPlaneStore {
         status TEXT NOT NULL DEFAULT 'active',
         membership_plan TEXT NOT NULL DEFAULT 'inactive',
         membership_expires_at TEXT NOT NULL DEFAULT '',
+        archived_at TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -342,6 +370,8 @@ class ControlPlaneStore {
         last_used_at TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         revoked_at TEXT NOT NULL DEFAULT '',
+        family_id TEXT NOT NULL DEFAULT '',
+        parent_session_id INTEGER,
         FOREIGN KEY (user_id) REFERENCES client_user(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_refresh_session_user_device
@@ -373,10 +403,12 @@ class ControlPlaneStore {
         last_used_at TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         revoked_at TEXT NOT NULL DEFAULT '',
+        csrf_token_hash TEXT NOT NULL DEFAULT '',
         FOREIGN KEY (admin_user_id) REFERENCES admin_user(id) ON DELETE CASCADE
       );
       CREATE TABLE IF NOT EXISTS login_attempt (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scene TEXT NOT NULL DEFAULT 'client',
         username TEXT NOT NULL,
         success INTEGER NOT NULL DEFAULT 0,
         ip TEXT NOT NULL DEFAULT '',
@@ -403,9 +435,98 @@ class ControlPlaneStore {
         expires_at TEXT NOT NULL,
         consumed_at TEXT NOT NULL DEFAULT ''
       );
+
+      CREATE TABLE IF NOT EXISTS membership_grant (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        source_ref TEXT NOT NULL DEFAULT '',
+        days INTEGER NOT NULL,
+        previous_expires_at TEXT NOT NULL DEFAULT '',
+        new_expires_at TEXT NOT NULL,
+        admin_user_id INTEGER,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES client_user(id),
+        FOREIGN KEY (admin_user_id) REFERENCES admin_user(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_membership_grant_source_ref
+      ON membership_grant(source, source_ref) WHERE source_ref != '';
+
+      CREATE TABLE IF NOT EXISTS activation_code (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT NOT NULL,
+        code_hash TEXT NOT NULL UNIQUE,
+        code_mask TEXT NOT NULL,
+        days INTEGER NOT NULL,
+        expires_at TEXT NOT NULL DEFAULT '',
+        created_by_admin_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT NOT NULL DEFAULT '',
+        redeemed_at TEXT NOT NULL DEFAULT '',
+        redeemed_by_user_id INTEGER,
+        FOREIGN KEY (created_by_admin_id) REFERENCES admin_user(id),
+        FOREIGN KEY (redeemed_by_user_id) REFERENCES client_user(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS membership_product (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        membership_days INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        is_enabled INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS payment_order (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_no TEXT NOT NULL UNIQUE,
+        user_id INTEGER NOT NULL,
+        product_id INTEGER,
+        product_name TEXT NOT NULL,
+        membership_days INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        status TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT '',
+        external_transaction_id TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        paid_at TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (user_id) REFERENCES client_user(id),
+        FOREIGN KEY (product_id) REFERENCES membership_product(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS audit_event (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor_type TEXT NOT NULL,
+        actor_id INTEGER,
+        action TEXT NOT NULL,
+        target_type TEXT NOT NULL DEFAULT '',
+        target_id TEXT NOT NULL DEFAULT '',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        ip TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
     `);
     this.ensureClientUserColumn("membership_expires_at", "TEXT NOT NULL DEFAULT ''");
+    this.ensureClientUserColumn("archived_at", "TEXT NOT NULL DEFAULT ''");
     this.ensureEmailCodeColumn("failed_attempts", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureTableColumn("refresh_session", "family_id", "TEXT NOT NULL DEFAULT ''");
+    this.ensureTableColumn("refresh_session", "parent_session_id", "INTEGER");
+    this.ensureTableColumn("admin_session", "csrf_token_hash", "TEXT NOT NULL DEFAULT ''");
+    this.ensureTableColumn("login_attempt", "scene", "TEXT NOT NULL DEFAULT 'client'");
+  }
+
+  ensureTableColumn(tableName, columnName, definition) {
+    const columns = this.db.prepare(`PRAGMA table_info(${tableName})`).all();
+    if (columns.some((item) => asString(item && item.name).trim() === columnName)) {
+      return;
+    }
+    this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
   }
 
   ensureClientUserColumn(columnName, definition) {
@@ -422,6 +543,55 @@ class ControlPlaneStore {
       return;
     }
     this.db.exec(`ALTER TABLE email_code ADD COLUMN ${columnName} ${definition}`);
+  }
+
+  migrateRefreshSessionFamilies() {
+    const rows = this.db.prepare("SELECT id, family_id, parent_session_id FROM refresh_session ORDER BY id").all();
+    const byId = new Map(rows.map((row) => [Number(row.id), row]));
+    const adjacent = new Map(rows.map((row) => [Number(row.id), new Set()]));
+    for (const row of rows) {
+      const id = Number(row.id);
+      const parentId = Number(row.parent_session_id) || 0;
+      if (parentId && byId.has(parentId)) {
+        adjacent.get(id).add(parentId);
+        adjacent.get(parentId).add(id);
+      }
+    }
+    const visited = new Set();
+    this.runInTransaction(() => {
+      const update = this.db.prepare("UPDATE refresh_session SET family_id = ? WHERE id = ? AND family_id = ''");
+      for (const row of rows) {
+        const startId = Number(row.id);
+        if (visited.has(startId)) continue;
+        const pending = [startId];
+        const component = [];
+        const existingFamilies = [];
+        while (pending.length) {
+          const id = pending.pop();
+          if (visited.has(id)) continue;
+          visited.add(id);
+          const item = byId.get(id);
+          if (!item) continue;
+          component.push(item);
+          const familyId = asString(item.family_id).trim();
+          if (familyId) existingFamilies.push(familyId);
+          for (const neighbor of adjacent.get(id) || []) pending.push(neighbor);
+        }
+        const familyId = existingFamilies[0] || crypto.randomUUID();
+        for (const item of component) {
+          if (!asString(item.family_id).trim()) update.run(familyId, item.id);
+        }
+      }
+    });
+  }
+
+  migrateLegacyMembershipPlans() {
+    this.runInTransaction(() => {
+      for (const [legacyCode, nextCode] of Object.entries(LEGACY_MEMBERSHIP_PLAN_CODE_MAP)) {
+        this.db.prepare("UPDATE client_user SET membership_plan = ? WHERE lower(membership_plan) = ?")
+          .run(nextCode, legacyCode);
+      }
+    });
   }
 
   ensureDefaultMembershipPlans() {
@@ -452,7 +622,7 @@ class ControlPlaneStore {
           `).run(planId, featureCode, now, now);
         }
       }
-      for (const legacyCode of Object.keys(LEGACY_MEMBERSHIP_PLAN_CODE_MAP)) {
+      for (const legacyCode of [...Object.keys(LEGACY_MEMBERSHIP_PLAN_CODE_MAP), "standard", "trial"]) {
         this.db.prepare("DELETE FROM membership_plan WHERE code = ?").run(legacyCode);
       }
     });
@@ -577,8 +747,11 @@ class ControlPlaneStore {
     return sanitizeClientUser(this.db.prepare("SELECT * FROM client_user WHERE email = ?").get(asString(email).trim().toLowerCase()), {now});
   }
 
-  listClientUsers({now = new Date()} = {}) {
-    return this.db.prepare("SELECT * FROM client_user ORDER BY created_at ASC").all().map((row) => sanitizeClientUser(row, {now}));
+  listClientUsers({now = new Date(), includeArchived = false} = {}) {
+    const rows = includeArchived
+      ? this.db.prepare("SELECT * FROM client_user ORDER BY created_at ASC").all()
+      : this.db.prepare("SELECT * FROM client_user WHERE status != 'archived' ORDER BY created_at ASC").all();
+    return rows.map((row) => sanitizeClientUser(row, {now}));
   }
 
   createClientUser({email = "", username = "", password = "", membershipPlan = "inactive", membershipExpiresAt = "", now = new Date()} = {}) {
@@ -602,17 +775,34 @@ class ControlPlaneStore {
     if (!row || asString(row.status).trim() !== "active" || !verifyPassword(password, row.password_hash)) {
       return {ok: false, reason: "invalid_credentials"};
     }
+    if (passwordHashNeedsUpgrade(row.password_hash)) {
+      this.db.prepare("UPDATE client_user SET password_hash = ?, updated_at = ? WHERE id = ?")
+        .run(hashPassword(password, {enforcePolicy: false}), toIsoString(), row.id);
+    }
     return {ok: true, user: sanitizeClientUser(row)};
   }
 
-  updateClientPassword({email = "", newPassword = "", now = new Date()} = {}) {
+  updateClientPassword({email = "", newPassword = "", ip = "", now = new Date()} = {}) {
     const user = this.getClientUserByEmail(email, {now});
     if (!user) {
       return {ok: false, reason: "user_not_found"};
     }
-    this.db.prepare(`
-      UPDATE client_user SET password_hash = ?, updated_at = ? WHERE id = ?
-    `).run(hashPassword(newPassword), toIsoString(now), user.id);
+    const stamp = toIsoString(now);
+    this.runInTransaction(() => {
+      this.db.prepare(`
+        UPDATE client_user SET password_hash = ?, updated_at = ? WHERE id = ?
+      `).run(hashPassword(newPassword), stamp, user.id);
+      this.revokeAllUserRefreshSessions({userId: user.id, now: stamp});
+      this.appendAuditEvent({
+        actorType: "client_user",
+        actorId: user.id,
+        action: "user.password_reset",
+        targetType: "client_user",
+        targetId: user.id,
+        ip,
+        now: stamp
+      });
+    });
     return {ok: true, user: this.getClientUserById(user.id, {now})};
   }
 
@@ -673,11 +863,7 @@ class ControlPlaneStore {
       permissions: resolvedPermissions,
       feature_flags: {
         simulation_enabled: resolvedPermissions.includes(FEATURE_CODES.SIMULATION_USE),
-        craft_enabled: resolvedPermissions.includes(FEATURE_CODES.CRAFT_USE),
-        steam_binding_mode: effectivePlanCode === "member" ? "unlimited" : "single_locked",
-        steam_binding_limit: effectivePlanCode === "member" ? -1 : (effectivePlanCode === "inactive" ? 0 : 1),
-        trial_active: effectivePlanCode === "trial",
-        trial_expires_at: effectivePlanCode === "trial" ? user.membership_expires_at : ""
+        craft_enabled: resolvedPermissions.includes(FEATURE_CODES.CRAFT_USE)
       }
     };
   }
@@ -721,6 +907,8 @@ class ControlPlaneStore {
     membershipPlan = "",
     membershipExpiresAt = "",
     permissionOverrides = null,
+    adminUserId = 0,
+    auditIp = "",
     now = new Date()
   } = {}) {
     const user = this.getClientUserById(userId, {now});
@@ -751,6 +939,24 @@ class ControlPlaneStore {
           now: stamp
         });
       }
+      if (nextStatus === "disabled") {
+        this.revokeAllUserRefreshSessions({userId: user.id, now: stamp});
+      }
+      this.appendAuditEvent({
+        actorType: "admin",
+        actorId: adminUserId,
+        action: "user.access_updated",
+        targetType: "client_user",
+        targetId: user.id,
+        metadata: {
+          status: nextStatus,
+          membership_plan: plan.code,
+          membership_expires_at: expiresAt,
+          permission_overrides_changed: Array.isArray(permissionOverrides)
+        },
+        ip: auditIp,
+        now: stamp
+      });
     });
     return {
       ok: true,
@@ -759,124 +965,7 @@ class ControlPlaneStore {
     };
   }
 
-  listUserSteamBindings({userId = 0, activeOnly = true} = {}) {
-    const normalizedUserId = Number(userId) || 0;
-    const rows = activeOnly
-      ? this.db.prepare(`
-        SELECT * FROM client_user_steam_binding
-        WHERE user_id = ? AND status = 'active'
-        ORDER BY first_bound_at ASC, id ASC
-      `).all(normalizedUserId)
-      : this.db.prepare(`
-        SELECT * FROM client_user_steam_binding
-        WHERE user_id = ?
-        ORDER BY first_bound_at ASC, id ASC
-      `).all(normalizedUserId);
-    return rows.map((row) => ({
-      id: Number(row.id) || 0,
-      user_id: Number(row.user_id) || 0,
-      steam_id: asString(row.steam_id).trim(),
-      steam_account_name: asString(row.steam_account_name).trim(),
-      status: asString(row.status).trim() || "active",
-      first_bound_at: asString(row.first_bound_at).trim(),
-      last_seen_at: asString(row.last_seen_at).trim(),
-      source: asString(row.source).trim() || "client_login_save",
-      note: asString(row.note).trim()
-    }));
-  }
-
-  revokeUserSteamBindingById({userId = 0, bindingId = 0, note = "", now = new Date()} = {}) {
-    const targetUserId = Number(userId) || 0;
-    const targetBindingId = Number(bindingId) || 0;
-    const binding = this.db.prepare(`
-      SELECT * FROM client_user_steam_binding
-      WHERE id = ? AND user_id = ? AND status = 'active'
-      LIMIT 1
-    `).get(targetBindingId, targetUserId);
-    if (!binding) {
-      return {ok: false, reason: "steam_binding_not_found"};
-    }
-    const stamp = toIsoString(now);
-    const result = this.db.prepare(`
-      UPDATE client_user_steam_binding
-      SET status = 'revoked', last_seen_at = ?, note = ?
-      WHERE id = ? AND user_id = ? AND status = 'active'
-    `).run(stamp, asString(note).trim(), targetBindingId, targetUserId);
-    if (Number(result.changes) <= 0) {
-      return {ok: false, reason: "steam_binding_not_found"};
-    }
-    return {ok: true};
-  }
-
-  checkOrBindSteamAccount({userId = 0, steamId = "", steamAccountName = "", now = new Date()} = {}) {
-    const user = this.getClientUserById(userId, {now});
-    if (!user) {
-      return {ok: false, reason: "user_not_found"};
-    }
-    const normalizedSteamId = asString(steamId).trim();
-    if (!normalizedSteamId) {
-      return {ok: false, reason: "steam_id_required"};
-    }
-    const entitlements = this.resolveUserEntitlements({userId: user.id, now});
-    const bindingMode = asString(entitlements && entitlements.feature_flags && entitlements.feature_flags.steam_binding_mode).trim()
-      || "single_locked";
-    const bindingLimit = Number(entitlements && entitlements.feature_flags && entitlements.feature_flags.steam_binding_limit);
-    const activeBindings = this.listUserSteamBindings({userId: user.id, activeOnly: true});
-    const matchedExisting = activeBindings.find((item) => item.steam_id === normalizedSteamId) || null;
-    const baseResult = {
-      binding_mode: bindingMode,
-      binding_limit: Number.isFinite(bindingLimit) ? bindingLimit : 0,
-      bound_count: activeBindings.length,
-      matched_existing: !!matchedExisting
-    };
-    if (!entitlements || entitlements.membership_plan === "inactive" || baseResult.binding_limit === 0) {
-      return {
-        ok: false,
-        reason: "membership_inactive",
-        message: "当前账号未开通会员权限，无法绑定新的 Steam 账号",
-        ...baseResult
-      };
-    }
-    if (matchedExisting) {
-      const stamp = toIsoString(now);
-      const nextSteamAccountName = asString(steamAccountName).trim() || matchedExisting.steam_account_name;
-      this.db.prepare(`
-        UPDATE client_user_steam_binding
-        SET steam_account_name = ?, last_seen_at = ?
-        WHERE id = ?
-      `).run(nextSteamAccountName, stamp, matchedExisting.id);
-      return {
-        ok: true,
-        ...baseResult,
-        message: "已匹配既有 Steam 绑定"
-      };
-    }
-    if (baseResult.binding_limit > 0 && activeBindings.length >= baseResult.binding_limit) {
-      return {
-        ok: false,
-        reason: "steam_binding_limit_reached",
-        message: "当前账号允许绑定的 Steam 数量已达上限",
-        ...baseResult
-      };
-    }
-    const stamp = toIsoString(now);
-    this.db.prepare(`
-      INSERT INTO client_user_steam_binding(
-        user_id, steam_id, steam_account_name, status, first_bound_at, last_seen_at, source, note
-      )
-      VALUES(?, ?, ?, 'active', ?, ?, 'client_login_save', '')
-    `).run(user.id, normalizedSteamId, asString(steamAccountName).trim(), stamp, stamp);
-    return {
-      ok: true,
-      binding_mode: bindingMode,
-      binding_limit: baseResult.binding_limit,
-      bound_count: activeBindings.length + 1,
-      matched_existing: false,
-      message: "Steam 绑定资格已确认"
-    };
-  }
-
-  createRefreshSession({userId = 0, deviceId = "", ttlDays = 30, now = new Date()} = {}) {
+  createRefreshSession({userId = 0, deviceId = "", ttlDays = 30, now = new Date(), familyId = "", parentSessionId = null} = {}) {
     const user = this.getClientUserById(userId);
     if (!user) {
       throw new Error("user not found");
@@ -888,14 +977,21 @@ class ControlPlaneStore {
     const refreshToken = crypto.randomBytes(24).toString("base64url");
     const stamp = toIsoString(now);
     const expiresAt = new Date(parseTimeMs(stamp) + Math.max(1, Number(ttlDays) || 1) * 24 * 60 * 60 * 1000).toISOString();
+    const resolvedFamilyId = asString(familyId).trim() || crypto.randomUUID();
     const result = this.db.prepare(`
-      INSERT INTO refresh_session(token_hash, user_id, device_id, status, created_at, updated_at, last_used_at, expires_at, revoked_at)
-      VALUES(?, ?, ?, 'active', ?, ?, ?, ?, '')
-    `).run(hashToken(refreshToken), user.id, deviceText, stamp, stamp, stamp, expiresAt);
+      INSERT INTO refresh_session(
+        token_hash, user_id, device_id, status, created_at, updated_at, last_used_at, expires_at,
+        revoked_at, family_id, parent_session_id
+      )
+      VALUES(?, ?, ?, 'active', ?, ?, ?, ?, '', ?, ?)
+    `).run(hashToken(refreshToken), user.id, deviceText, stamp, stamp, stamp, expiresAt,
+      resolvedFamilyId, Number(parentSessionId) || null);
     return {
       id: Number(result.lastInsertRowid) || 0,
       refresh_token: refreshToken,
-      expires_at: expiresAt
+      expires_at: expiresAt,
+      family_id: resolvedFamilyId,
+      parent_session_id: Number(parentSessionId) || 0
     };
   }
 
@@ -948,28 +1044,84 @@ class ControlPlaneStore {
   }
 
   rotateRefreshSession({refreshToken = "", deviceId = "", ttlDays = 30, now = new Date()} = {}) {
-    const resolved = this.resolveRefreshSession({refreshToken, deviceId, now});
-    if (!resolved.ok) {
-      return resolved;
+    const stamp = toIsoString(now);
+    const row = this.db.prepare(`
+      SELECT rs.*, cu.status AS user_status
+      FROM refresh_session rs
+      JOIN client_user cu ON cu.id = rs.user_id
+      WHERE rs.token_hash = ? LIMIT 1
+    `).get(hashToken(refreshToken));
+    if (!row) {
+      return {ok: false, reason: "refresh_token_not_found"};
+    }
+    if (asString(row.status).trim() === "rotated") {
+      this.revokeRefreshFamily({familyId: row.family_id, now: stamp});
+      return {ok: false, reason: "refresh_token_reused"};
+    }
+    if (asString(row.status).trim() !== "active" || asString(row.revoked_at).trim()) {
+      return {ok: false, reason: "refresh_token_not_found"};
+    }
+    if (asString(row.device_id).trim() !== asString(deviceId).trim()) {
+      return {ok: false, reason: "device_mismatch"};
+    }
+    if (parseTimeMs(row.expires_at) <= parseTimeMs(stamp)) {
+      return {ok: false, reason: "refresh_token_expired"};
+    }
+    if (asString(row.user_status).trim() !== "active") {
+      return {ok: false, reason: "user_disabled"};
+    }
+    return this.runInTransaction(() => {
+      const familyId = asString(row.family_id).trim() || crypto.randomUUID();
+      if (!asString(row.family_id).trim()) {
+        this.db.prepare("UPDATE refresh_session SET family_id = ? WHERE id = ?")
+          .run(familyId, row.id);
+      }
+      const changed = this.db.prepare(`
+        UPDATE refresh_session SET status = 'rotated', updated_at = ?
+        WHERE id = ? AND status = 'active' AND revoked_at = ''
+      `).run(stamp, row.id);
+      if (Number(changed.changes) !== 1) {
+        throw new Error("refresh session rotation conflict");
+      }
+      const next = this.createRefreshSession({
+        userId: row.user_id,
+        deviceId,
+        ttlDays,
+        now: stamp,
+        familyId,
+        parentSessionId: row.id
+      });
+      return {
+        ok: true,
+        user: this.getClientUserById(row.user_id, {now}),
+        refresh_token: next.refresh_token,
+        expires_at: next.expires_at,
+        family_id: next.family_id,
+        parent_session_id: next.parent_session_id
+      };
+    });
+  }
+
+  revokeRefreshFamily({familyId = "", now = new Date()} = {}) {
+    const resolvedFamilyId = asString(familyId).trim();
+    if (!resolvedFamilyId) {
+      return {ok: false, reason: "refresh_family_id_required", revoked_count: 0};
     }
     const stamp = toIsoString(now);
-    this.db.prepare(`
-      UPDATE refresh_session
-      SET status = 'rotated', revoked_at = ?, updated_at = ?
-      WHERE id = ?
-    `).run(stamp, stamp, resolved.session.id);
-    const next = this.createRefreshSession({
-      userId: resolved.user.id,
-      deviceId,
-      ttlDays,
-      now
-    });
-    return {
-      ok: true,
-      user: resolved.user,
-      refresh_token: next.refresh_token,
-      expires_at: next.expires_at
-    };
+    const result = this.db.prepare(`
+      UPDATE refresh_session SET status = 'revoked', revoked_at = ?, updated_at = ?
+      WHERE family_id = ? AND status != 'revoked'
+    `).run(stamp, stamp, resolvedFamilyId);
+    return {ok: true, revoked_count: Number(result.changes) || 0};
+  }
+
+  revokeAllUserRefreshSessions({userId = 0, now = new Date()} = {}) {
+    const stamp = toIsoString(now);
+    const result = this.db.prepare(`
+      UPDATE refresh_session SET status = 'revoked', revoked_at = ?, updated_at = ?
+      WHERE user_id = ? AND status = 'active' AND revoked_at = ''
+    `).run(stamp, stamp, Number(userId) || 0);
+    return {ok: true, revoked_count: Number(result.changes) || 0};
   }
 
   revokeRefreshSession({refreshToken = "", now = new Date()} = {}) {
@@ -1005,6 +1157,389 @@ class ControlPlaneStore {
     return rows.map((row) => sanitizeDeviceSession(row));
   }
 
+  appendAuditEvent({actorType = "system", actorId = null, action = "", targetType = "", targetId = "", metadata = {}, ip = "", now = new Date()} = {}) {
+    const actionText = asString(action).trim();
+    if (!actionText) {
+      throw new Error("audit action is required");
+    }
+    const result = this.db.prepare(`
+      INSERT INTO audit_event(actor_type, actor_id, action, target_type, target_id, metadata_json, ip, created_at)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      asString(actorType).trim() || "system",
+      Number(actorId) || null,
+      actionText,
+      asString(targetType).trim(),
+      asString(targetId).trim(),
+      JSON.stringify(metadata && typeof metadata === "object" ? metadata : {}),
+      asString(ip).trim(),
+      toIsoString(now)
+    );
+    return Number(result.lastInsertRowid) || 0;
+  }
+
+  listAuditEvents({limit = 200} = {}) {
+    return this.db.prepare("SELECT * FROM audit_event ORDER BY id DESC LIMIT ?")
+      .all(Math.max(1, Math.min(1000, Number(limit) || 200)))
+      .map((row) => ({
+        id: Number(row.id) || 0,
+        actor_type: asString(row.actor_type).trim(),
+        actor_id: Number(row.actor_id) || 0,
+        action: asString(row.action).trim(),
+        target_type: asString(row.target_type).trim(),
+        target_id: asString(row.target_id).trim(),
+        metadata: JSON.parse(asString(row.metadata_json).trim() || "{}"),
+        ip: asString(row.ip).trim(),
+        created_at: asString(row.created_at).trim()
+      }));
+  }
+
+  grantMembership({userId = 0, days = 0, source = "admin", sourceRef = "", adminUserId = null, now = new Date()} = {}) {
+    const normalizedDays = Number(days);
+    if (!Number.isInteger(normalizedDays) || normalizedDays < 1 || normalizedDays > 3650) {
+      return {ok: false, reason: "membership_days_invalid"};
+    }
+    const user = this.getClientUserById(userId, {now});
+    if (!user || user.status === "archived") {
+      return {ok: false, reason: "user_not_found"};
+    }
+    const stamp = toIsoString(now);
+    const base = parseTimeMs(user.membership_expires_at) > parseTimeMs(stamp)
+      ? user.membership_expires_at
+      : stamp;
+    const expiresAt = addDays(base, normalizedDays);
+    this.db.prepare(`
+      UPDATE client_user SET membership_plan = 'member', membership_expires_at = ?, updated_at = ? WHERE id = ?
+    `).run(expiresAt, stamp, user.id);
+    const result = this.db.prepare(`
+      INSERT INTO membership_grant(
+        user_id, source, source_ref, days, previous_expires_at, new_expires_at, admin_user_id, created_at
+      ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(user.id, asString(source).trim() || "admin", asString(sourceRef).trim(), normalizedDays,
+      user.membership_expires_at, expiresAt, Number(adminUserId) || null, stamp);
+    return {
+      ok: true,
+      grant_id: Number(result.lastInsertRowid) || 0,
+      user: this.getClientUserById(user.id, {now})
+    };
+  }
+
+  listMembershipGrants({userId = 0} = {}) {
+    const rows = Number(userId)
+      ? this.db.prepare("SELECT * FROM membership_grant WHERE user_id = ? ORDER BY id ASC").all(Number(userId))
+      : this.db.prepare("SELECT * FROM membership_grant ORDER BY id ASC").all();
+    return rows.map((row) => ({
+      id: Number(row.id) || 0,
+      user_id: Number(row.user_id) || 0,
+      source: asString(row.source).trim(),
+      source_ref: asString(row.source_ref).trim(),
+      days: Number(row.days) || 0,
+      previous_expires_at: asString(row.previous_expires_at).trim(),
+      new_expires_at: asString(row.new_expires_at).trim(),
+      admin_user_id: Number(row.admin_user_id) || 0,
+      created_at: asString(row.created_at).trim()
+    }));
+  }
+
+  createManagedClientUser({email = "", username = "", password = "", membershipDays = 0, adminUserId = 0, now = new Date()} = {}) {
+    const days = Number(membershipDays) || 0;
+    if (!Number.isInteger(days) || days < 0 || days > 3650) {
+      return {ok: false, reason: "membership_days_invalid"};
+    }
+    return this.runInTransaction(() => {
+      const user = this.createClientUser({email, username, password, now});
+      let nextUser = user;
+      if (days > 0) {
+        nextUser = this.grantMembership({
+          userId: user.id,
+          days,
+          source: "admin_create",
+          sourceRef: `user:${user.id}`,
+          adminUserId,
+          now
+        }).user;
+      }
+      this.appendAuditEvent({
+        actorType: "admin", actorId: adminUserId, action: "user.created",
+        targetType: "client_user", targetId: user.id, metadata: {membership_days: days}, now
+      });
+      return {ok: true, user: nextUser};
+    });
+  }
+
+  archiveClientUser({userId = 0, adminUserId = 0, now = new Date()} = {}) {
+    const user = this.getClientUserById(userId, {now});
+    if (!user) return {ok: false, reason: "user_not_found"};
+    if (user.status === "archived") return {ok: true, user};
+    const stamp = toIsoString(now);
+    return this.runInTransaction(() => {
+      this.db.prepare("UPDATE client_user SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ?")
+        .run(stamp, stamp, user.id);
+      this.revokeAllUserRefreshSessions({userId: user.id, now: stamp});
+      this.appendAuditEvent({actorType: "admin", actorId: adminUserId, action: "user.archived", targetType: "client_user", targetId: user.id, now: stamp});
+      return {ok: true, user: this.getClientUserById(user.id, {now})};
+    });
+  }
+
+  restoreClientUser({userId = 0, adminUserId = 0, now = new Date()} = {}) {
+    const user = this.getClientUserById(userId, {now});
+    if (!user) return {ok: false, reason: "user_not_found"};
+    if (user.status !== "archived") return {ok: false, reason: "user_not_archived"};
+    const stamp = toIsoString(now);
+    return this.runInTransaction(() => {
+      this.db.prepare("UPDATE client_user SET status = 'active', archived_at = '', updated_at = ? WHERE id = ?")
+        .run(stamp, user.id);
+      this.appendAuditEvent({actorType: "admin", actorId: adminUserId, action: "user.restored", targetType: "client_user", targetId: user.id, now: stamp});
+      return {ok: true, user: this.getClientUserById(user.id, {now})};
+    });
+  }
+
+  resetClientUserPassword({userId = 0, newPassword = "", adminUserId = 0, now = new Date()} = {}) {
+    const user = this.getClientUserById(userId, {now});
+    if (!user) return {ok: false, reason: "user_not_found"};
+    const stamp = toIsoString(now);
+    return this.runInTransaction(() => {
+      this.db.prepare("UPDATE client_user SET password_hash = ?, updated_at = ? WHERE id = ?")
+        .run(hashPassword(newPassword), stamp, user.id);
+      this.revokeAllUserRefreshSessions({userId: user.id, now: stamp});
+      this.appendAuditEvent({actorType: "admin", actorId: adminUserId, action: "user.password_reset", targetType: "client_user", targetId: user.id, now: stamp});
+      return {ok: true, user: this.getClientUserById(user.id, {now})};
+    });
+  }
+
+  bulkGrantMembership({userIds = [], days = 0, adminUserId = 0, now = new Date()} = {}) {
+    const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => Number(id) || 0))];
+    const normalizedDays = Number(days);
+    if (!ids.length) return {ok: false, reason: "user_ids_required"};
+    if (!Number.isInteger(normalizedDays) || normalizedDays < 1 || normalizedDays > 3650) {
+      return {ok: false, reason: "membership_days_invalid"};
+    }
+    const users = ids.map((id) => this.getClientUserById(id, {now}));
+    if (users.some((user) => !user || user.status === "archived")) {
+      return {ok: false, reason: "user_not_found"};
+    }
+    return this.runInTransaction(() => {
+      const results = users.map((user) => this.grantMembership({
+        userId: user.id, days: normalizedDays, source: "admin_bulk",
+        sourceRef: `${crypto.randomUUID()}:${user.id}`, adminUserId, now
+      }));
+      this.appendAuditEvent({
+        actorType: "admin", actorId: adminUserId, action: "membership.bulk_granted",
+        targetType: "client_user", metadata: {user_ids: ids, days: normalizedDays}, now
+      });
+      return {ok: true, items: results.map((item) => item.user)};
+    });
+  }
+
+  generateActivationCodes({count = 1, days = 0, expiresAt = "", adminUserId = 0, now = new Date()} = {}) {
+    const normalizedCount = Number(count);
+    const normalizedDays = Number(days);
+    const expiry = asString(expiresAt).trim();
+    if (!Number.isInteger(normalizedCount) || normalizedCount < 1 || normalizedCount > 500) {
+      return {ok: false, reason: "activation_code_count_invalid"};
+    }
+    if (!Number.isInteger(normalizedDays) || normalizedDays < 1 || normalizedDays > 3650) {
+      return {ok: false, reason: "membership_days_invalid"};
+    }
+    if (expiry && (!parseTimeMs(expiry) || parseTimeMs(expiry) <= parseTimeMs(toIsoString(now)))) {
+      return {ok: false, reason: "activation_code_expiry_invalid"};
+    }
+    const batchId = crypto.randomUUID();
+    const stamp = toIsoString(now);
+    return this.runInTransaction(() => {
+      const codes = [];
+      for (let index = 0; index < normalizedCount; index += 1) {
+        const code = generateActivationCode();
+        const mask = `${code.slice(0, 8)}-****-****-${code.slice(-4)}`;
+        const result = this.db.prepare(`
+          INSERT INTO activation_code(
+            batch_id, code_hash, code_mask, days, expires_at, created_by_admin_id, created_at
+          ) VALUES(?, ?, ?, ?, ?, ?, ?)
+        `).run(batchId, hashToken(normalizeActivationCode(code)), mask, normalizedDays, expiry, Number(adminUserId) || 0, stamp);
+        codes.push({id: Number(result.lastInsertRowid) || 0, code, code_mask: mask, days: normalizedDays, expires_at: expiry});
+      }
+      this.appendAuditEvent({
+        actorType: "admin", actorId: adminUserId, action: "activation_codes.generated",
+        targetType: "activation_code_batch", targetId: batchId,
+        metadata: {count: normalizedCount, days: normalizedDays, expires_at: expiry}, now: stamp
+      });
+      return {ok: true, batch_id: batchId, codes};
+    });
+  }
+
+  listActivationCodes({status = "", batchId = "", now = new Date()} = {}) {
+    const rows = this.db.prepare(`
+      SELECT * FROM activation_code
+      WHERE (? = '' OR batch_id = ?)
+      ORDER BY id DESC
+    `).all(asString(batchId).trim(), asString(batchId).trim());
+    const stampMs = parseTimeMs(toIsoString(now));
+    return rows.map((row) => {
+      let resolvedStatus = "available";
+      if (asString(row.redeemed_at).trim()) resolvedStatus = "used";
+      else if (asString(row.revoked_at).trim()) resolvedStatus = "revoked";
+      else if (parseTimeMs(row.expires_at) && parseTimeMs(row.expires_at) <= stampMs) resolvedStatus = "expired";
+      return {
+        id: Number(row.id) || 0,
+        batch_id: asString(row.batch_id).trim(),
+        code_mask: asString(row.code_mask).trim(),
+        days: Number(row.days) || 0,
+        status: resolvedStatus,
+        expires_at: asString(row.expires_at).trim(),
+        created_at: asString(row.created_at).trim(),
+        revoked_at: asString(row.revoked_at).trim(),
+        redeemed_at: asString(row.redeemed_at).trim(),
+        redeemed_by_user_id: Number(row.redeemed_by_user_id) || 0
+      };
+    }).filter((row) => !status || row.status === status);
+  }
+
+  revokeActivationCode({activationCodeId = 0, adminUserId = 0, now = new Date()} = {}) {
+    const stamp = toIsoString(now);
+    return this.runInTransaction(() => {
+      const row = this.db.prepare("SELECT * FROM activation_code WHERE id = ?").get(Number(activationCodeId) || 0);
+      if (!row) return {ok: false, reason: "activation_code_not_found"};
+      if (asString(row.redeemed_at).trim()) return {ok: false, reason: "activation_code_used"};
+      if (asString(row.revoked_at).trim()) return {ok: true};
+      this.db.prepare("UPDATE activation_code SET revoked_at = ? WHERE id = ? AND redeemed_at = ''")
+        .run(stamp, row.id);
+      this.appendAuditEvent({actorType: "admin", actorId: adminUserId, action: "activation_code.revoked", targetType: "activation_code", targetId: row.id, now: stamp});
+      return {ok: true};
+    });
+  }
+
+  redeemActivationCode({userId = 0, code = "", now = new Date()} = {}) {
+    const normalizedCode = normalizeActivationCode(code);
+    if (!normalizedCode) return {ok: false, reason: "activation_code_required"};
+    const stamp = toIsoString(now);
+    return this.runInTransaction(() => {
+      const row = this.db.prepare("SELECT * FROM activation_code WHERE code_hash = ?")
+        .get(hashToken(normalizedCode));
+      if (!row) return {ok: false, reason: "activation_code_not_found"};
+      if (asString(row.redeemed_at).trim()) return {ok: false, reason: "activation_code_used"};
+      if (asString(row.revoked_at).trim()) return {ok: false, reason: "activation_code_revoked"};
+      if (parseTimeMs(row.expires_at) && parseTimeMs(row.expires_at) <= parseTimeMs(stamp)) {
+        return {ok: false, reason: "activation_code_expired"};
+      }
+      const changed = this.db.prepare(`
+        UPDATE activation_code SET redeemed_at = ?, redeemed_by_user_id = ?
+        WHERE id = ? AND redeemed_at = '' AND revoked_at = ''
+      `).run(stamp, Number(userId) || 0, row.id);
+      if (Number(changed.changes) !== 1) return {ok: false, reason: "activation_code_used"};
+      const granted = this.grantMembership({
+        userId, days: row.days, source: "activation_code", sourceRef: String(row.id), now: stamp
+      });
+      if (!granted.ok) throw new Error(granted.reason);
+      this.appendAuditEvent({
+        actorType: "client_user", actorId: userId, action: "activation_code.redeemed",
+        targetType: "activation_code", targetId: row.id,
+        metadata: {days: Number(row.days) || 0}, now: stamp
+      });
+      return {ok: true, user: granted.user, grant_id: granted.grant_id};
+    });
+  }
+
+  sanitizeProduct(row) {
+    if (!row) return null;
+    return {
+      id: Number(row.id) || 0,
+      name: asString(row.name).trim(),
+      description: asString(row.description).trim(),
+      membership_days: Number(row.membership_days) || 0,
+      price_cents: Number(row.price_cents) || 0,
+      currency: asString(row.currency).trim() || "CNY",
+      is_enabled: Number(row.is_enabled) === 1,
+      sort_order: Number(row.sort_order) || 0,
+      created_at: asString(row.created_at).trim(),
+      updated_at: asString(row.updated_at).trim()
+    };
+  }
+
+  createProduct({name = "", description = "", membershipDays = 0, priceCents = 0, isEnabled = true, sortOrder = 0, adminUserId = 0, now = new Date()} = {}) {
+    const nameText = asString(name).trim();
+    const days = Number(membershipDays);
+    const cents = Number(priceCents);
+    if (!nameText) throw new Error("product name is required");
+    if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error("membership_days_invalid");
+    if (!Number.isInteger(cents) || cents < 0) throw new Error("price_cents_invalid");
+    const stamp = toIsoString(now);
+    const result = this.db.prepare(`
+      INSERT INTO membership_product(name, description, membership_days, price_cents, is_enabled, sort_order, created_at, updated_at)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(nameText, asString(description).trim(), days, cents, isEnabled ? 1 : 0, Number(sortOrder) || 0, stamp, stamp);
+    this.appendAuditEvent({actorType: "admin", actorId: adminUserId, action: "product.created", targetType: "membership_product", targetId: result.lastInsertRowid, now: stamp});
+    return this.sanitizeProduct(this.db.prepare("SELECT * FROM membership_product WHERE id = ?").get(result.lastInsertRowid));
+  }
+
+  updateProduct({productId = 0, name, description, membershipDays, priceCents, isEnabled, sortOrder, adminUserId = 0, now = new Date()} = {}) {
+    const row = this.db.prepare("SELECT * FROM membership_product WHERE id = ?").get(Number(productId) || 0);
+    if (!row) return null;
+    const next = {
+      name: name === undefined ? row.name : asString(name).trim(),
+      description: description === undefined ? row.description : asString(description).trim(),
+      days: membershipDays === undefined ? Number(row.membership_days) : Number(membershipDays),
+      cents: priceCents === undefined ? Number(row.price_cents) : Number(priceCents),
+      enabled: isEnabled === undefined ? Number(row.is_enabled) : (isEnabled ? 1 : 0),
+      sort: sortOrder === undefined ? Number(row.sort_order) : Number(sortOrder)
+    };
+    if (!next.name) throw new Error("product name is required");
+    if (!Number.isInteger(next.days) || next.days < 1 || next.days > 3650) throw new Error("membership_days_invalid");
+    if (!Number.isInteger(next.cents) || next.cents < 0) throw new Error("price_cents_invalid");
+    const stamp = toIsoString(now);
+    this.db.prepare(`
+      UPDATE membership_product SET name = ?, description = ?, membership_days = ?, price_cents = ?,
+        is_enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?
+    `).run(next.name, next.description, next.days, next.cents, next.enabled, next.sort, stamp, row.id);
+    this.appendAuditEvent({actorType: "admin", actorId: adminUserId, action: "product.updated", targetType: "membership_product", targetId: row.id, now: stamp});
+    return this.sanitizeProduct(this.db.prepare("SELECT * FROM membership_product WHERE id = ?").get(row.id));
+  }
+
+  deleteProduct({productId = 0, adminUserId = 0, now = new Date()} = {}) {
+    const id = Number(productId) || 0;
+    const row = this.db.prepare("SELECT * FROM membership_product WHERE id = ?").get(id);
+    if (!row) return {ok: false, reason: "product_not_found"};
+    const referenced = this.db.prepare("SELECT COUNT(1) AS count FROM payment_order WHERE product_id = ?").get(id);
+    if ((Number(referenced && referenced.count) || 0) > 0) {
+      return {ok: false, reason: "product_in_use"};
+    }
+    return this.runInTransaction(() => {
+      this.db.prepare("DELETE FROM membership_product WHERE id = ?").run(id);
+      this.appendAuditEvent({
+        actorType: "admin", actorId: adminUserId, action: "product.deleted",
+        targetType: "membership_product", targetId: id, now
+      });
+      return {ok: true};
+    });
+  }
+
+  listProducts({enabledOnly = false} = {}) {
+    const rows = enabledOnly
+      ? this.db.prepare("SELECT * FROM membership_product WHERE is_enabled = 1 ORDER BY sort_order ASC, id ASC").all()
+      : this.db.prepare("SELECT * FROM membership_product ORDER BY sort_order ASC, id ASC").all();
+    return rows.map((row) => this.sanitizeProduct(row));
+  }
+
+  listOrders({limit = 500} = {}) {
+    return this.db.prepare("SELECT * FROM payment_order ORDER BY id DESC LIMIT ?")
+      .all(Math.max(1, Math.min(1000, Number(limit) || 500)))
+      .map((row) => ({
+        id: Number(row.id) || 0,
+        order_no: asString(row.order_no).trim(),
+        user_id: Number(row.user_id) || 0,
+        product_id: Number(row.product_id) || 0,
+        product_name: asString(row.product_name).trim(),
+        membership_days: Number(row.membership_days) || 0,
+        amount_cents: Number(row.amount_cents) || 0,
+        currency: asString(row.currency).trim() || "CNY",
+        status: asString(row.status).trim(),
+        provider: asString(row.provider).trim(),
+        external_transaction_id: asString(row.external_transaction_id).trim(),
+        created_at: asString(row.created_at).trim(),
+        updated_at: asString(row.updated_at).trim(),
+        paid_at: asString(row.paid_at).trim()
+      }));
+  }
+
   needsAdminBootstrap() {
     const row = this.db.prepare("SELECT COUNT(1) AS count FROM admin_user").get();
     return (Number(row && row.count) || 0) === 0;
@@ -1038,31 +1573,38 @@ class ControlPlaneStore {
     if (!row || asString(row.status).trim() !== "active" || !verifyPassword(password, row.password_hash)) {
       return {ok: false, reason: "invalid_credentials"};
     }
+    if (passwordHashNeedsUpgrade(row.password_hash)) {
+      this.db.prepare("UPDATE admin_user SET password_hash = ?, updated_at = ? WHERE id = ?")
+        .run(hashPassword(password, {enforcePolicy: false}), toIsoString(), row.id);
+    }
     return {ok: true, user: sanitizeAdminUser(row)};
   }
 
-  createAdminSession({adminUserId = 0, ttlHours = 12, now = new Date()} = {}) {
+  createAdminSession({adminUserId = 0, ttlHours = 8, now = new Date()} = {}) {
     const user = sanitizeAdminUser(this.db.prepare("SELECT * FROM admin_user WHERE id = ?").get(Number(adminUserId) || 0));
     if (!user) {
       throw new Error("admin user not found");
     }
     const sessionToken = crypto.randomBytes(24).toString("base64url");
+    const csrfToken = crypto.randomBytes(24).toString("base64url");
     const stamp = toIsoString(now);
     const expiresAt = new Date(parseTimeMs(stamp) + Math.max(1, Number(ttlHours) || 1) * 60 * 60 * 1000).toISOString();
     this.runInTransaction(() => {
       this.db.prepare(`
-        INSERT INTO admin_session(token_hash, admin_user_id, status, created_at, updated_at, last_used_at, expires_at, revoked_at)
-        VALUES(?, ?, 'active', ?, ?, ?, ?, '')
-      `).run(hashToken(sessionToken), user.id, stamp, stamp, stamp, expiresAt);
+        INSERT INTO admin_session(
+          token_hash, admin_user_id, status, created_at, updated_at, last_used_at, expires_at, revoked_at, csrf_token_hash
+        ) VALUES(?, ?, 'active', ?, ?, ?, ?, '', ?)
+      `).run(hashToken(sessionToken), user.id, stamp, stamp, stamp, expiresAt, hashToken(csrfToken));
       this.db.prepare("UPDATE admin_user SET last_login_at = ?, updated_at = ? WHERE id = ?").run(stamp, stamp, user.id);
     });
     return {
       session_token: sessionToken,
+      csrf_token: csrfToken,
       expires_at: expiresAt
     };
   }
 
-  resolveAdminSession({sessionToken = "", now = new Date()} = {}) {
+  resolveAdminSession({sessionToken = "", idleTimeoutMs = 30 * 60 * 1000, now = new Date()} = {}) {
     const row = this.db.prepare(`
       SELECT s.*, u.username, u.status AS user_status, u.is_super_admin, u.created_at AS user_created_at,
              u.updated_at AS user_updated_at, u.last_login_at
@@ -1077,17 +1619,21 @@ class ControlPlaneStore {
     if (asString(row.user_status).trim() !== "active") {
       return {ok: false, reason: "admin_user_disabled"};
     }
-    if (parseTimeMs(row.expires_at) <= parseTimeMs(toIsoString(now))) {
+    const stamp = toIsoString(now);
+    if (parseTimeMs(row.expires_at) <= parseTimeMs(stamp)
+      || parseTimeMs(row.last_used_at) + Math.max(1, Number(idleTimeoutMs) || 1) <= parseTimeMs(stamp)) {
+      this.db.prepare("UPDATE admin_session SET status = 'expired', revoked_at = ?, updated_at = ? WHERE id = ?")
+        .run(stamp, stamp, row.id);
       return {ok: false, reason: "admin_session_expired"};
     }
-    const stamp = toIsoString(now);
     this.db.prepare("UPDATE admin_session SET last_used_at = ?, updated_at = ? WHERE id = ?").run(stamp, stamp, row.id);
     return {
       ok: true,
       session: {
         id: Number(row.id) || 0,
         admin_user_id: Number(row.admin_user_id) || 0,
-        expires_at: asString(row.expires_at).trim()
+        expires_at: asString(row.expires_at).trim(),
+        last_used_at: stamp
       },
       user: sanitizeAdminUser({
         id: row.admin_user_id,
@@ -1101,6 +1647,13 @@ class ControlPlaneStore {
     };
   }
 
+  verifyAdminCsrf({sessionId = 0, csrfToken = ""} = {}) {
+    const row = this.db.prepare("SELECT csrf_token_hash FROM admin_session WHERE id = ?").get(Number(sessionId) || 0);
+    const actual = Buffer.from(hashToken(csrfToken), "hex");
+    const expected = Buffer.from(asString(row && row.csrf_token_hash).trim(), "hex");
+    return actual.length === expected.length && actual.length > 0 && crypto.timingSafeEqual(actual, expected);
+  }
+
   revokeAdminSession({sessionToken = "", now = new Date()} = {}) {
     const result = this.db.prepare(`
       UPDATE admin_session
@@ -1112,24 +1665,53 @@ class ControlPlaneStore {
 
   // --- P1: Login brute-force protection ---
 
-  recordLoginAttempt({username = "", success = false, ip = "", now = new Date()} = {}) {
+  recordLoginAttempt({scene = "client", username = "", success = false, ip = "", now = new Date()} = {}) {
+    const sceneText = asString(scene).trim() || "client";
+    const usernameText = asString(username).trim().toLowerCase();
+    if (success) {
+      this.db.prepare("DELETE FROM login_attempt WHERE scene = ? AND username = ? AND success = 0")
+        .run(sceneText, usernameText);
+      return;
+    }
     this.db.prepare(`
-      INSERT INTO login_attempt(username, success, ip, created_at)
-      VALUES(?, ?, ?, ?)
-    `).run(asString(username).trim(), success ? 1 : 0, asString(ip).trim(), toIsoString(now));
+      INSERT INTO login_attempt(scene, username, success, ip, created_at)
+      VALUES(?, ?, 0, ?, ?)
+    `).run(sceneText, usernameText, asString(ip).trim(), toIsoString(now));
   }
 
-  getRecentFailedAttempts({username = "", windowMs = 15 * 60 * 1000, now = new Date()} = {}) {
-    const cutoff = new Date(now.getTime() - windowMs).toISOString();
+  getRecentFailedAttempts({scene = "client", username = "", ip = "", windowMs = 15 * 60 * 1000, now = new Date()} = {}) {
+    const nowMs = parseTimeMs(toIsoString(now));
+    const cutoff = new Date(nowMs - windowMs).toISOString();
+    const sceneText = asString(scene).trim() || "client";
+    const usernameText = asString(username).trim().toLowerCase();
+    const ipText = asString(ip).trim();
+    if (ipText && !usernameText) {
+      const row = this.db.prepare(`
+        SELECT COUNT(*) AS cnt FROM login_attempt
+        WHERE scene = ? AND ip = ? AND success = 0 AND created_at >= ?
+      `).get(sceneText, ipText, cutoff);
+      return Number(row && row.cnt) || 0;
+    }
     const row = this.db.prepare(`
       SELECT COUNT(*) AS cnt FROM login_attempt
-      WHERE username = ? AND success = 0 AND created_at >= ?
-    `).get(asString(username).trim(), cutoff);
+      WHERE scene = ? AND username = ? AND success = 0 AND created_at >= ?
+    `).get(sceneText, usernameText, cutoff);
     return Number(row && row.cnt) || 0;
   }
 
-  isLoginLocked({username = "", maxAttempts = 5, windowMs = 15 * 60 * 1000, now = new Date()} = {}) {
-    return this.getRecentFailedAttempts({username, windowMs, now}) >= maxAttempts;
+  getLoginRateLimit({scene = "client", username = "", ip = "", windowMs = 15 * 60 * 1000, now = new Date()} = {}) {
+    const accountFailures = this.getRecentFailedAttempts({scene, username, windowMs, now});
+    const ipFailures = this.getRecentFailedAttempts({scene, ip, windowMs, now});
+    if (accountFailures >= 5) return {limited: true, reason: "account_login_rate_limited"};
+    if (ipFailures >= 20) return {limited: true, reason: "ip_login_rate_limited"};
+    return {limited: false, reason: ""};
+  }
+
+  isLoginLocked({scene = "client", username = "", ip = "", maxAttempts = 5, windowMs = 15 * 60 * 1000, now = new Date()} = {}) {
+    if (Number(maxAttempts) !== 5) {
+      return this.getRecentFailedAttempts({scene, username, windowMs, now}) >= Number(maxAttempts);
+    }
+    return this.getLoginRateLimit({scene, username, ip, windowMs, now}).limited;
   }
 
   // --- P2: Three-step registration ---

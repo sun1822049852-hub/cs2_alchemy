@@ -71,6 +71,11 @@ const state = {
   clientAuthPromptTitle: "",
   clientAuthPromptHint: "",
   workspaceHydratedFor: "",
+  membershipProducts: [],
+  membershipProductsLoaded: false,
+  membershipLoading: false,
+  membershipStatusText: "",
+  membershipStatusTone: "",
   // --- 多账号汰换 ---
   batchCraftAccounts: [],
   batchCraftSelectedPresetId: "",
@@ -100,9 +105,10 @@ const ui = {
   licenseBundleInput: document.getElementById("licenseBundleInput"), licenseImportBtn: document.getElementById("licenseImportBtn"), licenseClearBtn: document.getElementById("licenseClearBtn"), licenseStatus: document.getElementById("licenseStatus"),
   licenseClearLocalBtn: document.getElementById("licenseClearLocalBtn"), licenseUserPill: document.getElementById("licenseUserPill"), licenseUserName: document.getElementById("licenseUserName"),
   navShell: document.getElementById("navShell"), navRailTrigger: document.getElementById("navRailTrigger"), mainSidebar: document.getElementById("mainSidebar"),
-  navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"), navSimulation: document.getElementById("navSimulation"),
+  navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"), navSimulation: document.getElementById("navSimulation"), navMembership: document.getElementById("navMembership"),
   guestWorkspaceNotice: document.getElementById("guestWorkspaceNotice"), guestWorkspaceNoticeText: document.getElementById("guestWorkspaceNoticeText"), guestWorkspaceLoginBtn: document.getElementById("guestWorkspaceLoginBtn"),
-  accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
+  accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"), membershipPage: document.getElementById("membershipPage"),
+  membershipPlanValue: document.getElementById("membershipPlanValue"), membershipExpiresValue: document.getElementById("membershipExpiresValue"), membershipRemainingValue: document.getElementById("membershipRemainingValue"), membershipProductList: document.getElementById("membershipProductList"), membershipActivationCode: document.getElementById("membershipActivationCode"), membershipRedeemBtn: document.getElementById("membershipRedeemBtn"), membershipRefreshBtn: document.getElementById("membershipRefreshBtn"), membershipStatus: document.getElementById("membershipStatus"),
   accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
   accountPasswordToggle: document.getElementById("accountPasswordToggle"),
   accountLoginModalTitle: document.getElementById("accountLoginModalTitle"), accountLoginHint: document.getElementById("accountLoginHint"),
@@ -714,7 +720,7 @@ function applyGuestWorkspacePreview({reason = ""} = {}) {
   renderCraftPage();
   renderSimulationPage();
   renderGuestWorkspaceNotice();
-  setAccountStatus("登录后可保存 Steam 账号并绑定到当前客户端身份。");
+  setAccountStatus("登录后可在当前客户端保存并管理 Steam 账号。");
   setSummary(String(reason || inventoryPreview.summary || "").trim());
   return true;
 }
@@ -755,26 +761,11 @@ function buildClientMembershipHintText(license = state.clientLicense) {
   const user = license && license.user && typeof license.user === "object" ? license.user : null;
   const featureFlags = license && license.featureFlags && typeof license.featureFlags === "object" ? license.featureFlags : {};
   const membershipPlan = String(user && user.membership_plan || "").trim();
-  const trialActive = !!featureFlags.trial_active;
-  const trialExpiresAt = String(featureFlags.trial_expires_at || "").trim();
-  const remainingDays = (() => {
-    const expiresAtMs = Date.parse(trialExpiresAt);
-    if (!trialActive || !Number.isFinite(expiresAtMs)) {
-      return 0;
-    }
-    return Math.max(0, Math.ceil((expiresAtMs - Date.now()) / (24 * 60 * 60 * 1000)));
-  })();
-  if (membershipPlan === "trial" && trialActive) {
-    return `新用户体验中，还可使用 ${remainingDays} 天普通版权限；当前最多绑定 1 个 Steam 账号；体验期内可使用炼金，到期后将失效。`;
-  }
   if (membershipPlan === "inactive" || featureFlags.craft_enabled === false) {
-    return "体验已到期，请开通会员后继续使用炼金功能；删除本地账号不等于换绑，既有 Steam 绑定资格仍会保留。";
+    return "当前为基础版，可使用除炼金执行外的现有功能；开通高级会员版后可使用炼金。";
   }
   if (membershipPlan === "member") {
-    return "当前版本支持绑定无限个 Steam 账号，已开通后可持续使用炼金功能。";
-  }
-  if (membershipPlan === "standard") {
-    return "当前版本仅支持绑定 1 个 Steam 账号，已开通后可使用炼金功能。";
+    return "高级会员版已生效，可使用全部现有功能。";
   }
   return "";
 }
@@ -838,7 +829,7 @@ function renderLicenseGate() {
       : "授权已验证，正在初始化本地工作台，请稍候。";
   } else if (authMode === "prod_login") {
     licenseHintText = remoteAuthDisabled
-      ? "正式登录模式已启用，但远程认证服务尚未配置。"
+      ? "正式登录模式已启用，但本地控制台尚未配置。"
       : "登录入口为用户名和密码，邮箱仅用于注册验证与重置密码。";
   } else if (authMode === "dev_auto_bundle") {
     licenseHintText = expired
@@ -896,7 +887,7 @@ function renderLicenseGate() {
       statusText = "授权已通过，正在载入本地工作台...";
     } else if (authMode === "prod_login") {
       statusText = remoteAuthDisabled
-        ? "认证服务未配置，当前无法执行登录。"
+        ? "本地控制台未配置，当前无法执行登录。"
         : (String(license.message || "").trim() || "请输入账号密码登录。");
     } else if (authMode === "dev_auto_bundle") {
       statusText = expired
@@ -968,7 +959,7 @@ async function loadLicenseState({hydrateWorkspace = true} = {}) {
 
 async function submitClientLogin() {
   const username = String((ui.clientLoginUsername && ui.clientLoginUsername.value) || "").trim();
-  const password = String((ui.clientLoginPassword && ui.clientLoginPassword.value) || "").trim();
+  const password = String((ui.clientLoginPassword && ui.clientLoginPassword.value) || "");
   if (!username) {
     setLicenseStatus("请输入登录账号", true);
     return;
@@ -1024,7 +1015,7 @@ async function submitClientRegister() {
   const email = String((ui.clientRegisterEmail && ui.clientRegisterEmail.value) || "").trim();
   const code = String((ui.clientRegisterCode && ui.clientRegisterCode.value) || "").trim();
   const username = String((ui.clientRegisterUsername && ui.clientRegisterUsername.value) || "").trim();
-  const password = String((ui.clientRegisterPassword && ui.clientRegisterPassword.value) || "").trim();
+  const password = String((ui.clientRegisterPassword && ui.clientRegisterPassword.value) || "");
   if (!email || !code || !username || !password) {
     setLicenseStatus("请完整填写邮箱、验证码、用户名和密码", true);
     return;
@@ -1078,7 +1069,7 @@ async function sendClientResetCode() {
 async function submitClientReset() {
   const email = String((ui.clientResetEmail && ui.clientResetEmail.value) || "").trim();
   const code = String((ui.clientResetCode && ui.clientResetCode.value) || "").trim();
-  const newPassword = String((ui.clientResetPassword && ui.clientResetPassword.value) || "").trim();
+  const newPassword = String((ui.clientResetPassword && ui.clientResetPassword.value) || "");
   if (!email || !code || !newPassword) {
     setLicenseStatus("请完整填写邮箱、验证码和新密码", true);
     return;
@@ -1369,6 +1360,13 @@ function normalizeCraftAssistRuntimeStateSnapshot(snapshot) {
 
 function createCraftAssistRunToken() {
   return `assist_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createCraftOperationId() {
+  if (typeof globalThis !== "undefined" && globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return `craft_${globalThis.crypto.randomUUID()}`;
+  }
+  return `craft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function getCraftAssistActiveRunToken(username) {
@@ -3123,12 +3121,183 @@ function syncAccountFormBySelection() {
   setAccountForm({username: "", password: "", totp: "", remark: ""});
 }
 
+function getMembershipExpiryText() {
+  return String(state.clientLicense && state.clientLicense.featureFlags && state.clientLicense.featureFlags.membership_expires_at || "").trim();
+}
+
+function formatMembershipDate(value) {
+  const dateMs = Date.parse(String(value || "").trim());
+  if (!Number.isFinite(dateMs)) return "-";
+  return new Date(dateMs).toLocaleString("zh-CN", {hour12: false});
+}
+
+function setMembershipStatus(text, tone = "") {
+  state.membershipStatusText = String(text || "").trim();
+  state.membershipStatusTone = String(tone || "").trim();
+  if (!ui.membershipStatus) return;
+  ui.membershipStatus.textContent = state.membershipStatusText || "";
+  ui.membershipStatus.classList.toggle("is-error", state.membershipStatusTone === "error");
+  ui.membershipStatus.classList.toggle("is-success", state.membershipStatusTone === "success");
+}
+
+function renderMembershipPage() {
+  if (!ui.membershipPage) return;
+  const license = state.clientLicense && typeof state.clientLicense === "object" ? state.clientLicense : {};
+  const user = license.user && typeof license.user === "object" ? license.user : null;
+  const plan = String(user && user.membership_plan || "").trim();
+  const membershipExpiresAt = getMembershipExpiryText();
+  const expiryMs = Date.parse(membershipExpiresAt);
+  const remainingDays = Number.isFinite(expiryMs)
+    ? Math.max(0, Math.ceil((expiryMs - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
+  if (ui.membershipPlanValue) {
+    ui.membershipPlanValue.textContent = plan === "member" ? "高级会员版" : (plan === "inactive" ? "基础版" : "未登录");
+  }
+  if (ui.membershipExpiresValue) {
+    ui.membershipExpiresValue.textContent = plan === "member"
+      ? (membershipExpiresAt ? formatMembershipDate(membershipExpiresAt) : "长期有效")
+      : "-";
+  }
+  if (ui.membershipRemainingValue) {
+    ui.membershipRemainingValue.textContent = plan === "member"
+      ? (remainingDays === null ? "长期有效" : `${remainingDays} 天`)
+      : "未开通";
+  }
+  if (ui.membershipRefreshBtn) ui.membershipRefreshBtn.disabled = !!state.membershipLoading;
+  if (ui.membershipRedeemBtn) ui.membershipRedeemBtn.disabled = !!state.membershipLoading || !license.authenticated;
+  if (!ui.membershipProductList) return;
+  ui.membershipProductList.replaceChildren();
+  if (state.membershipLoading && !state.membershipProductsLoaded) {
+    const loading = document.createElement("div");
+    loading.className = "membership-empty-products";
+    loading.textContent = "正在读取充值商品...";
+    ui.membershipProductList.append(loading);
+    return;
+  }
+  const products = Array.isArray(state.membershipProducts) ? state.membershipProducts : [];
+  if (!products.length) {
+    const empty = document.createElement("div");
+    empty.className = "membership-empty-products";
+    empty.textContent = "当前没有可用的充值商品";
+    ui.membershipProductList.append(empty);
+    return;
+  }
+  for (const product of products) {
+    const productId = String(product && product.id || "").trim();
+    const days = Math.max(0, Number(product && (product.membership_days || product.days)) || 0);
+    const priceCents = Math.max(0, Number(product && product.price_cents) || 0);
+    const card = document.createElement("article");
+    card.className = "membership-product-card";
+    const name = document.createElement("div");
+    name.className = "membership-product-name";
+    name.textContent = String(product && product.name || "会员商品").trim() || "会员商品";
+    const duration = document.createElement("div");
+    duration.className = "membership-product-days";
+    duration.textContent = days > 0 ? `${days} 天高级会员版` : "高级会员版";
+    const description = document.createElement("p");
+    description.className = "membership-product-description";
+    description.textContent = String(product && product.description || "延长当前会员有效期").trim() || "延长当前会员有效期";
+    const footer = document.createElement("div");
+    footer.className = "membership-product-footer";
+    const price = document.createElement("span");
+    price.className = "membership-product-price";
+    price.textContent = `¥${(priceCents / 100).toFixed(2)}`;
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "membership-product-action";
+    action.textContent = "前往支付";
+    action.disabled = !!state.membershipLoading || !license.authenticated || !productId;
+    action.onclick = () => checkoutMembershipProduct(productId);
+    footer.append(price, action);
+    card.append(name, duration, description, footer);
+    ui.membershipProductList.append(card);
+  }
+}
+
+async function refreshMembershipProducts({force = false} = {}) {
+  if (state.membershipLoading) return;
+  if (state.membershipProductsLoaded && !force) {
+    renderMembershipPage();
+    return;
+  }
+  state.membershipLoading = true;
+  setMembershipStatus("正在读取充值商品...");
+  renderMembershipPage();
+  try {
+    const data = await api("/api/membership/products", {suppressAuthFailure: true});
+    state.membershipProducts = Array.isArray(data && data.products) ? data.products : [];
+    state.membershipProductsLoaded = true;
+    setMembershipStatus(state.membershipProducts.length ? "充值商品已更新" : "当前没有可用的充值商品");
+  } catch (err) {
+    setMembershipStatus(`读取充值商品失败：${String(err && err.message || err)}`, "error");
+  } finally {
+    state.membershipLoading = false;
+    renderMembershipPage();
+  }
+}
+
+async function redeemMembershipActivationCode() {
+  if (state.membershipLoading) return;
+  if (!state.clientLicense || !state.clientLicense.authenticated) {
+    openClientAuthModal({title: "登录后兑换激活码", hint: "请先登录当前客户端账号，再兑换激活码。", view: "login"});
+    return;
+  }
+  const code = String(ui.membershipActivationCode && ui.membershipActivationCode.value || "").trim().toUpperCase();
+  if (!code) {
+    setMembershipStatus("请输入激活码", "error");
+    return;
+  }
+  state.membershipLoading = true;
+  setMembershipStatus("正在兑换激活码...");
+  renderMembershipPage();
+  try {
+    const data = await api("/api/membership/redeem", {
+      method: "POST",
+      body: JSON.stringify({code}),
+      suppressAuthFailure: true
+    });
+    applyClientLicenseState(data);
+    renderLicenseGate();
+    if (ui.membershipActivationCode) ui.membershipActivationCode.value = "";
+    setMembershipStatus("激活码兑换成功，会员状态已更新", "success");
+  } catch (err) {
+    setMembershipStatus(`兑换失败：${String(err && err.message || err)}`, "error");
+  } finally {
+    state.membershipLoading = false;
+    renderMembershipPage();
+  }
+}
+
+async function checkoutMembershipProduct(productId) {
+  if (state.membershipLoading) return;
+  if (!state.clientLicense || !state.clientLicense.authenticated) {
+    openClientAuthModal({title: "登录后充值会员", hint: "请先登录当前客户端账号，再选择充值商品。", view: "login"});
+    return;
+  }
+  state.membershipLoading = true;
+  setMembershipStatus("正在准备支付...");
+  renderMembershipPage();
+  try {
+    await api("/api/membership/checkout", {
+      method: "POST",
+      body: JSON.stringify({product_id: String(productId || "").trim()}),
+      suppressAuthFailure: true
+    });
+  } catch (err) {
+    const reason = String(err && err.data && err.data.reason || "").trim();
+    setMembershipStatus(reason === "payment_not_configured" ? "支付方式暂未开放" : `支付请求失败：${String(err && err.message || err)}`, reason === "payment_not_configured" ? "" : "error");
+  } finally {
+    state.membershipLoading = false;
+    renderMembershipPage();
+  }
+}
+
 function showPage(pageId) {
   state.currentPage = pageId;
   if (ui.navShell && ui.navShell.contains(document.activeElement) && typeof document.activeElement.blur === "function") {
     document.activeElement.blur();
   }
-  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft], ["simulationPage", ui.navSimulation], ["batchCraftPage", ui.navBatchCraft], ["webInventoryPage", ui.navWebInventory]]) {
+  for (const [id, btn] of [["accountPage", ui.navAccount], ["inventoryPage", ui.navInventory], ["craftPage", ui.navCraft], ["simulationPage", ui.navSimulation], ["batchCraftPage", ui.navBatchCraft], ["webInventoryPage", ui.navWebInventory], ["membershipPage", ui.navMembership]]) {
     const active = id === pageId;
     document.getElementById(id).classList.toggle("hidden", !active);
     if (btn) {
@@ -3155,6 +3324,10 @@ function showPage(pageId) {
   }
   if (pageId === "webInventoryPage") {
     renderWebInvAccountList();
+  }
+  if (pageId === "membershipPage") {
+    renderMembershipPage();
+    void refreshMembershipProducts();
   }
   /* 全局产物预测面板：仅在炼金汰换 / 多账号汰换页可见 */
   const predictorPages = new Set(["craftPage", "batchCraftPage"]);
@@ -3233,7 +3406,7 @@ function renderSavedAccounts() {
     if (!cards.length) {
       const empty = document.createElement("div");
       empty.className = "empty";
-      empty.textContent = "登录后可保存 Steam 账号并绑定到当前客户端身份。";
+      empty.textContent = "登录后可在当前客户端保存并管理 Steam 账号。";
       ui.savedAccountsWrap.append(empty);
       return;
     }
@@ -3272,7 +3445,7 @@ function renderSavedAccounts() {
         evt.stopPropagation();
         openClientAuthModal({
           title: "登录后可保存 Steam 账号",
-          hint: "当前为访客预览态，登录后可保存 Steam 账号并绑定到当前客户端身份。",
+          hint: "当前为访客预览态，登录后可在当前客户端保存并管理 Steam 账号。",
           view: "login"
         });
       };
@@ -3284,7 +3457,7 @@ function renderSavedAccounts() {
       card.onclick = () => {
         openClientAuthModal({
           title: "登录后可保存 Steam 账号",
-          hint: "当前为访客预览态，登录后可保存 Steam 账号并绑定到当前客户端身份。",
+          hint: "当前为访客预览态，登录后可在当前客户端保存并管理 Steam 账号。",
           view: "login"
         });
       };
@@ -3713,7 +3886,7 @@ async function deleteAccount(row) {
 
 async function loginAndSave() {
   if (guardGuestAction({
-    reason: "当前为访客预览态，登录后可保存 Steam 账号并绑定到当前客户端身份。",
+    reason: "当前为访客预览态，登录后可在当前客户端保存并管理 Steam 账号。",
     view: "login"
   }) === false) {
     return false;
@@ -12565,6 +12738,7 @@ async function runCraftTradeUpQueue() {
       const data = await api("/api/craft/tradeup-with-components", {
         method: "POST",
         body: JSON.stringify({
+          operation_id: createCraftOperationId(),
           username,
           allow_cooling: !!state.craftIncludeCooling,
           prepare_only: true,
@@ -12601,6 +12775,7 @@ async function runCraftTradeUpQueue() {
         const data = await api("/api/craft/tradeup", {
           method: "POST",
           body: JSON.stringify({
+            operation_id: createCraftOperationId(),
             username,
             allow_cooling: !!state.craftIncludeCooling,
             use_component_items: false,
@@ -12641,6 +12816,7 @@ async function runCraftTradeUpQueue() {
         const data = await api("/api/craft/tradeup", {
           method: "POST",
           body: JSON.stringify({
+            operation_id: createCraftOperationId(),
             username,
             allow_cooling: !!state.craftIncludeCooling,
             use_component_items: false,
@@ -15462,6 +15638,7 @@ async function runBatchCraftExecution() {
         const prepareData = await api("/api/craft/tradeup-with-components", {
           method: "POST",
           body: JSON.stringify({
+            operation_id: createCraftOperationId(),
             username: entry.username,
             allow_cooling: !!state.batchCraftIncludeCooling,
             prepare_only: true,
@@ -15533,6 +15710,7 @@ async function runBatchCraftExecution() {
         const data = await api("/api/craft/tradeup", {
           method: "POST",
           body: JSON.stringify({
+            operation_id: createCraftOperationId(),
             username: entry.username,
             allow_cooling: !!state.batchCraftIncludeCooling,
             use_component_items: false,
@@ -16055,6 +16233,16 @@ function bindEvents() {
   ui.navSimulation.onclick = () => showPage("simulationPage");
   if (ui.navBatchCraft) ui.navBatchCraft.onclick = () => showPage("batchCraftPage");
   if (ui.navWebInventory) ui.navWebInventory.onclick = () => showPage("webInventoryPage");
+  if (ui.navMembership) ui.navMembership.onclick = () => showPage("membershipPage");
+  if (ui.membershipRefreshBtn) ui.membershipRefreshBtn.onclick = () => refreshMembershipProducts({force: true});
+  if (ui.membershipRedeemBtn) ui.membershipRedeemBtn.onclick = () => redeemMembershipActivationCode();
+  if (ui.membershipActivationCode) {
+    ui.membershipActivationCode.addEventListener("keydown", (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      void redeemMembershipActivationCode();
+    });
+  }
   syncNavDrawerDom();
 
   if (ui.simulationModeSavedBtn) {

@@ -17,6 +17,9 @@ function buildDesktopLauncherEnv(baseEnv = process.env, {
       ? "dev_auto_bundle"
       : "prod_login";
   }
+  if (normalizeText(env.CLIENT_AUTH_MODE) === "prod_login" && !normalizeText(env.CONTROL_PLANE_BASE_URL)) {
+    env.CONTROL_PLANE_BASE_URL = "http://127.0.0.1:8787";
+  }
   if (normalizeText(env.CLIENT_AUTH_MODE) !== "dev_auto_bundle") {
     return env;
   }
@@ -30,7 +33,7 @@ function buildDesktopLauncherEnv(baseEnv = process.env, {
     env.CLIENT_DEV_LICENSE_USERNAME = "dev_local";
   }
   if (!normalizeText(env.CLIENT_DEV_LICENSE_PLAN)) {
-    env.CLIENT_DEV_LICENSE_PLAN = "elite";
+    env.CLIENT_DEV_LICENSE_PLAN = "member";
   }
   if (!normalizeText(env.CLIENT_DEV_LICENSE_TTL_MINUTES)) {
     env.CLIENT_DEV_LICENSE_TTL_MINUTES = "43200";

@@ -1,7 +1,9 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const {DatabaseSync} = require("node:sqlite");
 
 const {ControlPlaneStore} = require("../src/controlPlaneStore");
 const {FEATURE_CODES} = require("../../shared/featureCodes");
@@ -14,371 +16,347 @@ function sortText(values) {
   return [...values].sort((left, right) => String(left).localeCompare(String(right)));
 }
 
+function seedLegacyPlans(dbPath) {
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE client_user (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      membership_plan TEXT NOT NULL DEFAULT 'inactive',
+      membership_expires_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  const insert = db.prepare(`
+    INSERT INTO client_user(email, username, password_hash, membership_plan, membership_expires_at, created_at, updated_at)
+    VALUES(?, ?, 'legacy', ?, ?, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+  `);
+  for (const [index, code] of ["trial", "standard", "pro", "elite", "free"].entries()) {
+    insert.run(`${code}@example.com`, `legacy_${index}`, code, "2026-08-01T00:00:00.000Z");
+  }
+  db.close();
+}
+
+function testLegacyRefreshFamilyMigration(tempDir) {
+  const dbPath = path.join(tempDir, "legacy-refresh-family.db");
+  const original = new ControlPlaneStore({dbPath});
+  let firstSession;
+  let unrelatedSession;
+  try {
+    const firstUser = original.createClientUser({
+      email: "legacy-refresh-a@example.com",
+      username: "legacy_refresh_a",
+      password: "LegacyRefresh12"
+    });
+    const unrelatedUser = original.createClientUser({
+      email: "legacy-refresh-b@example.com",
+      username: "legacy_refresh_b",
+      password: "LegacyRefresh34"
+    });
+    firstSession = original.createRefreshSession({userId: firstUser.id, deviceId: "legacy-device-a"});
+    unrelatedSession = original.createRefreshSession({userId: unrelatedUser.id, deviceId: "legacy-device-b"});
+    original.db.prepare("UPDATE refresh_session SET family_id = ''").run();
+  } finally {
+    original.close();
+  }
+
+  const migrated = new ControlPlaneStore({dbPath});
+  try {
+    const families = migrated.db.prepare("SELECT id, family_id FROM refresh_session ORDER BY id").all();
+    assert.equal(families.every((row) => String(row.family_id || "").length > 0), true);
+    assert.notEqual(families[0].family_id, families[1].family_id);
+
+    const rotated = migrated.rotateRefreshSession({
+      refreshToken: firstSession.refresh_token,
+      deviceId: "legacy-device-a"
+    });
+    assert.equal(rotated.ok, true);
+    assert.equal(rotated.family_id, families[0].family_id);
+    assert.equal(migrated.rotateRefreshSession({
+      refreshToken: firstSession.refresh_token,
+      deviceId: "legacy-device-a"
+    }).reason, "refresh_token_reused");
+    assert.equal(migrated.resolveRefreshSession({
+      refreshToken: rotated.refresh_token,
+      deviceId: "legacy-device-a"
+    }).reason, "refresh_token_not_found");
+    assert.equal(migrated.resolveRefreshSession({
+      refreshToken: unrelatedSession.refresh_token,
+      deviceId: "legacy-device-b"
+    }).ok, true);
+    assert.deepEqual(migrated.revokeRefreshFamily({familyId: ""}), {
+      ok: false,
+      reason: "refresh_family_id_required",
+      revoked_count: 0
+    });
+  } finally {
+    migrated.close();
+  }
+}
+
 function main() {
   const tempDir = makeTempDir();
   const dbPath = path.join(tempDir, "control-plane-auth.db");
+  const legacyDbPath = path.join(tempDir, "legacy.db");
+  seedLegacyPlans(legacyDbPath);
+  testLegacyRefreshFamilyMigration(tempDir);
+
+  const migratedStore = new ControlPlaneStore({dbPath: legacyDbPath});
+  try {
+    assert.deepEqual(
+      migratedStore.listClientUsers({includeArchived: true}).map((user) => user.membership_plan),
+      ["member", "member", "member", "member", "inactive"]
+    );
+    assert.deepEqual(migratedStore.listMembershipPlans().map((plan) => plan.code), ["inactive", "member"]);
+  } finally {
+    migratedStore.close();
+  }
+
   const store = new ControlPlaneStore({dbPath});
   try {
-    assert.equal(store.needsAdminBootstrap(), true);
+    const plans = store.listMembershipPlans();
+    assert.deepEqual(plans.map((item) => item.code), ["inactive", "member"]);
+    assert.deepEqual(sortText(plans[0].permissions), sortText([
+      FEATURE_CODES.ACCOUNTS_READ,
+      FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.INVENTORY_READ,
+      FEATURE_CODES.INVENTORY_REFRESH,
+      FEATURE_CODES.SIMULATION_USE
+    ]));
+    assert.equal(plans[0].permissions.includes(FEATURE_CODES.CRAFT_USE), false);
+    assert.deepEqual(sortText(plans[1].permissions), sortText([
+      FEATURE_CODES.ACCOUNTS_READ,
+      FEATURE_CODES.ACCOUNTS_WRITE,
+      FEATURE_CODES.CRAFT_USE,
+      FEATURE_CODES.INVENTORY_READ,
+      FEATURE_CODES.INVENTORY_REFRESH,
+      FEATURE_CODES.SIMULATION_USE
+    ]));
 
-    const bootstrapAdmin = store.createOrUpdateAdminUser({
+    const admin = store.createOrUpdateAdminUser({
       username: "admin",
-      password: "Root123!",
+      password: "  root secret  ",
       isSuperAdmin: true,
       now: "2026-04-05T04:59:00.000Z"
     });
-    assert.equal(bootstrapAdmin.username, "admin");
-    assert.equal(bootstrapAdmin.is_super_admin, true);
-    assert.equal(store.needsAdminBootstrap(), false);
-
-    const adminAuth = store.authenticateAdminUser({
-      username: "admin",
-      password: "Root123!"
-    });
-    assert.equal(adminAuth.ok, true);
-    assert.equal(adminAuth.user.username, "admin");
+    assert.equal(store.authenticateAdminUser({username: "admin", password: "  root secret  "}).ok, true);
+    assert.equal(store.authenticateAdminUser({username: "admin", password: "root secret"}).ok, false);
+    const adminHash = store.db.prepare("SELECT password_hash FROM admin_user WHERE id = ?").get(admin.id).password_hash;
+    assert.match(adminHash, /^scrypt\$v2\$32768\$8\$3\$/);
 
     const adminSession = store.createAdminSession({
-      adminUserId: adminAuth.user.id,
-      ttlHours: 12,
+      adminUserId: admin.id,
+      ttlHours: 8,
       now: "2026-04-05T05:00:00.000Z"
     });
-    assert.equal(typeof adminSession.session_token, "string");
-    assert.equal(adminSession.session_token.length > 10, true);
-
-    const resolvedAdminSession = store.resolveAdminSession({
+    assert.equal(store.resolveAdminSession({
       sessionToken: adminSession.session_token,
-      now: "2026-04-05T05:01:00.000Z"
-    });
-    assert.equal(resolvedAdminSession.ok, true);
-    assert.equal(resolvedAdminSession.user.username, "admin");
-
-    const plans = store.listMembershipPlans();
-    assert.deepEqual(plans.map((item) => item.code), ["inactive", "member", "standard", "trial"]);
-
-    const inactivePlan = plans.find((item) => item.code === "inactive");
-    assert.deepEqual(sortText(inactivePlan.permissions), sortText([
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]));
-
-    const standardPlan = plans.find((item) => item.code === "standard");
-    assert.deepEqual(sortText(standardPlan.permissions), sortText([
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.CRAFT_USE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]));
-
-    const memberPlan = plans.find((item) => item.code === "member");
-    assert.deepEqual(sortText(memberPlan.permissions), sortText([
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.CRAFT_USE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]));
-
-    const trialPlan = plans.find((item) => item.code === "trial");
-    assert.deepEqual(sortText(trialPlan.permissions), sortText([
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.CRAFT_USE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]));
-
-    assert.equal(store.canSendCode({
-      email: "alice@example.com",
-      scene: "register",
-      cooldownMs: 60 * 1000,
-      now: "2026-04-05T05:00:00.000Z"
-    }), true);
-
-    const created = store.createEmailCode({
-      email: "alice@example.com",
-      scene: "register",
-      code: "123456",
-      ttlMs: 5 * 60 * 1000,
-      now: "2026-04-05T05:00:00.000Z"
-    });
-    assert.equal(created.email, "alice@example.com");
-    assert.equal(created.scene, "register");
-    assert.equal(created.expires_at, "2026-04-05T05:05:00.000Z");
-
-    const active = store.getLatestActiveCode({
-      email: "alice@example.com",
-      scene: "register",
-      now: "2026-04-05T05:01:00.000Z"
-    });
-    assert.ok(active);
-    assert.equal(active.email, "alice@example.com");
-    assert.equal(active.scene, "register");
-    assert.equal(typeof active.code_hash, "string");
-    assert.equal(active.code_hash.length > 10, true);
-
-    assert.equal(store.canSendCode({
-      email: "alice@example.com",
-      scene: "register",
-      cooldownMs: 60 * 1000,
-      now: "2026-04-05T05:00:30.000Z"
-    }), false);
-
-    assert.equal(store.canSendCode({
-      email: "alice@example.com",
-      scene: "register",
-      cooldownMs: 60 * 1000,
-      now: "2026-04-05T05:01:30.000Z"
-    }), true);
-
-    const verified = store.verifyEmailCode({
-      email: "alice@example.com",
-      scene: "register",
-      code: "123456",
-      now: "2026-04-05T05:01:30.000Z"
-    });
-    assert.equal(verified.ok, true);
-    assert.equal(verified.reason, "verified");
-
-    const repeated = store.verifyEmailCode({
-      email: "alice@example.com",
-      scene: "register",
-      code: "123456",
-      now: "2026-04-05T05:01:35.000Z"
-    });
-    assert.equal(repeated.ok, false);
-    assert.equal(repeated.reason, "code_not_found");
+      idleTimeoutMs: 30 * 60 * 1000,
+      now: "2026-04-05T05:29:59.000Z"
+    }).ok, true);
+    assert.equal(store.resolveAdminSession({
+      sessionToken: adminSession.session_token,
+      idleTimeoutMs: 30 * 60 * 1000,
+      now: "2026-04-05T06:00:00.000Z"
+    }).reason, "admin_session_expired");
 
     const user = store.createClientUser({
       email: "alice@example.com",
       username: "alice",
-      password: "Secret123!"
+      password: "  user secret  ",
+      now: "2026-04-05T05:00:00.000Z"
     });
-    assert.equal(user.username, "alice");
     assert.equal(user.membership_plan, "inactive");
     assert.equal(user.membership_expires_at, "");
-    assert.equal(user.remaining_membership_days, 0);
+    assert.equal(store.authenticateClientUser({username: "alice", password: "  user secret  "}).ok, true);
+    assert.equal(store.authenticateClientUser({username: "alice", password: "user secret"}).ok, false);
 
-    const defaultEntitlements = store.resolveUserEntitlements({
+    const legacySalt = "legacy-salt";
+    const legacyDigest = crypto.scryptSync("  user secret  ", legacySalt, 64).toString("hex");
+    store.db.prepare("UPDATE client_user SET password_hash = ? WHERE id = ?")
+      .run(`scrypt$${legacySalt}$${legacyDigest}`, user.id);
+    assert.equal(store.authenticateClientUser({username: "alice", password: "  user secret  "}).ok, true);
+    assert.match(store.db.prepare("SELECT password_hash FROM client_user WHERE id = ?").get(user.id).password_hash,
+      /^scrypt\$v2\$32768\$8\$3\$/);
+
+    const shortLegacyPassword = "short7";
+    const shortLegacySalt = "legacy-short-salt";
+    const shortLegacyDigest = crypto.scryptSync(shortLegacyPassword, shortLegacySalt, 64).toString("hex");
+    store.db.prepare("UPDATE client_user SET password_hash = ? WHERE id = ?")
+      .run(`scrypt$${shortLegacySalt}$${shortLegacyDigest}`, user.id);
+    assert.equal(store.authenticateClientUser({username: "alice", password: shortLegacyPassword}).ok, true);
+    assert.match(store.db.prepare("SELECT password_hash FROM client_user WHERE id = ?").get(user.id).password_hash,
+      /^scrypt\$v2\$32768\$8\$3\$/);
+
+    store.db.prepare("UPDATE admin_user SET password_hash = ? WHERE id = ?")
+      .run(`scrypt$${shortLegacySalt}$${shortLegacyDigest}`, admin.id);
+    assert.equal(store.authenticateAdminUser({username: "admin", password: shortLegacyPassword}).ok, true);
+    assert.match(store.db.prepare("SELECT password_hash FROM admin_user WHERE id = ?").get(admin.id).password_hash,
+      /^scrypt\$v2\$32768\$8\$3\$/);
+
+    const inactive = store.resolveUserEntitlements({userId: user.id, now: "2026-04-05T05:00:00.000Z"});
+    assert.equal(inactive.membership_plan, "inactive");
+    assert.equal(inactive.feature_flags.craft_enabled, false);
+    assert.equal("steam_binding_limit" in inactive.feature_flags, false);
+    assert.equal("trial_active" in inactive.feature_flags, false);
+
+    const firstSession = store.createRefreshSession({
       userId: user.id,
-      now: "2026-04-05T05:01:40.000Z"
+      deviceId: "device-alpha",
+      now: "2026-04-05T05:01:00.000Z"
     });
-    assert.equal(defaultEntitlements.membership_plan, "inactive");
-    assert.equal(defaultEntitlements.assigned_membership_plan, "inactive");
-    assert.deepEqual(sortText(defaultEntitlements.permissions), sortText([
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]));
-    assert.equal(defaultEntitlements.feature_flags.simulation_enabled, true);
-    assert.equal(defaultEntitlements.feature_flags.craft_enabled, false);
-    assert.equal(defaultEntitlements.feature_flags.steam_binding_mode, "single_locked");
-    assert.equal(defaultEntitlements.feature_flags.steam_binding_limit, 0);
-    assert.equal(defaultEntitlements.feature_flags.trial_active, false);
-    assert.equal(defaultEntitlements.feature_flags.trial_expires_at, "");
-    assert.equal(defaultEntitlements.remaining_membership_days, 0);
-    assert.equal(defaultEntitlements.membership_active, false);
-
-    const trialUser = store.createClientUser({
-      email: "trial@example.com",
-      username: "trial_user",
-      password: "Secret123!",
-      membershipPlan: "trial",
-      membershipExpiresAt: "2026-04-15T00:00:00.000Z",
-      now: "2026-04-05T05:01:45.000Z"
-    });
-    const trialEntitlements = store.resolveUserEntitlements({
-      userId: trialUser.id,
-      now: "2026-04-08T00:00:00.000Z"
-    });
-    assert.equal(trialEntitlements.membership_plan, "trial");
-    assert.equal(trialEntitlements.assigned_membership_plan, "trial");
-    assert.equal(trialEntitlements.membership_active, true);
-    assert.equal(trialEntitlements.permissions.includes(FEATURE_CODES.CRAFT_USE), true);
-    assert.equal(trialEntitlements.feature_flags.craft_enabled, true);
-    assert.equal(trialEntitlements.feature_flags.steam_binding_limit, 1);
-    assert.equal(trialEntitlements.feature_flags.trial_active, true);
-    assert.equal(trialEntitlements.feature_flags.trial_expires_at, "2026-04-15T00:00:00.000Z");
-
-    const expiredTrialEntitlements = store.resolveUserEntitlements({
-      userId: trialUser.id,
-      now: "2026-04-20T00:00:00.000Z"
-    });
-    assert.equal(expiredTrialEntitlements.membership_plan, "inactive");
-    assert.equal(expiredTrialEntitlements.assigned_membership_plan, "trial");
-    assert.equal(expiredTrialEntitlements.membership_active, false);
-    assert.equal(expiredTrialEntitlements.permissions.includes(FEATURE_CODES.CRAFT_USE), false);
-    assert.equal(expiredTrialEntitlements.feature_flags.craft_enabled, false);
-    assert.equal(expiredTrialEntitlements.feature_flags.steam_binding_limit, 0);
-    assert.equal(expiredTrialEntitlements.feature_flags.trial_active, false);
-    assert.equal(expiredTrialEntitlements.feature_flags.trial_expires_at, "");
-
-    const updatedEntitlements = store.updateClientUserEntitlements({
-      userId: user.id,
-      membershipPlan: "standard",
-      membershipExpiresAt: "2026-04-20T00:00:00.000Z",
-      permissionOverrides: [
-        {featureCode: FEATURE_CODES.CRAFT_USE, enabled: true}
-      ],
-      now: "2026-04-05T05:01:50.000Z"
-    });
-    assert.equal(updatedEntitlements.ok, true);
-    assert.equal(updatedEntitlements.user.membership_plan, "standard");
-    assert.equal(updatedEntitlements.user.membership_expires_at, "2026-04-20T00:00:00.000Z");
-    assert.equal(updatedEntitlements.user.remaining_membership_days, 15);
-    assert.deepEqual(sortText(updatedEntitlements.entitlements.permissions), sortText([
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE,
-      FEATURE_CODES.CRAFT_USE
-    ]));
-    assert.equal(updatedEntitlements.entitlements.feature_flags.simulation_enabled, true);
-    assert.equal(updatedEntitlements.entitlements.feature_flags.craft_enabled, true);
-    assert.equal(updatedEntitlements.entitlements.feature_flags.steam_binding_mode, "single_locked");
-    assert.equal(updatedEntitlements.entitlements.feature_flags.steam_binding_limit, 1);
-    assert.equal(updatedEntitlements.entitlements.feature_flags.trial_active, false);
-    assert.equal(updatedEntitlements.entitlements.feature_flags.trial_expires_at, "");
-    assert.equal(updatedEntitlements.entitlements.membership_active, true);
-    assert.equal(updatedEntitlements.entitlements.remaining_membership_days, 15);
-
-    const expiredEntitlements = store.resolveUserEntitlements({
-      userId: user.id,
-      now: "2026-04-25T00:00:00.000Z"
-    });
-    assert.equal(expiredEntitlements.membership_plan, "inactive");
-    assert.equal(expiredEntitlements.assigned_membership_plan, "standard");
-    assert.equal(expiredEntitlements.membership_active, false);
-    assert.equal(expiredEntitlements.remaining_membership_days, 0);
-    assert.deepEqual(sortText(expiredEntitlements.permissions), sortText([
-      FEATURE_CODES.ACCOUNTS_READ,
-      FEATURE_CODES.ACCOUNTS_WRITE,
-      FEATURE_CODES.INVENTORY_READ,
-      FEATURE_CODES.INVENTORY_REFRESH,
-      FEATURE_CODES.SIMULATION_USE
-    ]));
-
-    const login = store.authenticateClientUser({
-      username: "alice",
-      password: "Secret123!"
-    });
-    assert.equal(login.ok, true);
-    assert.equal(login.user.username, "alice");
-
-    const session = store.createRefreshSession({
-      userId: login.user.id,
-      deviceId: "device_alpha",
+    const rotated = store.rotateRefreshSession({
+      refreshToken: firstSession.refresh_token,
+      deviceId: "device-alpha",
       now: "2026-04-05T05:02:00.000Z"
     });
-    assert.equal(typeof session.refresh_token, "string");
-    assert.equal(session.refresh_token.length > 10, true);
-
-    const resolved = store.resolveRefreshSession({
-      refreshToken: session.refresh_token,
-      deviceId: "device_alpha",
+    assert.equal(rotated.ok, true);
+    assert.equal(rotated.family_id, firstSession.family_id);
+    assert.equal(rotated.parent_session_id, firstSession.id);
+    const reused = store.rotateRefreshSession({
+      refreshToken: firstSession.refresh_token,
+      deviceId: "device-alpha",
       now: "2026-04-05T05:03:00.000Z"
     });
-    assert.equal(resolved.ok, true);
-    assert.equal(resolved.user.username, "alice");
-    assert.equal(resolved.user.membership_plan, "standard");
-
-    const access = store.resolveClientAccess({
-      refreshToken: session.refresh_token,
-      deviceId: "device_alpha",
-      now: "2026-04-05T05:03:10.000Z"
-    });
-    assert.equal(access.ok, true);
-    assert.equal(access.user.username, "alice");
-    assert.equal(access.entitlements.membership_plan, "standard");
-    assert.equal(access.entitlements.permissions.includes(FEATURE_CODES.CRAFT_USE), true);
-
-    const accessWithoutCraft = store.resolveClientAccess({
-      refreshToken: session.refresh_token,
-      deviceId: "device_alpha",
-      now: "2026-04-25T00:00:00.000Z"
-    });
-    assert.equal(accessWithoutCraft.ok, true);
-    assert.equal(accessWithoutCraft.entitlements.membership_plan, "inactive");
-    assert.equal(accessWithoutCraft.entitlements.permissions.includes(FEATURE_CODES.CRAFT_USE), false);
-
-    const rotated = store.rotateRefreshSession({
-      refreshToken: session.refresh_token,
-      deviceId: "device_alpha",
+    assert.equal(reused.reason, "refresh_token_reused");
+    assert.equal(store.resolveRefreshSession({
+      refreshToken: rotated.refresh_token,
+      deviceId: "device-alpha",
       now: "2026-04-05T05:04:00.000Z"
-    });
-    assert.equal(rotated.ok, true);
-    assert.notEqual(rotated.refresh_token, session.refresh_token);
+    }).reason, "refresh_token_not_found");
 
-    const oldToken = store.resolveRefreshSession({
-      refreshToken: session.refresh_token,
-      deviceId: "device_alpha",
-      now: "2026-04-05T05:04:30.000Z"
+    const managed = store.createManagedClientUser({
+      email: "member@example.com",
+      username: "managed",
+      password: "managed pass",
+      membershipDays: 7,
+      adminUserId: admin.id,
+      now: "2026-04-06T00:00:00.000Z"
     });
-    assert.equal(oldToken.ok, false);
-    assert.equal(oldToken.reason, "refresh_token_not_found");
+    assert.equal(managed.user.membership_plan, "member");
+    assert.equal(managed.user.membership_expires_at, "2026-04-13T00:00:00.000Z");
+    assert.equal(store.listMembershipGrants({userId: managed.user.id}).length, 1);
 
-    const revoked = store.revokeRefreshSession({
-      refreshToken: rotated.refresh_token,
-      now: "2026-04-05T05:05:00.000Z"
+    const bulk = store.bulkGrantMembership({
+      userIds: [user.id, managed.user.id],
+      days: 5,
+      adminUserId: admin.id,
+      now: "2026-04-10T00:00:00.000Z"
     });
-    assert.equal(revoked.ok, true);
+    assert.equal(bulk.ok, true);
+    assert.equal(store.getClientUserById(user.id).membership_expires_at, "2026-04-15T00:00:00.000Z");
+    assert.equal(store.getClientUserById(managed.user.id).membership_expires_at, "2026-04-18T00:00:00.000Z");
+    assert.equal(store.bulkGrantMembership({userIds: [user.id, 999999], days: 1, adminUserId: admin.id}).reason, "user_not_found");
+    assert.equal(store.getClientUserById(user.id).membership_expires_at, "2026-04-15T00:00:00.000Z");
 
-    const afterRevoke = store.resolveRefreshSession({
-      refreshToken: rotated.refresh_token,
-      deviceId: "device_alpha",
-      now: "2026-04-05T05:05:10.000Z"
+    const sessionBeforeReset = store.createRefreshSession({userId: user.id, deviceId: "reset-device"});
+    const reset = store.resetClientUserPassword({
+      userId: user.id,
+      newPassword: "new pass 123",
+      adminUserId: admin.id,
+      now: "2026-04-10T01:00:00.000Z"
     });
-    assert.equal(afterRevoke.ok, false);
-    assert.equal(afterRevoke.reason, "refresh_token_not_found");
+    assert.equal(reset.ok, true);
+    assert.equal(store.resolveRefreshSession({refreshToken: sessionBeforeReset.refresh_token, deviceId: "reset-device"}).reason, "refresh_token_not_found");
+    assert.equal(store.authenticateClientUser({username: "alice", password: "new pass 123"}).ok, true);
 
-    const sessionBeta = store.createRefreshSession({
-      userId: login.user.id,
-      deviceId: "device_beta",
-      now: "2026-04-05T05:05:30.000Z"
+    const selfReset = store.updateClientPassword({
+      email: user.email,
+      newPassword: "self reset 12",
+      ip: "127.0.0.1",
+      now: "2026-04-10T01:30:00.000Z"
     });
-    assert.equal(typeof sessionBeta.refresh_token, "string");
+    assert.equal(selfReset.ok, true);
+    const selfResetAudit = store.listAuditEvents().find((event) =>
+      event.action === "user.password_reset" && event.actor_type === "client_user");
+    assert.equal(selfResetAudit.actor_id, user.id);
+    assert.equal(selfResetAudit.ip, "127.0.0.1");
 
-    const userSessions = store.listUserDeviceSessions({
-      userId: login.user.id
-    });
-    assert.deepEqual(userSessions.map((item) => item.device_id), ["device_beta"]);
+    const appendAuditEvent = store.appendAuditEvent.bind(store);
+    store.appendAuditEvent = () => { throw new Error("audit write failed"); };
+    try {
+      assert.throws(() => store.updateClientUserControl({
+        userId: managed.user.id,
+        status: "disabled",
+        adminUserId: admin.id,
+        now: "2026-04-10T01:45:00.000Z"
+      }), /audit write failed/);
+    } finally {
+      store.appendAuditEvent = appendAuditEvent;
+    }
+    assert.equal(store.getClientUserById(managed.user.id).status, "active");
 
-    const revokedById = store.revokeRefreshSessionById({
-      sessionId: userSessions[0].id,
-      now: "2026-04-05T05:06:00.000Z"
-    });
-    assert.equal(revokedById.ok, true);
+    const archived = store.archiveClientUser({userId: managed.user.id, adminUserId: admin.id, now: "2026-04-10T02:00:00.000Z"});
+    assert.equal(archived.user.status, "archived");
+    assert.equal(store.listClientUsers().some((item) => item.id === managed.user.id), false);
+    assert.equal(store.listClientUsers({includeArchived: true}).some((item) => item.id === managed.user.id), true);
+    assert.equal(store.restoreClientUser({userId: managed.user.id, adminUserId: admin.id, now: "2026-04-10T03:00:00.000Z"}).user.status, "active");
 
-    const afterRevokeById = store.resolveRefreshSession({
-      refreshToken: sessionBeta.refresh_token,
-      deviceId: "device_beta",
-      now: "2026-04-05T05:06:10.000Z"
+    const generated = store.generateActivationCodes({
+      count: 2,
+      days: 30,
+      expiresAt: "2026-12-31T00:00:00.000Z",
+      adminUserId: admin.id,
+      now: "2026-04-11T00:00:00.000Z"
     });
-    assert.equal(afterRevokeById.ok, false);
-    assert.equal(afterRevokeById.reason, "refresh_token_not_found");
+    assert.equal(generated.codes.length, 2);
+    assert.match(generated.codes[0].code, /^CS2-[A-Z2-9]{4}(?:-[A-Z2-9]{4}){3}$/);
+    assert.equal(store.db.prepare("SELECT code_hash FROM activation_code WHERE id = ?").get(generated.codes[0].id).code_hash.includes(generated.codes[0].code), false);
+    assert.equal(store.listActivationCodes({now: "2026-04-11T00:00:00.000Z"})[0].code, undefined);
 
-    const adminLogout = store.revokeAdminSession({
-      sessionToken: adminSession.session_token,
-      now: "2026-04-05T05:06:30.000Z"
+    const redeemed = store.redeemActivationCode({
+      userId: user.id,
+      code: generated.codes[0].code,
+      now: "2026-04-12T00:00:00.000Z"
     });
-    assert.equal(adminLogout.ok, true);
+    assert.equal(redeemed.ok, true);
+    assert.equal(redeemed.user.membership_plan, "member");
+    assert.equal(redeemed.user.membership_expires_at, "2026-05-15T00:00:00.000Z");
+    assert.equal(store.redeemActivationCode({userId: managed.user.id, code: generated.codes[0].code}).reason, "activation_code_used");
+    assert.equal(store.revokeActivationCode({activationCodeId: generated.codes[1].id, adminUserId: admin.id}).ok, true);
+    assert.equal(store.redeemActivationCode({userId: user.id, code: generated.codes[1].code}).reason, "activation_code_revoked");
 
-    const afterAdminLogout = store.resolveAdminSession({
-      sessionToken: adminSession.session_token,
-      now: "2026-04-05T05:06:40.000Z"
+    const product = store.createProduct({
+      name: "30 天会员",
+      description: "本地商品",
+      membershipDays: 30,
+      priceCents: 1990,
+      isEnabled: true,
+      sortOrder: 10,
+      adminUserId: admin.id,
+      now: "2026-04-12T00:00:00.000Z"
     });
-    assert.equal(afterAdminLogout.ok, false);
-    assert.equal(afterAdminLogout.reason, "admin_session_not_found");
+    assert.equal(product.price_cents, 1990);
+    assert.equal(store.listProducts({enabledOnly: true}).length, 1);
+    const disabledProduct = store.updateProduct({productId: product.id, isEnabled: false, adminUserId: admin.id});
+    assert.equal(disabledProduct.is_enabled, false);
+    assert.equal(store.listProducts({enabledOnly: true}).length, 0);
+    assert.deepEqual(store.listOrders(), []);
+
+    const removableProduct = store.createProduct({
+      name: "可删除商品", membershipDays: 1, priceCents: 100, adminUserId: admin.id
+    });
+    assert.equal(store.deleteProduct({productId: removableProduct.id, adminUserId: admin.id}).ok, true);
+    assert.equal(store.listProducts().some((item) => item.id === removableProduct.id), false);
+
+    store.db.prepare(`
+      INSERT INTO payment_order(
+        order_no, user_id, product_id, product_name, membership_days, amount_cents,
+        currency, status, provider, external_transaction_id, created_at, updated_at, paid_at
+      ) VALUES(?, ?, ?, ?, ?, ?, 'CNY', 'pending', '', '', ?, ?, '')
+    `).run("TEST-ORDER-1", user.id, product.id, product.name, product.membership_days,
+      product.price_cents, "2026-04-12T00:00:00.000Z", "2026-04-12T00:00:00.000Z");
+    assert.equal(store.deleteProduct({productId: product.id, adminUserId: admin.id}).reason, "product_in_use");
+    assert.equal(store.listProducts().some((item) => item.id === product.id), true);
+
+    const events = store.listAuditEvents();
+    assert.equal(events.some((event) => event.action === "activation_codes.generated"), true);
+    assert.equal(events.some((event) => event.action === "activation_code.redeemed"), true);
+    assert.equal(events.some((event) => event.action === "user.password_reset"), true);
   } finally {
     store.close();
     fs.rmSync(tempDir, {recursive: true, force: true});

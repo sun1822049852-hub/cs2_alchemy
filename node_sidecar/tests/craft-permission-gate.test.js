@@ -7,7 +7,6 @@ const Module = require("node:module");
 const crypto = require("node:crypto");
 
 const {FEATURE_CODES} = require("../../shared/licensePolicy");
-const {hashCraftPermitPayload} = require("../../shared/craftPermitPolicy");
 const {stableJsonStringify} = require("../../shared/licensePolicy");
 const {resolveDeviceId} = require("../src/deviceIdentity");
 
@@ -263,6 +262,15 @@ async function withTempDir(run) {
   }
 }
 
+async function waitFor(predicate, {timeoutMs = 1000, intervalMs = 10} = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return !!predicate();
+}
+
 function getBaselinePermissions() {
   return [
     FEATURE_CODES.ACCOUNTS_READ,
@@ -383,7 +391,7 @@ async function test_real_craft_execution_routes_still_require_craft_use() {
   }
 }
 
-async function test_real_craft_execution_routes_require_remote_permit_in_prod_login() {
+async function test_real_craft_execution_routes_use_signed_snapshot_without_remote_permit() {
   await withTempDir(async (dir) => {
     const machineIdFile = path.join(dir, "machine-id.bin");
     fs.writeFileSync(machineIdFile, "device-alpha");
@@ -404,7 +412,7 @@ async function test_real_craft_execution_routes_require_remote_permit_in_prod_lo
     const server = createServer({
       licenseConfigFactory: () => ({
         defaultAuthMode: "prod_login",
-        controlPlaneBaseUrl: "https://auth.example.com",
+        controlPlaneBaseUrl: "http://127.0.0.1:8787",
         publicKeyFile,
         machineIdFile
       }),
@@ -416,27 +424,11 @@ async function test_real_craft_execution_routes_require_remote_permit_in_prod_lo
       }),
       controlPlaneAuthClientFactory: () => ({
         getCapabilities() {
-          return {configured: true, baseUrl: "https://auth.example.com"};
+          return {configured: true, baseUrl: "http://127.0.0.1:8787"};
         },
         async issueCraftPermit(args = {}) {
           permitCalls.push({...args});
-          const snapshot = {
-            sub: "user_test",
-            username: "member_test",
-            device_id: deviceId,
-            action: String(args.action || "").trim(),
-            account_username: String(args.accountUsername || "").trim(),
-            payload_hash: String(args.payloadHash || "").trim(),
-            jti: `permit_${permitCalls.length}`,
-            iat: "2026-04-07T03:00:00.000Z",
-            exp: "2099-01-01T00:00:30.000Z"
-          };
-          return {
-            permit: {
-              snapshot,
-              signature: signPermit(privateKey, snapshot)
-            }
-          };
+          throw new Error("craft execution must not request a remote permit");
         }
       })
     });
@@ -478,21 +470,7 @@ async function test_real_craft_execution_routes_require_remote_permit_in_prod_lo
       assert.equal(componentResponse.statusCode, 200, JSON.stringify(componentResponse.body));
       assert.equal(componentResponse.body.ok, true);
 
-      assert.equal(permitCalls.length, 2);
-      assert.deepEqual(permitCalls[0], {
-        refreshCredential: "refresh_token_1",
-        deviceId,
-        action: "craft.tradeup.execute",
-        accountUsername: "member_test",
-        payloadHash: hashCraftPermitPayload("craft.tradeup.execute", tradeupBody)
-      });
-      assert.deepEqual(permitCalls[1], {
-        refreshCredential: "refresh_token_1",
-        deviceId,
-        action: "craft.tradeup.with_components.execute",
-        accountUsername: "member_test",
-        payloadHash: hashCraftPermitPayload("craft.tradeup.with_components.execute", componentBody)
-      });
+      assert.equal(permitCalls.length, 0);
       assert.equal(craftCalls.length, 1);
       assert.equal(componentCraftCalls.length, 1);
     } finally {
@@ -502,7 +480,7 @@ async function test_real_craft_execution_routes_require_remote_permit_in_prod_lo
   });
 }
 
-async function test_real_craft_execution_routes_fail_when_remote_permit_is_unavailable() {
+async function test_real_craft_execution_succeeds_when_control_plane_is_unavailable() {
   await withTempDir(async (dir) => {
     const machineIdFile = path.join(dir, "machine-id.bin");
     fs.writeFileSync(machineIdFile, "device-alpha");
@@ -515,7 +493,7 @@ async function test_real_craft_execution_routes_fail_when_remote_permit_is_unava
     const server = createServer({
       licenseConfigFactory: () => ({
         defaultAuthMode: "prod_login",
-        controlPlaneBaseUrl: "https://auth.example.com",
+        controlPlaneBaseUrl: "http://127.0.0.1:8787",
         machineIdFile
       }),
       licenseRuntimeFactory: () => createLicenseRuntime([
@@ -526,7 +504,7 @@ async function test_real_craft_execution_routes_fail_when_remote_permit_is_unava
       }),
       controlPlaneAuthClientFactory: () => ({
         getCapabilities() {
-          return {configured: true, baseUrl: "https://auth.example.com"};
+          return {configured: true, baseUrl: "http://127.0.0.1:8787"};
         },
         async issueCraftPermit() {
           const error = new Error("认证服务不可用");
@@ -548,10 +526,90 @@ async function test_real_craft_execution_routes_fail_when_remote_permit_is_unava
           item_ids: ["asset_1"]
         }
       });
-      assert.equal(tradeupResponse.statusCode, 503);
-      assert.equal(tradeupResponse.body.reason, "craft_auth_unavailable");
-      assert.equal(craftCalls.length, 0);
+      assert.equal(tradeupResponse.statusCode, 200, JSON.stringify(tradeupResponse.body));
+      assert.equal(tradeupResponse.body.ok, true);
+      assert.equal(craftCalls.length, 1);
     } finally {
+      await closeServer(server);
+      delete require.cache[require.resolve("../src/uiServer")];
+    }
+  });
+}
+
+async function test_craft_operation_id_is_idempotent_and_account_lock_covers_all_execution_routes() {
+  await withTempDir(async (dir) => {
+    let resolveCraft;
+    const pendingCraft = new Promise((resolve) => {
+      resolveCraft = resolve;
+    });
+    const craftCalls = [];
+    const componentCraftCalls = [];
+    const createServer = loadCreateServer({
+      snapshotPath: path.join(dir, "unused-snapshot.json"),
+      connectedUsernames: ["member_test"],
+      craftCalls,
+      componentCraftCalls,
+      craftResponse: pendingCraft
+    });
+    const server = createServer({
+      licenseRuntimeFactory: () => createLicenseRuntime([
+        ...getBaselinePermissions(),
+        FEATURE_CODES.CRAFT_USE
+      ])
+    });
+
+    try {
+      const address = await listen(server);
+      const body = {
+        operation_id: "operation-fixed-1",
+        username: "member_test",
+        password: "secret",
+        item_ids: ["asset_1"]
+      };
+      const firstRequest = requestJson({
+        port: address.port,
+        route: "/api/craft/tradeup",
+        body
+      });
+      assert.equal(await waitFor(() => craftCalls.length === 1), true);
+
+      const duplicateRequest = requestJson({
+        port: address.port,
+        route: "/api/craft/tradeup",
+        body
+      });
+      const conflictResponse = await requestJson({
+        port: address.port,
+        route: "/api/craft/tradeup-with-components",
+        body: {
+          operation_id: "operation-fixed-2",
+          username: "member_test",
+          password: "secret",
+          recipes: [{item_ids: ["asset_2"]}]
+        }
+      });
+      assert.equal(conflictResponse.statusCode, 409);
+      assert.equal(conflictResponse.body.reason, "craft_already_running");
+      assert.equal(componentCraftCalls.length, 0);
+
+      resolveCraft({ok: true, recipe_count: 1, rows: [], steps: [], gained_ids: ["new_asset"]});
+      const [firstResponse, duplicateResponse] = await Promise.all([firstRequest, duplicateRequest]);
+      assert.equal(firstResponse.statusCode, 200);
+      assert.equal(duplicateResponse.statusCode, 200);
+      assert.equal(craftCalls.length, 1);
+      assert.equal(firstResponse.body.operation_id, "operation-fixed-1");
+      assert.deepEqual(duplicateResponse.body, firstResponse.body);
+
+      const replayResponse = await requestJson({
+        port: address.port,
+        route: "/api/craft/tradeup",
+        body
+      });
+      assert.equal(replayResponse.statusCode, 200);
+      assert.deepEqual(replayResponse.body, firstResponse.body);
+      assert.equal(craftCalls.length, 1);
+    } finally {
+      resolveCraft({ok: true, recipe_count: 1, rows: [], steps: []});
       await closeServer(server);
       delete require.cache[require.resolve("../src/uiServer")];
     }
@@ -561,8 +619,9 @@ async function test_real_craft_execution_routes_fail_when_remote_permit_is_unava
 async function main() {
   await test_helper_craft_routes_allow_simulation_permission_without_craft_use();
   await test_real_craft_execution_routes_still_require_craft_use();
-  await test_real_craft_execution_routes_require_remote_permit_in_prod_login();
-  await test_real_craft_execution_routes_fail_when_remote_permit_is_unavailable();
+  await test_real_craft_execution_routes_use_signed_snapshot_without_remote_permit();
+  await test_real_craft_execution_succeeds_when_control_plane_is_unavailable();
+  await test_craft_operation_id_is_idempotent_and_account_lock_covers_all_execution_routes();
   console.log("craft-permission-gate tests passed");
 }
 

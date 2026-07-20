@@ -6,21 +6,16 @@ function asString(value) {
 }
 
 function validatePassword(password) {
-  const text = asString(password).trim();
+  const text = asString(password);
   if (!text) {
     return {ok: false, reason: "password_required", message: "密码不能为空"};
   }
-  if (text.length < 8) {
-    return {ok: false, reason: "password_too_short", message: "密码至少需要8个字符"};
+  const length = [...text].length;
+  if (length < 12) {
+    return {ok: false, reason: "password_too_short", message: "密码至少需要12个字符"};
   }
-  if (text.length > 128) {
+  if (length > 128) {
     return {ok: false, reason: "password_too_long", message: "密码不能超过128个字符"};
-  }
-  if (!/[a-zA-Z]/.test(text)) {
-    return {ok: false, reason: "password_missing_letter", message: "密码至少需要包含1个字母"};
-  }
-  if (!/[0-9]/.test(text)) {
-    return {ok: false, reason: "password_missing_digit", message: "密码至少需要包含1个数字"};
   }
   return {ok: true, reason: "valid", message: ""};
 }

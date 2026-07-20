@@ -43,6 +43,7 @@ function loadRunBatchCraftExecution(overrides = {}) {
     setRows: overrides.setRows,
     syncInventoryTop: overrides.syncInventoryTop,
     cacheSnapshotForAccount: overrides.cacheSnapshotForAccount,
+    createCraftOperationId: overrides.createCraftOperationId || (() => `test-operation-${Math.random()}`),
     normalizeCraftRecipeItemIds: overrides.normalizeCraftRecipeItemIds || ((ids) => Array.from(new Set((Array.isArray(ids) ? ids : []).map((value) => String(value || "").trim()).filter(Boolean)))),
     deepCopyPlain: overrides.deepCopyPlain || ((value) => JSON.parse(JSON.stringify(value))),
     buildCraftApiRecipePayload: overrides.buildCraftApiRecipePayload || ((entry) => ({

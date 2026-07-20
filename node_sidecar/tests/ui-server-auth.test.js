@@ -5,12 +5,13 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
-const {stableJsonStringify, FEATURE_CODES} = require("../../shared/licensePolicy");
+const {stableJsonStringify, FEATURE_CODES, LICENSE_SNAPSHOT_POLICY} = require("../../shared/licensePolicy");
 const {createServer} = require("../src/uiServer");
 const {UiStateStore} = require("../src/uiStateStore");
 const {LicenseStore} = require("../src/licenseStore");
 const {createLicenseEnforcer} = require("../src/licenseEnforcer");
 const {createLicenseScheduler} = require("../src/licenseScheduler");
+const {resolveDeviceId} = require("../src/deviceIdentity");
 
 function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "cs2-alchemy-ui-license-"));
@@ -41,7 +42,7 @@ function createSnapshot(overrides = {}) {
     sub: "user_1",
     username: "member_a",
     device_id: "device_alpha",
-    membership_plan: "pro",
+    membership_plan: "member",
     permissions: [
       FEATURE_CODES.ACCOUNTS_READ,
       FEATURE_CODES.ACCOUNTS_WRITE,
@@ -57,6 +58,10 @@ function createSnapshot(overrides = {}) {
     jti: "snap_1",
     iat: "2026-04-04T12:00:00.000Z",
     exp: "2026-04-04T12:15:00.000Z",
+    iss: LICENSE_SNAPSHOT_POLICY.issuer,
+    aud: LICENSE_SNAPSHOT_POLICY.audience,
+    token_type: LICENSE_SNAPSHOT_POLICY.tokenType,
+    key_id: LICENSE_SNAPSHOT_POLICY.keyId,
     ...overrides
   };
 }
@@ -95,9 +100,11 @@ async function startServer(options = {}) {
   const uiStateFilePath = path.join(tempDir, "inventory_ui_state.json");
   const licenseStateFilePath = path.join(tempDir, "client_license_state.json");
   const clientConfigFilePath = path.join(tempDir, "client_config.json");
+  const machineIdFilePath = path.join(tempDir, "machine_id.bin");
   writeJson(accountsFilePath, legacyAccountsFixture());
   writeJson(uiStateFilePath, {});
   writeJson(clientConfigFilePath, {});
+  fs.writeFileSync(machineIdFilePath, Buffer.from("ui-auth-device", "utf8"));
 
   const runtime = createLicenseRuntime(licenseStateFilePath);
   const fakeAccountStore = {
@@ -138,9 +145,11 @@ async function startServer(options = {}) {
     licenseConfigFactory: () => ({
       authMode: "debug_bundle",
       configFile: clientConfigFilePath,
+      machineIdFile: machineIdFilePath,
       ...(options.licenseConfig && typeof options.licenseConfig === "object" ? options.licenseConfig : {})
     }),
     controlPlaneAuthClientFactory: options.controlPlaneAuthClientFactory,
+    authStoreFactory: options.authStoreFactory,
     uiStateStoreFactory: ({viewerUsername} = {}) =>
       new UiStateStore(uiStateFilePath, {
         viewerUsername
@@ -154,6 +163,7 @@ async function startServer(options = {}) {
     accountsFilePath,
     uiStateFilePath,
     licenseStateFilePath,
+    machineIdFilePath,
     runtime,
     server,
     baseUrl: `http://127.0.0.1:${address.port}`
@@ -165,7 +175,7 @@ async function stopServer(ctx) {
   fs.rmSync(ctx.tempDir, {recursive: true, force: true});
 }
 
-async function requestJson(ctx, method, route, {body = null} = {}) {
+async function requestJson(ctx, method, route, {body = null, headers = {}} = {}) {
   const payload = body == null ? "" : JSON.stringify(body);
   const url = new URL(route, ctx.baseUrl);
   return new Promise((resolve, reject) => {
@@ -175,7 +185,8 @@ async function requestJson(ctx, method, route, {body = null} = {}) {
         method,
         headers: {
           "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload)
+          "Content-Length": Buffer.byteLength(payload),
+          ...headers
         }
       },
       (res) => {
@@ -269,20 +280,22 @@ async function test_prod_login_mode_blocks_manual_import() {
   }
 }
 
-async function test_client_auth_login_writes_remote_bundle_to_local_runtime() {
+async function test_client_auth_login_writes_local_control_plane_bundle_to_runtime() {
+  let receivedPassword = "";
   const ctx = await startServer({
     licenseConfig: {
       authMode: "prod_login",
-      controlPlaneBaseUrl: "https://auth.example.com"
+      controlPlaneBaseUrl: "http://127.0.0.1:8787"
     },
     controlPlaneAuthClientFactory: () => ({
       getCapabilities() {
         return {
           configured: true,
-          baseUrl: "https://auth.example.com"
+          baseUrl: "http://127.0.0.1:8787"
         };
       },
-      async login() {
+      async login({password}) {
+        receivedPassword = password;
         return {
           user: {
             id: "user_1",
@@ -302,10 +315,11 @@ async function test_client_auth_login_writes_remote_bundle_to_local_runtime() {
     const login = await requestJson(ctx, "POST", "/api/client-auth/login", {
       body: {
         username: "member_remote",
-        password: "secret"
+        password: " login secret "
       }
     });
     assert.equal(login.status, 200);
+    assert.equal(receivedPassword, " login secret ");
     assert.equal(login.body.authenticated, true);
     assert.equal(login.body.user.username, "member_remote");
 
@@ -313,6 +327,121 @@ async function test_client_auth_login_writes_remote_bundle_to_local_runtime() {
     assert.equal(state.status, 200);
     assert.equal(state.body.authenticated, true);
     assert.equal(state.body.user.username, "member_remote");
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_local_api_rejects_cross_origin_and_oversized_mutations() {
+  const ctx = await startServer();
+  try {
+    const crossOrigin = await requestJson(ctx, "POST", "/api/license/clear", {
+      headers: {Origin: "https://evil.example"}
+    });
+    assert.equal(crossOrigin.status, 403);
+    assert.equal(crossOrigin.body.reason, "cross_origin_request_denied");
+
+    const plainText = await requestJson(ctx, "POST", "/api/client-auth/login", {
+      body: {username: "member_a", password: "Password1234"},
+      headers: {"Content-Type": "text/plain"}
+    });
+    assert.equal(plainText.status, 415);
+
+    const oversized = await requestJson(ctx, "POST", "/api/client-auth/login", {
+      body: {username: "member_a", password: "x".repeat(65536)}
+    });
+    assert.equal(oversized.status, 413);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_signed_permissions_ignore_legacy_local_super_admin() {
+  const ctx = await startServer({
+    authStoreFactory: () => ({
+      dbPath: path.join(os.tmpdir(), "legacy-auth-store.db"),
+      accountsFilePath: path.join(os.tmpdir(), "legacy-accounts.json"),
+      getUserByUsername() {
+        return {username: "member_a", display_name: "Legacy admin", is_super_admin: true};
+      },
+      canAccessSteamAccount() {
+        return true;
+      },
+      close() {}
+    })
+  });
+  try {
+    const imported = await requestJson(ctx, "POST", "/api/license/import", {
+      body: {
+        bundle: ctx.runtime.issueBundle({
+          membership_plan: "inactive",
+          permissions: [],
+          jti: "snap_no_permissions"
+        })
+      }
+    });
+    assert.equal(imported.status, 200);
+
+    const accounts = await requestJson(ctx, "GET", "/api/accounts");
+    assert.equal(accounts.status, 403);
+    assert.equal(accounts.body.reason, "permission_denied");
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_register_complete_imports_bundle_without_exposing_credentials() {
+  let receivedDeviceId = "";
+  const ctx = await startServer({
+    licenseConfig: {
+      authMode: "prod_login",
+      controlPlaneBaseUrl: "http://127.0.0.1:8787"
+    },
+    controlPlaneAuthClientFactory: () => ({
+      getCapabilities() {
+        return {configured: true, baseUrl: "http://127.0.0.1:8787"};
+      },
+      async completeRegister({deviceId}) {
+        receivedDeviceId = deviceId;
+        return {
+          user: {id: "registered_1", username: "registered_user"},
+          bundle: ctx.runtime.issueBundle({
+            sub: "registered_1",
+            username: "registered_user",
+            membership_plan: "inactive",
+            permissions: [FEATURE_CODES.ACCOUNTS_READ],
+            jti: "snap_registered"
+          }),
+          refreshCredential: "refresh_secret_must_stay_in_sidecar",
+          refresh_token: "raw_refresh_must_not_escape",
+          access_bundle: {refresh_credential: "nested_refresh_must_not_escape"}
+        };
+      }
+    })
+  });
+  try {
+    const registered = await requestJson(ctx, "POST", "/api/client-auth/register/complete", {
+      body: {
+        email: "registered@example.com",
+        verification_ticket: "ticket_1",
+        username: "registered_user",
+        password: "RegisterPass12",
+        device_id: "browser_supplied_device"
+      }
+    });
+    assert.equal(registered.status, 200);
+    assert.equal(registered.body.authenticated, true);
+    assert.equal(registered.body.user.username, "registered_user");
+    assert.equal(receivedDeviceId, resolveDeviceId(ctx.machineIdFilePath));
+    const responseText = JSON.stringify(registered.body);
+    assert.equal(responseText.includes("refresh_secret_must_stay_in_sidecar"), false);
+    assert.equal(responseText.includes("raw_refresh_must_not_escape"), false);
+    assert.equal(responseText.includes("nested_refresh_must_not_escape"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(registered.body, "bundle"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(registered.body, "access_bundle"), false);
+
+    const stored = ctx.runtime.scheduler.readBundle();
+    assert.equal(stored.refresh_credential, "refresh_secret_must_stay_in_sidecar");
   } finally {
     await stopServer(ctx);
   }
@@ -402,9 +531,12 @@ async function test_dev_auto_bundle_mode_bootstraps_local_signed_license() {
 }
 
 async function main() {
+  await test_local_api_rejects_cross_origin_and_oversized_mutations();
   await test_import_license_and_gate_business_api();
   await test_prod_login_mode_blocks_manual_import();
-  await test_client_auth_login_writes_remote_bundle_to_local_runtime();
+  await test_client_auth_login_writes_local_control_plane_bundle_to_runtime();
+  await test_signed_permissions_ignore_legacy_local_super_admin();
+  await test_register_complete_imports_bundle_without_exposing_credentials();
   await test_dev_auto_bundle_mode_bootstraps_local_signed_license();
   console.log("ui-server-auth tests passed");
 }
