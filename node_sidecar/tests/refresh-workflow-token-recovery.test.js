@@ -23,7 +23,7 @@ async function test_recovery_capable_pool_handles_missing_token_before_inventory
     username: "demo",
     accountStore: {
       getCredentials() {
-        return {username: "demo", password: "secret"};
+        return {username: "demo", password: "secret", mafile_content: JSON.stringify({shared_secret: "guard"})};
       }
     },
     tokenStore: {get: () => ""},
@@ -43,10 +43,119 @@ async function test_recovery_capable_pool_handles_missing_token_before_inventory
   const acquired = calls.find((entry) => entry.type === "acquire");
   assert.equal(acquired.args.refreshToken, "");
   assert.equal(acquired.args.refreshTokenOnly, true);
+  assert.equal(acquired.args.allowTokenRecovery, true);
+}
+
+async function test_raw_eresult_15_without_mafile_clears_token_and_returns_manual_relogin() {
+  const calls = [];
+  const diagnostics = [];
+  let token = "stale-refresh-token";
+  const sessionPool = {
+    hasTokenRecovery() {
+      return true;
+    },
+    async acquire() {
+      throw new Error("steam error: AccessDenied code=15");
+    },
+    invalidate(username, reason) {
+      calls.push({type: "invalidate", username, reason});
+    }
+  };
+
+  await assert.rejects(
+    () => refreshInventory({
+      username: "manual-account",
+      accountStore: {
+        getCredentials() {
+          return {username: "manual-account", password: "secret", mafile_content: ""};
+        }
+      },
+      tokenStore: {
+        get() {
+          return token;
+        },
+        remove(username) {
+          calls.push({type: "remove_token", username});
+          token = "";
+        }
+      },
+      schemaStore: {load: () => ({})},
+      sessionPool,
+      authDiagnosticWriter(event) {
+        diagnostics.push(event);
+        const error = new Error("diagnostic disk full");
+        error.code = "ENOSPC";
+        throw error;
+      }
+    }),
+    (err) => {
+      assert.equal(err && err.reason, "login_key_invalid");
+      assert.equal(err && err.auth_state, "auth_invalid");
+      return true;
+    }
+  );
+
+  assert.equal(token, "");
+  assert.equal(calls.filter((entry) => entry.type === "remove_token").length, 1);
+  assert.equal(calls.filter((entry) => entry.type === "invalidate").length, 1);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0].stage, "refresh_connect");
+  assert.equal(diagnostics[0].reason, "login_key_invalid");
+  assert.equal(diagnostics[0].tokenCleared, true);
+  assert.equal(diagnostics[0].recoveryMode, "manual_login");
+  assert.equal(diagnostics[0].error.message, "steam error: AccessDenied code=15");
+}
+
+async function test_access_denied_without_explicit_result_15_does_not_clear_token() {
+  let token = "current-refresh-token";
+  let removeCalls = 0;
+  let diagnosticCalls = 0;
+  const sourceError = new Error("AccessDenied from unrelated upstream policy");
+  const sessionPool = {
+    hasTokenRecovery() {
+      return true;
+    },
+    async acquire() {
+      throw sourceError;
+    },
+    invalidate() {}
+  };
+
+  await assert.rejects(
+    () => refreshInventory({
+      username: "manual-account",
+      accountStore: {
+        getCredentials() {
+          return {username: "manual-account", password: "secret", mafile_content: ""};
+        }
+      },
+      tokenStore: {
+        get() {
+          return token;
+        },
+        remove() {
+          removeCalls += 1;
+          token = "";
+        }
+      },
+      schemaStore: {load: () => ({})},
+      sessionPool,
+      authDiagnosticWriter() {
+        diagnosticCalls += 1;
+      }
+    }),
+    (err) => err === sourceError
+  );
+
+  assert.equal(token, "current-refresh-token");
+  assert.equal(removeCalls, 0);
+  assert.equal(diagnosticCalls, 0);
 }
 
 async function main() {
   await test_recovery_capable_pool_handles_missing_token_before_inventory_work();
+  await test_raw_eresult_15_without_mafile_clears_token_and_returns_manual_relogin();
+  await test_access_denied_without_explicit_result_15_does_not_clear_token();
   console.log("refresh-workflow-token-recovery tests passed");
 }
 

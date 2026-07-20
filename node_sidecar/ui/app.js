@@ -103,7 +103,7 @@ const ui = {
   navAccount: document.getElementById("navAccount"), navInventory: document.getElementById("navInventory"), navCraft: document.getElementById("navCraft"), navSimulation: document.getElementById("navSimulation"),
   guestWorkspaceNotice: document.getElementById("guestWorkspaceNotice"), guestWorkspaceNoticeText: document.getElementById("guestWorkspaceNoticeText"), guestWorkspaceLoginBtn: document.getElementById("guestWorkspaceLoginBtn"),
   accountPage: document.getElementById("accountPage"), inventoryPage: document.getElementById("inventoryPage"), craftPage: document.getElementById("craftPage"), simulationPage: document.getElementById("simulationPage"),
-  accountUsername: document.getElementById("accountUsername"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountRemark: document.getElementById("accountRemark"),
+  accountUsernameField: document.getElementById("accountUsernameField"), accountUsername: document.getElementById("accountUsername"), accountPasswordField: document.getElementById("accountPasswordField"), accountPassword: document.getElementById("accountPassword"), accountTotp: document.getElementById("accountTotp"), accountGuardField: document.getElementById("accountGuardField"), accountGuardHint: document.getElementById("accountGuardHint"), accountGuardIdentity: document.getElementById("accountGuardIdentity"), accountGuardUsername: document.getElementById("accountGuardUsername"), accountRemark: document.getElementById("accountRemark"),
   accountPasswordToggle: document.getElementById("accountPasswordToggle"),
   accountLoginModalTitle: document.getElementById("accountLoginModalTitle"), accountLoginHint: document.getElementById("accountLoginHint"),
   loginSaveBtn: document.getElementById("loginSaveBtn"), clearAccountBtn: document.getElementById("clearAccountBtn"), accountStatus: document.getElementById("accountStatus"), savedAccountsWrap: document.getElementById("savedAccountsWrap"),
@@ -2330,15 +2330,35 @@ function stopInventoryEventStream() {
   inventoryEventUsername = "";
 }
 
+function isInventoryEventStreamPageHidden() {
+  return typeof document !== "undefined" && String(document.visibilityState || "").toLowerCase() === "hidden";
+}
+
+function syncInventoryEventStreamVisibility() {
+  if (isInventoryEventStreamPageHidden()) {
+    stopInventoryEventStream();
+    return;
+  }
+  const username = String(state.currentAccountUsername || "").trim();
+  if (username) startInventoryEventStream(username);
+}
+
+function formatInventoryRefreshFailureMessage(data = {}) {
+  const reason = String(data.reason || data.code || "").trim();
+  if (reason === "login_key_invalid") return "登录过期";
+  if (reason === "login_key_missing") return "需要手动登录";
+  return String(data.message || "未知错误");
+}
+
 function startInventoryEventStream(username) {
   const key = String(username || "").trim();
-  if (!key) {
+  if (!key || isInventoryEventStreamPageHidden()) {
     stopInventoryEventStream();
     return;
   }
   if (inventoryEventSource && inventoryEventUsername === key) return;
   stopInventoryEventStream();
-  const stream = new EventSource(`/api/events?username=${encodeURIComponent(key)}`);
+  const stream = new EventSource(`/api/events?username=${encodeURIComponent(key)}&stream_version=2`);
   inventoryEventSource = stream;
   inventoryEventUsername = key;
 
@@ -2381,7 +2401,7 @@ function startInventoryEventStream(username) {
     if (!eventUsername || eventUsername !== state.currentAccountUsername) return;
     if (state.connectedUsername === eventUsername) state.connectedUsername = "";
     syncInventoryTop();
-    const msg = String(data.message || "未知错误");
+    const msg = formatInventoryRefreshFailureMessage(data);
     setSummary(`自动刷新失败：${msg}`);
   });
 
@@ -2544,7 +2564,7 @@ function showErrorToast(message) {
   lastErrorToastTs = now;
   ensureErrorToastNode();
   if (!errorToastNode || !errorToastTextNode) return;
-  errorToastTextNode.textContent = `错误：${msg}`;
+  errorToastTextNode.textContent = msg;
   errorToastNode.classList.remove("show");
   // Force reflow so same message can replay animation.
   void errorToastNode.offsetWidth;
@@ -2593,13 +2613,17 @@ function setSummary(text, {isError = null} = {}) {
 }
 function setAccountStatus(text, isError = false) {
   const msg = String(text || "");
-  ui.accountStatus.textContent = msg;
-  ui.accountStatus.classList.toggle("error", !!isError);
+  const showInline = String(state.accountLoginMode || "").trim() !== "relogin";
+  ui.accountStatus.textContent = showInline ? msg : "";
+  ui.accountStatus.classList.toggle("error", showInline && !!isError);
   if (isError && msg.trim()) showErrorToast(msg);
 }
 function formatLoginSaveError(err) {
   const payload = err && err.data && typeof err.data === "object" ? err.data : null;
   const reason = String(payload && payload.reason || "").trim();
+  if (reason === "invalid_password" && String(state.accountLoginMode || "").trim() === "relogin") {
+    return "密码错误，请重新输入密码";
+  }
   const reasonMessageMap = {
     auth_api_unreachable: "登录失败：无法连接 Steam 认证服务器，请检查网络或代理配置后重试",
     invalid_password: "登录失败：账号或密码错误，请确认后重试",
@@ -2680,7 +2704,7 @@ function getAccountConnectionLabel(username, {connected = false, phaseText = "",
   }
   if (authState === "auth_invalid" && !(row && row.has_steam_guard)) {
     return {
-      text: "登录失效",
+      text: "登录过期",
       connected: false
     };
   }
@@ -2700,6 +2724,12 @@ function getAccountConnectionLabel(username, {connected = false, phaseText = "",
     return {
       text: "已连接",
       connected: true
+    };
+  }
+  if (row && row.has_steam_guard && !row.has_refresh_token) {
+    return {
+      text: row.has_password === false ? "无密码" : "未登录",
+      connected: false
     };
   }
   return {
@@ -2786,6 +2816,7 @@ async function ensureAccountProfile(username, {force = false} = {}) {
   if (state.profileHydratingUsernames.has(key)) return false;
   const row = accountByUsername(key);
   if (!row) return false;
+  if (!force && row.has_steam_guard && !row.has_refresh_token) return false;
   const hasSteamName = Boolean(String(row.steam_name || "").trim());
   const hasSteamId = Boolean(String(row.steam_id || "").trim());
   const hasAvatar = Boolean(String(row.avatar_url || "").trim());
@@ -2828,6 +2859,7 @@ async function hydrateAccountsProfileIfNeeded() {
       if (state.profileHydratedUsernames.has(username)) return false;
       const row = accountByUsername(username);
       if (!row) return false;
+      if (row.has_steam_guard && !row.has_refresh_token) return false;
       const hasSteamName = Boolean(String(row.steam_name || "").trim());
       const hasSteamId = Boolean(String(row.steam_id || "").trim());
       const hasAvatar = Boolean(String(row.avatar_url || "").trim());
@@ -2947,10 +2979,42 @@ function syncInventoryTop() {
 function setAccountForm({username = "", password = "", totp = "", remark = ""} = {}) {
   ui.accountUsername.value = username;
   ui.accountPassword.value = password;
-  ui.accountTotp.value = normalizeTotpCode(totp);
+  setSteamVerificationCodeValue(ui.accountTotp, totp);
   ui.accountRemark.value = remark;
   state.accountPasswordVisible = false;
   syncAccountPasswordVisibility();
+}
+
+function setAccountGuardFieldVisible(visible) {
+  if (ui.accountGuardField) {
+    ui.accountGuardField.classList.toggle("hidden", !visible);
+  }
+  if (!visible && ui.accountTotp) {
+    setSteamVerificationCodeValue(ui.accountTotp, "");
+  }
+}
+
+function setAccountGuardVerificationMode(active) {
+  const enabled = !!active;
+  if (ui.accountLoginModal) {
+    ui.accountLoginModal.classList.toggle("guard-code-mode", enabled);
+  }
+  if (ui.accountUsernameField) ui.accountUsernameField.classList.toggle("hidden", enabled);
+  if (ui.accountPasswordField) ui.accountPasswordField.classList.toggle("hidden", enabled);
+  if (ui.accountGuardIdentity) ui.accountGuardIdentity.classList.toggle("hidden", !enabled);
+  if (ui.accountGuardUsername) {
+    ui.accountGuardUsername.textContent = enabled
+      ? String(state.pendingGuard && state.pendingGuard.username || ui.accountUsername && ui.accountUsername.value || "").trim()
+      : "";
+  }
+  if (ui.accountUsername) ui.accountUsername.disabled = enabled;
+  if (ui.accountPassword) ui.accountPassword.disabled = enabled;
+  if (ui.accountPasswordToggle) ui.accountPasswordToggle.disabled = enabled;
+  if (ui.accountTotp) ui.accountTotp.disabled = false;
+  if (enabled) {
+    if (ui.accountLoginModalTitle) ui.accountLoginModalTitle.classList.add("hidden");
+    if (ui.accountLoginHint) ui.accountLoginHint.classList.add("hidden");
+  }
 }
 
 function syncAccountPasswordVisibility() {
@@ -2966,32 +3030,56 @@ function syncAccountPasswordVisibility() {
   }
 }
 
+function normalizeSteamVerificationCode(value) {
+  return normalizeTotpCode(value);
+}
+
 function normalizeTotpCode(value) {
   return String(value == null ? "" : value)
-    .replace(/\s+/g, "")
-    .toUpperCase();
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 5);
+}
+
+function renderSteamVerificationCodeSlots(input) {
+  if (!input || typeof input.closest !== "function") return;
+  const shell = input.closest(".steam-verification-code-input");
+  if (!shell) return;
+  const value = normalizeTotpCode(input.value);
+  shell.querySelectorAll(".steam-verification-code-slot").forEach((slot, index) => {
+    slot.textContent = value[index] || "";
+    slot.classList.toggle("filled", index < value.length);
+  });
+}
+
+function setSteamVerificationCodeValue(input, value) {
+  if (!input) return "";
+  const next = normalizeTotpCode(value);
+  input.value = next;
+  renderSteamVerificationCodeSlots(input);
+  return next;
+}
+
+function initSteamVerificationCodeInput(input) {
+  if (!input || input.dataset.steamCodeBound === "1") return;
+  input.dataset.steamCodeBound = "1";
+  const apply = () => setSteamVerificationCodeValue(input, input.value);
+  ["input", "change", "blur", "keyup"].forEach((eventName) => {
+    input.addEventListener(eventName, apply);
+  });
+  input.addEventListener("paste", () => setTimeout(apply, 0));
+  input.addEventListener("focus", () => input.closest(".steam-verification-code-input")?.classList.add("focused"));
+  input.addEventListener("blur", () => input.closest(".steam-verification-code-input")?.classList.remove("focused"));
+  renderSteamVerificationCodeSlots(input);
 }
 
 function normalizeAccountTotpInput() {
   if (!ui.accountTotp) return "";
-  const next = normalizeTotpCode(ui.accountTotp.value);
-  if (ui.accountTotp.value !== next) {
-    ui.accountTotp.value = next;
-  }
-  return next;
+  return setSteamVerificationCodeValue(ui.accountTotp, ui.accountTotp.value);
 }
 
 function bindAccountTotpNormalization() {
-  if (!ui.accountTotp) return;
-  const apply = () => {
-    normalizeAccountTotpInput();
-  };
-  ["input", "change", "blur", "keyup"].forEach((eventName) => {
-    ui.accountTotp.addEventListener(eventName, apply);
-  });
-  ui.accountTotp.addEventListener("paste", () => {
-    setTimeout(apply, 0);
-  });
+  initSteamVerificationCodeInput(ui.accountTotp);
 }
 
 function clearAccountInputs({focusUsername = false} = {}) {
@@ -3025,7 +3113,7 @@ function setAccountLoginBusy(busy) {
   syncAccountLoginActionState();
 }
 
-function ensureAccountFormEditable({focusUsername = false, focusGuard = false} = {}) {
+function ensureAccountFormEditable({focusUsername = false, focusPassword = false, focusGuard = false} = {}) {
   const reloginMode = String(state.accountLoginMode || "").trim() === "relogin";
   const fields = [ui.accountUsername, ui.accountPassword, ui.accountTotp, ui.accountRemark];
   for (const field of fields) {
@@ -3050,18 +3138,22 @@ function ensureAccountFormEditable({focusUsername = false, focusGuard = false} =
     ui.accountRemark.readOnly = reloginMode;
   }
   if (ui.accountLoginModalTitle) {
-    ui.accountLoginModalTitle.textContent = reloginMode ? "重新登录" : "添加账号";
+    ui.accountLoginModalTitle.textContent = reloginMode ? "" : "添加账号";
+    ui.accountLoginModalTitle.classList.toggle("hidden", reloginMode);
   }
   if (ui.accountLoginHint) {
-    ui.accountLoginHint.textContent = reloginMode
-      ? "为当前账号重新登录并获取新的 loginKey"
-      : "使用 Steam 账号登录并保存到当前客户端";
+    ui.accountLoginHint.textContent = reloginMode ? "" : "先验证账号密码；Steam 要求验证码时再输入";
+    ui.accountLoginHint.classList.toggle("hidden", reloginMode);
   }
   if (ui.loginSaveBtn) {
     ui.loginSaveBtn.textContent = reloginMode ? "重新登录" : "登录并保存";
   }
   syncAccountLoginActionState();
   const modalVisible = !ui.accountLoginModal || !ui.accountLoginModal.classList.contains("hidden");
+  if (focusPassword && modalVisible && ui.accountPassword && typeof ui.accountPassword.focus === "function") {
+    ui.accountPassword.focus();
+    return;
+  }
   if (focusGuard && modalVisible && ui.accountTotp && typeof ui.accountTotp.focus === "function") {
     ui.accountTotp.focus();
     return;
@@ -3071,20 +3163,21 @@ function ensureAccountFormEditable({focusUsername = false, focusGuard = false} =
   }
 }
 
-function openAccountLoginModal({focusUsername = false, focusGuard = false} = {}) {
+function openAccountLoginModal({focusUsername = false, focusPassword = false, focusGuard = false} = {}) {
   if (!ui.accountLoginModal) return;
+  if (!state.pendingGuard) setAccountGuardFieldVisible(false);
   ui.accountLoginModal.classList.remove("hidden");
-  ensureAccountFormEditable({focusUsername, focusGuard});
+  ensureAccountFormEditable({focusUsername, focusPassword, focusGuard});
 }
 
-function openAccountReloginModal({username = "", reason = ""} = {}) {
+function openAccountReloginModal({username = "", password = "", reason = ""} = {}) {
   state.accountLoginMode = "relogin";
   state.pendingRelogin = {
     username: String(username || "").trim(),
     reason: String(reason || "").trim()
   };
-  setAccountForm({username, password: "", totp: "", remark: ""});
-  openAccountLoginModal({focusGuard: true});
+  setAccountForm({username, password, totp: "", remark: ""});
+  openAccountLoginModal({focusPassword: true});
 }
 
 function closeAccountLoginModal() {
@@ -3093,7 +3186,7 @@ function closeAccountLoginModal() {
   syncAccountLoginActionState();
 }
 
-function setAccountLoginOverlayStage({percent = 0, title = "正在登录账号", detail = ""} = {}) {
+function setAccountLoginOverlayStage({percent = 0, title = "正在验证账号和密码", detail = ""} = {}) {
   if (typeof setCraftExecutionOverlayState !== "function") return true;
   return setCraftExecutionOverlayState({
     owner: "login_flow",
@@ -3116,7 +3209,7 @@ function handlePostLoginRefreshResult(username, result = null) {
   const reason = String(result.reason || "").trim();
   const authState = String(result.authState || "").trim() || (reason === "login_key_invalid" ? "auth_invalid" : "login_required");
   const message = reason === "login_key_invalid"
-    ? "登录失效，请重新登录后再刷新"
+    ? "登录过期"
     : (reason === "login_key_missing"
       ? "当前账号缺少 loginKey，请重新登录后再刷新"
       : String(result.message || "").trim());
@@ -3743,17 +3836,40 @@ async function loginAndSave() {
     return false;
   }
   if (state.accountLoginBusy) return false;
-  const reloginMode = String(state.accountLoginMode || "").trim() === "relogin";
   const username = String(ui.accountUsername.value || "").trim();
-  const password = reloginMode ? "" : String(ui.accountPassword.value || "").trim();
-  const totp = normalizeAccountTotpInput();
+  const password = String(ui.accountPassword.value || "").trim();
+  let totp = state.pendingGuard ? normalizeAccountTotpInput() : "";
   const remark = "";
   if (!username) { setAccountStatus("请输入 Steam 账号", true); return; }
-  if (!password && !reloginMode) { setAccountStatus("请输入密码", true); return; }
+  if (!password) { setAccountStatus("请输入密码", true); return; }
+  const reloginAccount = accountByUsername(username);
+  const recoverExistingLoginExpiry = async (err) => {
+    const payload = err && err.data && typeof err.data === "object" ? err.data : {};
+    if (String(payload.reason || "").trim() !== "login_key_invalid" || !reloginAccount) return null;
+    setAccountAuthState(username, {authState: "auth_invalid", authReason: "login_key_invalid"});
+    if (!reloginAccount.has_steam_guard) {
+      return {ok: false, message: String(payload.message || "登录过期").trim() || "登录过期"};
+    }
+    return recoverExpiredAccountWithLocalGuard(username);
+  };
+  const applyRecoveryPasswordFallback = (recovery) => {
+    if (!recovery || !recovery.passwordReentryRequired) return;
+    if (recovery.passwordCleared) {
+      state.accounts = state.accounts.map((row) => row.username === username ? {...row, password: ""} : row);
+      renderSavedAccounts();
+    }
+    if (ui.accountPassword) {
+      ui.accountPassword.value = "";
+      ui.accountPassword.focus();
+    }
+  };
 
   // --- Phase 2: submitting guard code for a pending session ---
   if (state.pendingGuard && state.pendingGuard.username === username) {
-    if (!totp) { setAccountStatus("请输入验证码", true); return; }
+    if (!/^[A-Z0-9]{5}$/.test(totp)) {
+      setAccountStatus("请输入5位大写字母或数字验证码", true);
+      return false;
+    }
     if (setAccountLoginOverlayStage({percent: 25, title: "正在提交验证码", detail: "正在验证..."}) === false) {
       setAccountStatus("当前有任务进行中，请稍后再试", true);
       return false;
@@ -3761,9 +3877,10 @@ async function loginAndSave() {
     try {
       setAccountLoginBusy(true);
       setAccountStatus("正在提交验证码，请稍候...");
+      const authenticatedPassword = String(state.pendingGuard.password || password).trim();
       await api("/api/accounts/login-submit-code", {
         method: "POST",
-        body: JSON.stringify({username, password, code: totp, remark})
+        body: JSON.stringify({username, password: authenticatedPassword, code: totp, remark})
       });
       state.pendingGuard = null;
       resetGuardHintUI();
@@ -3772,6 +3889,16 @@ async function loginAndSave() {
     } catch (err) {
       state.pendingGuard = null;
       resetGuardHintUI();
+      const recovery = await recoverExistingLoginExpiry(err);
+      if (recovery && recovery.ok && recovery.reconnected) {
+        await finishLoginSuccess(username);
+        return true;
+      }
+      if (recovery) {
+        applyRecoveryPasswordFallback(recovery);
+        setAccountStatus(recovery.message || "登录过期", true);
+        return false;
+      }
       setAccountStatus(formatLoginSaveError(err), true);
       return false;
     } finally {
@@ -3783,8 +3910,8 @@ async function loginAndSave() {
   // --- Phase 1: start login (may complete immediately or require guard) ---
   if (setAccountLoginOverlayStage({
     percent: 25,
-    title: "正在登录账号",
-    detail: totp ? "正在校验账号、密码与令牌码..." : "正在校验账号与密码..."
+    title: "正在验证账号和密码",
+    detail: "正在校验账号与密码..."
   }) === false) {
     setAccountStatus("当前有任务进行中，请稍后再试", true);
     return false;
@@ -3792,7 +3919,9 @@ async function loginAndSave() {
 
   try {
     setAccountLoginBusy(true);
-    setAccountStatus("正在登录，请稍候...");
+    setAccountStatus(reloginAccount && reloginAccount.has_steam_guard
+      ? "正在验证密码并由后端提交本地令牌..."
+      : "正在验证账号与密码...");
     const resp = await api("/api/accounts/login-start", {
       method: "POST",
       body: JSON.stringify({username, password, totp, remark})
@@ -3800,6 +3929,10 @@ async function loginAndSave() {
     const data = resp && resp.data ? resp.data : resp;
 
     if (data && data.done === false && data.guard_type) {
+      if (reloginAccount && reloginAccount.has_steam_guard && data.guard_type === "device_code") {
+        setAccountStatus("本地令牌自动验证失败，请检查令牌文件后重试", true);
+        return false;
+      }
       // Guard required — enter phase 2
       clearAccountLoginOverlay();
       setAccountLoginBusy(false);
@@ -3812,6 +3945,25 @@ async function loginAndSave() {
     await finishLoginSuccess(username);
     return true;
   } catch (err) {
+    const errorPayload = err && err.data && typeof err.data === "object" ? err.data : {};
+    if (errorPayload.password_cleared === true && String(errorPayload.reason || "").trim() === "invalid_password") {
+      state.accounts = state.accounts.map((row) => row.username === username ? {...row, password: ""} : row);
+      if (ui.accountPassword) {
+        ui.accountPassword.value = "";
+        ui.accountPassword.focus();
+      }
+      renderSavedAccounts();
+    }
+    const recovery = await recoverExistingLoginExpiry(err);
+    if (recovery && recovery.ok && recovery.reconnected) {
+      await finishLoginSuccess(username);
+      return true;
+    }
+    if (recovery) {
+      applyRecoveryPasswordFallback(recovery);
+      setAccountStatus(recovery.message || "登录过期", true);
+      return false;
+    }
     setAccountStatus(formatLoginSaveError(err), true);
     return false;
   } finally {
@@ -3830,38 +3982,37 @@ function applyGuardHintUI(guardType, guardHint) {
     if (span) span.textContent = label;
   }
   if (ui.accountTotp) {
+    setAccountGuardVerificationMode(true);
+    setAccountGuardFieldVisible(true);
     ui.accountTotp.value = "";
-    ui.accountTotp.maxLength = guardType === "email_code" ? 5 : 6;
+    ui.accountTotp.maxLength = 5;
     ui.accountTotp.focus();
   }
-  const hintEl = document.getElementById("accountGuardHint");
+  const hintEl = ui.accountGuardHint;
   if (hintEl) {
-    if (guardType === "email_code" && guardHint) {
-      hintEl.textContent = `Steam 已向 ${guardHint} 发送验证码，请查收邮件`;
-      hintEl.classList.remove("hidden");
-    } else if (guardType === "device_code") {
-      hintEl.textContent = "请输入 Steam 手机令牌码";
-      hintEl.classList.remove("hidden");
-    } else {
-      hintEl.classList.add("hidden");
-    }
+    hintEl.textContent = "";
+    hintEl.classList.add("hidden");
   }
-  setAccountStatus(guardType === "email_code"
-    ? `验证码已发送到 ${guardHint || "邮箱"}，请输入后点击登录`
-    : "请输入令牌码后点击登录");
+  setAccountStatus("");
   if (ui.loginSaveBtn) ui.loginSaveBtn.textContent = "提交验证码";
 }
 
 function resetGuardHintUI() {
   state.pendingGuard = null;
+  setAccountGuardVerificationMode(false);
+  setAccountGuardFieldVisible(false);
   const totpLabel = ui.accountTotp && ui.accountTotp.closest && ui.accountTotp.closest("label");
   if (totpLabel) {
     const span = totpLabel.querySelector("span");
     if (span) span.textContent = "令牌码";
   }
-  if (ui.accountTotp) ui.accountTotp.maxLength = 6;
-  const hintEl = document.getElementById("accountGuardHint");
-  if (hintEl) hintEl.classList.add("hidden");
+  if (ui.accountTotp) ui.accountTotp.maxLength = 5;
+  const hintEl = ui.accountGuardHint;
+  if (hintEl) {
+    hintEl.textContent = "";
+    hintEl.classList.add("hidden");
+  }
+  ensureAccountFormEditable();
   syncAccountLoginActionState();
 }
 
@@ -3918,6 +4069,15 @@ async function connectByStatusBadge({preferCraft = false, usernameOverride = ""}
     state.currentAccountUsername
   ).trim();
   if (!username) return;
+  const account = accountByUsername(username);
+  if (account && account.has_steam_guard && !account.has_refresh_token && account.has_password === false) {
+    openAccountReloginModal({
+      username,
+      password: "",
+      reason: "password_reentry_required"
+    });
+    return;
+  }
   if (String(state.connectedUsername || "").trim() === username && String(state.currentAccountUsername || "").trim() === username) {
     return;
   }
@@ -13759,7 +13919,9 @@ async function disconnectOtherSessionsForTarget(username, {silent = true} = {}) 
   if (!key) return {disconnected: []};
   const data = await api("/api/session/disconnect-others", {
     method: "POST",
-    body: JSON.stringify({username: key})
+    body: JSON.stringify({username: key}),
+    timeoutMs: 5000,
+    timeoutMessage: "清理其他账号连接超时，请重试"
   });
   const disconnected = Array.isArray(data && data.disconnected) ? data.disconnected : [];
   for (const item of disconnected) {
@@ -13889,6 +14051,7 @@ async function doRefresh({
     setRows(rows, component, snapshotPath, nextKeepSelectedIds ? {keepSelectedIds: nextKeepSelectedIds} : {});
     setAccountAuthState(username, {authState: "normal", authReason: ""});
     state.accounts = state.accounts.map((row) => row.username === username ? {...row, has_refresh_token: true} : row);
+    void ensureAccountProfile(username);
     cacheSnapshotForAccount(username, {
       rows,
       component,
@@ -13913,6 +14076,33 @@ async function doRefresh({
     const payload = err && err.data && typeof err.data === "object" ? err.data : null;
     const reason = String(payload && payload.reason || "").trim();
     const responseAuthState = String(payload && payload.auth_state || "").trim();
+    const credentialState = String(payload && payload.credential_state || "").trim();
+    const passwordCleared = payload && payload.password_cleared === true;
+    if (account.has_steam_guard && credentialState === "password_reentry_required") {
+      if (passwordCleared) {
+        state.accounts = state.accounts.map((row) => row.username === username ? {...row, password: ""} : row);
+        renderSavedAccounts();
+      }
+      setAccountAuthState(username, {authState: "auth_invalid", authReason: reason || "login_key_invalid"});
+      syncInventoryTop();
+      if (!suppressReloginModal) {
+        openAccountReloginModal({
+          username,
+          password: "",
+          reason: "password_reentry_required"
+        });
+      }
+      const message = String(payload && payload.message || "").trim()
+        || "保存的 Steam 密码已失效，请重新输入密码";
+      setSummary(message);
+      return {
+        ok: false,
+        message,
+        reloginRequired: true,
+        reason: reason || "login_key_invalid",
+        authState: "auth_invalid"
+      };
+    }
     if (account.has_steam_guard && (responseAuthState === "needs_attention" || reason === "login_key_missing" || reason === "login_key_invalid")) {
       setAccountAuthState(username, {authState: "needs_attention", authReason: reason});
       syncInventoryTop();
@@ -13930,11 +14120,12 @@ async function doRefresh({
       if (!suppressReloginModal) {
         openAccountReloginModal({
           username,
+          password: String(account.password || ""),
           reason
         });
       }
       const message = reason === "login_key_invalid"
-        ? "登录失效，请重新登录后再刷新"
+        ? "登录过期"
         : "当前账号缺少 loginKey，请重新登录后再刷新";
       setSummary(message);
       return {ok: false, message, reloginRequired: true, reason, authState};
@@ -15312,6 +15503,8 @@ function bindEvents() {
     closeTargetComponentDrawer();
     closeRemarkModal(null);
   });
+  document.addEventListener("visibilitychange", syncInventoryEventStreamVisibility);
+  window.addEventListener("pagehide", stopInventoryEventStream);
   window.addEventListener("resize", () => {
     placeFilterDrawer();
     placeBatchCraftAccountListbox();
@@ -16519,9 +16712,108 @@ function bindEvents() {
 // ===== 批量导入 maFile =====
 
 const batchImportState = {
-  files: [],  // { name, content, password }
-  running: false
+  files: [],
+  running: false,
+  resolutionGroups: [],
+  selectedClientIdByAccount: new Map(),
+  confirmedOverwriteAccounts: new Set(),
+  overwritePasswordAccounts: new Set(),
+  summary: {added: 0, attached: 0, overwritten: 0, skipped: 0, failed: 0}
 };
+
+function makeBatchImportClientId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `mafile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function completeBatchImportPreflightItems(files, items) {
+  const byClientId = new Map((Array.isArray(items) ? items : []).map((item) => [String(item && item.client_id || ""), item]));
+  return (Array.isArray(files) ? files : []).map((file) => {
+    const clientId = String(file && file.clientId || "");
+    return byClientId.get(clientId) || {
+      client_id: clientId,
+      file_name: String(file && file.name || ""),
+      account_name: "",
+      status: "invalid",
+      message: "令牌文件格式错误"
+    };
+  });
+}
+
+function partitionBatchImportPreflightItems(items) {
+  const result = {ready: [], resolution: [], blocking: []};
+  for (const item of Array.isArray(items) ? items : []) {
+    const status = String(item && item.status || "").trim();
+    if (status === "ready") result.ready.push(item);
+    else if (["duplicate_existing", "selection_required", "duplicate_confirmation_required", "password_confirmation_required", "duplicate_batch"].includes(status)) {
+      result.resolution.push(item);
+    } else {
+      result.blocking.push(item);
+    }
+  }
+  return result;
+}
+
+function groupBatchImportResolutionItems(items) {
+  const groupsByAccount = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const accountName = String(item && item.account_name || "").trim();
+    if (!accountName) continue;
+    const itemHasSteamGuard = !!(item && item.existing_has_steam_guard);
+    const itemTargetAction = String(item && item.target_action || "").trim() || (itemHasSteamGuard ? "overwrite" : "create");
+    let group = groupsByAccount.get(accountName);
+    if (!group) {
+      group = {
+        account_name: accountName,
+        target_action: itemTargetAction,
+        existing_has_steam_guard: itemHasSteamGuard,
+        existing_remark: String(item && item.existing_remark || "").trim(),
+        connected: !!(item && item.connected),
+        candidates: []
+      };
+      groupsByAccount.set(accountName, group);
+    }
+    if (itemTargetAction === "overwrite" || itemHasSteamGuard) group.target_action = "overwrite";
+    if (itemHasSteamGuard) group.existing_has_steam_guard = true;
+    if (!group.existing_remark) group.existing_remark = String(item && item.existing_remark || "").trim();
+    if (item && item.connected) group.connected = true;
+    group.candidates.push(item);
+  }
+  return [...groupsByAccount.values()];
+}
+
+function batchImportPasswordForFile(file, mode, uniformPassword) {
+  return mode === "uniform" ? String(uniformPassword || "") : String(file && file.password || "");
+}
+
+function resetBatchImportState() {
+  batchImportState.files = [];
+  batchImportState.running = false;
+  batchImportState.resolutionGroups = [];
+  batchImportState.selectedClientIdByAccount = new Map();
+  batchImportState.confirmedOverwriteAccounts = new Set();
+  batchImportState.overwritePasswordAccounts = new Set();
+  batchImportState.overwritePasswordAccounts = new Set();
+  batchImportState.summary = {added: 0, attached: 0, overwritten: 0, skipped: 0, failed: 0};
+}
+
+function clearBatchImportSensitiveState() {
+  resetBatchImportState();
+  const uniformPassword = document.getElementById("batchImportPasswordInput");
+  const pastedCredentials = document.getElementById("batchImportPasteArea");
+  const fileInput = document.getElementById("batchImportFileInput");
+  if (uniformPassword) uniformPassword.value = "";
+  if (pastedCredentials) pastedCredentials.value = "";
+  if (fileInput) fileInput.value = "";
+  if (document.getElementById("batchImportFileList")) renderBatchImportFileList();
+}
+
+function removeBatchImportFilesByClientIds(clientIds) {
+  const ids = clientIds instanceof Set ? clientIds : new Set(clientIds || []);
+  if (!ids.size) return;
+  batchImportState.files = batchImportState.files.filter((file) => !ids.has(String(file && file.clientId || "")));
+  renderBatchImportFileList();
+}
 
 function initBatchImport() {
   const btn = document.getElementById("accountPageBatchImportBtn");
@@ -16539,32 +16831,34 @@ function initBatchImport() {
   if (!btn || !modal) return;
 
   btn.onclick = () => {
-    batchImportState.files = [];
-    batchImportState.running = false;
+    clearBatchImportSensitiveState();
     renderBatchImportFileList();
     document.getElementById("batchImportProgress").classList.add("hidden");
     document.getElementById("batchImportResults").innerHTML = "";
     document.getElementById("batchImportParseResult").innerHTML = "";
-    const ta = document.getElementById("batchImportPasteArea");
-    if (ta) ta.value = "";
     // 默认粘贴模式
     if (pwdMode) pwdMode.value = "paste";
     switchBatchPwdMode("paste");
     modal.classList.remove("hidden");
   };
 
-  closeBtn.onclick = () => { if (!batchImportState.running) modal.classList.add("hidden"); };
-  modal.onclick = (e) => { if (e.target === modal && !batchImportState.running) modal.classList.add("hidden"); };
+  const closeBatchImportModal = () => {
+    if (batchImportState.running) return;
+    modal.classList.add("hidden");
+    clearBatchImportSensitiveState();
+  };
+  closeBtn.onclick = closeBatchImportModal;
+  modal.onclick = (e) => { if (e.target === modal) closeBatchImportModal(); };
 
   selectFilesBtn.onclick = () => fileInput.click();
-  fileInput.onchange = () => { handleBatchImportFiles(fileInput.files); fileInput.value = ""; };
+  fileInput.onchange = () => { handleBatchImportFiles(Array.from(fileInput.files)); fileInput.value = ""; };
 
   dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); };
   dropZone.ondragleave = () => dropZone.classList.remove("drag-over");
   dropZone.ondrop = (e) => {
     e.preventDefault();
     dropZone.classList.remove("drag-over");
-    handleBatchImportFiles(e.dataTransfer.files);
+    handleBatchImportFiles(Array.from(e.dataTransfer.files));
   };
 
   if (pwdMode) {
@@ -16576,6 +16870,13 @@ function initBatchImport() {
   }
 
   startBtn.onclick = () => startBatchImport();
+
+  const duplicateModal = document.getElementById("batchImportDuplicateModal");
+  const closeDuplicateModal = () => cancelBatchImportDuplicateOverwrite();
+  document.getElementById("batchImportDuplicateCloseBtn").onclick = closeDuplicateModal;
+  document.getElementById("batchImportDuplicateCancelBtn").onclick = closeDuplicateModal;
+  duplicateModal.onclick = (e) => { if (e.target === duplicateModal && !batchImportState.running) closeDuplicateModal(); };
+  document.getElementById("batchImportDuplicateOverwriteBtn").onclick = () => void overwriteSelectedBatchImportDuplicates();
 }
 
 function switchBatchPwdMode(mode) {
@@ -16588,15 +16889,21 @@ function switchBatchPwdMode(mode) {
 
 async function handleBatchImportFiles(fileList) {
   for (const file of fileList) {
+    const content = await file.text();
+    let accountName = "";
     try {
-      const content = await file.text();
-      JSON.parse(content); // validate JSON
       const parsed = JSON.parse(content);
-      const accountName = parsed.account_name || file.name.replace(/\.maFile$/i, "");
-      batchImportState.files.push({name: file.name, accountName, content, password: ""});
-    } catch (err) {
-      console.warn("maFile parse error:", file.name, err);
-    }
+      accountName = String(parsed && parsed.account_name || "").trim();
+    } catch (_) {}
+    batchImportState.files.push({
+      clientId: makeBatchImportClientId(),
+      name: file.name,
+      accountName,
+      content,
+      password: "",
+      preflightStatus: "",
+      preflightMessage: ""
+    });
   }
   renderBatchImportFileList();
 }
@@ -16610,10 +16917,22 @@ function renderBatchImportFileList() {
     const f = batchImportState.files[i];
     const div = document.createElement("div");
     div.className = "batch-import-file-item";
+    const identity = document.createElement("div");
+    identity.className = "batch-import-file-identity";
     const nameSpan = document.createElement("span");
     nameSpan.className = "file-name";
-    nameSpan.textContent = f.accountName || f.name;
-    div.append(nameSpan);
+    nameSpan.textContent = f.name;
+    const accountSpan = document.createElement("span");
+    accountSpan.className = "file-account-name";
+    accountSpan.textContent = `登录账号：${f.accountName || "等待预检"}`;
+    identity.append(nameSpan, accountSpan);
+    if (f.preflightStatus) {
+      const statusTag = document.createElement("span");
+      statusTag.className = `file-preflight-status ${f.preflightStatus}`;
+      statusTag.textContent = batchImportPreflightStatusText(f);
+      identity.append(statusTag);
+    }
+    div.append(identity);
     if (f.password && mode === "paste") {
       const tag = document.createElement("span");
       tag.style.cssText = "color:var(--success);font-size:11px;margin-left:8px;";
@@ -16638,6 +16957,16 @@ function renderBatchImportFileList() {
   }
 }
 
+function batchImportPreflightStatusText(file) {
+  const status = String(file && file.preflightStatus || "").trim();
+  if (status === "ready") return "可导入";
+  if (status === "duplicate_existing") return "已有同名账号";
+  if (status === "password_confirmation_required") return "密码待确认";
+  if (status === "duplicate_batch") return "批次内账号重复";
+  if (status === "invalid") return String(file && file.preflightMessage || "令牌文件格式错误");
+  return status;
+}
+
 /**
  * 解析粘贴的账密文本，提取账号和密码对
  * 支持格式：账号xxx密码yyy（后面可能还有令牌秘钥等，忽略）
@@ -16656,6 +16985,16 @@ function parseBatchCredentials(text) {
   return result;
 }
 
+function renderBatchImportCredentialSummary(resultDiv, lines) {
+  resultDiv.replaceChildren();
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const row = document.createElement("div");
+    row.className = String(line && line.tone || "").trim();
+    row.textContent = String(line && line.text || "");
+    resultDiv.append(row);
+  }
+}
+
 /**
  * 将解析的账密映射应用到已导入的 maFile 列表
  */
@@ -16666,13 +17005,13 @@ function applyParsedCredentials() {
 
   const text = ta.value.trim();
   if (!text) {
-    resultDiv.innerHTML = '<span class="match-fail">请先粘贴账密文本</span>';
+    renderBatchImportCredentialSummary(resultDiv, [{tone: "match-fail", text: "请先粘贴账密文本"}]);
     return;
   }
 
   const credMap = parseBatchCredentials(text);
   if (credMap.size === 0) {
-    resultDiv.innerHTML = '<span class="match-fail">未识别到任何账号密码对，请检查格式</span>';
+    renderBatchImportCredentialSummary(resultDiv, [{tone: "match-fail", text: "未识别到任何账号密码对，请检查格式"}]);
     return;
   }
 
@@ -16693,15 +17032,15 @@ function applyParsedCredentials() {
     }
   }
 
-  let html = `<span class="match-ok">解析到 ${credMap.size} 个账号，匹配成功 ${matched} 个</span>`;
+  const lines = [{tone: "match-ok", text: `解析到 ${credMap.size} 个账号，匹配成功 ${matched} 个`}];
   if (unmatched.length > 0) {
-    html += `<br><span class="match-fail">未找到对应 maFile 的账号：${unmatched.join(", ")}</span>`;
+    lines.push({tone: "match-fail", text: `未找到对应 maFile 的账号：${unmatched.join(", ")}`});
   }
   const noPassword = batchImportState.files.filter(f => !f.password);
   if (noPassword.length > 0) {
-    html += `<br><span class="match-fail">仍缺密码的账号：${noPassword.map(f => f.accountName).join(", ")}</span>`;
+    lines.push({tone: "match-fail", text: `仍缺密码的账号：${noPassword.map(f => f.accountName).join(", ")}`});
   }
-  resultDiv.innerHTML = html;
+  renderBatchImportCredentialSummary(resultDiv, lines);
   renderBatchImportFileList();
 }
 
@@ -16723,66 +17062,441 @@ async function startBatchImport() {
   progressText.textContent = "准备中...";
   resultsWrap.innerHTML = "";
   startBtn.disabled = true;
-
-  const accounts = batchImportState.files.map((f) => ({
-    username: f.accountName,
-    password: mode === "uniform" ? uniformPassword : f.password,
-    maFileContent: f.content
-  }));
+  batchImportState.summary = {added: 0, attached: 0, overwritten: 0, skipped: 0, failed: 0};
 
   try {
-    const resp = await fetchAuthAwareRaw("/api/accounts/batch-import", {
+    progressText.textContent = "正在检查令牌文件...";
+    const preflight = await api("/api/accounts/batch-import/preflight", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({accounts})
-    }, {
-      operation: "批量导入账号",
-      expectedContentTypes: ["text/event-stream"]
+      body: JSON.stringify({
+        accounts: batchImportState.files.map((f) => ({
+          client_id: f.clientId,
+          file_name: f.name,
+          password: batchImportPasswordForFile(f, mode, uniformPassword),
+          maFileContent: f.content
+        }))
+      })
     });
+    const byClientId = new Map(batchImportState.files.map((file) => [file.clientId, file]));
+    const preflightItems = completeBatchImportPreflightItems(batchImportState.files, preflight && preflight.items);
+    for (const item of preflightItems) {
+      const file = byClientId.get(String(item && item.client_id || ""));
+      if (!file) continue;
+      file.accountName = String(item.account_name || "").trim();
+      file.preflightStatus = String(item.status || "invalid").trim();
+      file.preflightMessage = String(item.message || "").trim();
+    }
+    renderBatchImportFileList();
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, {stream: true});
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      let eventName = "";
-      for (const line of lines) {
-        if (line.startsWith("event: ")) {
-          eventName = line.slice(7).trim();
-        } else if (line.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (eventName === "progress" || eventName === "account_result") {
-              const pct = data.total > 0 ? Math.round((data.done / data.total) * 100) : 0;
-              progressFill.style.width = pct + "%";
-              progressText.textContent = `${data.done || 0} / ${data.total || 0}`;
-            }
-            if (eventName === "account_result") {
-              const item = document.createElement("div");
-              item.className = `batch-import-result-item ${data.ok ? "ok" : "fail"}`;
-              item.textContent = `${data.ok ? "✓" : "✗"} ${data.username}: ${data.message}`;
-              resultsWrap.append(item);
-            }
-          } catch (_) {}
-        }
+    const partition = partitionBatchImportPreflightItems(preflightItems);
+    if (partition.blocking.length) {
+      progressText.textContent = "已跳过格式错误的令牌文件";
+      for (const item of partition.blocking) {
+        batchImportState.summary.failed += 1;
+        appendBatchImportResult({
+          ok: false,
+          account_name: item.account_name || item.file_name,
+          message: item.message || "令牌文件格式错误"
+        });
       }
     }
+
+    const importable = [...partition.ready, ...partition.resolution];
+    for (const item of importable) {
+      const file = byClientId.get(String(item.client_id || ""));
+      if (file) file.password = batchImportPasswordForFile(file, mode, uniformPassword);
+    }
+
+    const resolutionItems = partition.resolution.map((item) => makeBatchImportDuplicateItem(item, byClientId));
+    const readyAccounts = partition.ready.map((item) => ({
+      ...makeBatchImportRequestAccount(item, byClientId, mode, uniformPassword, false),
+      overwrite: false
+    }));
+    if (readyAccounts.length) {
+      const readyResults = [];
+      await runBatchImportRequest(readyAccounts, (data) => readyResults.push(data));
+      const addedClientIds = new Set();
+      for (const data of readyResults) {
+        const status = String(data && data.status || "").trim();
+        if (["duplicate_confirmation_required", "password_confirmation_required", "duplicate_existing", "selection_required"].includes(status)) {
+          resolutionItems.push(makeBatchImportDuplicateItem(data, byClientId));
+          appendBatchImportResult({...data, ok: false, message: "需要选择令牌文件后继续"}, "pending");
+          continue;
+        }
+        if (data.ok && ["added", "attached", ""].includes(status)) {
+          if (status === "attached") batchImportState.summary.attached += 1;
+          else batchImportState.summary.added += 1;
+          addedClientIds.add(String(data && data.client_id || ""));
+        } else {
+          batchImportState.summary.failed += 1;
+        }
+        appendBatchImportResult(data);
+      }
+      removeBatchImportFilesByClientIds(addedClientIds);
+    }
+    try { await loadAccounts(); } catch (_) {}
+    if (resolutionItems.length) {
+      openBatchImportDuplicateModal(resolutionItems);
+      return;
+    }
+    renderBatchImportSummary();
+    progressFill.style.width = "100%";
+    progressText.textContent = "导入完成";
   } catch (err) {
     progressText.textContent = `导入出错: ${err.message}`;
+  } finally {
+    batchImportState.running = false;
+    startBtn.disabled = false;
   }
+}
 
-  batchImportState.running = false;
-  startBtn.disabled = false;
+function makeBatchImportRequestAccount(item, byClientId, mode, uniformPassword, overwrite) {
+  const clientId = String(item && item.client_id || "");
+  const file = byClientId.get(clientId);
+  return {
+    client_id: clientId,
+    file_name: String(file && file.name || item && item.file_name || ""),
+    account_name: String(item && item.account_name || file && file.accountName || "").trim(),
+    target_action: String(item && item.target_action || "create").trim() || "create",
+    password: batchImportPasswordForFile(file, mode, uniformPassword),
+    maFileContent: String(file && file.content || ""),
+    overwrite: !!overwrite
+  };
+}
 
-  // 刷新账号列表
-  try { await loadAccounts(); } catch (_) {}
+function makeBatchImportDuplicateItem(item, byClientId) {
+  const clientId = String(item && item.client_id || "");
+  const file = byClientId.get(clientId) || {};
+  const existingHasSteamGuard = !!(item && item.existing_has_steam_guard);
+  return {
+    client_id: clientId,
+    file_name: String(item && item.file_name || file.name || ""),
+    account_name: String(item && item.account_name || file.accountName || "").trim(),
+    target_action: String(item && item.target_action || "").trim() || (existingHasSteamGuard ? "overwrite" : "create"),
+    existing_has_steam_guard: existingHasSteamGuard,
+    password_differs: !!(item && item.password_differs),
+    existing_remark: String(item && item.existing_remark || "").trim(),
+    connected: !!(item && item.connected),
+    auth_state: String(item && item.auth_state || "").trim(),
+    file
+  };
+}
+
+async function runBatchImportRequest(accounts, onAccountResult) {
+  const resp = await fetchAuthAwareRaw("/api/accounts/batch-import", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({accounts})
+  }, {
+    operation: "批量导入账号",
+    expectedContentTypes: ["text/event-stream"]
+  });
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let doneSummary = null;
+  const processEvent = (rawEvent) => {
+    let eventName = "";
+    let dataText = "";
+    for (const rawLine of String(rawEvent || "").split(/\r?\n/)) {
+      const line = rawLine.trimEnd();
+      if (line.startsWith("event:")) eventName = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataText += line.slice(5).trim();
+    }
+    if (!dataText) return;
+    try {
+      const data = JSON.parse(dataText);
+      if (eventName === "progress" || eventName === "account_result") {
+        const progressFill = document.getElementById("batchImportProgressFill");
+        const progressText = document.getElementById("batchImportProgressText");
+        const pct = data.total > 0 ? Math.round((Number(data.done) / Number(data.total)) * 100) : 0;
+        progressFill.style.width = `${pct}%`;
+        progressText.textContent = `${data.done || 0} / ${data.total || 0}`;
+      }
+      if (eventName === "account_result" && typeof onAccountResult === "function") onAccountResult(data);
+      if (eventName === "done") doneSummary = data;
+    } catch (_) {}
+  };
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, {stream: true});
+    const events = buffer.split(/\r?\n\r?\n/);
+    buffer = events.pop() || "";
+    for (const event of events) processEvent(event);
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) processEvent(buffer);
+  return doneSummary;
+}
+
+function appendBatchImportResult(data, forcedTone = "") {
+  const resultsWrap = document.getElementById("batchImportResults");
+  const item = document.createElement("div");
+  const tone = forcedTone || (data && data.ok ? "ok" : "fail");
+  item.className = `batch-import-result-item ${tone}`;
+  const accountName = String(data && (data.account_name || data.username) || "-").trim();
+  item.textContent = `${data && data.ok ? "✓" : tone === "pending" ? "•" : "✗"} ${accountName}: ${String(data && data.message || "").trim()}`;
+  resultsWrap.append(item);
+}
+
+function renderBatchImportSummary() {
+  const summary = batchImportState.summary;
+  const item = document.createElement("div");
+  item.className = "batch-import-result-summary";
+  item.textContent = `新增 ${summary.added} 个 · 绑定 ${summary.attached} 个 · 覆盖 ${summary.overwritten} 个 · 跳过 ${summary.skipped} 个 · 失败 ${summary.failed} 个`;
+  document.getElementById("batchImportResults").prepend(item);
+}
+
+function openBatchImportDuplicateModal(items) {
+  batchImportState.resolutionGroups = groupBatchImportResolutionItems(items);
+  batchImportState.selectedClientIdByAccount = new Map();
+  batchImportState.confirmedOverwriteAccounts = new Set();
+  batchImportState.overwritePasswordAccounts = new Set();
+  for (const group of batchImportState.resolutionGroups) {
+    if (group.candidates.length !== 1) continue;
+    const candidate = group.candidates[0];
+    batchImportState.selectedClientIdByAccount.set(group.account_name, candidate.client_id);
+  }
+  const statusEl = document.getElementById("batchImportDuplicateStatus");
+  statusEl.textContent = "";
+  statusEl.className = "enroll-status";
+  document.getElementById("batchImportModal").classList.add("hidden");
+  document.getElementById("batchImportDuplicateModal").classList.remove("hidden");
+  renderBatchImportDuplicateList();
+}
+
+function batchImportResolutionCandidateHasPassword(item) {
+  return Boolean(String(item && item.file && item.file.password || "").trim());
+}
+
+function batchImportResolutionGroupIsReady(group) {
+  const selectedClientId = batchImportState.selectedClientIdByAccount.get(group.account_name);
+  if (!selectedClientId) return false;
+  const candidate = group.candidates.find((item) => item.client_id === selectedClientId);
+  if (!candidate) return false;
+  if (group.target_action === "overwrite" && !batchImportState.confirmedOverwriteAccounts.has(group.account_name)) return false;
+  return true;
+}
+
+function renderBatchImportDuplicateList() {
+  const list = document.getElementById("batchImportDuplicateList");
+  const processBtn = document.getElementById("batchImportDuplicateOverwriteBtn");
+  list.replaceChildren();
+  for (let groupIndex = 0; groupIndex < batchImportState.resolutionGroups.length; groupIndex += 1) {
+    const group = batchImportState.resolutionGroups[groupIndex];
+    const groupEl = document.createElement("section");
+    groupEl.className = "batch-import-resolution-group";
+    const header = document.createElement("div");
+    header.className = "batch-import-resolution-head";
+    const account = document.createElement("strong");
+    account.textContent = group.account_name;
+    const action = document.createElement("span");
+    action.textContent = group.target_action === "overwrite"
+      ? "已有令牌，选择替换文件"
+      : group.target_action === "attach"
+        ? "为已有账号绑定令牌"
+        : "选择一个令牌文件创建账号";
+    header.append(account, action);
+    groupEl.append(header);
+
+    const candidates = document.createElement("div");
+    candidates.className = "batch-import-resolution-candidates";
+    for (const candidate of group.candidates) {
+      const candidateLabel = document.createElement("label");
+      candidateLabel.className = "batch-import-resolution-candidate";
+      const hasPassword = batchImportResolutionCandidateHasPassword(candidate);
+      const candidateInput = document.createElement("input");
+      candidateInput.type = "radio";
+      candidateInput.name = `batch-import-candidate-${groupIndex}`;
+      candidateInput.checked = batchImportState.selectedClientIdByAccount.get(group.account_name) === candidate.client_id;
+      candidateInput.onchange = () => {
+        if (candidateInput.checked) {
+          batchImportState.selectedClientIdByAccount.set(group.account_name, candidate.client_id);
+          batchImportState.overwritePasswordAccounts.delete(group.account_name);
+        }
+        renderBatchImportDuplicateList();
+      };
+      const candidateCopy = document.createElement("span");
+      candidateCopy.className = "batch-import-resolution-candidate-copy";
+      const fileName = document.createElement("span");
+      fileName.className = "batch-import-resolution-file-name";
+      fileName.textContent = candidate.file_name || "-";
+      const detail = document.createElement("span");
+      detail.textContent = hasPassword ? "包含导入密码" : "不包含密码";
+      candidateCopy.append(fileName, detail);
+      candidateLabel.append(candidateInput, candidateCopy);
+      candidates.append(candidateLabel);
+    }
+    groupEl.append(candidates);
+
+    const selectedClientId = batchImportState.selectedClientIdByAccount.get(group.account_name);
+    const selectedCandidate = group.candidates.find((item) => item.client_id === selectedClientId);
+    if (selectedCandidate && selectedCandidate.password_differs) {
+      const passwordPanel = document.createElement("div");
+      passwordPanel.className = "batch-import-resolution-password";
+      const passwordTitle = document.createElement("span");
+      passwordTitle.textContent = "导入密码与本地密码不同";
+      const passwordValue = document.createElement("input");
+      passwordValue.type = "text";
+      passwordValue.readOnly = true;
+      passwordValue.autocomplete = "off";
+      passwordValue.value = String(selectedCandidate.file && selectedCandidate.file.password || "");
+      const passwordChoice = document.createElement("label");
+      const passwordCheckbox = document.createElement("input");
+      passwordCheckbox.type = "checkbox";
+      passwordCheckbox.checked = batchImportState.overwritePasswordAccounts.has(group.account_name);
+      passwordCheckbox.onchange = () => {
+        if (passwordCheckbox.checked) batchImportState.overwritePasswordAccounts.add(group.account_name);
+        else batchImportState.overwritePasswordAccounts.delete(group.account_name);
+      };
+      const passwordChoiceText = document.createElement("span");
+      passwordChoiceText.textContent = "使用导入密码覆盖本地密码";
+      passwordChoice.append(passwordCheckbox, passwordChoiceText);
+      passwordPanel.append(passwordTitle, passwordValue, passwordChoice);
+      groupEl.append(passwordPanel);
+    }
+
+    if (group.existing_remark || group.connected) {
+      const local = document.createElement("div");
+      local.className = "batch-import-resolution-local";
+      local.textContent = `本地备注：${group.existing_remark || "无"} · ${group.connected ? "已连接" : "未连接"}`;
+      groupEl.append(local);
+    }
+    if (group.target_action === "overwrite") {
+      const confirmLabel = document.createElement("label");
+      confirmLabel.className = "batch-import-resolution-overwrite";
+      const confirmInput = document.createElement("input");
+      confirmInput.type = "checkbox";
+      confirmInput.checked = batchImportState.confirmedOverwriteAccounts.has(group.account_name);
+      confirmInput.onchange = () => {
+        if (confirmInput.checked) batchImportState.confirmedOverwriteAccounts.add(group.account_name);
+        else batchImportState.confirmedOverwriteAccounts.delete(group.account_name);
+        renderBatchImportDuplicateList();
+      };
+      const confirmText = document.createElement("span");
+      confirmText.textContent = "确认覆盖已有令牌";
+      confirmLabel.append(confirmInput, confirmText);
+      groupEl.append(confirmLabel);
+    }
+    list.append(groupEl);
+  }
+  const selectedCount = batchImportState.resolutionGroups.filter(batchImportResolutionGroupIsReady).length;
+  const total = batchImportState.resolutionGroups.length;
+  processBtn.disabled = batchImportState.running || selectedCount === 0;
+  processBtn.textContent = `处理已选择账号（${selectedCount}）`;
+  document.getElementById("batchImportDuplicateSummary").textContent = `已新增 ${batchImportState.summary.added} 个、绑定 ${batchImportState.summary.attached} 个，${total} 个账号待选择`;
+}
+
+function finishBatchImportDuplicateStep({removeClientIds = new Set()} = {}) {
+  removeBatchImportFilesByClientIds(removeClientIds);
+  document.getElementById("batchImportDuplicateModal").classList.add("hidden");
+  document.getElementById("batchImportModal").classList.remove("hidden");
+  batchImportState.resolutionGroups = [];
+  batchImportState.selectedClientIdByAccount = new Map();
+  batchImportState.confirmedOverwriteAccounts = new Set();
+  renderBatchImportSummary();
+  document.getElementById("batchImportProgressFill").style.width = "100%";
+  document.getElementById("batchImportProgressText").textContent = "导入完成";
+}
+
+function cancelBatchImportDuplicateOverwrite() {
+  if (batchImportState.running) return;
+  batchImportState.summary.skipped += batchImportState.resolutionGroups.length;
+  finishBatchImportDuplicateStep({
+    removeClientIds: new Set(batchImportState.resolutionGroups.flatMap((group) => group.candidates.map((item) => item.client_id)))
+  });
+}
+
+function collectBatchImportFinishedClientIds(skippedGroups, selected, successfulClientIds) {
+  const clientIds = new Set();
+  for (const group of skippedGroups) {
+    for (const candidate of group.candidates) clientIds.add(candidate.client_id);
+  }
+  for (const {candidate, group} of selected) {
+    if (!successfulClientIds.has(candidate.client_id)) continue;
+    for (const groupCandidate of group.candidates) clientIds.add(groupCandidate.client_id);
+  }
+  return clientIds;
+}
+
+async function overwriteSelectedBatchImportDuplicates() {
+  if (batchImportState.running) return;
+  const selectedGroups = batchImportState.resolutionGroups.filter(batchImportResolutionGroupIsReady);
+  if (!selectedGroups.length) return;
+  const skippedGroups = batchImportState.resolutionGroups.filter((group) => !selectedGroups.includes(group));
+  const selected = selectedGroups.map((group) => ({
+    group,
+    candidate: group.candidates.find((item) => item.client_id === batchImportState.selectedClientIdByAccount.get(group.account_name))
+  }));
+  batchImportState.running = true;
+  renderBatchImportDuplicateList();
+  const statusEl = document.getElementById("batchImportDuplicateStatus");
+  statusEl.textContent = "正在处理选中账号...";
+  statusEl.className = "enroll-status";
+  try {
+    const accounts = selected.map(({group, candidate}) => {
+      const payload = {
+        client_id: candidate.client_id,
+        file_name: candidate.file_name,
+        account_name: candidate.account_name,
+        target_action: group.target_action,
+        password: String(candidate.file && candidate.file.password || ""),
+        password_action: candidate.password_differs
+          ? (batchImportState.overwritePasswordAccounts.has(group.account_name) ? "overwrite" : "discard")
+          : "",
+        maFileContent: String(candidate.file && candidate.file.content || "")
+      };
+      return group.target_action === "overwrite" && batchImportState.confirmedOverwriteAccounts.has(group.account_name)
+        ? {...payload, overwrite: true}
+        : {...payload, overwrite: false};
+    });
+    const overwriteResults = [];
+    await runBatchImportRequest(accounts, (data) => overwriteResults.push(data));
+    const successfulClientIds = new Set();
+    let addedCount = 0;
+    let attachedCount = 0;
+    let overwrittenCount = 0;
+    let failedCount = 0;
+    for (const data of overwriteResults) {
+      const status = String(data && data.status || "").trim();
+      if (data.ok && ["added", "attached", "overwritten", ""].includes(status)) {
+        if (status === "attached") attachedCount += 1;
+        else if (status === "overwritten") overwrittenCount += 1;
+        else addedCount += 1;
+        successfulClientIds.add(String(data && data.client_id || ""));
+      } else {
+        failedCount += 1;
+      }
+      appendBatchImportResult(data);
+    }
+    const respondedIds = new Set(overwriteResults.map((data) => String(data && data.client_id || "")));
+    for (const {candidate} of selected) {
+      if (respondedIds.has(candidate.client_id)) continue;
+      failedCount += 1;
+      appendBatchImportResult({
+        ok: false,
+        account_name: candidate.account_name,
+        message: "处理结果缺失，请重试"
+      });
+    }
+    batchImportState.summary.skipped += skippedGroups.length;
+    batchImportState.summary.added += addedCount;
+    batchImportState.summary.attached += attachedCount;
+    batchImportState.summary.overwritten += overwrittenCount;
+    batchImportState.summary.failed += failedCount;
+    try { await loadAccounts(); } catch (_) {}
+    finishBatchImportDuplicateStep({
+      removeClientIds: collectBatchImportFinishedClientIds(skippedGroups, selected, successfulClientIds)
+    });
+  } catch (err) {
+    statusEl.textContent = `覆盖失败：${err.message}`;
+    statusEl.className = "enroll-status error";
+  } finally {
+    batchImportState.running = false;
+    renderBatchImportDuplicateList();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -17827,7 +18541,7 @@ async function startTradeTransfer() {
 
 // ═══ Steam Guard 联合绑定 ═══
 
-let enrollState = {step: 1, mode: "existing", flowId: "", running: false};
+let enrollState = {step: 1, mode: "existing", flowId: "", accountName: "", running: false};
 
 function formatSteamGuardEnrollError(input, fallbackMessage) {
   const payload = input && typeof input === "object" && input.data && typeof input.data === "object"
@@ -17844,9 +18558,11 @@ function formatSteamGuardEnrollError(input, fallbackMessage) {
     username_required: "请输入 Steam 账号",
     password_required: "请输入 Steam 密码",
     email_code_required: "请输入邮箱验证码",
+    invalid_email_code: "邮箱验证码错误，请重新输入",
+    invalid_code_format: "验证码必须为5位大写字母或数字",
     app_code_mismatch: "动态码与本地候选令牌不一致，请确认 Steam App 已完成绑定后重试",
-    app_code_attempts_exceeded: "动态码连续三次验证失败，本次候选令牌已销毁，请重新开始",
-    flow_not_found: "本次绑定已超时或结束，请重新开始",
+    time_sync_failed: "Steam 服务器时间同步失败，请检查网络后重试",
+    flow_not_found: "绑定进程已不存在，请重新开始",
     persistence_failed: "令牌已验证，但保存失败，请重新开始",
     login_failed: "Steam 登录失败，请检查账号、密码、邮箱验证码或网络连接",
     unsupported_login_state: "Steam 要求额外人工验证，当前联合绑定已终止",
@@ -17868,19 +18584,23 @@ function initSteamGuardEnroll() {
   const cancelBtn = document.getElementById("enrollCancelBtn");
   const existingModeBtn = document.getElementById("coexistExistingModeBtn");
   const newModeBtn = document.getElementById("coexistNewModeBtn");
+  const emailCodeInput = document.getElementById("coexistEmailCode");
+  const appCodeInput = document.getElementById("coexistAppCode");
 
   if (!btn || !modal) return;
+  initSteamVerificationCodeInput(emailCodeInput);
+  initSteamVerificationCodeInput(appCodeInput);
 
   btn.onclick = () => {
-    enrollState = {step: 1, mode: "existing", flowId: "", running: false};
+    enrollState = {step: 1, mode: "existing", flowId: "", accountName: "", running: false};
     populateEnrollAccountSelect();
     setCoexistAccountMode("existing");
     showEnrollStep(1);
     document.getElementById("coexistNewUsername").value = "";
     document.getElementById("coexistNewPassword").value = "";
     document.getElementById("coexistNewRemark").value = "";
-    document.getElementById("coexistEmailCode").value = "";
-    document.getElementById("coexistAppCode").value = "";
+    setSteamVerificationCodeValue(emailCodeInput, "");
+    setSteamVerificationCodeValue(appCodeInput, "");
     document.getElementById("enrollStatusText").textContent = "";
     document.getElementById("enrollStatusText").className = "enroll-status";
     modal.classList.remove("hidden");
@@ -17986,6 +18706,41 @@ async function cancelCoexistFlow({closeModal = false} = {}) {
   }
 }
 
+async function recoverExpiredAccountWithLocalGuard(username) {
+  const key = String(username || "").trim();
+  const account = accountByUsername(key);
+  if (!key || !account || !account.has_steam_guard || getAccountAuthState(key) !== "auth_invalid") {
+    return {ok: true, skipped: true, reconnected: false};
+  }
+  try {
+    const result = await api("/api/accounts/steam-guard/recover-login", {
+      method: "POST",
+      body: JSON.stringify({username: key})
+    });
+    setAccountAuthState(key, {authState: "normal", authReason: ""});
+    state.accounts = state.accounts.map((row) => row.username === key ? {...row, has_refresh_token: true} : row);
+    syncInventoryTop();
+    renderSavedAccounts();
+    return {ok: true, reconnected: result && result.reconnected !== false};
+  } catch (err) {
+    const payload = err && err.data && typeof err.data === "object" ? err.data : {};
+    const credentialState = String(payload.credential_state || "").trim();
+    const passwordCleared = payload.password_cleared === true;
+    const message = String(payload.message || err && err.message || "本地令牌自动重新登录失败").trim();
+    if (passwordCleared) {
+      state.accounts = state.accounts.map((row) => row.username === key ? {...row, password: ""} : row);
+      renderSavedAccounts();
+    }
+    return {
+      ok: false,
+      reason: String(payload.reason || "token_recovery_failed").trim(),
+      message,
+      passwordReentryRequired: credentialState === "password_reentry_required",
+      passwordCleared
+    };
+  }
+}
+
 async function handleEnrollAction() {
   const statusEl = document.getElementById("enrollStatusText");
   const actionBtn = document.getElementById("enrollActionBtn");
@@ -17999,6 +18754,7 @@ async function handleEnrollAction() {
     const remark = existingMode ? "" : document.getElementById("coexistNewRemark").value.trim();
     if (!username) { statusEl.textContent = existingMode ? "请选择已有账号" : "请输入 Steam 账号"; statusEl.className = "enroll-status error"; return; }
     if (!existingMode && !password) { statusEl.textContent = "请输入 Steam 密码"; statusEl.className = "enroll-status error"; return; }
+    enrollState.accountName = username;
     enrollState.running = true;
     actionBtn.disabled = true;
     statusEl.textContent = "正在登录 Steam 并检查账号状态...";
@@ -18020,8 +18776,13 @@ async function handleEnrollAction() {
       actionBtn.disabled = false;
     }
   } else if (enrollState.step === 2) {
-    const code = document.getElementById("coexistEmailCode").value.trim();
-    if (!code) { statusEl.textContent = "请输入邮箱验证码"; statusEl.className = "enroll-status error"; return; }
+    const emailCodeInput = document.getElementById("coexistEmailCode");
+    const code = setSteamVerificationCodeValue(emailCodeInput, emailCodeInput.value);
+    if (!/^[A-Z0-9]{5}$/.test(code)) {
+      statusEl.textContent = "验证码必须为5位大写字母或数字";
+      statusEl.className = "enroll-status error";
+      return;
+    }
     enrollState.running = true;
     actionBtn.disabled = true;
     statusEl.textContent = "正在验证邮箱验证码并获取待绑定令牌...";
@@ -18036,15 +18797,19 @@ async function handleEnrollAction() {
     } catch (err) {
       statusEl.textContent = formatSteamGuardEnrollError(err, `请求失败：${err.message}`);
       statusEl.className = "enroll-status error";
-      if (String(err && err.data && err.data.reason || "") !== "email_code_required") enrollState.flowId = "";
+      const reason = String(err && err.data && err.data.reason || "");
+      if (!["email_code_required", "invalid_email_code", "invalid_code_format"].includes(reason)) {
+        enrollState.flowId = "";
+      }
     } finally {
       enrollState.running = false;
       actionBtn.disabled = false;
     }
   } else if (enrollState.step === 3) {
-    const code = document.getElementById("coexistAppCode").value.trim().toUpperCase();
-    if (!/^[23456789BCDFGHJKMNPQRTVWXY]{5}$/.test(code)) {
-      statusEl.textContent = "请输入 Steam App 当前显示的五位动态码";
+    const appCodeInput = document.getElementById("coexistAppCode");
+    const code = setSteamVerificationCodeValue(appCodeInput, appCodeInput.value);
+    if (!/^[A-Z0-9]{5}$/.test(code)) {
+      statusEl.textContent = "验证码必须为5位大写字母或数字";
       statusEl.className = "enroll-status error";
       return;
     }
@@ -18053,21 +18818,41 @@ async function handleEnrollAction() {
     statusEl.textContent = "正在验证动态码并保存令牌...";
     statusEl.className = "enroll-status";
     try {
-      await api("/api/accounts/steam-guard/coexist/verify-app-code", {
+      const verified = await api("/api/accounts/steam-guard/coexist/verify-app-code", {
         method: "POST",
         body: JSON.stringify({flow_id: enrollState.flowId, code})
       });
       enrollState.flowId = "";
       statusEl.textContent = "";
       showEnrollStep(4);
-      await loadAccounts();
+      const verifiedUsername = String(verified && verified.account_name || enrollState.accountName || "").trim();
+      await loadAccounts({preferUsername: verifiedUsername});
+      if (enrollState.mode === "existing" && verifiedUsername) {
+        const recovery = await recoverExpiredAccountWithLocalGuard(verifiedUsername);
+        if (recovery.ok && recovery.reconnected) {
+          statusEl.textContent = "令牌已保存，并已使用本地令牌重新登录";
+          statusEl.className = "enroll-status";
+        } else if (recovery.passwordReentryRequired) {
+          document.getElementById("steamGuardEnrollModal").classList.add("hidden");
+          const account = accountByUsername(verifiedUsername);
+          openAccountReloginModal({
+            username: verifiedUsername,
+            password: recovery.passwordCleared ? "" : String(account && account.password || ""),
+            reason: "password_reentry_required"
+          });
+          setAccountStatus(recovery.message, true);
+        } else if (!recovery.ok) {
+          statusEl.textContent = `令牌已保存，自动重新登录失败：${recovery.message}`;
+          statusEl.className = "enroll-status error";
+        }
+      }
     } catch (err) {
       const reason = String(err && err.data && err.data.reason || "");
-      const remaining = Number(err && err.data && err.data.attempts_remaining);
-      statusEl.textContent = formatSteamGuardEnrollError(err, `验证失败：${err.message}`)
-        + (reason === "app_code_mismatch" && Number.isFinite(remaining) ? `（还可尝试 ${remaining} 次）` : "");
+      statusEl.textContent = formatSteamGuardEnrollError(err, `验证失败：${err.message}`);
       statusEl.className = "enroll-status error";
-      if (reason !== "app_code_mismatch") enrollState.flowId = "";
+      if (!["app_code_mismatch", "time_sync_failed", "invalid_code_format"].includes(reason)) {
+        enrollState.flowId = "";
+      }
     } finally {
       enrollState.running = false;
       actionBtn.disabled = false;
@@ -18242,6 +19027,61 @@ async function exportGuardMaFile() {
   }
 }
 
+function clearTokenDetailSensitiveState({closeModal = false} = {}) {
+  clearTokenCodeTimer();
+  tokenDetailState.recoveryCode = "";
+  tokenDetailState.recoveryVisible = false;
+  tokenDetailState.remaining = 0;
+  document.getElementById("tokenTotpCode").textContent = "-----";
+  document.getElementById("tokenCodePanel").classList.add("hidden");
+  const recoveryEl = document.getElementById("tokenRevCode");
+  recoveryEl.textContent = "••••••••";
+  recoveryEl.classList.add("masked");
+  document.getElementById("tokenRecoveryPanel").classList.add("hidden");
+  document.getElementById("tokenRecoveryCopyBtn").disabled = true;
+  if (closeModal) document.getElementById("tokenDetailModal").classList.add("hidden");
+}
+
+async function refreshAccountsAfterLocalGuardDeletion(username) {
+  try {
+    await loadAccounts({preferUsername: username});
+    setAccountStatus("本地令牌文件已删除");
+  } catch (_) {
+    setAccountStatus("本地令牌文件已删除，但账号列表刷新失败，请手动刷新", true);
+  }
+}
+
+async function deleteLocalSteamGuardFile() {
+  const username = String(tokenDetailState.username || "").trim();
+  if (!username) return;
+  const confirmed = await openConfirmModal({
+    title: "确认删除令牌文件",
+    message: "仅删除本地令牌文件，不会解除 Steam App 中的令牌；删除后无法查看令牌码、恢复码或使用本地令牌自动重新连接。",
+    confirmText: "删除令牌文件",
+    cancelText: "取消"
+  });
+  if (!confirmed) return;
+  const deleteBtn = document.getElementById("tokenDeleteBtn");
+  const statusEl = document.getElementById("tokenManageStatus");
+  deleteBtn.disabled = true;
+  statusEl.textContent = "正在删除本地令牌文件...";
+  statusEl.className = "enroll-status";
+  try {
+    await api("/api/accounts/steam-guard", {
+      method: "DELETE",
+      body: JSON.stringify({username})
+    });
+  } catch (err) {
+    statusEl.textContent = `删除失败：${err.message}`;
+    statusEl.className = "enroll-status error";
+    return;
+  } finally {
+    deleteBtn.disabled = false;
+  }
+  clearTokenDetailSensitiveState({closeModal: true});
+  await refreshAccountsAfterLocalGuardDeletion(username);
+}
+
 function initTokenDetailModal() {
   const modal = document.getElementById("tokenDetailModal");
   const closeBtn = document.getElementById("tokenDetailCloseBtn");
@@ -18249,9 +19089,7 @@ function initTokenDetailModal() {
 
   const closeModal = () => {
     modal.classList.add("hidden");
-    clearTokenCodeTimer();
-    tokenDetailState.recoveryCode = "";
-    tokenDetailState.recoveryVisible = false;
+    clearTokenDetailSensitiveState();
   };
 
   closeBtn.onclick = closeModal;
@@ -18263,6 +19101,7 @@ function initTokenDetailModal() {
   document.getElementById("tokenExportBtn").onclick = () => void exportGuardMaFile();
   document.getElementById("tokenShowCodeBtn").onclick = () => void loadCurrentGuardCode();
   document.getElementById("tokenShowRecoveryBtn").onclick = () => void loadRecoveryCode();
+  document.getElementById("tokenDeleteBtn").onclick = () => void deleteLocalSteamGuardFile();
   document.getElementById("tokenRecoveryRevealBtn").onclick = () => void revealRecoveryCode();
   const recoveryCopyBtn = document.getElementById("tokenRecoveryCopyBtn");
   recoveryCopyBtn.onclick = () => copyTextWithFeedback(recoveryCopyBtn, tokenDetailState.recoveryCode);

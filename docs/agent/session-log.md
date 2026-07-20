@@ -5705,3 +5705,29 @@ gpt-5.4 final review：APPROVED，无 blocking；non-blocking concern 是 worker
 - 未验证：
   - 默认测试仍排除浏览器交互测试。
   - 未使用真实未绑定/已绑定 Steam 测试账号验证邮箱码、Steam App 绑定和已有令牌拒绝路径。
+
+## 2026-07-18 Guard-only batch maFile import close-out
+
+- 工作区：`C:/Users/18220/Desktop/cs2_alchemy/.worktrees/steam-guard-coexist`
+- 分支：`codex/steam-guard-coexist`
+- 完成内容：
+  - 新增批量 maFile 预检；身份只使用内部 `account_name`，文件名只显示，`steamid/status/fully_enrolled` 不参与身份和完成校验。
+  - 导入要求 `account_name`、6 位 `revocation_code` 和非空 `shared_secret`；存储前剥离登录 token/cookie 并设置 `Session:null`。
+  - ready 项先保存且不登录 Steam、不写 TokenStore；同批可解析同名项整组阻止；已有/并发重复进入默认不勾选的独立覆盖窗口。
+  - 覆盖只更新密码和 maFile，保留备注、资料、余额、SteamID、refresh token、runtime session 和 active account。
+  - Guard-only 无 token 账号显示“未登录”；启动/切换账号不会在首次连接前触发 profile 登录，refresh 成功后才允许补齐昵称头像。
+  - 令牌管理新增“删除令牌文件”，只清本地 maFile；确认文案说明不会解除 Steam App 令牌，前端同时清 TOTP timer 和恢复码内存。
+  - 修复审查发现的动态账号名 `innerHTML` 注入、成功项重复进入导入、覆盖重试计数、缺密码重复阻断 ready、删除成功后列表刷新误报和关闭弹窗敏感数据残留。
+- 验证：
+  - TDD RED -> GREEN；10 个直接影响测试脚本通过。
+  - `npm test` -> `PASS 113 node_sidecar tests in 50.5s`。
+  - 14 个变更/新增 JavaScript 文件通过 `node --check`。
+  - 独立只读审查无剩余阻断项。
+  - 临时数据库和合成账号真实页面验证：1569x912 与 390x844 下导入/重复/令牌弹窗无横向溢出；确认弹窗 `z-index 9100 > 9000`；缺密码重复项禁用；覆盖计数从 0 到 1；取消返回结果并显示新增 2/跳过 2；未执行覆盖或删除确认。
+- 未验证 / 风险：
+  - 默认 runner 排除的三个浏览器交互测试未运行。
+  - 未使用真实 Steam 账号、真实 maFile 或生产数据库；未执行远程令牌、库存、市场、交易或炼金操作。
+  - Guard-only 账号首次真实自动登录、Token 持久化与随后 profile 补齐仍需受控测试账号验证。
+- Git 状态：
+  - 修改保持未提交；未 stage、未 commit、未 push、未 merge。
+  - 主工作区及其 UI/配方/运行态改动未触碰。

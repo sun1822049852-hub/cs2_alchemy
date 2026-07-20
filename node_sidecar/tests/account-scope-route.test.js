@@ -384,7 +384,7 @@ function seedAuthStore({dbPath, accountsFilePath}) {
   }
 }
 
-async function withScopedServer({username, permissions}, run) {
+async function withScopedServer({username, permissions, serverOptions = {}}, run) {
   const tempDir = makeTempDir();
   const originalPaths = {...PATHS};
   const dbPath = path.join(tempDir, "csgo_skins.db");
@@ -437,7 +437,8 @@ async function withScopedServer({username, permissions}, run) {
     const createServer = loadCreateServer({calls});
     const server = createServer({
       licenseRuntimeFactory: () => createLicenseRuntime({username, permissions}),
-      licenseConfigFactory: () => ({authMode: "debug_bundle"})
+      licenseConfigFactory: () => ({authMode: "debug_bundle"}),
+      ...serverOptions
     });
     try {
       const address = await listen(server);
@@ -481,6 +482,20 @@ async function test_bound_user_only_lists_bound_steam_accounts() {
       response.body.accounts.map((row) => row.username),
       ["countsteam01"]
     );
+    assert.equal(response.body.accounts[0].password, "SecretA");
+    assert.equal(Object.hasOwn(response.body.accounts[0], "mafile_content"), false);
+  });
+}
+
+async function test_read_only_user_does_not_receive_saved_steam_passwords() {
+  await withScopedServer({
+    username: "member_a",
+    permissions: [FEATURE_CODES.ACCOUNTS_READ]
+  }, async ({port}) => {
+    const response = await requestJson({port, route: "/api/accounts"});
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body.accounts.map((row) => row.username), ["countsteam01"]);
+    assert.equal(Object.hasOwn(response.body.accounts[0], "password"), false);
   });
 }
 
@@ -499,6 +514,30 @@ async function test_unbound_user_cannot_select_wrong_steam_account() {
     });
     assert.equal(response.statusCode, 403);
     assert.equal(response.body.reason, "account_scope_denied");
+  });
+}
+
+async function test_unbound_existing_account_login_is_rejected_before_steam_authentication() {
+  let loginCalls = 0;
+  await withScopedServer({
+    username: "member_a",
+    permissions: accountReadPermissions(),
+    serverOptions: {
+      startLoginSessionFn: async () => {
+        loginCalls += 1;
+        throw new Error("Steam authentication must not run");
+      }
+    }
+  }, async ({port}) => {
+    const response = await requestJson({
+      port,
+      method: "POST",
+      route: "/api/accounts/login-start",
+      body: {username: "countsteam02", password: "AttackerSuppliedPassword"}
+    });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.body.reason, "account_scope_denied");
+    assert.equal(loginCalls, 0);
   });
 }
 
@@ -920,7 +959,9 @@ async function test_unknown_dev_user_keeps_legacy_single_user_scope() {
 
 async function main() {
   await test_bound_user_only_lists_bound_steam_accounts();
+  await test_read_only_user_does_not_receive_saved_steam_passwords();
   await test_unbound_user_cannot_select_wrong_steam_account();
+  await test_unbound_existing_account_login_is_rejected_before_steam_authentication();
   await test_trade_routes_stop_before_external_calls_for_unbound_account();
   await test_market_routes_stop_before_external_calls_for_unbound_account();
   await test_fetch_balance_persists_steam_store_source_metadata();

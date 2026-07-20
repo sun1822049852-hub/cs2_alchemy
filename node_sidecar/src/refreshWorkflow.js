@@ -5,6 +5,7 @@ const {CS2Session} = require("./cs2Session");
 const {parseInventory} = require("./inventoryParser");
 const {preloadComponentContents} = require("./componentLoader");
 const {saveProcessedSnapshot, saveRawSnapshot} = require("./snapshotStore");
+const {appendSteamAuthDiagnostic} = require("./steamAuthDiagnosticLog");
 const {asString} = require("./utils");
 
 function rawItemKey(item) {
@@ -24,12 +25,20 @@ function mergeRawItem(baseItem, patchItem) {
   return merged;
 }
 
-function createRefreshAuthError(code, message, {status = 409, authState = "login_required", cause = null} = {}) {
+function createRefreshAuthError(code, message, {
+  status = 409,
+  authState = "login_required",
+  cause = null,
+  credentialState = "",
+  passwordCleared = false
+} = {}) {
   const err = new Error(message);
   err.code = code;
   err.status = status;
   err.reason = code;
   err.auth_state = authState;
+  if (credentialState) err.credential_state = credentialState;
+  if (passwordCleared) err.password_cleared = true;
   if (cause) {
     err.cause = cause;
     const rawCode = asString(cause && (cause.code || cause.eresult || cause.result || "")).trim();
@@ -51,21 +60,41 @@ function isLoginKeyInvalidError(err) {
   if (!message && !rawCode) {
     return false;
   }
-  if (["invalidpassword", "accessdenied", "accountlogondenied", "invalidloginauthcode"].includes(rawCode)) {
+  if (["invalidpassword", "login_key_invalid", "refresh_token_invalid", "refresh_token_rejected", "refresh_token_expired"].includes(rawCode)) {
     return true;
   }
-  if (Number.isFinite(numericCode) && [5, 15, 63, 65].includes(numericCode)) {
+  if (Number.isFinite(numericCode) && [5, 15].includes(numericCode)) {
+    return true;
+  }
+  if (/(?:^|[\s,;])(?:eresult|result|code)\s*[=:]\s*15\b/i.test(message)) {
     return true;
   }
   return [
     "invalidpassword",
-    "accessdenied",
-    "accountlogondenied",
-    "invalid login auth code",
+    "invalid password",
+    "login key invalid",
     "refresh token rejected",
     "token rejected",
     "token expired"
   ].some((part) => message.includes(part));
+}
+
+async function clearRejectedRefreshToken(tokenStore, accountName) {
+  try {
+    if (typeof tokenStore.remove !== "function") {
+      throw new Error("TokenStore cannot remove the stale token");
+    }
+    const removeResult = await tokenStore.remove(accountName);
+    if (removeResult === false || asString(await tokenStore.get(accountName)).trim()) {
+      throw new Error("TokenStore rejected the removal");
+    }
+  } catch (err) {
+    throw createRefreshAuthError("token_store_clear_failed", "过期 refresh token 清理失败", {
+      status: 500,
+      authState: "needs_attention",
+      cause: err
+    });
+  }
 }
 
 async function refreshInventory({
@@ -83,7 +112,8 @@ async function refreshInventory({
   parseInventoryFn = parseInventory,
   preloadComponentContentsFn = preloadComponentContents,
   saveProcessedSnapshotFn = saveProcessedSnapshot,
-  saveRawSnapshotFn = saveRawSnapshot
+  saveRawSnapshotFn = saveRawSnapshot,
+  authDiagnosticWriter = appendSteamAuthDiagnostic
 }) {
   const accounts = accountStore || new AccountStore();
   const active = username
@@ -94,13 +124,48 @@ async function refreshInventory({
   }
   const accountName = active.username;
   const accountPassword = asString(password || active.password || "").trim();
+  const hasLocalSteamGuard = !!asString(active.mafile_content || "").trim();
   const tokens = tokenStore || new TokenStore();
   const refreshToken = tokens.get(accountName);
   const poolCanRecover = !!(
+    hasLocalSteamGuard
+    &&
     sessionPool
     && typeof sessionPool.hasTokenRecovery === "function"
     && sessionPool.hasTokenRecovery()
   );
+  const createLoginKeyInvalidError = async (error) => {
+    let tokenCleared = false;
+    if (!hasLocalSteamGuard) {
+      await clearRejectedRefreshToken(tokens, accountName);
+      tokenCleared = true;
+    }
+    try {
+      await authDiagnosticWriter({
+        stage: "refresh_connect",
+        username: accountName,
+        reason: "login_key_invalid",
+        authState: "auth_invalid",
+        error,
+        hasSteamGuard: hasLocalSteamGuard,
+        tokenCleared,
+        recoveryMode: !hasLocalSteamGuard || asString(error && error.credential_state).trim() === "password_reentry_required"
+          ? "manual_login"
+          : "guard_auto_failed"
+      });
+    } catch (diagnosticError) {
+      if (logger && typeof logger.warn === "function") {
+        const errorCode = asString(diagnosticError && diagnosticError.code).trim() || "unknown";
+        logger.warn("steam_auth", `diagnostic log write failed: code=${errorCode}`);
+      }
+    }
+    return createRefreshAuthError("login_key_invalid", `login key invalid: ${accountName}`, {
+      authState: "auth_invalid",
+      cause: error,
+      credentialState: asString(error && error.credential_state).trim(),
+      passwordCleared: error && error.password_cleared === true
+    });
+  };
   if (!refreshToken && !poolCanRecover) {
     throw createRefreshAuthError("login_key_missing", `login key missing: ${accountName}`);
   }
@@ -124,14 +189,12 @@ async function refreshInventory({
           password: accountPassword,
           refreshToken,
           tokenStore: tokens,
-          refreshTokenOnly: true
+          refreshTokenOnly: true,
+          allowTokenRecovery: poolCanRecover
         });
       } catch (err) {
         if (isLoginKeyInvalidError(err)) {
-          throw createRefreshAuthError("login_key_invalid", `login key invalid: ${accountName}`, {
-            authState: "auth_invalid",
-            cause: err
-          });
+          throw await createLoginKeyInvalidError(err);
         }
         throw err;
       }
@@ -151,10 +214,7 @@ async function refreshInventory({
         });
       } catch (err) {
         if (isLoginKeyInvalidError(err)) {
-          throw createRefreshAuthError("login_key_invalid", `login key invalid: ${accountName}`, {
-            authState: "auth_invalid",
-            cause: err
-          });
+          throw await createLoginKeyInvalidError(err);
         }
         throw err;
       }

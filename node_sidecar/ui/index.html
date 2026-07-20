@@ -322,23 +322,32 @@
             </div>
             <div class="account-login-body">
               <div id="accountLoginHint" class="account-login-linkhint">使用 Steam 账号登录并保存到当前客户端</div>
+              <div id="accountGuardIdentity" class="account-guard-identity hidden">
+                <span>账号：</span>
+                <strong id="accountGuardUsername"></strong>
+              </div>
               <div class="account-login-fields">
-                <label class="account-login-field">
+                <label id="accountUsernameField" class="account-login-field">
                   <span>Steam 账号</span>
                   <input id="accountUsername" type="text" autocomplete="off" autocorrect="off" spellcheck="false" />
                 </label>
-                <label class="account-login-field">
+                <label id="accountPasswordField" class="account-login-field">
                   <span>密码</span>
                   <div class="account-password-field-wrap">
-                    <input id="accountPassword" type="password" autocomplete="new-password" />
+                    <input id="accountPassword" type="password" autocomplete="current-password" />
                     <button id="accountPasswordToggle" class="account-password-toggle" type="button" aria-label="显示密码" aria-pressed="false">
                       <span class="account-password-toggle-icon" aria-hidden="true"></span>
                     </button>
                   </div>
                 </label>
-                <label class="account-login-field">
-                  <span>令牌码</span>
-                  <input id="accountTotp" type="text" maxlength="6" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="有令牌码则填写，无则留空" />
+                <label id="accountGuardField" class="account-login-field hidden">
+                  <span class="steam-verification-code-label">令牌码</span>
+                  <div class="steam-verification-code-input">
+                    <input id="accountTotp" type="text" maxlength="5" pattern="[A-Z0-9]{5}" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" aria-label="五位 Steam 令牌码" />
+                    <div class="steam-verification-code-slots" aria-hidden="true">
+                      <span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span>
+                    </div>
+                  </div>
                 </label>
               </div>
               <div id="accountGuardHint" class="account-guard-hint hidden" aria-live="polite"></div>
@@ -929,8 +938,14 @@
               <strong>输入邮箱验证码</strong>
               <span id="coexistEmailHint">Steam 已向账号邮箱发送验证码。</span>
             </div>
-            <label class="enroll-sms-label">邮箱验证码
-              <input id="coexistEmailCode" type="text" placeholder="请输入邮箱验证码" maxlength="12" autocomplete="one-time-code" spellcheck="false" />
+            <label class="enroll-sms-label">
+              <span class="steam-verification-code-label">邮箱验证码</span>
+              <div class="steam-verification-code-input">
+                <input id="coexistEmailCode" type="text" maxlength="5" pattern="[A-Z0-9]{5}" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" aria-label="五位邮箱验证码" />
+                <div class="steam-verification-code-slots" aria-hidden="true">
+                  <span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span>
+                </div>
+              </div>
             </label>
           </div>
           <div id="enrollStep3" class="enroll-step hidden">
@@ -938,8 +953,14 @@
               <strong>在 Steam App 中完成绑定</strong>
               <span>完成后输入 App 当前显示的五位动态码。本程序只校验两端令牌是否一致。</span>
             </div>
-            <label class="enroll-sms-label">五位动态码
-              <input id="coexistAppCode" type="text" placeholder="请输入五位动态码" maxlength="5" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" />
+            <label class="enroll-sms-label">
+              <span class="steam-verification-code-label">五位动态码</span>
+              <div class="steam-verification-code-input">
+                <input id="coexistAppCode" type="text" maxlength="5" pattern="[A-Z0-9]{5}" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" aria-label="五位 App 动态码" />
+                <div class="steam-verification-code-slots" aria-hidden="true">
+                  <span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span>
+                </div>
+              </div>
             </label>
           </div>
           <div id="enrollStep4" class="enroll-step hidden">
@@ -957,6 +978,24 @@
       </div>
     </div>
 
+    <div id="batchImportDuplicateModal" class="modal-overlay hidden">
+      <div class="modal-dialog batch-import-duplicate-dialog">
+        <div class="modal-header">
+          <h3>选择令牌文件</h3>
+          <button id="batchImportDuplicateCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="batchImportDuplicateSummary" class="batch-import-duplicate-summary">0 个账号待选择</div>
+          <div id="batchImportDuplicateList" class="batch-import-duplicate-list"></div>
+          <div id="batchImportDuplicateStatus" class="enroll-status"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="batchImportDuplicateCancelBtn" type="button">取消</button>
+          <button id="batchImportDuplicateOverwriteBtn" class="btn-primary" type="button" disabled>处理已选择账号（0）</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ Steam Guard 令牌管理弹窗 ═══ -->
     <div id="tokenDetailModal" class="modal-overlay hidden">
       <div class="modal-dialog token-detail-dialog">
@@ -969,6 +1008,7 @@
             <button id="tokenExportBtn" type="button">导出 maFile</button>
             <button id="tokenShowCodeBtn" type="button">查看令牌码</button>
             <button id="tokenShowRecoveryBtn" type="button">查看恢复码</button>
+            <button id="tokenDeleteBtn" class="btn-danger" type="button">删除令牌文件</button>
           </div>
           <div id="tokenCodePanel" class="token-totp-section hidden">
             <div class="token-totp-label">当前令牌码</div>

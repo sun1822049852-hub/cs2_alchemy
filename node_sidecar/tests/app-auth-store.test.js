@@ -311,6 +311,185 @@ function test_update_steam_guard_propagates_database_write_failure() {
   }
 }
 
+function test_guard_import_create_and_overwrite_have_narrow_persistence_boundaries() {
+  const ctx = createStore();
+  try {
+    ctx.store.bootstrapAdmin({password: "Admin!234"});
+    ctx.store.createUser({
+      username: "member_a",
+      password: "Member!234",
+      roleCodes: ["member"],
+      boundSteamUsernames: ["countsteam01"]
+    });
+    ctx.store.setActiveSteamAccount("member_a", "countsteam01");
+
+    assert.equal(ctx.store.createSteamGuardImport("member_a", {
+      username: "guard_only",
+      password: "FirstPassword",
+      mafile_content: JSON.stringify({account_name: "guard_only", shared_secret: "first", revocation_code: "R12345"})
+    }), true);
+    assert.equal(ctx.store.canAccessSteamAccount("member_a", "guard_only"), true);
+    assert.equal(ctx.store.getViewerActiveSteamUsername("member_a"), "countsteam01");
+    const created = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("guard_only");
+    assert.equal(created.password, "FirstPassword");
+    assert.equal(created.remark, "");
+    assert.equal(created.steam_name, "");
+    assert.equal(created.avatar_url, "");
+
+    ctx.store.updateSteamWalletBalance("countsteam01", {
+      balance: "¥ 12.34",
+      source: "steam_store",
+      currency: "CNY",
+      observedAt: "2026-06-06T12:00:00.000Z"
+    });
+    const before = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    const attachedMaFile = JSON.stringify({account_name: "countsteam01", shared_secret: "attached", revocation_code: "R11111"});
+    assert.equal(ctx.store.attachSteamGuardImport("member_a", "countsteam01", {
+      password: "AttachedPassword",
+      mafile_content: attachedMaFile
+    }), true);
+    const attached = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    assert.equal(attached.password, before.password);
+    assert.equal(attached.mafile_content, attachedMaFile);
+    for (const field of [
+      "remark", "steam_name", "steam_id", "steam_id64", "avatar_url", "ban_status", "trade_url",
+      "balance", "balance_source", "balance_currency", "balance_observed_at", "created_at"
+    ]) {
+      assert.equal(attached[field], before[field], `${field} must remain unchanged on attach`);
+    }
+    assert.throws(
+      () => ctx.store.attachSteamGuardImport("member_a", "countsteam01", {
+        password: "MustNotReplace",
+        mafile_content: JSON.stringify({account_name: "countsteam01", shared_secret: "other", revocation_code: "R22222"})
+      }),
+      (err) => err && err.code === "duplicate_existing"
+    );
+
+    const replacement = JSON.stringify({account_name: "countsteam01", shared_secret: "next", revocation_code: "R54321"});
+    assert.equal(ctx.store.overwriteSteamGuardImport("member_a", "countsteam01", {
+      password: "ReplacementPassword",
+      password_action: "overwrite",
+      mafile_content: replacement
+    }), true);
+    const after = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    assert.equal(after.password, "ReplacementPassword");
+    assert.equal(after.mafile_content, replacement);
+    for (const field of [
+      "remark", "steam_name", "steam_id", "steam_id64", "avatar_url", "ban_status", "trade_url",
+      "balance", "balance_source", "balance_currency", "balance_observed_at", "created_at"
+    ]) {
+      assert.equal(after[field], before[field], `${field} must remain unchanged`);
+    }
+    assert.equal(ctx.store.getViewerActiveSteamUsername("member_a"), "countsteam01");
+
+    assert.throws(
+      () => ctx.store.createSteamGuardImport("member_a", {
+        username: "countsteam01",
+        password: "NoOverwrite",
+        mafile_content: replacement
+      }),
+      (err) => err && err.code === "duplicate_existing"
+    );
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_guard_import_create_rolls_back_when_viewer_binding_disappears_inside_transaction() {
+  const ctx = createStore();
+  try {
+    ctx.store.bootstrapAdmin({password: "Admin!234"});
+    ctx.store.createUser({
+      username: "member_a",
+      password: "Member!234",
+      roleCodes: ["member"]
+    });
+    ctx.store.db.exec(`
+      CREATE TRIGGER remove_guard_import_viewer
+      AFTER INSERT ON steam_account
+      WHEN NEW.username = 'orphan_guard'
+      BEGIN
+        DELETE FROM app_user WHERE username = 'member_a';
+      END;
+    `);
+
+    assert.throws(
+      () => ctx.store.createSteamGuardImport("member_a", {
+        username: "orphan_guard",
+        password: "MustRollback",
+        mafile_content: JSON.stringify({account_name: "orphan_guard", shared_secret: "guard", revocation_code: "R12345"})
+      }),
+      /viewer binding failed/
+    );
+    assert.equal(ctx.store.db.prepare("SELECT 1 FROM steam_account WHERE username = ?").get("orphan_guard"), undefined);
+    assert.ok(ctx.store.getUserByUsername("member_a"), "viewer deletion must roll back with the import");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_clear_steam_guard_only_clears_local_mafile() {
+  const ctx = createStore();
+  try {
+    ctx.store.bootstrapAdmin({password: "Admin!234"});
+    ctx.store.createUser({
+      username: "member_a",
+      password: "Member!234",
+      roleCodes: ["member"],
+      boundSteamUsernames: ["countsteam01"]
+    });
+    ctx.store.setActiveSteamAccount("member_a", "countsteam01");
+    ctx.store.updateSteamGuard("member_a", "countsteam01", {
+      mafile_content: JSON.stringify({shared_secret: "guard-secret"})
+    });
+    const before = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+
+    assert.equal(ctx.store.clearSteamGuard("member_a", "countsteam01"), true);
+    const after = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    assert.equal(after.mafile_content, "");
+    for (const field of [
+      "password", "remark", "steam_name", "steam_id", "steam_id64", "avatar_url", "ban_status", "trade_url",
+      "balance", "balance_source", "balance_currency", "balance_observed_at", "created_at"
+    ]) {
+      assert.equal(after[field], before[field], `${field} must remain unchanged`);
+    }
+    assert.equal(ctx.store.getViewerActiveSteamUsername("member_a"), "countsteam01");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_clear_steam_password_only_clears_persisted_password() {
+  const ctx = createStore();
+  try {
+    ctx.store.bootstrapAdmin({password: "Admin!234"});
+    ctx.store.createUser({
+      username: "member_a",
+      password: "Member!234",
+      roleCodes: ["member"],
+      boundSteamUsernames: ["countsteam01"]
+    });
+    ctx.store.setActiveSteamAccount("member_a", "countsteam01");
+    ctx.store.updateSteamGuard("member_a", "countsteam01", {
+      mafile_content: JSON.stringify({shared_secret: "guard-secret"})
+    });
+    const before = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+
+    assert.equal(ctx.store.clearSteamPassword("member_a", "countsteam01"), true);
+    const after = ctx.store.db.prepare("SELECT * FROM steam_account WHERE username = ?").get("countsteam01");
+    assert.equal(after.password, "");
+    for (const field of [
+      "mafile_content", "remark", "steam_name", "steam_id", "steam_id64", "avatar_url", "ban_status", "trade_url",
+      "balance", "balance_source", "balance_currency", "balance_observed_at", "created_at"
+    ]) {
+      assert.equal(after[field], before[field], `${field} must remain unchanged`);
+    }
+    assert.equal(ctx.store.getViewerActiveSteamUsername("member_a"), "countsteam01");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
 function main() {
   test_bootstrap_admin_creates_super_admin_and_imports_legacy_accounts();
   test_regular_user_only_sees_bound_steam_accounts();
@@ -321,6 +500,10 @@ function main() {
   test_internal_steam_account_credentials_remain_available_with_scope_checks();
   test_update_steam_guard_only_changes_guard_and_fills_empty_steam_id64();
   test_update_steam_guard_propagates_database_write_failure();
+  test_guard_import_create_and_overwrite_have_narrow_persistence_boundaries();
+  test_guard_import_create_rolls_back_when_viewer_binding_disappears_inside_transaction();
+  test_clear_steam_guard_only_clears_local_mafile();
+  test_clear_steam_password_only_clears_persisted_password();
   console.log("app-auth-store tests passed");
 }
 

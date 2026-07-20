@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const http = require("node:http");
 
-const {generateTotp} = require("../src/maFileParser");
 const {createServer} = require("../src/uiServer");
 
 const SHARED_SECRET = Buffer.from("route-coexist-shared").toString("base64");
@@ -88,20 +87,23 @@ function createAccountStore({failWrites = false} = {}) {
       current.mafile_content = payload.mafile_content;
       if (!current.steam_id64 && payload.steam_id64) current.steam_id64 = payload.steam_id64;
     },
-    upsert(payload) {
+    createGuardOnlyAccount(payload) {
       if (failWrites) throw new Error("database unavailable");
-      writes.push({type: "upsert", payload: {...payload}});
+      writes.push({type: "createGuardOnly", payload: {...payload}});
       rows.set(payload.username, {
         username: payload.username,
         password: payload.password,
         remark: payload.remark || "",
-        steam_name: payload.steamName || "",
-        steam_id: payload.steamId || "",
-        steam_id64: payload.steamId64 || "",
-        avatar_url: payload.avatarUrl || "",
-        mafile_content: payload.mafileContent || ""
+        steam_name: "",
+        steam_id: payload.steam_id64 || "",
+        steam_id64: payload.steam_id64 || "",
+        avatar_url: "",
+        mafile_content: payload.mafile_content || ""
       });
-      active = payload.username;
+      if (payload.set_active) active = payload.username;
+    },
+    upsert() {
+      throw new Error("legacy upsert path must not be used");
     },
     setActive(username) {
       if (!rows.has(username)) return false;
@@ -114,29 +116,66 @@ function createAccountStore({failWrites = false} = {}) {
 function createHarness({failWrites = false} = {}) {
   const accountStore = createAccountStore({failWrites});
   const calls = [];
-  const loginAdapter = {
+  const processFlows = new Map();
+  const processAdapter = {
     async start(input) {
-      calls.push({type: "login_start", input});
+      calls.push({type: "process_start", input});
       if (input.username === "remote-guard") {
-        return {status: "DeviceCode", session: {username: input.username}};
+        return {ok: false, reason: "already_has_authenticator"};
       }
+      processFlows.set(input.flowId, {username: input.username, password: input.password});
       return {
-        status: "RequiresEmailAuth",
-        guardHint: "m***@example.com",
-        session: {username: input.username}
+        ok: true,
+        state: "email_code_required",
+        flow_id: input.flowId,
+        guard_hint: "m***@example.com",
+        expires_in_seconds: 300
       };
     },
-    async submitEmailCode({session, code, persistToken}) {
-      calls.push({type: "email", session, code, persistToken});
+    async submitEmailCode({flowId, code}) {
+      calls.push({type: "process_email", flowId, code});
       return {
-        status: "Authenticated",
-        session,
-        refreshToken: "temporary-refresh",
-        steamId64: session.username === "existing" ? "76561198000000001" : "76561198000000999"
+        ok: true,
+        state: "steam_app_binding_required",
+        flow_id: flowId,
+        expires_in_seconds: 300
       };
     },
-    cancel({session}) {
-      calls.push({type: "cancel", session});
+    async verifyAppCode({flowId, code}) {
+      calls.push({type: "process_verify", flowId, code});
+      const flow = processFlows.get(flowId);
+      if (flow.username === "time-fails") {
+        return {ok: false, reason: "time_sync_failed", attempts_remaining: 3};
+      }
+      const steamId64 = flow.username === "existing" ? "76561198000000001" : "76561198000000999";
+      const maFile = {
+        shared_secret: SHARED_SECRET,
+        identity_secret: IDENTITY_SECRET,
+        secret_1: Buffer.from("secret-1").toString("base64"),
+        serial_number: "123456",
+        revocation_code: "R-ROUTE",
+        account_name: flow.username,
+        token_gid: "gid",
+        uri: "otpauth://route",
+        steamid: steamId64,
+        Session: null
+      };
+      return {
+        ok: true,
+        state: "verified",
+        flow_id: flowId,
+        account_name: flow.username,
+        steam_id64: steamId64,
+        password: flow.password,
+        file_name: `${flow.username}.maFile`,
+        maFile,
+        maFileContent: JSON.stringify(maFile)
+      };
+    },
+    cancel(flowId) {
+      calls.push({type: "process_cancel", flowId});
+      processFlows.delete(flowId);
+      return {ok: true};
     }
   };
   const options = {
@@ -148,25 +187,7 @@ function createHarness({failWrites = false} = {}) {
       getAccount: () => null
     }),
     tokenStoreFactory: () => ({get: () => ""}),
-    steamGuardLoginAdapter: loginAdapter,
-    steamGuardExchangeAccessToken: async (refreshToken) => {
-      calls.push({type: "exchange", refreshToken});
-      return "temporary-access";
-    },
-    steamGuardAddAuthenticator: async (input) => {
-      calls.push({type: "add", input});
-      return {
-        status: 1,
-        shared_secret: SHARED_SECRET,
-        identity_secret: IDENTITY_SECRET,
-        secret_1: Buffer.from("secret-1").toString("base64"),
-        serial_number: "123456",
-        revocation_code: "R-ROUTE",
-        account_name: "",
-        token_gid: "gid",
-        uri: "otpauth://route"
-      };
-    }
+    steamGuardProcessAdapter: processAdapter
   };
   function activeUsername() {
     const row = accountStore.getActive();
@@ -207,7 +228,7 @@ function requestJson(ctx, method, route, body = null) {
   });
 }
 
-async function test_local_guard_stops_before_network_login() {
+async function test_local_guard_still_uses_steam_as_remote_truth() {
   const harness = createHarness();
   const ctx = await startServer(harness.options);
   try {
@@ -215,15 +236,15 @@ async function test_local_guard_stops_before_network_login() {
       mode: "existing",
       username: "local-guard"
     });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.body.reason, "local_guard_exists");
-    assert.equal(harness.calls.some((entry) => entry.type === "login_start"), false);
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.state, "email_code_required");
+    assert.equal(harness.calls.filter((entry) => entry.type === "process_start").length, 1);
   } finally {
     await new Promise((resolve) => ctx.server.close(resolve));
   }
 }
 
-async function test_incomplete_local_guard_also_stops_before_network_login() {
+async function test_incomplete_local_guard_also_uses_steam_as_remote_truth() {
   const harness = createHarness();
   const ctx = await startServer(harness.options);
   try {
@@ -231,9 +252,9 @@ async function test_incomplete_local_guard_also_stops_before_network_login() {
       mode: "existing",
       username: "local-incomplete-guard"
     });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.body.reason, "local_guard_exists");
-    assert.equal(harness.calls.some((entry) => entry.type === "login_start"), false);
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.state, "email_code_required");
+    assert.equal(harness.calls.filter((entry) => entry.type === "process_start").length, 1);
   } finally {
     await new Promise((resolve) => ctx.server.close(resolve));
   }
@@ -250,7 +271,18 @@ async function test_remote_authenticator_is_reported_without_add_call() {
     });
     assert.equal(response.statusCode, 409);
     assert.equal(response.body.reason, "already_has_authenticator");
-    assert.equal(harness.calls.some((entry) => entry.type === "add"), false);
+    assert.equal(response.body.retry_after_seconds, 60);
+    assert.equal(harness.calls.filter((entry) => entry.type === "process_start").length, 1);
+
+    const blocked = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/start", {
+      mode: "new",
+      username: "remote-guard",
+      password: "secret"
+    });
+    assert.equal(blocked.statusCode, 429);
+    assert.equal(blocked.body.reason, "already_has_authenticator_cooldown");
+    assert.equal(blocked.body.retry_after_seconds, 60);
+    assert.equal(harness.calls.filter((entry) => entry.type === "process_start").length, 1);
   } finally {
     await new Promise((resolve) => ctx.server.close(resolve));
   }
@@ -262,14 +294,50 @@ async function completeFlow(ctx, startBody) {
   assert.equal(start.body.state, "email_code_required");
   const continued = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/submit-email-code", {
     flow_id: start.body.flow_id,
-    code: "EMAIL1"
+    code: "EML01"
   });
   assert.equal(continued.statusCode, 200);
   assert.equal(continued.body.state, "steam_app_binding_required");
   return requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/verify-app-code", {
     flow_id: start.body.flow_id,
-    code: generateTotp(SHARED_SECRET)
+    code: "APP01"
   });
+}
+
+async function test_coexist_code_routes_reject_invalid_format_before_worker_calls() {
+  const harness = createHarness();
+  const ctx = await startServer(harness.options);
+  try {
+    const start = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/start", {
+      mode: "new",
+      username: "format-check",
+      password: "secret"
+    });
+    const emailCalls = harness.calls.filter((entry) => entry.type === "process_email").length;
+    const invalidEmail = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/submit-email-code", {
+      flow_id: start.body.flow_id,
+      code: "abc12"
+    });
+    assert.equal(invalidEmail.statusCode, 400);
+    assert.equal(invalidEmail.body.reason, "invalid_code_format");
+    assert.equal(harness.calls.filter((entry) => entry.type === "process_email").length, emailCalls);
+
+    const continued = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/submit-email-code", {
+      flow_id: start.body.flow_id,
+      code: "ABC12"
+    });
+    assert.equal(continued.statusCode, 200);
+    const verifyCalls = harness.calls.filter((entry) => entry.type === "process_verify").length;
+    const invalidApp = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/verify-app-code", {
+      flow_id: start.body.flow_id,
+      code: "A-123"
+    });
+    assert.equal(invalidApp.statusCode, 400);
+    assert.equal(invalidApp.body.reason, "invalid_code_format");
+    assert.equal(harness.calls.filter((entry) => entry.type === "process_verify").length, verifyCalls);
+  } finally {
+    await new Promise((resolve) => ctx.server.close(resolve));
+  }
 }
 
 async function test_new_guard_only_account_persists_only_after_verify() {
@@ -287,11 +355,10 @@ async function test_new_guard_only_account_persists_only_after_verify() {
     assert.equal(Object.hasOwn(response.body, "maFile"), false);
     assert.equal(Object.hasOwn(response.body, "maFileContent"), false);
     assert.equal(JSON.stringify(response.body).includes(SHARED_SECRET), false);
-    const write = harness.accountStore.writes.find((entry) => entry.type === "upsert");
+    const write = harness.accountStore.writes.find((entry) => entry.type === "createGuardOnly");
     assert.equal(write.payload.username, "guard-only");
     assert.equal(write.payload.password, "new-password");
-    assert.equal(write.payload.steamName, "");
-    assert.equal(write.payload.avatarUrl, "");
+    assert.equal(write.payload.set_active, true);
     const saved = harness.accountStore.getCredentials("guard-only");
     assert.equal(JSON.parse(saved.mafile_content).Session, null);
     assert.equal(harness.accountStore.getActive().username, "guard-only");
@@ -309,7 +376,7 @@ async function test_existing_account_only_updates_guard() {
     assert.equal(response.statusCode, 200);
     const writes = harness.accountStore.writes;
     assert.equal(writes.filter((entry) => entry.type === "updateGuard").length, 1);
-    assert.equal(writes.some((entry) => entry.type === "upsert"), false);
+    assert.equal(writes.some((entry) => entry.type === "createGuardOnly"), false);
     const after = harness.accountStore.getCredentials("existing");
     assert.equal(after.password, before.password);
     assert.equal(after.remark, before.remark);
@@ -341,13 +408,41 @@ async function test_persistence_failure_never_returns_success() {
   }
 }
 
+async function test_time_sync_failure_is_retryable_without_attempt_limit() {
+  const harness = createHarness();
+  const ctx = await startServer(harness.options);
+  try {
+    const start = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/start", {
+      mode: "new",
+      username: "time-fails",
+      password: "new-password"
+    });
+    await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/submit-email-code", {
+      flow_id: start.body.flow_id,
+      code: "EML01"
+    });
+    const response = await requestJson(ctx, "POST", "/api/accounts/steam-guard/coexist/verify-app-code", {
+      flow_id: start.body.flow_id,
+      code: "APP01"
+    });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.body.reason, "time_sync_failed");
+    assert.equal(Object.hasOwn(response.body, "attempts_remaining"), false);
+    assert.match(response.body.message, /检查网络后重试/);
+  } finally {
+    await new Promise((resolve) => ctx.server.close(resolve));
+  }
+}
+
 async function main() {
-  await test_local_guard_stops_before_network_login();
-  await test_incomplete_local_guard_also_stops_before_network_login();
+  await test_local_guard_still_uses_steam_as_remote_truth();
+  await test_incomplete_local_guard_also_uses_steam_as_remote_truth();
   await test_remote_authenticator_is_reported_without_add_call();
+  await test_coexist_code_routes_reject_invalid_format_before_worker_calls();
   await test_new_guard_only_account_persists_only_after_verify();
   await test_existing_account_only_updates_guard();
   await test_persistence_failure_never_returns_success();
+  await test_time_sync_failure_is_retryable_without_attempt_limit();
   console.log("steam-guard-coexist-route tests passed");
 }
 

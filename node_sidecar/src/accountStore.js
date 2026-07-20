@@ -87,11 +87,63 @@ class AccountStore {
     }));
   }
 
+  saveVerifiedCredentials(username, password) {
+    return this._withStore((store) => store.saveVerifiedSteamCredentials(
+      this.options.viewerUsername,
+      username,
+      password
+    ));
+  }
+
   updateSteamGuard(username, guard) {
     return this._withStore((store) => store.updateSteamGuard(
       this.options.viewerUsername,
       username,
       guard
+    ));
+  }
+
+  createGuardOnlyAccount(payload) {
+    return this._withStore((store) => store.createGuardOnlyAccount(
+      this.options.viewerUsername,
+      payload
+    ));
+  }
+
+  createSteamGuardImport(payload) {
+    return this._withStore((store) => store.createSteamGuardImport(
+      this.options.viewerUsername,
+      payload
+    ));
+  }
+
+  attachSteamGuardImport(username, payload) {
+    return this._withStore((store) => store.attachSteamGuardImport(
+      this.options.viewerUsername,
+      username,
+      payload
+    ));
+  }
+
+  overwriteSteamGuardImport(username, payload) {
+    return this._withStore((store) => store.overwriteSteamGuardImport(
+      this.options.viewerUsername,
+      username,
+      payload
+    ));
+  }
+
+  clearSteamGuard(username) {
+    return this._withStore((store) => store.clearSteamGuard(
+      this.options.viewerUsername,
+      username
+    ));
+  }
+
+  clearPassword(username) {
+    return this._withStore((store) => store.clearSteamPassword(
+      this.options.viewerUsername,
+      username
     ));
   }
 

@@ -390,7 +390,7 @@ async function test_login_save_rejects_second_trial_binding_without_writing_loca
       body: {
         username: "steam_account_b",
         password: "pw",
-        totp: "123456"
+        totp: "A1B2C"
       }
     });
     assert.equal(response.statusCode, 409);
@@ -430,7 +430,7 @@ async function test_login_save_reuses_license_refresh_credential_for_binding_che
       body: {
         username: "steam_account_a",
         password: "pw",
-        totp: "123456"
+        totp: "A1B2C"
       }
     });
     assert.equal(response.statusCode, 200);
@@ -473,7 +473,7 @@ async function test_login_save_skips_binding_check_for_dev_auto_bundle() {
       body: {
         username: "steam_account_a",
         password: "pw",
-        totp: "123456"
+        totp: "A1B2C"
       }
     });
     assert.equal(response.statusCode, 200);

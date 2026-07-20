@@ -47,8 +47,43 @@ async function test_session_pool_connects_through_shared_token_recovery() {
   }
 }
 
+async function test_session_pool_skips_shared_token_recovery_when_account_has_no_mafile() {
+  const calls = [];
+  class FakeSession {
+    async connect(args) {
+      calls.push({type: "connect", args});
+      return {steam: {on() {}}, csgo: {inventory: []}};
+    }
+    disconnect() {}
+  }
+  const tokenRecoveryService = {
+    async withTokenRecovery(username, operation) {
+      calls.push({type: "recovery", username});
+      return operation("unexpected-recovered-token");
+    }
+  };
+  const pool = createSessionPool({SessionClass: FakeSession, tokenRecoveryService});
+  try {
+    await pool.acquire({
+      username: "manual-guard-account",
+      password: "saved-password",
+      refreshToken: "expired-token",
+      tokenStore: {get() {}, set() {}},
+      refreshTokenOnly: true,
+      allowTokenRecovery: false
+    });
+    assert.equal(calls.some((entry) => entry.type === "recovery"), false);
+    const connect = calls.find((entry) => entry.type === "connect");
+    assert.equal(connect.args.refreshToken, "expired-token");
+    assert.equal(connect.args.refreshTokenOnly, true);
+  } finally {
+    pool.shutdown();
+  }
+}
+
 async function main() {
   await test_session_pool_connects_through_shared_token_recovery();
+  await test_session_pool_skips_shared_token_recovery_when_account_has_no_mafile();
   console.log("session-pool-token-recovery tests passed");
 }
 

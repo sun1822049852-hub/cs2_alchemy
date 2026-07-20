@@ -21,6 +21,9 @@ function createMemoryTokenStore(initialToken = "") {
     },
     set(_username, nextToken) {
       token = nextToken;
+    },
+    remove() {
+      token = "";
     }
   };
 }
@@ -37,6 +40,12 @@ function createDeferred() {
 
 test("classifies numeric Steam token rejection codes without classifying network failures", () => {
   assert.equal(isRecoverableTokenError({eresult: 5}), true);
+  assert.equal(isRecoverableTokenError(new Error("steam error: InvalidPassword")), true);
+  assert.equal(isRecoverableTokenError(new Error("steam disconnected code=5 reason=InvalidPassword")), true);
+  assert.equal(isRecoverableTokenError({eresult: 15}), true);
+  assert.equal(isRecoverableTokenError({eresult: 63}), false);
+  assert.equal(isRecoverableTokenError({eresult: 65}), false);
+  assert.equal(isRecoverableTokenError({eresult: 85}), false);
   assert.equal(isRecoverableTokenError({statusCode: 401, message: "inventory unauthorized"}), true);
   assert.equal(isRecoverableTokenError(new Error("库存 API 返回 403")), true);
   assert.equal(isRecoverableTokenError({code: "ETIMEDOUT", message: "connect timeout"}), false);
@@ -73,6 +82,7 @@ test("recovers a missing token from stored credentials and Guard before running 
   assert.equal(result, "ok");
   assert.equal(tokenStore.get("countsteam01"), "new_refresh_token");
   assert.deepEqual(calls, [
+    {type: "invalidate", username: "countsteam01"},
     {
       type: "login",
       args: {
@@ -82,7 +92,6 @@ test("recovers a missing token from stored credentials and Guard before running 
         persistToken: false
       }
     },
-    {type: "invalidate", username: "countsteam01"},
     {type: "operation", refreshToken: "new_refresh_token"}
   ]);
 });
@@ -118,6 +127,68 @@ test("recovers an explicitly invalid token and retries the operation once", asyn
   assert.equal(result, "retried_ok");
   assert.equal(loginCalls, 1);
   assert.deepEqual(operationTokens, ["expired_refresh_token", "replacement_refresh_token"]);
+});
+
+test("EResult 15 clears stale session and token before one automatic Guard recovery", async () => {
+  const calls = [];
+  let token = "stale_refresh_token";
+  const service = createTokenRecoveryService({
+    tokenStore: {
+      get() {
+        return token;
+      },
+      remove(username) {
+        calls.push({type: "remove_token", username});
+        token = "";
+      },
+      set(username, nextToken) {
+        calls.push({type: "set_token", username, token: nextToken});
+        token = nextToken;
+      }
+    },
+    accountCredentialsProvider: async () => ({
+      username: "countsteam01",
+      password: "SecretA",
+      mafile_content: COMPLETE_MAFILE
+    }),
+    generateGuardCode: () => "ABCDE",
+    async invalidateSessions(username) {
+      calls.push({type: "invalidate", username});
+    },
+    async loginWithCredentials(args) {
+      calls.push({type: "login", args});
+      return {refreshToken: "replacement_refresh_token"};
+    }
+  });
+
+  const result = await service.withTokenRecovery("countsteam01", async (refreshToken) => {
+    calls.push({type: "operation", refreshToken});
+    if (refreshToken === "stale_refresh_token") {
+      const error = new Error("AccessDenied");
+      error.eresult = 15;
+      throw error;
+    }
+    return "recovered";
+  });
+
+  assert.equal(result, "recovered");
+  assert.equal(token, "replacement_refresh_token");
+  assert.deepEqual(calls, [
+    {type: "operation", refreshToken: "stale_refresh_token"},
+    {type: "invalidate", username: "countsteam01"},
+    {type: "remove_token", username: "countsteam01"},
+    {
+      type: "login",
+      args: {
+        username: "countsteam01",
+        password: "SecretA",
+        guardCode: "ABCDE",
+        persistToken: false
+      }
+    },
+    {type: "set_token", username: "countsteam01", token: "replacement_refresh_token"},
+    {type: "operation", refreshToken: "replacement_refresh_token"}
+  ]);
 });
 
 test("shares one recovery login across concurrent consumers of the same account", async () => {
@@ -189,6 +260,7 @@ test("returns needs_attention when Steam requires additional manual verification
 });
 
 test("returns needs_attention when stored credentials are rejected", async () => {
+  const cleared = [];
   const service = createTokenRecoveryService({
     tokenStore: createMemoryTokenStore(),
     accountCredentialsProvider: async () => ({
@@ -201,6 +273,9 @@ test("returns needs_attention when stored credentials are rejected", async () =>
       const err = new Error("InvalidPassword");
       err.code = "InvalidPassword";
       throw err;
+    },
+    async clearStoredPassword(username) {
+      cleared.push(username);
     }
   });
 
@@ -210,10 +285,217 @@ test("returns needs_attention when stored credentials are rejected", async () =>
       assert.equal(err && err.code, "token_recovery_needs_attention");
       assert.equal(err && err.reason, "invalid_credentials");
       assert.equal(err && err.auth_state, "needs_attention");
+      assert.equal(err && err.credential_state, "password_reentry_required");
+      assert.equal(err && err.password_cleared, true);
       assert.doesNotMatch(err && err.message, /WrongPassword/);
       return true;
     }
   );
+  assert.deepEqual(cleared, ["countsteam01"]);
+});
+
+test("does not request password re-entry when clearing the rejected password fails", async () => {
+  const service = createTokenRecoveryService({
+    tokenStore: createMemoryTokenStore(),
+    accountCredentialsProvider: async () => ({
+      username: "countsteam01",
+      password: "WrongPassword",
+      mafile_content: COMPLETE_MAFILE
+    }),
+    generateGuardCode: () => "ABCDE",
+    async loginWithCredentials() {
+      const err = new Error("InvalidPassword");
+      err.code = "InvalidPassword";
+      throw err;
+    },
+    async clearStoredPassword() {
+      throw new Error("database unavailable");
+    }
+  });
+
+  await assert.rejects(
+    () => service.recoverToken("countsteam01"),
+    (err) => {
+      assert.equal(err && err.reason, "password_clear_failed");
+      assert.equal(err && err.auth_state, "needs_attention");
+      assert.equal(err && err.credential_state, undefined);
+      assert.doesNotMatch(err && err.message, /database unavailable/);
+      return true;
+    }
+  );
+});
+
+test("accounts without maFile return to manual login without attempting credential recovery", async () => {
+  for (const scenario of [
+    {initialToken: "", expectedReason: "login_key_missing", expectedAuthState: "login_required"},
+    {initialToken: "expired-token", expectedReason: "login_key_invalid", expectedAuthState: "auth_invalid"}
+  ]) {
+    let loginCalls = 0;
+    const service = createTokenRecoveryService({
+      tokenStore: createMemoryTokenStore(scenario.initialToken),
+      accountCredentialsProvider: async () => ({
+        username: "manual-account",
+        password: "SavedPassword",
+        mafile_content: ""
+      }),
+      async loginWithCredentials() {
+        loginCalls += 1;
+        return {refreshToken: "must-not-be-created"};
+      }
+    });
+    await assert.rejects(
+      () => service.withTokenRecovery("manual-account", async (token) => {
+        if (token) {
+          const err = new Error("steam error: InvalidPassword");
+          err.code = "InvalidPassword";
+          throw err;
+        }
+        return "not reached";
+      }),
+      (err) => {
+        assert.equal(err && err.reason, scenario.expectedReason);
+        assert.equal(err && err.auth_state, scenario.expectedAuthState);
+        assert.equal(err && err.relogin_required, true);
+        return true;
+      }
+    );
+    assert.equal(loginCalls, 0);
+  }
+});
+
+test("EResult 15 returns existing accounts without maFile to manual relogin", async () => {
+  const calls = [];
+  let token = "stale_refresh_token";
+  let loginCalls = 0;
+  const service = createTokenRecoveryService({
+    tokenStore: {
+      get() {
+        return token;
+      },
+      set(_username, nextToken) {
+        token = nextToken;
+      },
+      remove(username) {
+        calls.push({type: "remove_token", username});
+        token = "";
+      }
+    },
+    accountCredentialsProvider: async () => ({
+      username: "manual-account",
+      password: "SavedPassword",
+      mafile_content: ""
+    }),
+    async invalidateSessions(username) {
+      calls.push({type: "invalidate", username});
+    },
+    async loginWithCredentials() {
+      loginCalls += 1;
+      return {refreshToken: "must-not-be-created"};
+    }
+  });
+
+  await assert.rejects(
+    () => service.withTokenRecovery("manual-account", async () => {
+      const error = new Error("AccessDenied");
+      error.eresult = 15;
+      throw error;
+    }),
+    (err) => {
+      assert.equal(err && err.reason, "login_key_invalid");
+      assert.equal(err && err.auth_state, "auth_invalid");
+      assert.equal(err && err.relogin_required, true);
+      return true;
+    }
+  );
+  assert.equal(token, "");
+  assert.deepEqual(calls, [
+    {type: "invalidate", username: "manual-account"},
+    {type: "remove_token", username: "manual-account"}
+  ]);
+  assert.equal(loginCalls, 0);
+});
+
+test("credential-login EResult 15 clears the saved password and prevents another automatic login", async () => {
+  const credentials = {
+    username: "guard-account",
+    password: "SavedPassword",
+    mafile_content: COMPLETE_MAFILE
+  };
+  let loginCalls = 0;
+  let clearPasswordCalls = 0;
+  const service = createTokenRecoveryService({
+    tokenStore: createMemoryTokenStore("stale_refresh_token"),
+    accountCredentialsProvider: async () => ({...credentials}),
+    generateGuardCode: () => "ABCDE",
+    async loginWithCredentials() {
+      loginCalls += 1;
+      const err = new Error("AccessDenied");
+      err.eresult = 15;
+      throw err;
+    },
+    async clearStoredPassword() {
+      clearPasswordCalls += 1;
+      credentials.password = "";
+      return true;
+    }
+  });
+
+  await assert.rejects(
+    () => service.recoverToken("guard-account"),
+    (err) => {
+      assert.equal(err && err.reason, "login_key_invalid");
+      assert.equal(err && err.auth_state, "auth_invalid");
+      assert.equal(err && err.relogin_required, true);
+      assert.equal(err && err.credential_state, "password_reentry_required");
+      assert.equal(err && err.password_cleared, true);
+      return true;
+    }
+  );
+  await assert.rejects(
+    () => service.recoverToken("guard-account"),
+    (err) => {
+      assert.equal(err && err.reason, "password_missing");
+      assert.equal(err && err.credential_state, "password_reentry_required");
+      assert.equal(err && err.relogin_required, true);
+      return true;
+    }
+  );
+  assert.equal(loginCalls, 1);
+  assert.equal(clearPasswordCalls, 1);
+});
+
+test("credential-login Steam results remain distinct from refresh-token expiry", async () => {
+  const scenarios = [
+    {eresult: 63, reason: "account_logon_denied", message: /额外验证/},
+    {eresult: 65, reason: "invalid_login_auth_code", message: /令牌码无效/},
+    {eresult: 85, reason: "two_factor_required", message: /两步验证/}
+  ];
+  for (const scenario of scenarios) {
+    const service = createTokenRecoveryService({
+      tokenStore: createMemoryTokenStore(),
+      accountCredentialsProvider: async () => ({
+        username: "guard-account",
+        password: "SavedPassword",
+        mafile_content: COMPLETE_MAFILE
+      }),
+      generateGuardCode: () => "ABCDE",
+      async loginWithCredentials() {
+        const err = new Error(`Steam result ${scenario.eresult}`);
+        err.eresult = scenario.eresult;
+        throw err;
+      }
+    });
+    await assert.rejects(
+      () => service.recoverToken("guard-account"),
+      (err) => {
+        assert.equal(err && err.code, scenario.errorCode || "token_recovery_needs_attention");
+        assert.equal(err && err.reason, scenario.reason);
+        assert.equal(err && err.auth_state, scenario.authState || "needs_attention");
+        assert.match(err && err.message, scenario.message);
+        return true;
+      }
+    );
+  }
 });
 
 test("reuses a token refreshed by another consumer before starting a second login", async () => {
@@ -360,7 +642,7 @@ test("does not announce recovery success when TokenStore persistence fails", asy
       return true;
     }
   );
-  assert.equal(invalidateCalls, 0);
+  assert.equal(invalidateCalls, 1);
   assert.equal(operationCalls, 0);
 });
 
@@ -416,4 +698,32 @@ test("returns needs_attention without logging in when local Guard data is incomp
     }
   );
   assert.equal(loginCalls, 0);
+});
+
+test("supports an extensible password-reentry classifier without guessing future Steam codes", async () => {
+  const service = createTokenRecoveryService({
+    tokenStore: createMemoryTokenStore(),
+    accountCredentialsProvider: async () => ({
+      username: "countsteam01",
+      password: "SecretA",
+      mafile_content: JSON.stringify(COMPLETE_MAFILE)
+    }),
+    generateGuardCode: () => "ABCDE",
+    loginWithCredentials: async () => {
+      const error = new Error("future Steam credential rejection");
+      error.eresult = 99999;
+      throw error;
+    },
+    passwordReentryRequiredClassifier: (err) => Number(err && err.eresult) === 99999
+  });
+
+  await assert.rejects(
+    service.recoverToken("countsteam01"),
+    (err) => (
+      err &&
+      err.reason === "invalid_credentials" &&
+      err.credential_state === "password_reentry_required" &&
+      !String(err.message || "").includes("99999")
+    )
+  );
 });

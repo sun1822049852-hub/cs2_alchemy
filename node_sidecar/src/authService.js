@@ -442,6 +442,7 @@ async function startLoginSession({
           waitAuth,
           startedAt,
           timeout,
+          authenticatedPassword: accountPassword,
           tokenStore: tokenStore || null,
           persistToken: !!persistToken,
           logger: logger || null
@@ -540,6 +541,7 @@ async function submitGuardCode({
     return {
       ok: true,
       done: true,
+      authenticated_password: entry.authenticatedPassword,
       result: {username: accountName, refresh_token: refreshToken, steam_id64: getSteamId64(session)}
     };
   } catch (err) {

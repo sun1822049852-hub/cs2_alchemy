@@ -1,13 +1,23 @@
 const SteamTotp = require("steam-totp");
 
 class TokenRecoveryError extends Error {
-  constructor(reason, message, {cause = null} = {}) {
+  constructor(reason, message, {
+    cause = null,
+    code = "token_recovery_needs_attention",
+    authState = "needs_attention",
+    reloginRequired = false,
+    credentialState = "",
+    passwordCleared = false
+  } = {}) {
     super(message);
     this.name = "TokenRecoveryError";
-    this.code = "token_recovery_needs_attention";
+    this.code = code;
     this.reason = reason;
-    this.auth_state = "needs_attention";
+    this.auth_state = authState;
     this.status = 409;
+    if (reloginRequired) this.relogin_required = true;
+    if (credentialState) this.credential_state = credentialState;
+    if (passwordCleared) this.password_cleared = true;
     if (cause) {
       Object.defineProperty(this, "cause", {
         value: cause,
@@ -45,13 +55,8 @@ function isRecoverableTokenError(err) {
     "token_rejected",
     "token_expired",
     "invalidpassword",
-    "accessdenied",
-    "accountlogondenied",
-    "invalidloginauthcode",
     "5",
     "15",
-    "63",
-    "65",
     "401",
     "403"
   ]);
@@ -66,7 +71,11 @@ function isRecoverableTokenError(err) {
     "refresh token rejected",
     "refresh token expired",
     "token rejected",
-    "token expired"
+    "token expired",
+    "accessdenied",
+    "access denied",
+    "invalidpassword",
+    "invalid password"
   ].some((text) => message.includes(text)) || /(?:http|api(?:\s*返回)?|status(?:code)?[=: ]+)\s*(401|403)\b/i.test(message);
 }
 
@@ -101,6 +110,34 @@ function isInvalidCredentialsError(err) {
     message.includes("invalidpassword") || message.includes("incorrect password");
 }
 
+function createManualLoginRequiredError(reason) {
+  const normalizedReason = reason === "login_key_missing" ? "login_key_missing" : "login_key_invalid";
+  return new TokenRecoveryError(
+    normalizedReason,
+    normalizedReason === "login_key_missing" ? "当前账号需要手动登录" : "登录过期",
+    {
+      code: normalizedReason,
+      authState: normalizedReason === "login_key_missing" ? "login_required" : "auth_invalid",
+      reloginRequired: true
+    }
+  );
+}
+
+function mapCredentialLoginError(err) {
+  const rawCode = asTrimmedString(err && (err.eresult || err.result || err.code));
+  const code = Number(rawCode);
+  if (code === 15) return {
+    reason: "login_key_invalid",
+    message: "登录过期",
+    code: "login_key_invalid",
+    authState: "auth_invalid"
+  };
+  if (code === 63) return {reason: "account_logon_denied", message: "Steam 要求额外验证，请手动重新登录"};
+  if (code === 65) return {reason: "invalid_login_auth_code", message: "Steam Guard 令牌码无效，请检查本地令牌"};
+  if (code === 85) return {reason: "two_factor_required", message: "Steam 要求两步验证，请手动重新登录"};
+  return null;
+}
+
 function parseGuardData(account) {
   const source = account && (
     account.mafile_content || account.maFileContent || account.maFile || account.mafile
@@ -130,7 +167,9 @@ function createTokenRecoveryService({
   loginWithCredentials,
   invalidateSessions = async () => {},
   generateGuardCode = (sharedSecret) => SteamTotp.generateAuthCode(sharedSecret),
-  shouldRecoverFromError = isRecoverableTokenError
+  shouldRecoverFromError = isRecoverableTokenError,
+  passwordReentryRequiredClassifier = () => false,
+  clearStoredPassword = null
 } = {}) {
   if (!tokenStore || typeof tokenStore.get !== "function" || typeof tokenStore.set !== "function") {
     throw new TypeError("tokenStore with get/set is required");
@@ -147,19 +186,72 @@ function createTokenRecoveryService({
   if (typeof shouldRecoverFromError !== "function") {
     throw new TypeError("shouldRecoverFromError must be a function");
   }
+  if (typeof passwordReentryRequiredClassifier !== "function") {
+    throw new TypeError("passwordReentryRequiredClassifier must be a function");
+  }
+  if (clearStoredPassword != null && typeof clearStoredPassword !== "function") {
+    throw new TypeError("clearStoredPassword must be a function when provided");
+  }
 
   const recoveries = new Map();
 
-  async function performRecovery(username) {
+  async function invalidateStaleAuthentication(accountName) {
+    try {
+      await invalidateSessions(accountName);
+    } catch (err) {
+      throw new TokenRecoveryError("session_invalidation_failed", "旧登录会话失效失败", {cause: err});
+    }
+    try {
+      const currentToken = asTrimmedString(await tokenStore.get(accountName));
+      if (currentToken && typeof tokenStore.remove !== "function") {
+        throw new Error("TokenStore cannot remove the stale token");
+      }
+      if (typeof tokenStore.remove === "function") {
+        const removeResult = await tokenStore.remove(accountName);
+        if (removeResult === false || asTrimmedString(await tokenStore.get(accountName))) {
+          throw new Error("TokenStore rejected the removal");
+        }
+      }
+    } catch (err) {
+      throw new TokenRecoveryError("token_store_clear_failed", "过期 refresh token 清理失败", {cause: err});
+    }
+  }
+
+  async function clearRejectedPassword(accountName) {
+    if (!clearStoredPassword) return false;
+    try {
+      const clearResult = await clearStoredPassword(accountName);
+      if (clearResult === false) throw new Error("password clear rejected");
+      return true;
+    } catch (err) {
+      throw new TokenRecoveryError("password_clear_failed", "已保存密码清除失败，请稍后重试", {
+        cause: err
+      });
+    }
+  }
+
+  async function performRecovery(username, {manualReason = "login_key_invalid"} = {}) {
     const requestedUsername = asTrimmedString(username);
     const account = await accountCredentialsProvider(requestedUsername);
     if (!account) {
       throw new TokenRecoveryError("account_not_found", "未找到本地账号");
     }
     const accountName = asTrimmedString(account.username) || requestedUsername;
+    const guardSource = account && (
+      account.mafile_content || account.maFileContent || account.maFile || account.mafile
+    );
+    if (manualReason === "login_key_invalid" || guardSource) {
+      await invalidateStaleAuthentication(accountName);
+    }
+    if (!guardSource) {
+      throw createManualLoginRequiredError(manualReason);
+    }
     const password = asTrimmedString(account.password);
     if (!password) {
-      throw new TokenRecoveryError("password_missing", "该账号没有保存密码");
+      throw new TokenRecoveryError("password_missing", "该账号没有保存密码", {
+        credentialState: "password_reentry_required",
+        reloginRequired: true
+      });
     }
     const guard = parseGuardData(account);
 
@@ -182,14 +274,34 @@ function createTokenRecoveryService({
         persistToken: false
       });
     } catch (err) {
+      if (isInvalidCredentialsError(err) || passwordReentryRequiredClassifier(err)) {
+        const passwordCleared = await clearRejectedPassword(accountName);
+        throw new TokenRecoveryError("invalid_credentials", "已保存的 Steam 账号或密码无效", {
+          cause: err,
+          credentialState: "password_reentry_required",
+          passwordCleared
+        });
+      }
+      const mappedCredentialError = mapCredentialLoginError(err);
+      if (mappedCredentialError) {
+        const requiresPasswordReentry = mappedCredentialError.reason === "login_key_invalid";
+        const passwordCleared = requiresPasswordReentry
+          ? await clearRejectedPassword(accountName)
+          : false;
+        throw new TokenRecoveryError(mappedCredentialError.reason, mappedCredentialError.message, {
+          cause: err,
+          code: mappedCredentialError.code || "token_recovery_needs_attention",
+          authState: mappedCredentialError.authState || "needs_attention",
+          reloginRequired: requiresPasswordReentry,
+          credentialState: requiresPasswordReentry ? "password_reentry_required" : "",
+          passwordCleared
+        });
+      }
       if (isManualVerificationError(err)) {
         throw new TokenRecoveryError(
           "manual_verification_required",
           "Steam 要求额外人工验证，请手动重新登录"
         );
-      }
-      if (isInvalidCredentialsError(err)) {
-        throw new TokenRecoveryError("invalid_credentials", "已保存的 Steam 账号或密码无效");
       }
       throw err;
     }
@@ -213,15 +325,10 @@ function createTokenRecoveryService({
       throw new TokenRecoveryError("token_store_write_failed", "refresh token 保存失败", {cause: err});
     }
 
-    try {
-      await invalidateSessions(accountName);
-    } catch (err) {
-      throw new TokenRecoveryError("session_invalidation_failed", "旧登录会话失效失败", {cause: err});
-    }
     return refreshToken;
   }
 
-  function recoverToken(username) {
+  function recoverToken(username, {manualReason = "login_key_invalid"} = {}) {
     const accountName = asTrimmedString(username);
     if (!accountName) {
       return Promise.reject(new TypeError("username is required"));
@@ -231,13 +338,21 @@ function createTokenRecoveryService({
     if (existing) {
       return existing;
     }
-    const pending = performRecovery(accountName).finally(() => {
+    const pending = performRecovery(accountName, {manualReason}).finally(() => {
       if (recoveries.get(recoveryKey) === pending) {
         recoveries.delete(recoveryKey);
       }
     });
     recoveries.set(recoveryKey, pending);
     return pending;
+  }
+
+  function invalidateAuthentication(username) {
+    const accountName = asTrimmedString(username);
+    if (!accountName) {
+      return Promise.reject(new TypeError("username is required"));
+    }
+    return invalidateStaleAuthentication(accountName);
   }
 
   async function withTokenRecovery(username, operation) {
@@ -265,7 +380,7 @@ function createTokenRecoveryService({
 
     const currentToken = asTrimmedString(await tokenStore.get(accountName));
     if (!currentToken) {
-      return runRecoveredOperation(await recoverToken(accountName));
+      return runRecoveredOperation(await recoverToken(accountName, {manualReason: "login_key_missing"}));
     }
     try {
       return await operation(currentToken);
@@ -277,12 +392,13 @@ function createTokenRecoveryService({
       if (latestToken && latestToken !== currentToken) {
         return runRecoveredOperation(latestToken);
       }
-      const replacementToken = await recoverToken(accountName);
+      const replacementToken = await recoverToken(accountName, {manualReason: "login_key_invalid"});
       return runRecoveredOperation(replacementToken);
     }
   }
 
   return {
+    invalidateAuthentication,
     recoverToken,
     withTokenRecovery
   };

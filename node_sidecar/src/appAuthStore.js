@@ -76,6 +76,7 @@ function sanitizeSteamAccount(row, activeUsername = "") {
     steam_name: asString(row.steam_name).trim(),
     steam_id: asString(row.steam_id).trim(),
     avatar_url: asString(row.avatar_url).trim(),
+    has_password: Boolean(asString(row.password).trim()),
     has_steam_guard: Boolean(asString(row.mafile_content).trim()),
     steam_id64: asString(row.steam_id64).trim(),
     ban_status: asString(row.ban_status || ""),
@@ -661,6 +662,54 @@ class AppAuthStore {
     }
   }
 
+  saveVerifiedSteamCredentials(viewerUsername, username, password) {
+    const viewer = asString(viewerUsername).trim();
+    const key = asString(username).trim();
+    const secret = asString(password).trim();
+    if (!key || !secret) {
+      throw new Error("username and password are required");
+    }
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const existing = this.db.prepare("SELECT id FROM steam_account WHERE username = ?").get(key);
+      if (existing) {
+        if (viewer && !this.canAccessSteamAccount(viewer, key)) {
+          throw new Error("viewer cannot manage this steam account");
+        }
+        this.db.prepare(`
+          UPDATE steam_account
+          SET password = ?, updated_at = ?
+          WHERE username = ?
+        `).run(secret, nowSqlText(), key);
+      } else {
+        if (viewer && !this.getUserByUsername(viewer)) {
+          throw new Error("viewer not found");
+        }
+        this.db.prepare(`
+          INSERT INTO steam_account(username, password, updated_at)
+          VALUES(?, ?, ?)
+        `).run(key, secret, nowSqlText());
+        if (viewer && !this.isSuperAdmin(viewer)) {
+          const binding = this.db.prepare(`
+            INSERT INTO user_steam_binding(user_id, steam_account_id)
+            SELECT u.id, sa.id
+            FROM app_user u, steam_account sa
+            WHERE u.username = ? AND sa.username = ?
+          `).run(viewer, key);
+          if (Number(binding.changes) !== 1) {
+            throw new Error("viewer binding failed");
+          }
+        }
+      }
+      this.db.exec("COMMIT");
+      return true;
+    } catch (err) {
+      try { this.db.exec("ROLLBACK"); } catch (_) {}
+      throw err;
+    }
+  }
+
   updateSteamGuard(viewerUsername, username, {mafile_content = "", steam_id64 = ""} = {}) {
     const viewer = asString(viewerUsername).trim();
     const key = asString(username).trim();
@@ -687,6 +736,212 @@ class AppAuthStore {
     `).run(maFileContent, steamId64, steamId64, nowSqlText(), key);
     if (Number(result.changes) < 1) {
       throw new Error("steam account not found");
+    }
+    return true;
+  }
+
+  createGuardOnlyAccount(viewerUsername, payload = {}) {
+    const viewer = asString(viewerUsername).trim();
+    const data = payload && typeof payload === "object" ? payload : {};
+    const key = asString(data.username).trim();
+    const secret = asString(data.password).trim();
+    const remark = asString(data.remark).trim();
+    const maFileContent = asString(data.mafile_content || data.maFileContent).trim();
+    const steamId64 = asString(data.steam_id64 || data.steamId64).trim();
+    const setActive = data.set_active === true || data.setActive === true;
+    if (!key || !maFileContent) {
+      throw new Error("username and mafile_content are required");
+    }
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (viewer && !this.getUserByUsername(viewer)) {
+        throw new Error("viewer not found");
+      }
+      if (this.db.prepare("SELECT 1 FROM steam_account WHERE username = ?").get(key)) {
+        const duplicate = new Error("steam account already exists");
+        duplicate.code = "duplicate_existing";
+        throw duplicate;
+      }
+      this.db.prepare(`
+        INSERT INTO steam_account(
+          username, password, remark, steam_name, steam_id, avatar_url,
+          mafile_content, steam_id64, updated_at
+        )
+        VALUES(?, ?, ?, '', ?, '', ?, ?, ?)
+      `).run(key, secret, remark, steamId64, maFileContent, steamId64, nowSqlText());
+      if (viewer) {
+        const binding = this.db.prepare(`
+          INSERT INTO user_steam_binding(user_id, steam_account_id)
+          SELECT u.id, sa.id
+          FROM app_user u, steam_account sa
+          WHERE u.username = ? AND sa.username = ?
+        `).run(viewer, key);
+        if (Number(binding.changes) !== 1) {
+          throw new Error("viewer binding failed");
+        }
+        if (setActive) {
+          const active = this.db.prepare(`
+            UPDATE app_user
+            SET active_steam_username = ?, updated_at = ?
+            WHERE username = ?
+          `).run(key, nowSqlText(), viewer);
+          if (Number(active.changes) !== 1) {
+            throw new Error("active account update failed");
+          }
+        }
+      }
+      this.db.exec("COMMIT");
+      if (setActive && !viewer) this.setLegacyActiveSteamUsername(key);
+      return true;
+    } catch (err) {
+      try { this.db.exec("ROLLBACK"); } catch (_) {}
+      if (err && err.code === "duplicate_existing") throw err;
+      if (/UNIQUE constraint failed:\s*steam_account\.username/i.test(asString(err && err.message))) {
+        const duplicate = new Error("steam account already exists");
+        duplicate.code = "duplicate_existing";
+        throw duplicate;
+      }
+      throw err;
+    }
+  }
+
+  createSteamGuardImport(viewerUsername, {username = "", password = "", mafile_content = ""} = {}) {
+    return this.createGuardOnlyAccount(viewerUsername, {
+      username,
+      password,
+      mafile_content,
+      set_active: false
+    });
+  }
+
+  attachSteamGuardImport(viewerUsername, username, {
+    password = "",
+    password_action = "",
+    mafile_content = "",
+    steam_id64 = ""
+  } = {}) {
+    const viewer = asString(viewerUsername).trim();
+    const key = asString(username).trim();
+    const secret = asString(password).trim();
+    const maFileContent = asString(mafile_content).trim();
+    const passwordAction = asString(password_action).trim().toLowerCase();
+    const steamId64 = asString(steam_id64).trim();
+    if (!key || !maFileContent) {
+      throw new Error("username and mafile_content are required");
+    }
+    if (passwordAction === "overwrite" && !secret) {
+      throw new Error("password is required for overwrite");
+    }
+    if (viewer && !this.canAccessSteamAccount(viewer, key)) {
+      throw new Error("viewer cannot manage this steam account");
+    }
+    const result = this.db.prepare(`
+      UPDATE steam_account
+      SET password = CASE WHEN ? = 'overwrite' THEN ? ELSE password END,
+          mafile_content = ?,
+          steam_id64 = CASE
+            WHEN TRIM(COALESCE(steam_id64, '')) = '' AND ? != '' THEN ?
+            ELSE steam_id64
+          END,
+          updated_at = ?
+      WHERE username = ?
+        AND TRIM(COALESCE(mafile_content, '')) = ''
+    `).run(passwordAction, secret, maFileContent, steamId64, steamId64, nowSqlText(), key);
+    if (Number(result.changes) > 0) {
+      return true;
+    }
+    const current = this.db.prepare("SELECT mafile_content FROM steam_account WHERE username = ?").get(key);
+    if (!current) {
+      const notFound = new Error("steam account not found");
+      notFound.code = "account_not_found";
+      throw notFound;
+    }
+    const duplicate = new Error("steam account already has Steam Guard");
+    duplicate.code = "duplicate_existing";
+    throw duplicate;
+  }
+
+  overwriteSteamGuardImport(viewerUsername, username, {
+    password = "",
+    password_action = "",
+    mafile_content = "",
+    steam_id64 = ""
+  } = {}) {
+    const viewer = asString(viewerUsername).trim();
+    const key = asString(username).trim();
+    const secret = asString(password).trim();
+    const maFileContent = asString(mafile_content).trim();
+    const passwordAction = asString(password_action).trim().toLowerCase();
+    const steamId64 = asString(steam_id64).trim();
+    if (!key || !maFileContent) {
+      throw new Error("username and mafile_content are required");
+    }
+    if (passwordAction === "overwrite" && !secret) {
+      throw new Error("password is required for overwrite");
+    }
+    if (viewer && !this.canAccessSteamAccount(viewer, key)) {
+      throw new Error("viewer cannot manage this steam account");
+    }
+    const result = this.db.prepare(`
+      UPDATE steam_account
+      SET password = CASE WHEN ? = 'overwrite' THEN ? ELSE password END,
+          mafile_content = ?,
+          steam_id64 = CASE
+            WHEN TRIM(COALESCE(steam_id64, '')) = '' AND ? != '' THEN ?
+            ELSE steam_id64
+          END,
+          updated_at = ?
+      WHERE username = ?
+    `).run(passwordAction, secret, maFileContent, steamId64, steamId64, nowSqlText(), key);
+    if (Number(result.changes) < 1) {
+      const notFound = new Error("steam account not found");
+      notFound.code = "account_not_found";
+      throw notFound;
+    }
+    return true;
+  }
+
+  clearSteamGuard(viewerUsername, username) {
+    const viewer = asString(viewerUsername).trim();
+    const key = asString(username).trim();
+    if (!key) {
+      throw new Error("username is required");
+    }
+    if (viewer && !this.canAccessSteamAccount(viewer, key)) {
+      throw new Error("viewer cannot manage this steam account");
+    }
+    const result = this.db.prepare(`
+      UPDATE steam_account
+      SET mafile_content = '', updated_at = ?
+      WHERE username = ?
+    `).run(nowSqlText(), key);
+    if (Number(result.changes) < 1) {
+      const notFound = new Error("steam account not found");
+      notFound.code = "account_not_found";
+      throw notFound;
+    }
+    return true;
+  }
+
+  clearSteamPassword(viewerUsername, username) {
+    const viewer = asString(viewerUsername).trim();
+    const key = asString(username).trim();
+    if (!key) {
+      throw new Error("username is required");
+    }
+    if (viewer && !this.canAccessSteamAccount(viewer, key)) {
+      throw new Error("viewer cannot manage this steam account");
+    }
+    const result = this.db.prepare(`
+      UPDATE steam_account
+      SET password = '', updated_at = ?
+      WHERE username = ?
+    `).run(nowSqlText(), key);
+    if (Number(result.changes) < 1) {
+      const notFound = new Error("steam account not found");
+      notFound.code = "account_not_found";
+      throw notFound;
     }
     return true;
   }

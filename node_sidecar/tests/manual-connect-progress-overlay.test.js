@@ -163,12 +163,36 @@ function loadUseAccountFn() {
   return context;
 }
 
+function loadDisconnectOtherSessionsFn({apiImpl} = {}) {
+  const source = extractFunctionSource("disconnectOtherSessionsForTarget");
+  const context = {
+    Array,
+    String,
+    state: {
+      connectedUsername: ""
+    },
+    apiCalls: [],
+    async api(pathname, options) {
+      context.apiCalls.push({pathname, options});
+      if (typeof apiImpl === "function") {
+        return apiImpl(pathname, options, context);
+      }
+      return {ok: true, disconnected: []};
+    },
+    markCachedConnectionDisconnected() {},
+    setSummary() {}
+  };
+  vm.runInNewContext(source, context, {filename: APP_PATH});
+  return context;
+}
+
 function loadInventoryEventStreamFns({
   currentAccountUsername = "acc-a",
   connectedUsername = "",
-  refreshing = true
+  refreshing = true,
+  visibilityState = "visible"
 } = {}) {
-  const stopSource = extractFunctionSource("stopInventoryEventStream");
+  const lifecycleSource = extractBlock("function stopInventoryEventStream()", "function formatInventoryRefreshFailureMessage(");
   const startSource = extractFunctionSource("startInventoryEventStream");
   const FakeEventSource = createFakeEventSourceClass();
   const calls = {
@@ -184,6 +208,9 @@ function loadInventoryEventStreamFns({
     String,
     JSON,
     encodeURIComponent,
+    document: {
+      visibilityState
+    },
     EventSource: FakeEventSource,
     inventoryEventSource: null,
     inventoryEventUsername: "",
@@ -222,7 +249,7 @@ function loadInventoryEventStreamFns({
       calls.componentQueue.push(payload);
     }
   };
-  vm.runInNewContext(`${stopSource}\n${startSource}`, context, {filename: APP_PATH});
+  vm.runInNewContext(`${lifecycleSource}\n${startSource}`, context, {filename: APP_PATH});
   return {context, calls, FakeEventSource};
 }
 
@@ -268,6 +295,28 @@ async function test_connected_manual_refresh_skips_connect_overlay() {
   assert.equal(app.refreshCalls[0].usernameOverride, "acc-a");
   assert.equal(app.refreshCalls[0].onProgress, null);
   assert.equal(app.clearCalls, 0);
+}
+
+async function test_disconnect_others_request_has_a_bounded_local_timeout() {
+  const app = loadDisconnectOtherSessionsFn({
+    apiImpl(pathname, options) {
+      if (Number(options && options.timeoutMs) > 0) {
+        return Promise.reject(new Error(String(options.timeoutMessage || "请求超时")));
+      }
+      return new Promise(() => {});
+    }
+  });
+
+  const result = Promise.race([
+    app.disconnectOtherSessionsForTarget("acc-a", {silent: true}),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("test observed an unbounded disconnect request")), 50))
+  ]);
+
+  await assert.rejects(result, /清理其他账号连接超时/);
+  assert.equal(app.apiCalls.length, 1);
+  assert.equal(app.apiCalls[0].pathname, "/api/session/disconnect-others");
+  assert.equal(Number(app.apiCalls[0].options.timeoutMs) >= 1000, true);
+  assert.equal(Number(app.apiCalls[0].options.timeoutMs) <= 10000, true);
 }
 
 function test_saved_account_status_badge_routes_connect_through_shared_overlay_source() {
@@ -349,13 +398,68 @@ function test_connection_ready_event_respects_silent_refresh_summary() {
   );
 }
 
+function test_hidden_page_does_not_open_inventory_event_stream() {
+  const {context, FakeEventSource} = loadInventoryEventStreamFns({
+    currentAccountUsername: "acc-a",
+    visibilityState: "hidden"
+  });
+
+  context.startInventoryEventStream("acc-a");
+
+  assert.equal(FakeEventSource.instances.length, 0, "hidden pages must not consume a long-lived SSE connection");
+}
+
+function test_visibility_lifecycle_closes_and_restores_only_the_current_stream() {
+  const {context, FakeEventSource} = loadInventoryEventStreamFns({
+    currentAccountUsername: "acc-a",
+    visibilityState: "visible"
+  });
+  assert.equal(
+    typeof context.syncInventoryEventStreamVisibility,
+    "function",
+    "inventory SSE needs an explicit visibility lifecycle owner"
+  );
+
+  context.startInventoryEventStream("acc-a");
+  assert.equal(FakeEventSource.instances.length, 1);
+  context.document.visibilityState = "hidden";
+  context.syncInventoryEventStreamVisibility();
+  assert.equal(FakeEventSource.instances[0].closed, true, "hiding the page should close its SSE connection");
+
+  context.document.visibilityState = "visible";
+  context.syncInventoryEventStreamVisibility();
+  assert.equal(FakeEventSource.instances.length, 2, "returning to the page should restore one current-account stream");
+  assert.equal(
+    FakeEventSource.instances[1].url,
+    "/api/events?username=acc-a&stream_version=2",
+    "visible pages should use the versioned SSE handshake so legacy clients can be retired"
+  );
+}
+
+function test_page_lifecycle_handlers_release_inventory_event_stream() {
+  assert.equal(
+    APP_SOURCE.includes('document.addEventListener("visibilitychange", syncInventoryEventStreamVisibility);'),
+    true,
+    "visibility changes should drive the inventory SSE lifecycle"
+  );
+  assert.equal(
+    APP_SOURCE.includes('window.addEventListener("pagehide", stopInventoryEventStream);'),
+    true,
+    "pagehide should release the inventory SSE even when beforeunload is skipped"
+  );
+}
+
 async function main() {
   await test_disconnected_manual_refresh_wires_connect_progress_overlay();
   await test_connected_manual_refresh_skips_connect_overlay();
+  await test_disconnect_others_request_has_a_bounded_local_timeout();
   test_saved_account_status_badge_routes_connect_through_shared_overlay_source();
   await test_use_account_reuses_shared_connect_overlay();
   test_connection_ready_event_marks_connected_and_clears_connect_overlay();
   test_connection_ready_event_respects_silent_refresh_summary();
+  test_hidden_page_does_not_open_inventory_event_stream();
+  test_visibility_lifecycle_closes_and_restores_only_the_current_stream();
+  test_page_lifecycle_handlers_release_inventory_event_stream();
   console.log("manual-connect-progress-overlay tests passed");
 }
 

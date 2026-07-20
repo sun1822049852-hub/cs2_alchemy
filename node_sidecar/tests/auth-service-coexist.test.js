@@ -52,9 +52,11 @@ function loadAuthServiceWithLoginSession(FakeLoginSession) {
 }
 
 class EmailLoginSession extends EventEmitter {
-  constructor() {
+  constructor(platformType) {
     super();
+    EmailLoginSession.lastPlatformType = platformType;
     this.refreshToken = "temporary_refresh";
+    this.accessToken = "temporary_access";
     this.steamID = {getSteamID64: () => "76561198000000001"};
   }
   async startWithCredentials() {
@@ -85,7 +87,7 @@ class ExistingGuardLoginSession extends EventEmitter {
   }
 }
 
-async function test_email_login_can_finish_without_persisting_temporary_token() {
+async function test_ordinary_email_login_keeps_original_steam_client_contract() {
   const writes = [];
   const stub = loadAuthServiceWithLoginSession(EmailLoginSession);
   try {
@@ -104,8 +106,11 @@ async function test_email_login_can_finish_without_persisting_temporary_token() 
       timeoutMs: 5000
     });
     assert.equal(phase2.result.refresh_token, "temporary_refresh");
+    assert.equal(phase2.authenticated_password, "secret");
+    assert.equal(Object.hasOwn(phase2.result, "access_token"), false);
     assert.equal(phase2.result.steam_id64, "76561198000000001");
-    assert.deepEqual(writes, [], "coexist login must never write the temporary refresh token");
+    assert.equal(EmailLoginSession.lastPlatformType, "steam-client");
+    assert.deepEqual(writes, [], "persistToken=false must not write the temporary refresh token");
   } finally {
     stub.restore();
   }
@@ -133,7 +138,7 @@ async function test_existing_mobile_authenticator_is_reported_and_session_is_rem
 }
 
 async function main() {
-  await test_email_login_can_finish_without_persisting_temporary_token();
+  await test_ordinary_email_login_keeps_original_steam_client_contract();
   await test_existing_mobile_authenticator_is_reported_and_session_is_removed();
   console.log("auth-service-coexist tests passed");
 }

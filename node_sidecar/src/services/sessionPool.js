@@ -99,7 +99,8 @@ function createSessionPool({
     password,
     refreshToken,
     tokenStore,
-    refreshTokenOnly = false
+    refreshTokenOnly = false,
+    allowTokenRecovery = true
   }) {
     const account = asString(username).trim();
     if (!account) {
@@ -125,6 +126,11 @@ function createSessionPool({
       return {steam: shared.steam || null, csgo: shared.csgo, reused: true};
     }
 
+    const recoveryEnabled = !!(
+      allowTokenRecovery
+      && tokenRecoveryService
+      && typeof tokenRecoveryService.withTokenRecovery === "function"
+    );
     const connectWithToken = async (effectiveRefreshToken) => {
       const session = new SessionClass({logger, tokenStore});
       try {
@@ -132,7 +138,7 @@ function createSessionPool({
           username: account,
           password,
           refreshToken: effectiveRefreshToken,
-          refreshTokenOnly: tokenRecoveryService ? true : refreshTokenOnly
+          refreshTokenOnly: recoveryEnabled ? true : refreshTokenOnly
         });
         return {session, steam: connected.steam, csgo: connected.csgo};
       } catch (err) {
@@ -140,7 +146,7 @@ function createSessionPool({
         throw err;
       }
     };
-    const connectTask = tokenRecoveryService && typeof tokenRecoveryService.withTokenRecovery === "function"
+    const connectTask = recoveryEnabled
       ? tokenRecoveryService.withTokenRecovery(account, connectWithToken)
       : connectWithToken(refreshToken);
     const connectingPromise = Promise.resolve(connectTask)

@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 
 const {
+  normalizeSteamGuardImportMaFile,
   normalizeMaFileForExport,
   readSteamGuardSummary
 } = require("../src/steamGuardTokenService");
@@ -49,9 +50,53 @@ function test_summary_never_contains_guard_secrets() {
   assert.equal(serialized.includes(makeMaFile().identity_secret), false);
 }
 
+function test_import_normalization_accepts_guard_only_mafile_and_strips_login_material() {
+  const source = makeMaFile();
+  delete source.steamid;
+  source.fully_enrolled = false;
+  source.status = 0;
+
+  const result = normalizeSteamGuardImportMaFile(source);
+  const normalized = JSON.parse(result.maFileContent);
+
+  assert.equal(result.accountName, "demo");
+  assert.equal(normalized.account_name, "demo");
+  assert.equal(normalized.revocation_code, "R12345");
+  assert.equal(normalized.shared_secret, source.shared_secret);
+  assert.equal(normalized.Session, null);
+  assert.equal(Object.hasOwn(normalized, "access_token"), false);
+  assert.equal(Object.hasOwn(normalized, "refresh_token"), false);
+  assert.equal(JSON.stringify(normalized).includes("secret_cookie"), false);
+  assert.equal(normalized.fully_enrolled, false);
+  assert.equal(normalized.status, 0);
+}
+
+function test_import_validation_rejects_missing_required_guard_fields_with_generic_error() {
+  const cases = [
+    {...makeMaFile(), account_name: ""},
+    {...makeMaFile(), revocation_code: ""},
+    {...makeMaFile(), revocation_code: "12345"},
+    {...makeMaFile(), revocation_code: "1234567"},
+    {...makeMaFile(), shared_secret: ""}
+  ];
+
+  for (const value of cases) {
+    assert.throws(
+      () => normalizeSteamGuardImportMaFile(value),
+      (err) => err && err.code === "invalid_mafile_format" && err.message === "令牌文件格式错误"
+    );
+  }
+  assert.throws(
+    () => normalizeSteamGuardImportMaFile("not-json"),
+    (err) => err && err.code === "invalid_mafile_format" && err.message === "令牌文件格式错误"
+  );
+}
+
 function main() {
   test_export_strips_all_login_session_material();
   test_summary_never_contains_guard_secrets();
+  test_import_normalization_accepts_guard_only_mafile_and_strips_login_material();
+  test_import_validation_rejects_missing_required_guard_fields_with_generic_error();
   console.log("steam-guard-token-service tests passed");
 }
 

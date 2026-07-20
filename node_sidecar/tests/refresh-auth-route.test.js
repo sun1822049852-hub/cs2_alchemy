@@ -141,6 +141,24 @@ function createFakeAccountStore(seedRows = []) {
       active = key;
       return true;
     },
+    saveVerifiedCredentials(username, password) {
+      const key = String(username || "").trim();
+      const secret = String(password || "").trim();
+      if (!key || !secret) return false;
+      rows.set(key, {
+        ...rows.get(key),
+        username: key,
+        password: secret
+      });
+      return true;
+    },
+    clearPassword(username) {
+      const key = String(username || "").trim();
+      const row = rows.get(key);
+      if (!row) return false;
+      rows.set(key, {...row, password: ""});
+      return true;
+    },
     updateRemark(username, remark) {
       const key = String(username || "").trim();
       if (!rows.has(key)) {
@@ -191,6 +209,7 @@ async function startServer({accounts = null, uiStateData = {}} = {}) {
     uiStateFilePath,
     licenseStateFilePath,
     runtime,
+    accountStore: fakeAccountStore,
     server,
     baseUrl: `http://127.0.0.1:${address.port}`
   };
@@ -433,6 +452,7 @@ async function test_refresh_inventory_requires_saved_login_key_before_connecting
 
 async function test_refresh_inventory_classifies_invalid_saved_login_key() {
   const connectCalls = [];
+  let storedToken = "old_login_key";
   class FakeSession {
     async connect(args = {}) {
       connectCalls.push({...args});
@@ -456,7 +476,10 @@ async function test_refresh_inventory_classifies_invalid_saved_login_key() {
       },
       tokenStore: {
         get() {
-          return "old_login_key";
+          return storedToken;
+        },
+        remove() {
+          storedToken = "";
         }
       },
       schemaStore: {
@@ -474,6 +497,43 @@ async function test_refresh_inventory_classifies_invalid_saved_login_key() {
   assert.equal(connectCalls.length, 1);
   assert.equal(connectCalls[0].refreshToken, "old_login_key");
   assert.equal(connectCalls[0].refreshTokenOnly, true);
+  assert.equal(storedToken, "");
+}
+
+async function test_refresh_inventory_only_enables_auto_recovery_for_accounts_with_mafile() {
+  const recoveryFlags = [];
+  for (const mafileContent of ["", JSON.stringify({shared_secret: "guard"})]) {
+    const sessionPool = {
+      hasTokenRecovery() {
+        return true;
+      },
+      async acquire(args) {
+        recoveryFlags.push(args.allowTokenRecovery);
+        throw new Error("stop after recovery eligibility check");
+      },
+      invalidate() {
+      }
+    };
+    await assert.rejects(
+      () => refreshInventory({
+        username: "countsteam01",
+        accountStore: {
+          getCredentials() {
+            return {
+              username: "countsteam01",
+              password: "SecretA",
+              mafile_content: mafileContent
+            };
+          }
+        },
+        tokenStore: {get() { return "expired-token"; }},
+        schemaStore: {load() { return {}; }},
+        sessionPool
+      }),
+      /stop after recovery eligibility check/
+    );
+  }
+  assert.deepEqual(recoveryFlags, [false, true]);
 }
 
 async function test_refresh_inventory_reports_connection_ready_before_component_preload_finishes() {
@@ -564,6 +624,8 @@ async function test_refresh_route_returns_login_key_invalid_and_persists_auth_st
         err.reason = "login_key_invalid";
         err.status = 409;
         err.auth_state = "auth_invalid";
+        err.credential_state = "password_reentry_required";
+        err.password_cleared = true;
         throw err;
       }
     })
@@ -580,8 +642,11 @@ async function test_refresh_route_returns_login_key_invalid_and_persists_auth_st
     assert.equal(response.statusCode, 409);
     assert.equal(response.body.ok, false);
     assert.equal(response.body.reason, "login_key_invalid");
+    assert.equal(response.body.message, "登录过期");
     assert.equal(response.body.auth_state, "auth_invalid");
     assert.equal(response.body.relogin_required, true);
+    assert.equal(response.body.credential_state, "password_reentry_required");
+    assert.equal(response.body.password_cleared, true);
     assert.equal(refreshCalls, 1);
 
     const accountsResponse = await requestJson(ctx, "GET", "/api/accounts");
@@ -628,6 +693,47 @@ async function test_refresh_route_skips_retry_for_persisted_auth_invalid_state()
     assert.equal(response.body.auth_state, "auth_invalid");
     assert.equal(response.body.relogin_required, true);
     assert.equal(refreshCalls, 0);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_refresh_route_preserves_password_reentry_after_automatic_recovery_is_latched() {
+  const ctx = await startServer({
+    accounts: [{
+      username: "countsteam01",
+      password: "",
+      remark: "主号A",
+      steam_name: "Alpha",
+      steam_id: "steamid-alpha",
+      avatar_url: "https://example.com/a.png",
+      mafile_content: JSON.stringify({shared_secret: "guard"}),
+      is_active: true
+    }],
+    createServerOptionsFactory: () => ({
+      refreshInventoryFn: async () => {
+        const err = new Error("该账号没有保存密码");
+        err.code = "password_missing";
+        err.reason = "password_missing";
+        err.status = 409;
+        err.auth_state = "needs_attention";
+        err.credential_state = "password_reentry_required";
+        throw err;
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+
+    const response = await requestJson(ctx, "POST", "/api/refresh", {
+      body: {username: "countsteam01"}
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.reason, "password_missing");
+    assert.equal(response.body.auth_state, "needs_attention");
+    assert.equal(response.body.relogin_required, true);
+    assert.equal(response.body.credential_state, "password_reentry_required");
   } finally {
     await stopServer(ctx);
   }
@@ -698,7 +804,7 @@ async function test_login_save_clears_persisted_auth_invalid_state() {
         loginCalls += 1;
         assert.equal(username, "countsteam01");
         assert.equal(password, "SecretA");
-        assert.equal(twoFactorCode, "123456");
+        assert.equal(twoFactorCode, "A1B2C");
         return {
           username,
           refresh_token: "new_login_key"
@@ -719,7 +825,7 @@ async function test_login_save_clears_persisted_auth_invalid_state() {
       body: {
         username: "countsteam01",
         password: "SecretA",
-        totp: "123456"
+        totp: "A1B2C"
       }
     });
     assert.equal(response.statusCode, 200);
@@ -771,7 +877,281 @@ async function test_login_start_uses_saved_password_for_existing_account() {
   }
 }
 
-async function test_login_submit_code_uses_saved_password_without_exposing_it() {
+async function test_login_start_persists_verified_credentials_before_guard_response() {
+  const ctx = await startServer({
+    accounts: [{
+      username: "countsteam01",
+      password: "OldPassword",
+      remark: "主号A",
+      steam_name: "Alpha",
+      steam_id: "steamid-alpha",
+      avatar_url: "https://example.com/a.png",
+      is_active: true
+    }],
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async () => ({
+        done: false,
+        guard_type: "email_code",
+        guard_hint: "m***@example.com"
+      })
+    })
+  });
+  try {
+    await authorize(ctx);
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "countsteam01", password: "VerifiedPassword"}
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.done, false);
+    assert.equal(response.body.credentials_saved, true);
+    const accounts = await requestJson(ctx, "GET", "/api/accounts");
+    assert.equal(accounts.body.accounts[0].remark, "主号A");
+    const credentials = ctx.accountStore.getCredentials("countsteam01");
+    assert.equal(credentials.password, "VerifiedPassword");
+    assert.equal(credentials.remark, "主号A");
+    assert.equal(credentials.steam_name, "Alpha");
+    assert.equal(credentials.steam_id, "steamid-alpha");
+    assert.equal(credentials.avatar_url, "https://example.com/a.png");
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_login_start_saves_new_verified_account_without_switching_active_account() {
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async () => ({
+        done: false,
+        guard_type: "device_code",
+        guard_hint: ""
+      })
+    })
+  });
+  try {
+    await authorize(ctx);
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "new_verified_account", password: "VerifiedPassword"}
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.done, false);
+    assert.equal(response.body.credentials_saved, true);
+    assert.equal(ctx.accountStore.getCredentials("new_verified_account").password, "VerifiedPassword");
+    assert.equal(ctx.accountStore.getActive().username, "countsteam01");
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_login_start_submits_local_guard_on_backend_after_password_phase() {
+  const sharedSecret = Buffer.from("server-side-login-guard").toString("base64");
+  const maFileContent = JSON.stringify({
+    account_name: "countsteam01",
+    shared_secret: sharedSecret,
+    identity_secret: Buffer.from("server-side-identity").toString("base64"),
+    device_id: "android:12345678-1234-4123-8123-123456789abc",
+    revocation_code: "R12345",
+    Session: null
+  });
+  let startInput = null;
+  let submitInput = null;
+  const ctx = await startServer({
+    accounts: [{
+      username: "countsteam01",
+      password: "SecretA",
+      remark: "主号A",
+      steam_name: "Alpha",
+      steam_id: "steamid-alpha",
+      avatar_url: "https://example.com/a.png",
+      mafile_content: maFileContent,
+      has_steam_guard: true,
+      is_active: true
+    }],
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async (input) => {
+        startInput = input;
+        return {done: false, guard_type: "device_code", guard_hint: ""};
+      },
+      submitGuardCodeFn: async (input) => {
+        submitInput = input;
+        return {
+          done: true,
+          authenticated_password: "SecretA",
+          result: {
+            username: "countsteam01",
+            refresh_token: "refreshed-token",
+            steam_id64: "steamid-alpha"
+          }
+        };
+      },
+      resolveAccountProfileFn: async ({username}) => ({
+        username,
+        steam_id64: "steamid-alpha",
+        persona_name: "Alpha",
+        avatar_url_full: "https://example.com/a.png"
+      })
+    })
+  });
+  try {
+    await authorize(ctx);
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {
+        username: "countsteam01",
+        password: "SecretA",
+        totp: "CLIENT-MUST-NOT-BE-USED"
+      }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.done, true);
+    assert.equal(startInput.twoFactorCode, "", "password phase must start without a client-supplied Guard code");
+    assert.ok(submitInput, "backend should submit the local maFile code after Steam requests device_code");
+    assert.equal(submitInput.username, "countsteam01");
+    assert.match(submitInput.code, /^[A-Z0-9]{5}$/);
+    assert.equal(JSON.stringify(response.body).includes(submitInput.code), false);
+    assert.equal(JSON.stringify(response.body).includes(sharedSecret), false);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_existing_guard_invalid_password_clears_only_saved_password() {
+  const maFileContent = JSON.stringify({
+    account_name: "countsteam01",
+    shared_secret: Buffer.from("saved-login-guard").toString("base64"),
+    identity_secret: Buffer.from("saved-login-identity").toString("base64"),
+    device_id: "android:12345678-1234-4123-8123-123456789abc",
+    revocation_code: "R12345",
+    Session: null
+  });
+  const ctx = await startServer({
+    accounts: [{
+      username: "countsteam01",
+      password: "WrongPassword",
+      remark: "主号A",
+      steam_name: "Alpha",
+      steam_id: "steamid-alpha",
+      avatar_url: "https://example.com/a.png",
+      mafile_content: maFileContent,
+      has_steam_guard: true,
+      is_active: true
+    }],
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async () => {
+        const error = new Error("InvalidPassword");
+        error.eresult = 5;
+        throw error;
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "countsteam01", password: "WrongPassword"}
+    });
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.body.reason, "invalid_password");
+    assert.equal(response.body.message, "密码错误，请重新输入密码");
+    assert.equal(response.body.password_cleared, true);
+
+    const accounts = await requestJson(ctx, "GET", "/api/accounts");
+    assert.equal(accounts.body.accounts[0].password, "");
+    assert.equal(accounts.body.accounts[0].has_steam_guard, true);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_new_account_invalid_password_keeps_account_or_password_message() {
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async () => {
+        const error = new Error("InvalidPassword");
+        error.eresult = 5;
+        throw error;
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "brand_new_account", password: "WrongPassword"}
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.body.reason, "invalid_password");
+    assert.equal(response.body.message, "账号或密码错误，请确认后重试");
+    assert.equal(Object.hasOwn(response.body, "password_cleared"), false);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_existing_account_access_denied_is_persisted_as_login_expiry() {
+  const invalidatedAccounts = [];
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async () => {
+        const error = new Error("AccessDenied");
+        error.eresult = 15;
+        throw error;
+      },
+      tokenRecoveryService: {
+        async invalidateAuthentication(username) {
+          invalidatedAccounts.push(username);
+        }
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "countsteam01", password: "SecretA"}
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.reason, "login_key_invalid");
+    assert.equal(response.body.auth_state, "auth_invalid");
+    assert.equal(response.body.relogin_required, true);
+    assert.equal(response.body.message, "登录过期");
+    assert.deepEqual(invalidatedAccounts, ["countsteam01"]);
+
+    const accounts = await requestJson(ctx, "GET", "/api/accounts");
+    assert.equal(accounts.body.accounts[0].auth_state, "auth_invalid");
+    assert.equal(accounts.body.accounts[0].auth_reason, "login_key_invalid");
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_new_account_access_denied_remains_access_denied() {
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async () => {
+        const error = new Error("AccessDenied");
+        error.eresult = 15;
+        throw error;
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "brand_new_account", password: "SecretNew"}
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.body.reason, "access_denied");
+    assert.equal(Object.hasOwn(response.body, "auth_state"), false);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
+async function test_login_submit_code_ignores_tampered_password_and_uses_phase1_authenticated_password() {
   let submitInput = null;
   let profileInput = null;
   const ctx = await startServer({
@@ -780,6 +1160,7 @@ async function test_login_submit_code_uses_saved_password_without_exposing_it() 
         submitInput = input;
         return {
           done: true,
+          authenticated_password: "SecretA",
           result: {
             username: "countsteam01",
             refresh_token: "refreshed-token",
@@ -805,7 +1186,7 @@ async function test_login_submit_code_uses_saved_password_without_exposing_it() 
       body: {
         username: "countsteam01",
         code: "ABCDE",
-        password: ""
+        password: "TamperedPassword"
       }
     });
 
@@ -824,19 +1205,75 @@ async function test_login_submit_code_uses_saved_password_without_exposing_it() 
   }
 }
 
+async function test_login_code_routes_reject_invalid_format_before_auth_service() {
+  const calls = {
+    start: 0,
+    submit: 0,
+    save: 0
+  };
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      startLoginSessionFn: async () => {
+        calls.start += 1;
+        return {done: false, guard_type: "device_code", guard_hint: ""};
+      },
+      submitGuardCodeFn: async () => {
+        calls.submit += 1;
+        return {done: true, result: {username: "countsteam01", refresh_token: "token"}};
+      },
+      loginAndSaveTokenFn: async () => {
+        calls.save += 1;
+        return {username: "countsteam01", refresh_token: "token"};
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+
+    const startResponse = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "countsteam01", password: "SecretA", totp: "AB-12"}
+    });
+    const submitResponse = await requestJson(ctx, "POST", "/api/accounts/login-submit-code", {
+      body: {username: "countsteam01", code: "ABC123"}
+    });
+    const saveResponse = await requestJson(ctx, "POST", "/api/accounts/login-save", {
+      body: {username: "countsteam01", password: "SecretA", totp: "abc12"}
+    });
+
+    for (const response of [startResponse, submitResponse, saveResponse]) {
+      assert.equal(response.statusCode, 400);
+      assert.equal(response.body.reason, "invalid_guard_code_format");
+      assert.equal(response.body.message, "验证码必须为5位大写字母或数字");
+    }
+    assert.deepEqual(calls, {start: 0, submit: 0, save: 0});
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
 async function main() {
   await test_accounts_and_snapshot_routes_include_default_auth_state();
   await test_snapshot_account_route_can_persist_web_inventory_stub_artifact();
   await test_refresh_route_uses_injected_refresh_inventory_fn();
   await test_refresh_inventory_requires_saved_login_key_before_connecting();
   await test_refresh_inventory_classifies_invalid_saved_login_key();
+  await test_refresh_inventory_only_enables_auto_recovery_for_accounts_with_mafile();
   await test_refresh_inventory_reports_connection_ready_before_component_preload_finishes();
   await test_refresh_route_returns_login_key_invalid_and_persists_auth_state();
+  await test_refresh_route_preserves_password_reentry_after_automatic_recovery_is_latched();
   await test_refresh_route_skips_retry_for_persisted_auth_invalid_state();
   await test_guard_account_retries_despite_persisted_auth_invalid_state();
   await test_login_save_clears_persisted_auth_invalid_state();
   await test_login_start_uses_saved_password_for_existing_account();
-  await test_login_submit_code_uses_saved_password_without_exposing_it();
+  await test_login_start_persists_verified_credentials_before_guard_response();
+  await test_login_start_saves_new_verified_account_without_switching_active_account();
+  await test_login_start_submits_local_guard_on_backend_after_password_phase();
+  await test_existing_guard_invalid_password_clears_only_saved_password();
+  await test_new_account_invalid_password_keeps_account_or_password_message();
+  await test_existing_account_access_denied_is_persisted_as_login_expiry();
+  await test_new_account_access_denied_remains_access_denied();
+  await test_login_submit_code_ignores_tampered_password_and_uses_phase1_authenticated_password();
+  await test_login_code_routes_reject_invalid_format_before_auth_service();
   console.log("refresh-auth-route tests passed");
 }
 

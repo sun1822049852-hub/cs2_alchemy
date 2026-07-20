@@ -46,6 +46,42 @@ function normalizeMaFileForExport(content) {
   return normalized;
 }
 
+function invalidImportMaFileError() {
+  const err = new Error("令牌文件格式错误");
+  err.code = "invalid_mafile_format";
+  return err;
+}
+
+function normalizeSteamGuardImportMaFile(content) {
+  try {
+    const raw = parseRawMaFile(content);
+    const accountName = asString(raw.account_name).trim();
+    const sharedSecret = asString(raw.shared_secret).trim();
+    const revocationCode = asString(raw.revocation_code).trim();
+    if (!accountName || !sharedSecret || revocationCode.length !== 6) {
+      throw invalidImportMaFileError();
+    }
+    const normalized = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (key === "Session" || LOGIN_TOKEN_FIELDS.has(key)) continue;
+      normalized[key] = value;
+    }
+    normalized.account_name = accountName;
+    normalized.shared_secret = sharedSecret;
+    normalized.revocation_code = revocationCode;
+    normalized.Session = null;
+    return {
+      accountName,
+      maFileContent: JSON.stringify(normalized)
+    };
+  } catch (err) {
+    if (err && err.code === "invalid_mafile_format") {
+      throw err;
+    }
+    throw invalidImportMaFileError();
+  }
+}
+
 function readSteamGuardSummary(content, {nowSeconds} = {}) {
   const parsed = parseMaFile(content);
   const now = Number.isFinite(Number(nowSeconds)) ? Math.floor(Number(nowSeconds)) : getServerTime();
@@ -77,6 +113,7 @@ function hasCompleteSteamGuard(content) {
 
 module.exports = {
   hasCompleteSteamGuard,
+  normalizeSteamGuardImportMaFile,
   normalizeMaFileForExport,
   readSteamGuardSummary
 };
