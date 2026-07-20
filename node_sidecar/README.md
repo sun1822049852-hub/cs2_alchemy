@@ -59,6 +59,28 @@ npm run ui
 npm run ui:desktop
 ```
 
+### 开发文件日志
+
+排查本地运行问题时，可以在启动进程前显式开启后端开发文件日志：
+
+```powershell
+$env:CS2_DEV_FILE_LOG = "1"
+npm run ui
+```
+
+- 该环境变量只在进程启动时读取，修改后必须重启后端或桌面程序。
+- 只有精确值 `1` 会启用；未设置、`0`、`true` 等其它值都保持关闭。
+- 正式发布和普通用户环境不得设置该变量，默认不会创建通用开发日志。
+- 日志写入运行目录的 `logs/dev/backend-YYYY-MM-DD.jsonl`，按本地日期仅保留当天和前两天。
+- 文件日志会脱敏密码、token、cookie、Steam Guard secret、恢复码和验证码；`code`、`eresult` 等错误诊断字段会保留。
+- 控制台输出及已有 Craft、Guard、capture、artifact 专项日志不受影响；文件日志写入失败也不会中断业务。
+
+关闭开发文件日志并重启：
+
+```powershell
+Remove-Item Env:CS2_DEV_FILE_LOG -ErrorAction SilentlyContinue
+```
+
 说明：
 
 - 仓库根目录的 `main_ui_node_desktop.js` / `run.bat` 现在默认按正式入口启动，默认 `prod_login`
@@ -176,6 +198,7 @@ node tests/craftPredictorDrawerUi.test.js
 ## 运行产物
 
 - 库存快照：`logs/processed_inventory/*.json`
+- 可选后端开发日志：`logs/dev/backend-YYYY-MM-DD.jsonl`（仅 `CS2_DEV_FILE_LOG=1`）
 - UI 入口服务：`src/uiServer.js`
 - Electron 入口：`electron-main.js`
 
