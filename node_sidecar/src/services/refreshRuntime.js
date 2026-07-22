@@ -202,7 +202,12 @@ function createRefreshRuntime({
       const accountCache = uiState && typeof uiState.getAccount === "function" ? uiState.getAccount(account) : null;
       const persistedAuthState = asString(accountCache && accountCache.auth_state || "").trim();
       const persistedAuthReason = asString(accountCache && accountCache.auth_reason || "").trim();
-      if (persistedAuthState === "auth_invalid") {
+      const accountStore = accountStoreFactory();
+      const accountProjection = accountStore && typeof accountStore.get === "function"
+        ? accountStore.get(account)
+        : null;
+      const hasSteamGuard = Boolean(accountProjection && accountProjection.has_steam_guard);
+      if (persistedAuthState === "auth_invalid" && !hasSteamGuard) {
         throw buildRefreshAuthError({
           account,
           reason: persistedAuthReason || "login_key_invalid",

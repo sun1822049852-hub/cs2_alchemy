@@ -482,6 +482,20 @@ async function test_control_plane_user_lists_all_saved_steam_accounts() {
       response.body.accounts.map((row) => row.username),
       ["countsteam01", "countsteam02"]
     );
+    assert.equal(response.body.accounts[0].password, "SecretA");
+    assert.equal(Object.hasOwn(response.body.accounts[0], "mafile_content"), false);
+  });
+}
+
+async function test_read_only_user_does_not_receive_saved_steam_passwords() {
+  await withScopedServer({
+    username: "member_a",
+    permissions: [FEATURE_CODES.ACCOUNTS_READ]
+  }, async ({port}) => {
+    const response = await requestJson({port, route: "/api/accounts"});
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body.accounts.map((row) => row.username), ["countsteam01", "countsteam02"]);
+    assert.equal(response.body.accounts.every((row) => !Object.hasOwn(row, "password")), true);
   });
 }
 
@@ -955,6 +969,7 @@ async function test_unknown_dev_user_keeps_legacy_single_user_scope() {
 
 async function main() {
   await test_control_plane_user_lists_all_saved_steam_accounts();
+  await test_read_only_user_does_not_receive_saved_steam_passwords();
   await test_control_plane_user_can_select_any_saved_steam_account();
   await test_trade_routes_allow_any_saved_steam_account();
   await test_market_routes_allow_any_saved_steam_account();

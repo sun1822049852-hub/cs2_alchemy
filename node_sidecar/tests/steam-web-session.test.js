@@ -25,7 +25,7 @@ async function withProxyEnv(envValues, fn) {
   }
 }
 
-function stubHttpsRequest({responseJson}) {
+function stubHttpsRequest({responseJson, statusCode = 200}) {
   const https = require("https");
   const originalRequest = https.request;
   const requests = [];
@@ -42,7 +42,7 @@ function stubHttpsRequest({responseJson}) {
         body: req.body
       });
       const res = new EventEmitter();
-      res.statusCode = 200;
+      res.statusCode = statusCode;
       res.headers = {};
       process.nextTick(() => {
         callback(res);
@@ -195,6 +195,36 @@ async function test_refresh_web_cookie_from_token_falls_back_when_steam_session_
   }
 }
 
+async function test_refresh_web_cookie_from_token_surfaces_explicit_token_rejection() {
+  const httpsStub = stubHttpsRequest({
+    statusCode: 401,
+    responseJson: {response: {}}
+  });
+  const sessionStub = loadSteamWebSessionWithSteamSessionStub({
+    EAuthTokenPlatformType: {MobileApp: "mobile"},
+    LoginSession: class FakeLoginSession {
+      async getWebCookies() {
+        throw new Error("should not reach steam-session");
+      }
+    }
+  });
+  const {refreshWebCookieFromToken} = sessionStub.module;
+
+  try {
+    await assert.rejects(
+      () => refreshWebCookieFromToken("rejected.refresh.token", "76561198000000000"),
+      (err) => {
+        assert.equal(err && err.code, "refresh_token_rejected");
+        assert.doesNotMatch(String(err && err.message), /rejected\.refresh\.token/);
+        return true;
+      }
+    );
+  } finally {
+    sessionStub.restore();
+    httpsStub.restore();
+  }
+}
+
 async function test_refresh_web_cookie_from_token_passes_proxy_to_refresh_and_steam_session() {
   const httpsStub = stubHttpsRequest({
     responseJson: {
@@ -248,6 +278,7 @@ async function test_refresh_web_cookie_from_token_passes_proxy_to_refresh_and_st
 async function main() {
   await test_refresh_web_cookie_from_token_prefers_steam_session_and_enhances_cookie();
   await test_refresh_web_cookie_from_token_falls_back_when_steam_session_fails();
+  await test_refresh_web_cookie_from_token_surfaces_explicit_token_rejection();
   await test_refresh_web_cookie_from_token_passes_proxy_to_refresh_and_steam_session();
   console.log("steam-web-session tests passed");
 }

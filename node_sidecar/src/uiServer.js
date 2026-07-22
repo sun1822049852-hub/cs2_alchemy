@@ -10,8 +10,13 @@ const {TokenStore} = require("./tokenStore");
 const {UiStateStore} = require("./uiStateStore");
 const {loginAndSaveToken, startLoginSession, submitGuardCode, removePendingSession} = require("./authService");
 const {precheckAuthApi} = require("./networkPrecheck");
-const {parseMaFile, generateTotp} = require("./maFileParser");
-const {refreshWebCookie, refreshWebCookieFromToken} = require("./steamWebSession");
+const {parseMaFile} = require("./maFileParser");
+const {normalizeMaFileForExport, readSteamGuardSummary} = require("./steamGuardTokenService");
+const {createSteamGuardImportService} = require("./steamGuardImportService");
+const {createSteamGuardCoexistService} = require("./steamGuardCoexistService");
+const {createSteamGuardCoexistProcessAdapter} = require("./steamGuardCoexistProcessAdapter");
+const {TokenRecoveryError, createTokenRecoveryService, isRecoverableTokenError} = require("./tokenRecoveryService");
+const {refreshAccessToken, refreshWebCookie, refreshWebCookieFromToken} = require("./steamWebSession");
 const {fetchFullInventory} = require("./inventoryService");
 const {parseTradeUrl, sendTradeOffer, confirmTradeOffer, acceptTradeOffer, cancelTradeOffer, steamId64ToAccountId} = require("./tradeService");
 const {refreshInventory} = require("./refreshWorkflow");
@@ -57,13 +62,41 @@ const {PATHS, STORAGE_UNIT_DEF_INDEX, STORAGE_UNIT_CAPACITY} = require("./consta
 const { sellItem, getPriceOverview, calculateBuyerPrice, calculateSellerPrice, getMarketConfirmations, confirmMarketListings } = require("./steamMarketService");
 const { checkBansBatch, checkBanSingle, formatBanStatus, fetchBalance, fetchTradeUrl } = require("./steamAccountTools");
 const { getSteamApiKey, setSteamApiKey } = require("./steamApiKeyStore");
-const { enrollSteamGuard, finalizeSteamGuard } = require("./steamGuardEnrollService");
 
 const UI_DIR = path.resolve(__dirname, "..", "ui");
 const SESSION_COOKIE_NAME = "cs2_alchemy_session";
 const SESSION_TTL_DAYS = 7;
 const logger = new DedupLogger({windowMs: 800});
-const sessionPool = createSessionPool({logger});
+let sessionPool = null;
+const recoveryTokenStore = {
+  get(username) {
+    return new TokenStore().get(username);
+  },
+  set(username, token) {
+    return new TokenStore().set(username, token);
+  },
+  remove(username) {
+    return new TokenStore().remove(username);
+  }
+};
+const defaultTokenRecoveryService = createTokenRecoveryService({
+  tokenStore: recoveryTokenStore,
+  accountCredentialsProvider: async (username) => new AccountStore().getCredentials(username),
+  loginWithCredentials: async ({username, password, guardCode}) => loginAndSaveToken({
+    username,
+    password,
+    twoFactorCode: guardCode,
+    persistToken: false,
+    logger
+  }),
+  invalidateSessions: async (username) => {
+    if (sessionPool) sessionPool.invalidate(username, "token_recovered");
+  },
+  clearStoredPassword: async (username) => {
+    return new AccountStore().clearPassword(username);
+  }
+});
+sessionPool = createSessionPool({logger, tokenRecoveryService: defaultTokenRecoveryService});
 const componentOpsService = createComponentOpsService({sessionPool, logger});
 const craftService = createCraftService({sessionPool, logger});
 const weaponArmoryService = createWeaponArmoryService({sessionPool, logger});
@@ -164,7 +197,7 @@ function getViewerAccountStore(auth, deps = {}) {
  * @param {object} account — accountStore.get() 返回的行
  * @returns {{ webSession, hasMaFile: boolean }}
  */
-async function resolveWebSessionForAccount(account) {
+async function resolveWebSessionForAccount(account, {tokenRecoveryService = null} = {}) {
   if (!account) throw new Error("账号不存在");
   const username = asString(account.username).trim();
 
@@ -178,7 +211,8 @@ async function resolveWebSessionForAccount(account) {
       return refreshWebSessionFromTokenStore(account, {
         username,
         maData: null,
-        hasMaFile: false
+        hasMaFile: false,
+        tokenRecoveryService
       });
     }
     try {
@@ -189,7 +223,8 @@ async function resolveWebSessionForAccount(account) {
         username,
         maData,
         hasMaFile: true,
-        fallbackError: err
+        fallbackError: err,
+        tokenRecoveryService
       });
     }
   }
@@ -198,8 +233,139 @@ async function resolveWebSessionForAccount(account) {
   return refreshWebSessionFromTokenStore(account, {
     username,
     maData: null,
-    hasMaFile: false
+    hasMaFile: false,
+    tokenRecoveryService
   });
+}
+
+function getTokenStore(deps = {}) {
+  if (typeof deps.tokenStoreFactory === "function") {
+    const custom = deps.tokenStoreFactory();
+    if (custom) return custom;
+  }
+  return new TokenStore();
+}
+
+function getAccountCredentials(accountStore, username) {
+  if (accountStore && typeof accountStore.getCredentials === "function") {
+    return accountStore.getCredentials(username);
+  }
+  return accountStore && typeof accountStore.get === "function" ? accountStore.get(username) : null;
+}
+
+function createServerSteamGuardCoexistService(options = {}) {
+  if (options.steamGuardCoexistService) return options.steamGuardCoexistService;
+  const processAdapter = options.steamGuardProcessAdapter || createSteamGuardCoexistProcessAdapter();
+
+  return createSteamGuardCoexistService({
+    processAdapter,
+    completeBinding: async ({mode, accountId, accountName, password, remark, steamId64, maFileContent}) => {
+      const viewerUsername = asString(accountId).trim();
+      const accountStore = typeof options.accountStoreFactory === "function"
+        ? options.accountStoreFactory({viewerUsername})
+        : new AccountStore({viewerUsername});
+      if (mode === "existing") {
+        accountStore.updateSteamGuard(accountName, {
+          mafile_content: maFileContent,
+          steam_id64: steamId64
+        });
+        return;
+      }
+      if (getAccountCredentials(accountStore, accountName)) {
+        throw new Error("local_account_exists");
+      }
+      accountStore.createGuardOnlyAccount({
+        username: accountName,
+        password,
+        remark,
+        steam_id64: steamId64,
+        mafile_content: maFileContent,
+        set_active: true
+      });
+      const uiState = typeof options.uiStateStoreFactory === "function"
+        ? options.uiStateStoreFactory({viewerUsername})
+        : new UiStateStore(undefined, {viewerUsername});
+      if (uiState && typeof uiState.setLastSelected === "function") {
+        uiState.setLastSelected(accountName);
+      }
+    }
+  });
+}
+
+function steamGuardCoexistMessage(reason) {
+  const messages = {
+    local_guard_exists: "该账号本地已保存 Steam Guard，请使用令牌管理",
+    local_account_exists: "该账号已保存，请改用选择已有账号",
+    already_has_authenticator: "该 Steam 账号已经绑定令牌，联合绑定仅支持尚未绑定令牌的账号；不会移除或替换现有令牌",
+    already_has_authenticator_cooldown: "该账号刚被 Steam 判定为已绑定令牌，请等待60秒后重试",
+    email_code_required: "请输入邮箱验证码",
+    invalid_email_code: "邮箱验证码错误，请重新输入",
+    invalid_code_format: "验证码必须为5位大写字母或数字",
+    app_code_mismatch: "动态码不一致，请确认已在 Steam App 中完成绑定",
+    time_sync_failed: "Steam 服务器时间同步失败，请检查网络后重试",
+    flow_not_found: "绑定进程已不存在，请重新开始",
+    persistence_failed: "令牌保存失败",
+    access_token_missing: "Steam 登录成功但未返回 MobileApp access token，请重新开始绑定",
+    refresh_token_missing: "Steam 登录成功但未返回 refresh token，请重新开始绑定",
+    steam_id_missing: "Steam 登录成功但未返回 SteamID，请重新开始绑定",
+    add_authenticator_failed: "Steam Guard 令牌数据获取失败，请稍后重试",
+    invalid_authenticator_response: "Steam 返回的令牌数据不完整，请重新开始绑定",
+    coexist_worker_failed: "Steam Guard 独立绑定进程异常结束，请重新开始绑定",
+    coexist_worker_invalid_response: "Steam Guard 独立绑定进程返回异常，请重新开始绑定",
+    totp_generation_failed: "本地令牌数据无效，无法计算动态码",
+    password_required: "password is required",
+    username_required: "username is required"
+  };
+  return messages[reason] || "Steam Guard 联合绑定失败";
+}
+
+function steamGuardCoexistStatus(result) {
+  if (result && result.ok) return 200;
+  const reason = asString(result && result.reason).trim();
+  if (["local_guard_exists", "local_account_exists", "already_has_authenticator"].includes(reason)) return 409;
+  if (reason === "already_has_authenticator_cooldown") return 429;
+  if (reason === "flow_not_found") return 410;
+  if (reason === "app_code_mismatch") return 422;
+  if (["invalid_email_code", "invalid_code_format"].includes(reason)) return 400;
+  if (reason === "time_sync_failed") return 503;
+  if (reason === "persistence_failed") return 500;
+  if ([
+    "login_failed",
+    "access_token_missing",
+    "refresh_token_missing",
+    "steam_id_missing",
+    "add_authenticator_failed",
+    "invalid_authenticator_response",
+    "coexist_worker_failed",
+    "coexist_worker_invalid_response"
+  ].includes(reason)) return 502;
+  return 400;
+}
+
+function buildSteamGuardCoexistResponse(result) {
+  const value = result && typeof result === "object" ? result : {ok: false, reason: "unknown_error"};
+  const payload = {
+    ok: !!value.ok,
+    state: asString(value.state).trim(),
+    reason: asString(value.reason).trim(),
+    message: value.ok ? "" : steamGuardCoexistMessage(value.reason),
+    flow_id: asString(value.flow_id).trim(),
+    guard_hint: asString(value.guard_hint).trim(),
+    retry_after_seconds: Number(value.retry_after_seconds) || 0,
+    mode: asString(value.mode).trim(),
+    account_name: asString(value.account_name).trim(),
+    steam_id64: asString(value.steam_id64).trim(),
+    file_name: asString(value.file_name).trim()
+  };
+  if (Number(value.http_status)) payload.http_status = Number(value.http_status);
+  if (Number(value.steam_status)) payload.steam_status = Number(value.steam_status);
+  if (Array.isArray(value.missing_fields) && value.missing_fields.length) {
+    payload.missing_fields = value.missing_fields.map((field) => asString(field).trim()).filter(Boolean);
+  }
+  for (const key of Object.keys(payload)) {
+    if (payload[key] === "" || payload[key] === 0) delete payload[key];
+  }
+  return payload;
 }
 
 function maFileParseFailureReason(err) {
@@ -224,18 +390,11 @@ async function refreshWebSessionFromTokenStore(account, {
   username,
   maData = null,
   hasMaFile = false,
-  fallbackError = null
+  fallbackError = null,
+  tokenRecoveryService = null
 } = {}) {
   const tokenStore = new TokenStore();
-  try {
-    const refreshToken = tokenStore.get(username);
-    if (!refreshToken) {
-      if (fallbackError) {
-        throw fallbackError;
-      }
-      throw new Error(`账号 ${username} 既无 maFile 也无 refresh_token，无法获取 Web Session`);
-    }
-
+  const createWebSession = async (refreshToken) => {
     // 需要 steamId64 — 从 maFile 或 account 的 steam_id64 / steam_id 字段取
     let steamId64 = asString(maData && maData.steamId64 ? maData.steamId64 : "").trim();
     if (!steamId64) {
@@ -253,9 +412,68 @@ async function refreshWebSessionFromTokenStore(account, {
 
     const webSession = await refreshWebCookieFromToken(refreshToken, steamId64);
     return {webSession, hasMaFile: Boolean(hasMaFile), maData: maData || null};
-  } finally {
-    if (tokenStore && typeof tokenStore.close === "function") {
-      tokenStore.close();
+  };
+  if (tokenRecoveryService && typeof tokenRecoveryService.withTokenRecovery === "function") {
+    return tokenRecoveryService.withTokenRecovery(username, createWebSession);
+  }
+  const refreshToken = tokenStore.get(username);
+  if (!refreshToken) {
+    if (fallbackError) throw fallbackError;
+    throw new Error(`账号 ${username} 既无 maFile 也无 refresh_token，无法获取 Web Session`);
+  }
+  return createWebSession(refreshToken);
+}
+
+async function runAccountWebOperation(account, {tokenRecoveryService = null} = {}, operation) {
+  if (typeof operation !== "function") {
+    throw new TypeError("operation must be a function");
+  }
+  const username = asString(account && account.username).trim();
+  const initialSession = await resolveWebSessionForAccount(account, {tokenRecoveryService});
+  try {
+    return await operation(initialSession);
+  } catch (err) {
+    if (
+      !isRecoverableTokenError(err)
+      || !tokenRecoveryService
+      || typeof tokenRecoveryService.recoverToken !== "function"
+    ) {
+      throw err;
+    }
+
+    const replacementToken = await tokenRecoveryService.recoverToken(username);
+    let maData = initialSession.maData || null;
+    if (!maData && account && account.mafile_content) {
+      try {
+        maData = parseMaFile(account.mafile_content);
+      } catch (_) {
+        maData = null;
+      }
+    }
+    const steamId64 = asString(
+      (maData && maData.steamId64)
+      || (account && account.steam_id64)
+      || (account && account.steam_id)
+    ).trim();
+    if (!steamId64) {
+      throw new TokenRecoveryError("steam_id_missing", "该账号缺少 SteamID，无法恢复 Web 登录", {cause: err});
+    }
+    const retrySession = {
+      webSession: await refreshWebCookieFromToken(replacementToken, steamId64),
+      hasMaFile: Boolean(initialSession.hasMaFile),
+      maData
+    };
+    try {
+      return await operation(retrySession);
+    } catch (retryErr) {
+      if (isRecoverableTokenError(retryErr)) {
+        throw new TokenRecoveryError(
+          "refresh_token_rejected_after_recovery",
+          "Steam 仍拒绝新的登录凭据，请检查账号密码或 Guard",
+          {cause: retryErr}
+        );
+      }
+      throw retryErr;
     }
   }
 }
@@ -877,6 +1095,29 @@ function requireSteamAccountAccess(res, auth, username) {
   }
   writeJson(res, 403, {ok: false, reason: "account_scope_denied", message: "当前登录用户无权访问该 Steam 账号"});
   return false;
+}
+
+function requireExistingSteamAccountAccess(res, auth, username) {
+  const key = asString(username).trim();
+  if (!key) {
+    writeJson(res, 400, {ok: false, message: "username is required"});
+    return false;
+  }
+  const store = auth && auth.store;
+  if (!store || typeof store.getSteamAccountForUser !== "function") {
+    return requireSteamAccountAccess(res, auth, key);
+  }
+  let existing = null;
+  try {
+    existing = store.getSteamAccountForUser("", key, {includeAll: true});
+  } catch (_) {
+    writeJson(res, 500, {ok: false, reason: "account_scope_check_failed", message: "Steam 账号权限校验失败"});
+    return false;
+  }
+  if (!existing) {
+    return true;
+  }
+  return requireSteamAccountAccess(res, auth, key);
 }
 
 function canAccessSteamAccount(auth, username) {
@@ -1558,9 +1799,43 @@ function normalizeLoginSaveError(err) {
   };
 }
 
+function normalizeContextualLoginError(err, {existingAccount = false} = {}) {
+  const normalized = normalizeLoginSaveError(err);
+  if (!existingAccount) return normalized;
+  if (normalized.reason === "invalid_password") {
+    return {
+      ...normalized,
+      message: "密码错误，请重新输入密码"
+    };
+  }
+  if (normalized.reason !== "access_denied") return normalized;
+  return {
+    ...normalized,
+    message: "登录过期",
+    reason: "login_key_invalid",
+    status: 409,
+    auth_state: "auth_invalid",
+    relogin_required: true
+  };
+}
+
+function isValidAccountGuardCode(value) {
+  return /^[A-Z0-9]{5}$/.test(asString(value).trim());
+}
+
+function writeInvalidAccountGuardCode(res) {
+  writeJson(res, 400, {
+    ok: false,
+    reason: "invalid_guard_code_format",
+    message: "验证码必须为5位大写字母或数字"
+  });
+}
+
 function normalizeRefreshError(err) {
   const reason = asString(err && (err.reason || err.code) || "").trim();
   const authState = asString(err && err.auth_state || "").trim();
+  const credentialState = asString(err && err.credential_state || "").trim();
+  const passwordCleared = err && err.password_cleared === true;
   const rawMessage = asString(err && err.message ? err.message : err).trim();
   if (reason === "login_key_missing") {
     return {
@@ -1568,16 +1843,20 @@ function normalizeRefreshError(err) {
       reason,
       status: 409,
       auth_state: authState || "login_required",
-      relogin_required: true
+      relogin_required: true,
+      credential_state: credentialState,
+      password_cleared: passwordCleared
     };
   }
   if (reason === "login_key_invalid") {
     return {
-      message: "当前账号登录已失效，请重新登录后再刷新",
+      message: "登录过期",
       reason,
       status: 409,
       auth_state: authState || "auth_invalid",
-      relogin_required: true
+      relogin_required: true,
+      credential_state: credentialState,
+      password_cleared: passwordCleared
     };
   }
   return {
@@ -1585,7 +1864,9 @@ function normalizeRefreshError(err) {
     reason: reason || "refresh_failed",
     status: Math.max(400, Number(err && err.status) || 500),
     auth_state: authState,
-    relogin_required: false
+    relogin_required: credentialState === "password_reentry_required",
+    credential_state: credentialState,
+    password_cleared: passwordCleared
   };
 }
 
@@ -1700,7 +1981,11 @@ async function resolveAccountProfile({username, password = "", viewerUsername = 
     ...accountStoreOptions,
     viewerUsername
   });
-  const account = username ? accountStore.get(username) : accountStore.getActive();
+  const account = username
+    ? getAccountCredentials(accountStore, username)
+    : (typeof accountStore.getActiveCredentials === "function"
+      ? accountStore.getActiveCredentials()
+      : accountStore.getActive());
   const accountName = asString((account && account.username) || username).trim();
   if (!accountName) {
     throw new Error(`account not found: ${username || "(active)"}`);
@@ -2096,6 +2381,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
   const config = getClientLicenseConfig(deps);
   const refreshRuntime = deps && deps.refreshRuntime ? deps.refreshRuntime : defaultRefreshRuntime;
   const loginAndSaveTokenFn = typeof deps.loginAndSaveTokenFn === "function" ? deps.loginAndSaveTokenFn : loginAndSaveToken;
+  const startLoginSessionFn = typeof deps.startLoginSessionFn === "function" ? deps.startLoginSessionFn : startLoginSession;
+  const submitGuardCodeFn = typeof deps.submitGuardCodeFn === "function" ? deps.submitGuardCodeFn : submitGuardCode;
+  const tokenRecoveryService = deps.tokenRecoveryService || defaultTokenRecoveryService;
+  const resolveAccountWebSession = (account) => resolveWebSessionForAccount(account, {tokenRecoveryService});
   const resolveAccountProfileFn = typeof deps.resolveAccountProfileFn === "function"
     ? deps.resolveAccountProfileFn
     : resolveAccountProfile;
@@ -2469,6 +2758,12 @@ async function handleApi(req, res, urlObj, deps = {}) {
       if (username && !requireSteamAccountAccess(res, auth, username)) {
         return true;
       }
+      const streamVersion = asString(urlObj.searchParams.get("stream_version") || "").trim();
+      if (streamVersion !== "2") {
+        res.writeHead(204, {"Cache-Control": "no-store"});
+        res.end();
+        return true;
+      }
       refreshRuntime.handleSseRequest(req, res, username);
       return true;
     }
@@ -2479,8 +2774,24 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
       const store = getViewerAccountStore(auth, deps);
       const uiState = getUiStateStore(deps, viewerUsername);
-      const accounts = store.list().map((row) => mergeAccountAuthState(row, uiState));
-      const active = mergeAccountAuthState(store.getActive(), uiState);
+      const tokenStore = getTokenStore(deps);
+      const mayReadSavedPassword = hasPermission(auth, "accounts.write");
+      const decorate = (row) => {
+        if (!row || typeof row !== "object") return null;
+        const username = asString(row.username).trim();
+        const projected = {
+          ...mergeAccountAuthState(row, uiState),
+          has_refresh_token: !!(username && tokenStore.get(username))
+        };
+        if (mayReadSavedPassword && username && typeof store.getCredentials === "function") {
+          const credentials = store.getCredentials(username);
+          projected.password = asString(credentials && credentials.password).trim();
+        }
+        return projected;
+      };
+      const accounts = store.list().map(decorate);
+      const active = decorate(store.getActive());
+      res.setHeader("Cache-Control", "no-store");
       writeJson(res, 200, {
         accounts,
         active,
@@ -2508,7 +2819,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       });
       try {
         const accountStore = getViewerAccountStore(auth, deps);
-        const existed = accountStore.get(profile.username);
+        const existed = getAccountCredentials(accountStore, profile.username);
         if (existed) {
           const nextSteamId = asString(profile.steam_id64 || "").trim();
           const nextSteamName = asString(profile.persona_name || "").trim();
@@ -2665,21 +2976,36 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
-    const password = asString(body.password).trim();
-    const totp = asString(body.totp).trim();
+    const submittedPassword = asString(body.password).trim();
+    const submittedTotp = asString(body.totp).trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
     }
+    if (!requireExistingSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const accountStore = getViewerAccountStore(auth, deps);
+    const existed = accountStore.get(username);
+    const storedCredentials = typeof accountStore.getCredentials === "function"
+      ? accountStore.getCredentials(username)
+      : existed;
+    const password = submittedPassword || asString(storedCredentials && storedCredentials.password).trim();
+    const localMaFileContent = asString(storedCredentials && storedCredentials.mafile_content).trim();
+    const totp = localMaFileContent ? "" : submittedTotp;
     if (!password) {
       writeJson(res, 400, {ok: false, message: "password is required"});
+      return true;
+    }
+    if (totp && !isValidAccountGuardCode(totp)) {
+      writeInvalidAccountGuardCode(res);
       return true;
     }
 
     logger.info("ui_server", `login-start request: account=${username} totp=${totp ? "yes" : "no"}`);
     try {
       const tokenStore = new TokenStore();
-      const phase1 = await startLoginSession({
+      let phase1 = await startLoginSessionFn({
         username,
         password,
         twoFactorCode: totp,
@@ -2687,12 +3013,24 @@ async function handleApi(req, res, urlObj, deps = {}) {
         logger
       });
 
+      if (!phase1.done && phase1.guard_type === "device_code" && localMaFileContent) {
+        const guardSummary = readSteamGuardSummary(localMaFileContent);
+        phase1 = await submitGuardCodeFn({
+          username,
+          code: guardSummary.currentTotp,
+          tokenStore,
+          logger
+        });
+        logger.info("ui_server", `login-start local Guard accepted: account=${username}`);
+      }
+
       if (phase1.done) {
         // Login completed in one shot (totp was provided or no guard needed)
         const result = phase1.result;
-        const accountStore = getViewerAccountStore(auth, deps);
-        const existed = accountStore.get(username);
         const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
+        const authClient = getControlPlaneAuthClient(deps);
+        const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
+
         let profile = null;
         try {
           profile = await resolveAccountProfileFn({
@@ -2725,13 +3063,79 @@ async function handleApi(req, res, urlObj, deps = {}) {
         writeJson(res, 200, {ok: true, done: true, active: accountStore.getActive(), accounts: accountStore.list()});
       } else {
         // Guard required — session cached, waiting for code
+        try {
+          if (typeof accountStore.saveVerifiedCredentials !== "function"
+            || accountStore.saveVerifiedCredentials(username, password) === false) {
+            throw new Error("verified credentials save rejected");
+          }
+        } catch (saveErr) {
+          logger.warn("ui_server", `login-start credential save failed: account=${username} error=${asString(saveErr && saveErr.message ? saveErr.message : saveErr)}`);
+          writeJson(res, 500, {
+            ok: false,
+            reason: "credential_save_failed",
+            message: "账号密码保存失败，请重新登录"
+          });
+          return true;
+        }
         logger.info("ui_server", `login-start guard required: account=${username} guard_type=${phase1.guard_type} hint=${phase1.guard_hint || "-"}`);
-        writeJson(res, 200, {ok: true, done: false, guard_type: phase1.guard_type, guard_hint: phase1.guard_hint || ""});
+        writeJson(res, 200, {
+          ok: true,
+          done: false,
+          guard_type: phase1.guard_type,
+          guard_hint: phase1.guard_hint || "",
+          credentials_saved: true
+        });
       }
     } catch (err) {
-      const normalized = normalizeLoginSaveError(err);
+      const normalized = normalizeContextualLoginError(err, {existingAccount: !!existed});
+      if (existed && normalized.reason === "login_key_invalid") {
+        try {
+          if (!tokenRecoveryService || typeof tokenRecoveryService.invalidateAuthentication !== "function") {
+            throw new Error("authentication invalidation unavailable");
+          }
+          await tokenRecoveryService.invalidateAuthentication(username);
+        } catch (_) {
+          writeJson(res, 500, {
+            ok: false,
+            reason: "token_store_clear_failed",
+            message: "过期登录状态清理失败，请稍后重试",
+            auth_state: "needs_attention"
+          });
+          return true;
+        }
+      }
+      let passwordCleared = false;
+      if (existed && localMaFileContent && normalized.reason === "invalid_password") {
+        try {
+          if (typeof accountStore.clearPassword !== "function" || accountStore.clearPassword(username) === false) {
+            throw new Error("password clear rejected");
+          }
+          passwordCleared = true;
+        } catch (_) {
+          writeJson(res, 500, {
+            ok: false,
+            reason: "password_clear_failed",
+            message: "已保存密码清除失败，请稍后重试"
+          });
+          return true;
+        }
+      }
+      if (existed && normalized.auth_state) {
+        try {
+          const uiState = getUiStateStore(deps, viewerUsername);
+          if (typeof uiState.setAccountAuthState === "function") {
+            uiState.setAccountAuthState(username, normalized.auth_state, normalized.reason);
+          }
+        } catch (_) {
+          // The response still carries the authoritative recovery instruction.
+        }
+      }
       logger.warn("ui_server", `login-start failed: account=${username} reason=${normalized.reason} status=${normalized.status} raw=${normalized.raw || "-"}`);
-      writeJson(res, normalized.status, {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw});
+      const payload = {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw};
+      if (passwordCleared) payload.password_cleared = true;
+      if (normalized.auth_state) payload.auth_state = normalized.auth_state;
+      if (normalized.relogin_required) payload.relogin_required = true;
+      writeJson(res, normalized.status, payload);
     }
     return true;
   }
@@ -2746,7 +3150,6 @@ async function handleApi(req, res, urlObj, deps = {}) {
     const body = await readJsonBody(req);
     const username = asString(body.username).trim();
     const code = asString(body.code).trim();
-    const password = asString(body.password).trim();
     if (!username) {
       writeJson(res, 400, {ok: false, message: "username is required"});
       return true;
@@ -2755,16 +3158,34 @@ async function handleApi(req, res, urlObj, deps = {}) {
       writeJson(res, 400, {ok: false, message: "code is required"});
       return true;
     }
+    if (!isValidAccountGuardCode(code)) {
+      writeInvalidAccountGuardCode(res);
+      return true;
+    }
+    if (!requireExistingSteamAccountAccess(res, auth, username)) {
+      return true;
+    }
+    const accountStore = getViewerAccountStore(auth, deps);
+    const existed = accountStore.get(username);
+    const storedCredentials = typeof accountStore.getCredentials === "function"
+      ? accountStore.getCredentials(username)
+      : existed;
 
     logger.info("ui_server", `login-submit-code request: account=${username}`);
     try {
       const tokenStore = new TokenStore();
-      const phase2 = await submitGuardCode({username, code, tokenStore, logger});
+      const phase2 = await submitGuardCodeFn({username, code, tokenStore, logger});
       const result = phase2.result;
+      const password = asString(phase2.authenticated_password).trim()
+        || asString(storedCredentials && storedCredentials.password).trim();
+      if (!password) {
+        throw new Error("authenticated password missing from pending login session");
+      }
 
-      const accountStore = getViewerAccountStore(auth, deps);
-      const existed = accountStore.get(username);
       const finalRemark = asString(body.remark).trim() || (existed ? asString(existed.remark || "").trim() : "");
+      const authClient = getControlPlaneAuthClient(deps);
+      const requiresBindingCheck = getClientLicenseConfig(deps).authMode === "prod_login";
+
       let profile = null;
       try {
         profile = await resolveAccountProfileFn({
@@ -2796,9 +3217,38 @@ async function handleApi(req, res, urlObj, deps = {}) {
       logger.info("ui_server", `login-submit-code success: account=${username}`);
       writeJson(res, 200, {ok: true, done: true, active: accountStore.getActive(), accounts: accountStore.list()});
     } catch (err) {
-      const normalized = normalizeLoginSaveError(err);
+      const normalized = normalizeContextualLoginError(err, {existingAccount: !!existed});
+      if (existed && normalized.reason === "login_key_invalid") {
+        try {
+          if (!tokenRecoveryService || typeof tokenRecoveryService.invalidateAuthentication !== "function") {
+            throw new Error("authentication invalidation unavailable");
+          }
+          await tokenRecoveryService.invalidateAuthentication(username);
+        } catch (_) {
+          writeJson(res, 500, {
+            ok: false,
+            reason: "token_store_clear_failed",
+            message: "过期登录状态清理失败，请稍后重试",
+            auth_state: "needs_attention"
+          });
+          return true;
+        }
+      }
+      if (existed && normalized.auth_state) {
+        try {
+          const uiState = getUiStateStore(deps, viewerUsername);
+          if (typeof uiState.setAccountAuthState === "function") {
+            uiState.setAccountAuthState(username, normalized.auth_state, normalized.reason);
+          }
+        } catch (_) {
+          // The response still carries the authoritative recovery instruction.
+        }
+      }
       logger.warn("ui_server", `login-submit-code failed: account=${username} reason=${normalized.reason} status=${normalized.status} raw=${normalized.raw || "-"}`);
-      writeJson(res, normalized.status, {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw});
+      const payload = {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw};
+      if (normalized.auth_state) payload.auth_state = normalized.auth_state;
+      if (normalized.relogin_required) payload.relogin_required = true;
+      writeJson(res, normalized.status, payload);
     }
     return true;
   }
@@ -2821,6 +3271,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
     if (!totp) {
       writeJson(res, 400, {ok: false, message: "totp is required"});
+      return true;
+    }
+    if (!isValidAccountGuardCode(totp)) {
+      writeInvalidAccountGuardCode(res);
       return true;
     }
 
@@ -2914,7 +3368,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
     }
 
     const store = getViewerAccountStore(auth, deps);
-    const existed = store.get(username);
+    const existed = getAccountCredentials(store, username);
     const existedPassword = asString(existed && existed.password ? existed.password : "").trim();
     const finalPassword = password || existedPassword;
     if (!existed && !finalPassword) {
@@ -3055,7 +3509,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
         message: normalized.message,
         reason: normalized.reason,
         auth_state: normalized.auth_state,
-        relogin_required: normalized.relogin_required
+        relogin_required: normalized.relogin_required,
+        ...(normalized.credential_state ? {credential_state: normalized.credential_state} : {}),
+        ...(normalized.password_cleared ? {password_cleared: true} : {})
       });
     }
     return true;
@@ -4116,9 +4572,24 @@ async function handleApi(req, res, urlObj, deps = {}) {
     return true;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // 批量导入 maFile 账号（SSE 流式返回）
-  // ═══════════════════════════════════════════════════════════════
+  if (pathname === "/api/accounts/batch-import/preflight" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) {
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const accounts = Array.isArray(body && body.accounts) ? body.accounts : [];
+    if (accounts.length === 0) {
+      writeJson(res, 400, {ok: false, message: "accounts 列表为空"});
+      return true;
+    }
+    const service = createSteamGuardImportService({
+      accountStore: getViewerAccountStore(auth, deps),
+      isConnected: (username) => refreshRuntime.isConnected(username)
+    });
+    writeJson(res, 200, {ok: true, ...service.preflight(accounts)});
+    return true;
+  }
+
   if (pathname === "/api/accounts/batch-import" && req.method === "POST") {
     if (!requirePermission(res, auth, "accounts.write")) {
       return true;
@@ -4143,84 +4614,28 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
     sendSse("progress", {total: accounts.length, done: 0, message: "开始批量导入..."});
 
-    const tokenStore = new TokenStore();
     const accountStore = getViewerAccountStore(auth, deps);
-    let doneCount = 0;
-
-    for (const entry of accounts) {
-      const username = asString(entry && entry.username).trim();
-      const password = asString(entry && entry.password).trim();
-      const maFileContent = asString(entry && entry.maFileContent).trim();
-
-      if (!username || !password || !maFileContent) {
-        doneCount++;
-        sendSse("account_result", {
-          username: username || "(空)",
-          ok: false,
-          message: "缺少用户名、密码或 maFile 内容",
-          done: doneCount,
-          total: accounts.length
-        });
-        continue;
-      }
-
-      try {
-        // 1. 解析 maFile
-        const maData = parseMaFile(maFileContent);
-
-        // 2. 生成 TOTP
-        const totp = generateTotp(maData.sharedSecret);
-
-        sendSse("account_progress", {username, step: "login", message: `${username} 正在登录...`});
-
-        // 3. 登录
-        const result = await loginAndSaveTokenFn({
-          username,
-          password,
-          twoFactorCode: totp,
-          tokenStore,
-          logger
-        });
-
-        // 4. 入库
-        const steamId64 = maData.steamId64 || "";
-        accountStore.upsert({
-          username,
-          password,
-          remark: asString(entry.remark || "").trim(),
-          steamName: maData.accountName || "",
-          steamId: steamId64,
-          avatarUrl: "",
-          mafileContent: maFileContent,
-          steamId64
-        });
-
-        doneCount++;
-        sendSse("account_result", {
-          username,
-          ok: true,
-          message: "登录成功，已保存",
-          steam_id64: steamId64,
-          token_saved: Boolean(result.refresh_token),
-          done: doneCount,
-          total: accounts.length
-        });
-        logger.info("ui_server", `batch-import success: account=${username} steam_id64=${steamId64}`);
-      } catch (err) {
-        doneCount++;
-        const msg = asString(err && err.message ? err.message : err).trim() || "未知错误";
-        sendSse("account_result", {
-          username,
-          ok: false,
-          message: msg,
-          done: doneCount,
-          total: accounts.length
-        });
-        logger.warn("ui_server", `batch-import failed: account=${username} error=${msg}`);
-      }
+    const service = createSteamGuardImportService({
+      accountStore,
+      isConnected: (username) => refreshRuntime.isConnected(username)
+    });
+    const outcome = service.execute(accounts);
+    for (let index = 0; index < outcome.results.length; index += 1) {
+      const result = outcome.results[index];
+      sendSse("account_result", {
+        ...result,
+        done: index + 1,
+        total: accounts.length
+      });
+      logger.info("ui_server", `batch-import result: account=${result.account_name || "-"} status=${result.status}`);
     }
 
-    sendSse("done", {total: accounts.length, done: doneCount, message: "批量导入完成"});
+    sendSse("done", {
+      total: accounts.length,
+      done: accounts.length,
+      ...outcome.summary,
+      message: "批量导入完成"
+    });
     res.end();
     return true;
   }
@@ -4260,7 +4675,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
 
       try {
-        const account = accountStore.get(username);
+        const account = getAccountCredentials(accountStore, username);
         if (!account) {
           throw new Error("账号不存在");
         }
@@ -4268,21 +4683,20 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
         sendSse("inventory_progress", {username, step: "cookie", message: `${username} 刷新 Cookie...`});
 
-        const {webSession} = await resolveWebSessionForAccount(account);
-        logger.info("web_inventory_fetch", `account=${username} mode=batch step=session ${summarizeWebSessionForLog(webSession)}`);
-
-        sendSse("inventory_progress", {username, step: "fetch", message: `${username} 拉取库存...`});
-
-        const items = await fetchFullInventory({
-          steamId64: webSession.steamId64,
-          cookieString: webSession.cookieString,
-          onTrace: (trace) => {
-            logWebInventoryFetchTrace({username, mode: "batch", trace});
-          },
-          onPage: (pageIdx, pageItems, totalSoFar) => {
-            sendSse("inventory_page", {username, page: pageIdx, page_count: pageItems.length, total: totalSoFar});
-            logger.info("web_inventory_fetch", `account=${username} mode=batch phase=page page=${pageIdx + 1} page_count=${pageItems.length} total=${totalSoFar}`);
-          }
+        const items = await runAccountWebOperation(account, {tokenRecoveryService}, async ({webSession}) => {
+          logger.info("web_inventory_fetch", `account=${username} mode=batch step=session ${summarizeWebSessionForLog(webSession)}`);
+          sendSse("inventory_progress", {username, step: "fetch", message: `${username} 拉取库存...`});
+          return fetchFullInventory({
+            steamId64: webSession.steamId64,
+            cookieString: webSession.cookieString,
+            onTrace: (trace) => {
+              logWebInventoryFetchTrace({username, mode: "batch", trace});
+            },
+            onPage: (pageIdx, pageItems, totalSoFar) => {
+              sendSse("inventory_page", {username, page: pageIdx, page_count: pageItems.length, total: totalSoFar});
+              logger.info("web_inventory_fetch", `account=${username} mode=batch phase=page page=${pageIdx + 1} page_count=${pageItems.length} total=${totalSoFar}`);
+            }
+          });
         });
 
         doneCount++;
@@ -4333,24 +4747,25 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
     try {
       const accountStore = getViewerAccountStore(auth, deps);
-      const account = accountStore.get(username);
+      const account = getAccountCredentials(accountStore, username);
       if (!account) {
         writeJson(res, 400, {ok: false, message: "账号不存在"});
         return true;
       }
       logger.info("web_inventory_fetch", `account=${username} mode=single step=start`);
 
-      const {webSession} = await resolveWebSessionForAccount(account);
-      logger.info("web_inventory_fetch", `account=${username} mode=single step=session ${summarizeWebSessionForLog(webSession)}`);
-      const items = await fetchFullInventory({
-        steamId64: webSession.steamId64,
-        cookieString: webSession.cookieString,
-        onTrace: (trace) => {
-          logWebInventoryFetchTrace({username, mode: "single", trace});
-        },
-        onPage: (pageIdx, pageItems, totalSoFar) => {
-          logger.info("web_inventory_fetch", `account=${username} mode=single phase=page page=${pageIdx + 1} page_count=${pageItems.length} total=${totalSoFar}`);
-        }
+      const items = await runAccountWebOperation(account, {tokenRecoveryService}, async ({webSession}) => {
+        logger.info("web_inventory_fetch", `account=${username} mode=single step=session ${summarizeWebSessionForLog(webSession)}`);
+        return fetchFullInventory({
+          steamId64: webSession.steamId64,
+          cookieString: webSession.cookieString,
+          onTrace: (trace) => {
+            logWebInventoryFetchTrace({username, mode: "single", trace});
+          },
+          onPage: (pageIdx, pageItems, totalSoFar) => {
+            logger.info("web_inventory_fetch", `account=${username} mode=single phase=page page=${pageIdx + 1} page_count=${pageItems.length} total=${totalSoFar}`);
+          }
+        });
       });
 
       logger.info("web_inventory_fetch", `account=${username} mode=single step=done items=${items.length}`);
@@ -4393,14 +4808,14 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
     try {
       const accountStore = getViewerAccountStore(auth, deps);
-      const fromAccount = accountStore.get(fromUsername);
+      const fromAccount = getAccountCredentials(accountStore, fromUsername);
       if (!fromAccount) {
         sendSse("error", {message: "发送方账号不存在"});
         res.end();
         return true;
       }
 
-      const {webSession: fromSession, hasMaFile: fromHasMaFile, maData: fromMaData} = await resolveWebSessionForAccount(fromAccount);
+      const {webSession: fromSession, hasMaFile: fromHasMaFile, maData: fromMaData} = await resolveAccountWebSession(fromAccount);
       const {partnerId, tradeToken} = parseTradeUrl(toTradeUrl);
 
       // 计算接收方 SteamID64
@@ -4448,7 +4863,8 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
       if (receiverAccount) {
         try {
-          const {webSession: receiverSession, hasMaFile: recvHasMaFile, maData: recvMaData} = await resolveWebSessionForAccount(receiverAccount);
+          const receiverCredentials = getAccountCredentials(accountStore, receiverAccount.username);
+          const {webSession: receiverSession, hasMaFile: recvHasMaFile, maData: recvMaData} = await resolveAccountWebSession(receiverCredentials);
           sendSse("step", {step: "accept_receiver", message: `接收方 ${receiverAccount.username} 自动接受...`});
 
           await acceptTradeOffer({
@@ -4510,13 +4926,13 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
     try {
       const accountStore = getViewerAccountStore(auth, deps);
-      const account = accountStore.get(username);
+      const account = getAccountCredentials(accountStore, username);
       if (!account) {
         writeJson(res, 400, {ok: false, message: "账号不存在"});
         return true;
       }
 
-      const {webSession, hasMaFile, maData} = await resolveWebSessionForAccount(account);
+      const {webSession, hasMaFile, maData} = await resolveAccountWebSession(account);
       const results = [];
 
       for (const offerId of tradeofferIds) {
@@ -4569,13 +4985,13 @@ async function handleApi(req, res, urlObj, deps = {}) {
 
     try {
       const accountStore = getViewerAccountStore(auth, deps);
-      const account = accountStore.get(username);
+      const account = getAccountCredentials(accountStore, username);
       if (!account) {
         writeJson(res, 400, {ok: false, message: "账号不存在"});
         return true;
       }
 
-      const {webSession} = await resolveWebSessionForAccount(account);
+      const {webSession} = await resolveAccountWebSession(account);
       const results = [];
 
       for (const offerId of tradeofferIds) {
@@ -4614,10 +5030,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
 
       const accountStore = getViewerAccountStore(auth, deps);
-      const account = accountStore.get(username);
+      const account = getAccountCredentials(accountStore, username);
       if (!account) { writeJson(res, 404, {ok: false, message: "账号不存在"}); return true; }
 
-      const {webSession} = await resolveWebSessionForAccount(account);
+      const {webSession} = await resolveAccountWebSession(account);
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -4683,22 +5099,26 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
 
       const accountStore = getViewerAccountStore(auth, deps);
-      const account = accountStore.get(username);
+      const account = getAccountCredentials(accountStore, username);
       if (!account) { writeJson(res, 404, {ok: false, message: "账号不存在"}); return true; }
 
-      const {webSession, hasMaFile, maData} = await resolveWebSessionForAccount(account);
-      if (!hasMaFile || !maData || !maData.identitySecret) {
-        writeJson(res, 400, {ok: false, message: "该账号无 maFile 或缺少 identity_secret，无法获取确认列表"});
-        return true;
-      }
-
-      const confirmations = await getMarketConfirmations({
-        cookieString: webSession.cookieString,
-        identitySecret: maData.identitySecret
+      const confirmations = await runAccountWebOperation(account, {tokenRecoveryService}, async ({webSession, hasMaFile, maData}) => {
+        if (!hasMaFile || !maData || !maData.identitySecret) {
+          const error = new Error("该账号无 maFile 或缺少 identity_secret，无法获取确认列表");
+          error.status = 400;
+          throw error;
+        }
+        return getMarketConfirmations({
+          cookieString: webSession.cookieString,
+          identitySecret: maData.identitySecret
+        });
       });
       writeJson(res, 200, {ok: true, confirmations});
     } catch (err) {
-      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      writeJson(res, Math.max(400, Number(err && err.status) || 500), {
+        ok: false,
+        message: asString(err && err.message ? err.message : err).trim()
+      });
     }
     return true;
   }
@@ -4716,23 +5136,27 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
 
       const accountStore = getViewerAccountStore(auth, deps);
-      const account = accountStore.get(username);
+      const account = getAccountCredentials(accountStore, username);
       if (!account) { writeJson(res, 404, {ok: false, message: "账号不存在"}); return true; }
 
-      const {webSession, hasMaFile, maData} = await resolveWebSessionForAccount(account);
-      if (!hasMaFile || !maData || !maData.identitySecret) {
-        writeJson(res, 400, {ok: false, message: "该账号无 maFile 或缺少 identity_secret，无法确认上架"});
-        return true;
-      }
-
-      const {results} = await confirmMarketListings({
-        cookieString: webSession.cookieString,
-        identitySecret: maData.identitySecret,
-        confirmationIds
+      const {results} = await runAccountWebOperation(account, {tokenRecoveryService}, async ({webSession, hasMaFile, maData}) => {
+        if (!hasMaFile || !maData || !maData.identitySecret) {
+          const error = new Error("该账号无 maFile 或缺少 identity_secret，无法确认上架");
+          error.status = 400;
+          throw error;
+        }
+        return confirmMarketListings({
+          cookieString: webSession.cookieString,
+          identitySecret: maData.identitySecret,
+          confirmationIds
+        });
       });
       writeJson(res, 200, {ok: true, results});
     } catch (err) {
-      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      writeJson(res, Math.max(400, Number(err && err.status) || 500), {
+        ok: false,
+        message: asString(err && err.message ? err.message : err).trim()
+      });
     }
     return true;
   }
@@ -4854,9 +5278,10 @@ async function handleApi(req, res, urlObj, deps = {}) {
         for (const [sid, username] of id64Map) {
           sendSse("progress", {index: idx, total: id64Map.size, username});
           try {
-            const acc = accountStore.get(username);
-            const {webSession} = await resolveWebSessionForAccount(acc);
-            const banInfo = await checkBanSingle({cookieString: webSession.cookieString, steamId64: sid});
+            const acc = getAccountCredentials(accountStore, username);
+            const banInfo = await runAccountWebOperation(acc, {tokenRecoveryService}, ({webSession}) => (
+              checkBanSingle({cookieString: webSession.cookieString, steamId64: sid})
+            ));
             const status = formatBanStatus(banInfo);
             try {
               const store = new AppAuthStore(auth && auth.store ? auth.store.dbPath : PATHS.SKIN_DB_FILE);
@@ -4897,15 +5322,16 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const results = [];
 
       for (const u of usernames) {
-        const acc = accountStore.get(u);
+        const acc = getAccountCredentials(accountStore, u);
         if (!acc) { results.push({username: u, success: false, message: "账号不存在"}); continue; }
         try {
-          const {webSession} = await resolveWebSessionForAccount(acc);
-          const balResult = await fetchBalance({
-            cookieString: webSession.cookieString,
-            accessToken: webSession.accessToken,
-            steamId64: webSession.steamId64
-          });
+          const balResult = await runAccountWebOperation(acc, {tokenRecoveryService}, ({webSession}) => (
+            fetchBalance({
+              cookieString: webSession.cookieString,
+              accessToken: webSession.accessToken,
+              steamId64: webSession.steamId64
+            })
+          ));
           if (balResult.success) {
             const observedAt = new Date().toISOString();
             const result = {
@@ -4988,10 +5414,11 @@ async function handleApi(req, res, urlObj, deps = {}) {
         const u = usernames[i];
         sendSse("progress", {index: i, total: usernames.length, username: u});
         try {
-          const acc = accountStore.get(u);
+          const acc = getAccountCredentials(accountStore, u);
           if (!acc) { sendSse("url-result", {index: i, username: u, success: false, message: "账号不存在"}); continue; }
-          const {webSession} = await resolveWebSessionForAccount(acc);
-          const result = await fetchTradeUrl({cookieString: webSession.cookieString, steamId64: webSession.steamId64});
+          const result = await runAccountWebOperation(acc, {tokenRecoveryService}, ({webSession}) => (
+            fetchTradeUrl({cookieString: webSession.cookieString, steamId64: webSession.steamId64})
+          ));
           if (result.success) {
             successCount++;
             try {
@@ -5039,131 +5466,232 @@ async function handleApi(req, res, urlObj, deps = {}) {
     return true;
   }
 
-  // ═══ Steam Guard 令牌绑定 + 令牌详情 ═══
-
-  if (pathname === "/api/accounts/enroll-steam-guard" && req.method === "POST") {
+  // Steam Guard token management intentionally exposes only task-specific fields.
+  if (pathname === "/api/accounts/steam-guard/recover-login" && req.method === "POST") {
     if (!requirePermission(res, auth, "accounts.write")) return true;
-    try {
-      const body = await readJsonBody(req);
-      const username = asString(body.username || "").trim();
-      if (!username) {
-        writeJson(res, 400, {ok: false, message: "username required"});
-        return true;
-      }
-      const tokenStore = new TokenStore();
-      const refreshToken = tokenStore.get(username);
-      if (typeof tokenStore.close === "function") {
-        tokenStore.close();
-      }
-      if (!refreshToken) {
-        writeJson(res, 400, {ok: false, message: "该账号未登录或 refresh_token 不存在，请先登录"});
-        return true;
-      }
-      const result = await enrollSteamGuard({username, refreshToken, logger, timeoutMs: 60000});
-      writeJson(res, 200, result);
-    } catch (err) {
-      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!requireSteamAccountAccess(res, auth, username)) return true;
+    const accountStore = getViewerAccountStore(auth, deps);
+    const account = getAccountCredentials(accountStore, username);
+    if (!account) {
+      writeJson(res, 404, {ok: false, reason: "account_not_found", message: "账号不存在"});
+      return true;
     }
-    return true;
-  }
-
-  if (pathname === "/api/accounts/finalize-steam-guard" && req.method === "POST") {
-    if (!requirePermission(res, auth, "accounts.write")) return true;
+    if (!asString(account.mafile_content).trim()) {
+      writeJson(res, 409, {ok: false, reason: "guard_missing", message: "该账号尚未添加令牌"});
+      return true;
+    }
+    const uiState = getUiStateStore(deps, viewerUsername);
+    const persisted = uiState && typeof uiState.getAccount === "function" ? uiState.getAccount(username) : null;
+    if (asString(persisted && persisted.auth_state).trim() !== "auth_invalid") {
+      writeJson(res, 200, {ok: true, username, reconnected: false, skipped_reason: "account_not_expired"});
+      return true;
+    }
     try {
-      const body = await readJsonBody(req);
-      const username = asString(body.username || "").trim();
-      const activationCode = asString(body.activationCode || "").trim();
-      if (!username || !activationCode) {
-        writeJson(res, 400, {ok: false, message: "username and activationCode required"});
-        return true;
+      await tokenRecoveryService.recoverToken(username, {manualReason: "login_key_invalid"});
+      if (uiState && typeof uiState.clearAccountAuthState === "function") {
+        uiState.clearAccountAuthState(username);
       }
-      const result = await finalizeSteamGuard({username, activationCode, logger});
-      if (result.ok && result.maFileContent) {
-        try {
-          const accountStore = getViewerAccountStore(auth, deps);
-          const current = accountStore.get(username);
-          if (!current) {
-            writeJson(res, 404, {ok: false, message: "账号不存在"});
+      writeJson(res, 200, {ok: true, username, reconnected: true, has_refresh_token: true});
+    } catch (err) {
+      const reason = asString(err && (err.reason || err.code)).trim() || "token_recovery_failed";
+      const credentialState = asString(err && err.credential_state).trim();
+      const authState = asString(err && err.auth_state).trim() || "needs_attention";
+      if (credentialState === "password_reentry_required") {
+        if (!err.password_cleared) {
+          try {
+            const clearResult = accountStore.clearPassword(username);
+            if (clearResult === false) throw new Error("password clear rejected");
+          } catch (_) {
+            writeJson(res, 500, {
+              ok: false,
+              reason: "password_clear_failed",
+              message: "已保存密码清除失败，请稍后重试",
+              auth_state: "needs_attention"
+            });
             return true;
           }
-          accountStore.upsert({
-            username: current.username,
-            password: current.password,
-            remark: current.remark,
-            steamName: current.steam_name,
-            steamId: current.steam_id,
-            steamId64: current.steam_id64,
-            avatarUrl: current.avatar_url,
-            mafileContent: result.maFileContent
-          });
-        } catch (dbErr) {
-          logger.warn("steam_guard", `mafile db write failed: ${asString(dbErr.message || dbErr)}`);
         }
+        writeJson(res, 409, {
+          ok: false,
+          reason,
+          message: "保存的 Steam 密码已失效，请重新输入密码",
+          auth_state: authState,
+          credential_state: credentialState,
+          password_cleared: true
+        });
+        return true;
       }
-      writeJson(res, 200, result);
-    } catch (err) {
-      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      writeJson(res, Math.max(400, Number(err && err.status) || 409), {
+        ok: false,
+        reason,
+        message: asString(err && err.message).trim() || "本地令牌自动重新登录失败",
+        auth_state: authState
+      });
     }
     return true;
   }
 
-  if (pathname === "/api/accounts/token-detail" && req.method === "GET") {
-    if (!requirePermission(res, auth, "accounts.read")) return true;
+  if (pathname === "/api/accounts/steam-guard/coexist/start" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    const body = await readJsonBody(req);
+    const mode = asString(body.mode).trim().toLowerCase();
+    const username = asString(body.username).trim();
+    const accountStore = getViewerAccountStore(auth, deps);
+    let credentials = null;
+    if (mode === "existing") {
+      if (!requireSteamAccountAccess(res, auth, username)) return true;
+      credentials = getAccountCredentials(accountStore, username);
+      if (!credentials) {
+        writeJson(res, 404, {ok: false, reason: "account_not_found", message: "账号不存在"});
+        return true;
+      }
+    } else if (mode === "new") {
+      if (!username || !asString(body.password).trim()) {
+        writeJson(res, 400, {
+          ok: false,
+          reason: username ? "password_required" : "username_required",
+          message: username ? "password is required" : "username is required"
+        });
+        return true;
+      }
+      if (getAccountCredentials(accountStore, username)) {
+        writeJson(res, 409, {
+          ok: false,
+          reason: "local_account_exists",
+          message: steamGuardCoexistMessage("local_account_exists")
+        });
+        return true;
+      }
+    } else {
+      writeJson(res, 400, {ok: false, reason: "invalid_mode", message: "mode is invalid"});
+      return true;
+    }
+    const result = await deps.steamGuardCoexistService.start({
+      mode,
+      username,
+      password: mode === "existing" ? credentials.password : asString(body.password),
+      remark: mode === "existing" ? credentials.remark : asString(body.remark),
+      accountId: accountViewerUsername
+    });
+    writeJson(res, steamGuardCoexistStatus(result), buildSteamGuardCoexistResponse(result));
+    return true;
+  }
+
+  if (pathname === "/api/accounts/steam-guard/coexist/submit-email-code" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    const body = await readJsonBody(req);
+    if (!isValidAccountGuardCode(body.code)) {
+      writeJson(res, 400, {
+        ok: false,
+        reason: "invalid_code_format",
+        message: steamGuardCoexistMessage("invalid_code_format")
+      });
+      return true;
+    }
+    const result = await deps.steamGuardCoexistService.submitEmailCode({
+      flowId: asString(body.flow_id).trim(),
+      code: asString(body.code).trim(),
+      accountId: accountViewerUsername
+    });
+    writeJson(res, steamGuardCoexistStatus(result), buildSteamGuardCoexistResponse(result));
+    return true;
+  }
+
+  if (pathname === "/api/accounts/steam-guard/coexist/verify-app-code" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    const body = await readJsonBody(req);
+    if (!isValidAccountGuardCode(body.code)) {
+      writeJson(res, 400, {
+        ok: false,
+        reason: "invalid_code_format",
+        message: steamGuardCoexistMessage("invalid_code_format")
+      });
+      return true;
+    }
+    const result = await deps.steamGuardCoexistService.verifyAppCode({
+      flowId: asString(body.flow_id).trim(),
+      code: asString(body.code).trim(),
+      accountId: accountViewerUsername
+    });
+    writeJson(res, steamGuardCoexistStatus(result), buildSteamGuardCoexistResponse(result));
+    return true;
+  }
+
+  if (pathname === "/api/accounts/steam-guard/coexist/cancel" && req.method === "POST") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    const body = await readJsonBody(req);
+    const result = deps.steamGuardCoexistService.cancel(asString(body.flow_id).trim(), {
+      accountId: accountViewerUsername
+    });
+    writeJson(res, result.ok ? 200 : 410, buildSteamGuardCoexistResponse(result));
+    return true;
+  }
+
+  if (pathname === "/api/accounts/steam-guard" && req.method === "DELETE") {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    const body = await readJsonBody(req);
+    const username = asString(body.username).trim();
+    if (!requireSteamAccountAccess(res, auth, username)) return true;
+    const accountStore = getViewerAccountStore(auth, deps);
+    const account = getAccountCredentials(accountStore, username);
+    if (!account) {
+      writeJson(res, 404, {ok: false, reason: "account_not_found", message: "账号不存在"});
+      return true;
+    }
+    if (!asString(account.mafile_content).trim()) {
+      writeJson(res, 409, {ok: false, reason: "guard_missing", message: "该账号尚未添加令牌"});
+      return true;
+    }
     try {
-      const username = asString(urlObj.searchParams.get("username") || "").trim();
-      if (!username) {
-        writeJson(res, 400, {ok: false, message: "username required"});
-        return true;
-      }
+      accountStore.clearSteamGuard(username);
+      writeJson(res, 200, {ok: true, username, has_steam_guard: false});
+    } catch (_) {
+      writeJson(res, 500, {ok: false, reason: "guard_delete_failed", message: "删除本地令牌文件失败"});
+    }
+    return true;
+  }
+
+  if (
+    [
+      "/api/accounts/steam-guard/code",
+      "/api/accounts/steam-guard/recovery-code",
+      "/api/accounts/steam-guard/export"
+    ].includes(pathname)
+    && req.method === "GET"
+  ) {
+    if (!requirePermission(res, auth, "accounts.write")) return true;
+    const username = asString(urlObj.searchParams.get("username") || "").trim();
+    if (!requireSteamAccountAccess(res, auth, username)) return true;
+    try {
       const accountStore = getViewerAccountStore(auth, deps);
-      const acc = accountStore.get(username);
-      if (!acc || !acc.mafile_content) {
-        writeJson(res, 404, {ok: false, message: "该账号无 maFile 数据"});
+      const account = getAccountCredentials(accountStore, username);
+      if (!account || !account.mafile_content) {
+        writeJson(res, 409, {ok: false, reason: "guard_missing", message: "该账号尚未添加令牌"});
         return true;
       }
-      const parsed = parseMaFile(acc.mafile_content);
-      const currentTotp = generateTotp(parsed.sharedSecret);
-      const crypto = require("crypto");
-      const secretKey = crypto.randomBytes(32);
-      const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
-      let encrypted = cipher.update(parsed.sharedSecret, "utf8", "base64");
-      encrypted += cipher.final("base64");
-      const SteamTotp = require("steam-totp");
-      const serverTime = SteamTotp.time();
-      const localTime = Math.floor(Date.now() / 1000);
-      const serverTimeDiff = serverTime - localTime;
-      const rawData = typeof acc.mafile_content === "string"
-        ? JSON.parse(acc.mafile_content)
-        : (acc.mafile_content && typeof acc.mafile_content === "object" ? acc.mafile_content : {});
-      const redacted = {
-        ...rawData,
-        identity_secret: rawData.identity_secret ? "[REDACTED]" : "",
-        secret_1: rawData.secret_1 ? "[REDACTED]" : "",
-        access_token: rawData.access_token ? "[REDACTED]" : "",
-        Session: rawData.Session && typeof rawData.Session === "object"
-          ? {
-              ...rawData.Session,
-              SteamLoginSecure: rawData.Session.SteamLoginSecure ? "[REDACTED]" : ""
-            }
-          : {}
-      };
-      writeJson(res, 200, {
-        ok: true,
-        deviceId: parsed.deviceId || "",
-        revocationCode: parsed.revocationCode || "",
-        accountName: parsed.accountName || username,
-        steamId64: parsed.steamId64 || "",
-        currentTotp,
-        serverTimeDiff,
-        period: 30,
-        encryptedSecret: encrypted,
-        secretKeyHex: secretKey.toString("hex"),
-        ivHex: iv.toString("hex"),
-        steamData: redacted
+      const summary = readSteamGuardSummary(account.mafile_content);
+      if (pathname === "/api/accounts/steam-guard/code") {
+        writeJson(res, 200, {
+          ok: true,
+          current_code: summary.currentTotp,
+          period: summary.period,
+          remaining_seconds: summary.remainingSeconds
+        });
+        return true;
+      }
+      if (pathname === "/api/accounts/steam-guard/recovery-code") {
+        writeJson(res, 200, {ok: true, recovery_code: summary.revocationCode});
+        return true;
+      }
+      const exported = normalizeMaFileForExport(account.mafile_content);
+      writeJson(res, 200, exported, {
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(username)}.maFile"`,
+        "Cache-Control": "no-store"
       });
     } catch (err) {
-      writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
+      writeJson(res, 500, {ok: false, reason: "guard_operation_failed", message: "令牌操作失败"});
     }
     return true;
   }
@@ -5183,6 +5711,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
 function createServer(options = {}) {
   ensureRuntimeBootstrapped();
   const serverRefreshRuntime = createServerRefreshRuntime(options);
+  const steamGuardCoexistService = createServerSteamGuardCoexistService(options);
   if (serverRefreshRuntime && serverRefreshRuntime !== defaultRefreshRuntime && typeof serverRefreshRuntime.start === "function") {
     serverRefreshRuntime.start();
   }
@@ -5194,6 +5723,11 @@ function createServer(options = {}) {
     licenseConfigFactory: options.licenseConfigFactory,
     licenseRuntimeFactory: options.licenseRuntimeFactory,
     loginAndSaveTokenFn: options.loginAndSaveTokenFn,
+    startLoginSessionFn: options.startLoginSessionFn,
+    submitGuardCodeFn: options.submitGuardCodeFn,
+    tokenStoreFactory: options.tokenStoreFactory,
+    tokenRecoveryService: options.tokenRecoveryService || defaultTokenRecoveryService,
+    steamGuardCoexistService,
     refreshRuntime: serverRefreshRuntime,
     resolveAccountProfileFn: options.resolveAccountProfileFn,
     steamNetworkPrecheck: options.steamNetworkPrecheck,
@@ -5250,6 +5784,13 @@ function createServer(options = {}) {
       }
     } catch (_) {
       // ignore license runtime shutdown errors
+    }
+    try {
+      if (steamGuardCoexistService && typeof steamGuardCoexistService.shutdown === "function") {
+        steamGuardCoexistService.shutdown();
+      }
+    } catch (_) {
+      // ignore coexist worker shutdown errors
     }
     sessionPool.shutdown();
     void closeCraftAssistWorkerPool();

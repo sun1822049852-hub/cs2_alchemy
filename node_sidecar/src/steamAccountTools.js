@@ -8,6 +8,15 @@ const { enhanceCookieString, buildSteamHeaders, steamGet } = require("./steamHtt
 
 const BAN_BATCH_LIMIT = 100;
 
+function throwIfAuthRejected(response) {
+  const statusCode = Number(response && response.statusCode) || 0;
+  if (statusCode !== 401 && statusCode !== 403) return;
+  const error = new Error("Steam 拒绝当前 Web 登录凭据");
+  error.code = "refresh_token_rejected";
+  error.statusCode = statusCode;
+  throw error;
+}
+
 /**
  * Batch ban check via Steam Web API.
  * @param {string[]} steamId64List — up to 100 per call (auto-chunked)
@@ -52,6 +61,7 @@ async function checkBanSingle({ cookieString, steamId64 }) {
   const url = `https://steamcommunity.com/profiles/${steamId64}`;
   const headers = buildSteamHeaders({ cookieString: enhanced, steamId64, referer: `https://steamcommunity.com/profiles/${steamId64}` });
   const resp = await steamGet({ url, headers });
+  throwIfAuthRejected(resp);
   const body = resp.body || "";
 
   const banInfo = {
@@ -174,9 +184,11 @@ async function fetchTradeOfferAccessToken(accessToken) {
   for (const attempt of attempts) {
     try {
       const resp = await steamGet(attempt);
+      throwIfAuthRejected(resp);
       const tradeToken = String(resp && resp.json && resp.json.response && resp.json.response.trade_offer_access_token || "").trim();
       if (tradeToken) return tradeToken;
-    } catch (_) {
+    } catch (err) {
+      if (err && err.code === "refresh_token_rejected") throw err;
       // fall through to the next attempt
     }
   }
@@ -196,6 +208,7 @@ async function fetchBalance({ cookieString, accessToken, steamId64 }) {
     const url = "https://store.steampowered.com/api/GetClientWalletDetails/v1/?language=schinese";
     const headers = buildSteamHeaders({ cookieString: enhanceCookieString(cookieString, { steamId64, domain: "store" }), steamId64, referer: "https://store.steampowered.com/" });
     const resp = await steamGet({ url, headers });
+    throwIfAuthRejected(resp);
     const wallet = resp.json?.response;
 
     if (wallet && wallet.has_wallet) {
@@ -205,7 +218,8 @@ async function fetchBalance({ cookieString, accessToken, steamId64 }) {
       const formatted = `${symbol} ${(cents / 100).toFixed(2)}`;
       return { success: true, balance: formatted, currency: currencyCode };
     }
-  } catch (_primaryErr) {
+  } catch (primaryErr) {
+    if (primaryErr && primaryErr.code === "refresh_token_rejected") throw primaryErr;
     // fall through to fallback
   }
 
@@ -214,6 +228,7 @@ async function fetchBalance({ cookieString, accessToken, steamId64 }) {
     const url = "https://store.steampowered.com/account/";
     const headers = buildSteamHeaders({ cookieString: enhanceCookieString(cookieString, { steamId64, domain: "store" }), steamId64, referer: "https://store.steampowered.com/" });
     const resp = await steamGet({ url, headers });
+    throwIfAuthRejected(resp);
     const body = resp.body || "";
 
     // Match patterns like "¥ 123.45" or "$12.34"
@@ -224,7 +239,8 @@ async function fetchBalance({ cookieString, accessToken, steamId64 }) {
       const currency = Object.entries(CURRENCY_SYMBOLS).find(([, v]) => v === symbol)?.[0] || null;
       return { success: true, balance: balanceText, currency };
     }
-  } catch (_fallbackErr) {
+  } catch (fallbackErr) {
+    if (fallbackErr && fallbackErr.code === "refresh_token_rejected") throw fallbackErr;
     // both failed
   }
 
@@ -255,7 +271,8 @@ async function fetchTradeUrl({ cookieString, steamId64, accessToken }) {
         tradeUrl: `https://steamcommunity.com/tradeoffer/new/?partner=${partnerId}&token=${tokenFromApi}`
       };
     }
-  } catch (_) {
+  } catch (err) {
+    if (err && err.code === "refresh_token_rejected") throw err;
     // fall through to HTML scraping
   }
 
@@ -264,6 +281,7 @@ async function fetchTradeUrl({ cookieString, steamId64, accessToken }) {
     const url = `https://steamcommunity.com/profiles/${sid}/tradeoffers/privacy`;
     const headers = buildSteamHeaders({ cookieString: enhanced, steamId64: sid, referer: `https://steamcommunity.com/profiles/${sid}/` });
     const resp = await steamGet({ url, headers });
+    throwIfAuthRejected(resp);
     const body = resp.body || "";
 
     const tokenMatch = body.match(
@@ -275,7 +293,8 @@ async function fetchTradeUrl({ cookieString, steamId64, accessToken }) {
       const tradeUrl = `https://steamcommunity.com/tradeoffer/new/?partner=${accountId32}&token=${tokenMatch[1]}`;
       return { success: true, tradeUrl };
     }
-  } catch (_err) {
+  } catch (err) {
+    if (err && err.code === "refresh_token_rejected") throw err;
     // parse failed
   }
 

@@ -384,7 +384,9 @@ function createCraftService({sessionPool, logger}) {
 
   async function acquireContext({username, password}) {
     const accountStore = new AccountStore();
-    const account = username ? accountStore.get(username) : accountStore.getActive();
+    const account = username
+      ? (typeof accountStore.getCredentials === "function" ? accountStore.getCredentials(username) : accountStore.get(username))
+      : (typeof accountStore.getActiveCredentials === "function" ? accountStore.getActiveCredentials() : accountStore.getActive());
     if (!account) throw new Error(`account not found: ${username || "(active)"}`);
     const accountName = asString(account.username).trim();
     const tokenStore = new TokenStore();

@@ -323,23 +323,32 @@
             </div>
             <div class="account-login-body">
               <div id="accountLoginHint" class="account-login-linkhint">使用 Steam 账号登录并保存到当前客户端</div>
+              <div id="accountGuardIdentity" class="account-guard-identity hidden">
+                <span>账号：</span>
+                <strong id="accountGuardUsername"></strong>
+              </div>
               <div class="account-login-fields">
-                <label class="account-login-field">
+                <label id="accountUsernameField" class="account-login-field">
                   <span>Steam 账号</span>
                   <input id="accountUsername" type="text" autocomplete="off" autocorrect="off" spellcheck="false" />
                 </label>
-                <label class="account-login-field">
+                <label id="accountPasswordField" class="account-login-field">
                   <span>密码</span>
                   <div class="account-password-field-wrap">
-                    <input id="accountPassword" type="password" autocomplete="new-password" />
+                    <input id="accountPassword" type="password" autocomplete="current-password" />
                     <button id="accountPasswordToggle" class="account-password-toggle" type="button" aria-label="显示密码" aria-pressed="false">
                       <span class="account-password-toggle-icon" aria-hidden="true"></span>
                     </button>
                   </div>
                 </label>
-                <label class="account-login-field">
-                  <span>令牌码</span>
-                  <input id="accountTotp" type="text" maxlength="6" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" placeholder="有令牌码则填写，无则留空" />
+                <label id="accountGuardField" class="account-login-field hidden">
+                  <span class="steam-verification-code-label">令牌码</span>
+                  <div class="steam-verification-code-input">
+                    <input id="accountTotp" type="text" maxlength="5" pattern="[A-Z0-9]{5}" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" aria-label="五位 Steam 令牌码" />
+                    <div class="steam-verification-code-slots" aria-hidden="true">
+                      <span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span>
+                    </div>
+                  </div>
                 </label>
               </div>
               <div id="accountGuardHint" class="account-guard-hint hidden" aria-live="polite"></div>
@@ -954,103 +963,137 @@
       </div>
     </div>
 
-    <!-- ═══ Steam Guard 令牌绑定弹窗 ═══ -->
+    <!-- ═══ Steam Guard 联合绑定弹窗 ═══ -->
     <div id="steamGuardEnrollModal" class="modal-overlay hidden">
       <div class="modal-dialog steam-guard-enroll-dialog">
         <div class="modal-header">
-          <h3>绑定 Steam Guard 令牌</h3>
+          <h3>联合 Steam 令牌</h3>
           <button id="steamGuardEnrollCloseBtn" class="modal-close-btn" type="button">&times;</button>
         </div>
         <div class="modal-body">
-          <!-- Step 1: 选择账号 -->
           <div id="enrollStep1" class="enroll-step">
             <div class="enroll-warning-box">
-              <p><strong>⚠ 风险提示</strong></p>
-              <ul>
-                <li>系统会在验证后判断是首次绑定还是替换旧令牌</li>
-                <li>完成绑定后 <strong>两天内无法交易</strong></li>
-                <li>如果您尚未绑定过 Steam 令牌，则会有 <strong>15 天的市场交易冷却期</strong></li>
-                <li>请确保已启用加速器</li>
-              </ul>
+              <p><strong>仅支持尚未绑定移动令牌的 Steam 账号</strong></p>
+              <p>如 Steam 检测到账号已有令牌，本次操作会明确提示并终止，不会移除、替换或接管现有令牌。</p>
             </div>
-            <label class="enroll-select-label">选择账号
-              <select id="enrollAccountSelect"></select>
-            </label>
+            <div class="enroll-mode-switch" role="tablist" aria-label="联合绑定账号模式">
+              <button id="coexistExistingModeBtn" class="active" type="button" role="tab" aria-selected="true">选择已有账号</button>
+              <button id="coexistNewModeBtn" type="button" role="tab" aria-selected="false">只添加令牌</button>
+            </div>
+            <div id="coexistExistingFields" class="enroll-fields">
+              <label class="enroll-select-label">选择已有账号
+                <select id="enrollAccountSelect"></select>
+              </label>
+            </div>
+            <div id="coexistNewFields" class="enroll-fields hidden">
+              <label class="enroll-select-label">Steam 账号
+                <input id="coexistNewUsername" type="text" autocomplete="username" spellcheck="false" placeholder="请输入 Steam 账号" />
+              </label>
+              <label class="enroll-select-label">Steam 密码
+                <input id="coexistNewPassword" type="password" autocomplete="current-password" placeholder="请输入 Steam 密码" />
+              </label>
+              <label class="enroll-select-label">备注（可选）
+                <input id="coexistNewRemark" type="text" maxlength="80" placeholder="账号备注" />
+              </label>
+            </div>
           </div>
-          <!-- Step 2: SMS 验证 -->
           <div id="enrollStep2" class="enroll-step hidden">
-            <div id="enrollRevocationWrap" class="enroll-revocation-box">
-              <p><strong>恢复码（请务必记录）</strong></p>
-              <code id="enrollRevocationCode">-</code>
+            <div class="enroll-step-copy">
+              <strong>输入邮箱验证码</strong>
+              <span id="coexistEmailHint">Steam 已向账号邮箱发送验证码。</span>
             </div>
-            <label class="enroll-sms-label">SMS 验证码
-              <input id="enrollSmsInput" type="text" placeholder="输入手机收到的验证码" maxlength="10" autocomplete="off" />
+            <label class="enroll-sms-label">
+              <span class="steam-verification-code-label">邮箱验证码</span>
+              <div class="steam-verification-code-input">
+                <input id="coexistEmailCode" type="text" maxlength="5" pattern="[A-Z0-9]{5}" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" aria-label="五位邮箱验证码" />
+                <div class="steam-verification-code-slots" aria-hidden="true">
+                  <span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span>
+                </div>
+              </div>
             </label>
           </div>
-          <!-- Step 3: 完成 -->
           <div id="enrollStep3" class="enroll-step hidden">
+            <div class="enroll-step-copy">
+              <strong>在 Steam App 中完成绑定</strong>
+              <span>完成后输入 App 当前显示的五位动态码。本程序只校验两端令牌是否一致。</span>
+            </div>
+            <label class="enroll-sms-label">
+              <span class="steam-verification-code-label">五位动态码</span>
+              <div class="steam-verification-code-input">
+                <input id="coexistAppCode" type="text" maxlength="5" pattern="[A-Z0-9]{5}" autocapitalize="characters" autocomplete="one-time-code" spellcheck="false" aria-label="五位 App 动态码" />
+                <div class="steam-verification-code-slots" aria-hidden="true">
+                  <span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span><span class="steam-verification-code-slot"></span>
+                </div>
+              </div>
+            </label>
+          </div>
+          <div id="enrollStep4" class="enroll-step hidden">
             <div class="enroll-success-box">
-              <p id="enrollFinalModeText" class="enroll-mode-note">Steam Guard 令牌绑定成功</p>
-              <p>恢复码：<code id="enrollFinalRevCode">-</code></p>
-              <p class="enroll-success-hint">请妥善保管恢复码，丢失后将无法恢复令牌。</p>
+              <p class="enroll-mode-note">Steam Guard 令牌已保存</p>
+              <p class="enroll-success-hint">后续可在账号卡片的“令牌管理”中查看当前令牌码、恢复码或导出 maFile。</p>
             </div>
           </div>
-          <!-- Status -->
           <div id="enrollStatusText" class="enroll-status"></div>
         </div>
         <div class="modal-footer">
-          <button id="enrollBackBtn" type="button" class="hidden">上一步</button>
+          <button id="enrollCancelBtn" type="button">取消</button>
           <button id="enrollActionBtn" type="button" class="btn-primary">开始绑定</button>
         </div>
       </div>
     </div>
 
-    <!-- ═══ Steam Guard 令牌详情弹窗 ═══ -->
+    <div id="batchImportDuplicateModal" class="modal-overlay hidden">
+      <div class="modal-dialog batch-import-duplicate-dialog">
+        <div class="modal-header">
+          <h3>选择令牌文件</h3>
+          <button id="batchImportDuplicateCloseBtn" class="modal-close-btn" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="batchImportDuplicateSummary" class="batch-import-duplicate-summary">0 个账号待选择</div>
+          <div id="batchImportDuplicateList" class="batch-import-duplicate-list"></div>
+          <div id="batchImportDuplicateStatus" class="enroll-status"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="batchImportDuplicateCancelBtn" type="button">取消</button>
+          <button id="batchImportDuplicateOverwriteBtn" class="btn-primary" type="button" disabled>处理已选择账号（0）</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Steam Guard 令牌管理弹窗 ═══ -->
     <div id="tokenDetailModal" class="modal-overlay hidden">
       <div class="modal-dialog token-detail-dialog">
         <div class="modal-header">
-          <h3>Steam Guard 令牌详情 — <span id="tokenDetailAccountName">-</span></h3>
+          <h3>令牌管理 — <span id="tokenDetailAccountName">-</span></h3>
           <button id="tokenDetailCloseBtn" class="modal-close-btn" type="button">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="token-totp-section">
-            <div class="token-totp-label">实时 TOTP 码</div>
+          <div class="token-management-actions">
+            <button id="tokenExportBtn" type="button">导出 maFile</button>
+            <button id="tokenShowCodeBtn" type="button">查看令牌码</button>
+            <button id="tokenShowRecoveryBtn" type="button">查看恢复码</button>
+            <button id="tokenDeleteBtn" class="btn-danger" type="button">删除令牌文件</button>
+          </div>
+          <div id="tokenCodePanel" class="token-totp-section hidden">
+            <div class="token-totp-label">当前令牌码</div>
             <div class="token-totp-row">
               <span id="tokenTotpCode" class="token-totp-code">-----</span>
-              <button id="tokenTotpCopyBtn" type="button" class="token-copy-btn" title="复制">📋</button>
+              <button id="tokenTotpCopyBtn" type="button" class="token-copy-btn" title="复制令牌码">复制</button>
             </div>
             <div class="token-totp-timer">
               <div id="tokenTotpBar" class="token-totp-bar"></div>
               <span id="tokenTotpCountdown">30s</span>
             </div>
           </div>
-          <div class="token-info-grid">
-            <div class="token-info-row">
-              <span class="token-info-label">Device ID</span>
-              <span id="tokenDeviceId" class="token-info-value masked">●●●●●●●●</span>
-              <button class="token-toggle-btn" data-field="tokenDeviceId" title="显示/隐藏">👁</button>
-              <button class="token-copy-btn" data-copy="tokenDeviceId" title="复制">📋</button>
-            </div>
+          <div id="tokenRecoveryPanel" class="token-recovery-panel hidden">
             <div class="token-info-row">
               <span class="token-info-label">恢复码</span>
-              <span id="tokenRevCode" class="token-info-value masked">●●●●●●●●</span>
-              <button class="token-toggle-btn" data-field="tokenRevCode" title="显示/隐藏">👁</button>
-              <button class="token-copy-btn" data-copy="tokenRevCode" title="复制">📋</button>
-            </div>
-            <div class="token-info-row">
-              <span class="token-info-label">账号名</span>
-              <span id="tokenAccName" class="token-info-value">-</span>
-            </div>
-            <div class="token-info-row">
-              <span class="token-info-label">SteamID64</span>
-              <span id="tokenSteamId" class="token-info-value">-</span>
-              <button class="token-copy-btn" data-copy="tokenSteamId" title="复制">📋</button>
+              <span id="tokenRevCode" class="token-info-value masked">••••••••</span>
+              <button id="tokenRecoveryRevealBtn" class="token-toggle-btn" type="button">显示</button>
+              <button id="tokenRecoveryCopyBtn" class="token-copy-btn" type="button" disabled>复制</button>
             </div>
           </div>
-          <details class="token-raw-section">
-            <summary>SteamGuard 完整数据</summary>
-            <pre id="tokenRawData" class="token-raw-pre">-</pre>
-          </details>
+          <div id="tokenManageStatus" class="enroll-status"></div>
         </div>
         <div class="modal-footer">
           <span></span>

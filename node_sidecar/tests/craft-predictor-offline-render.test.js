@@ -60,6 +60,9 @@ function loadRenderCraftPageFns(initialState = {}) {
       craftConnectText: null
     },
     syncCurrentCraftAssistRuntimeState() {},
+    isGuestWorkspaceActive() {
+      return false;
+    },
     isCurrentAccountConnected() {
       return false;
     },

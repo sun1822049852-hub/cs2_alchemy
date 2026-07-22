@@ -4,7 +4,9 @@ const {asString} = require("../utils");
 function createSessionPool({
   logger,
   idleMs = 0,
-  cleanupIntervalMs = 30 * 1000
+  cleanupIntervalMs = 30 * 1000,
+  SessionClass = CS2Session,
+  tokenRecoveryService = null
 } = {}) {
   const entries = new Map();
   let cleanupTimer = null;
@@ -97,7 +99,8 @@ function createSessionPool({
     password,
     refreshToken,
     tokenStore,
-    refreshTokenOnly = false
+    refreshTokenOnly = false,
+    allowTokenRecovery = true
   }) {
     const account = asString(username).trim();
     if (!account) {
@@ -123,15 +126,31 @@ function createSessionPool({
       return {steam: shared.steam || null, csgo: shared.csgo, reused: true};
     }
 
-    const session = new CS2Session({logger, tokenStore});
-    const connectingPromise = session
-      .connect({
-        username: account,
-        password,
-        refreshToken,
-        refreshTokenOnly
-      })
-      .then(({steam, csgo}) => {
+    const recoveryEnabled = !!(
+      allowTokenRecovery
+      && tokenRecoveryService
+      && typeof tokenRecoveryService.withTokenRecovery === "function"
+    );
+    const connectWithToken = async (effectiveRefreshToken) => {
+      const session = new SessionClass({logger, tokenStore});
+      try {
+        const connected = await session.connect({
+          username: account,
+          password,
+          refreshToken: effectiveRefreshToken,
+          refreshTokenOnly: recoveryEnabled ? true : refreshTokenOnly
+        });
+        return {session, steam: connected.steam, csgo: connected.csgo};
+      } catch (err) {
+        try { session.disconnect(); } catch (_) {}
+        throw err;
+      }
+    };
+    const connectTask = recoveryEnabled
+      ? tokenRecoveryService.withTokenRecovery(account, connectWithToken)
+      : connectWithToken(refreshToken);
+    const connectingPromise = Promise.resolve(connectTask)
+      .then(({session, steam, csgo}) => {
         const readyEntry = {
           session,
           steam,
@@ -182,6 +201,10 @@ function createSessionPool({
     disconnectEntry(username, reason || "invalidated");
   }
 
+  function hasTokenRecovery() {
+    return !!(tokenRecoveryService && typeof tokenRecoveryService.withTokenRecovery === "function");
+  }
+
   function shutdown() {
     if (cleanupTimer) {
       clearInterval(cleanupTimer);
@@ -195,6 +218,7 @@ function createSessionPool({
 
   return {
     acquire,
+    hasTokenRecovery,
     touch,
     invalidate,
     shutdown

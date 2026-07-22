@@ -1671,6 +1671,22 @@ select.small {
   line-height: 1.5;
 }
 
+.account-guard-identity {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 24px;
+  font-size: 14px;
+  color: var(--account-text-soft);
+}
+
+.account-guard-identity strong {
+  color: var(--account-text-main);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
 .account-login-fields {
   display: grid;
   gap: 14px;
@@ -7569,6 +7585,31 @@ body.theme-inkblue #accountPage .empty {
   color: var(--account-text-soft);
 }
 
+.account-login-modal.guard-code-mode .account-login-modal-card {
+  width: min(100%, 390px);
+}
+
+.account-login-modal.guard-code-mode .account-login-body {
+  gap: 18px;
+}
+
+.account-login-modal.guard-code-mode .account-login-fields {
+  gap: 0;
+}
+
+.account-login-modal.guard-code-mode #accountGuardField {
+  gap: 10px;
+  align-items: center;
+}
+
+.account-login-modal.guard-code-mode #accountGuardField > span {
+  text-align: center;
+}
+
+.account-login-modal.guard-code-mode #accountTotp {
+  text-transform: uppercase;
+}
+
 body.theme-inkblue #accountPage .status-title {
   margin-bottom: 6px;
   color: var(--account-text-dim);
@@ -10213,6 +10254,10 @@ body.batch-craft-split-dragging {
 }
 .modal-overlay.hidden { display: none; }
 
+#confirmModal {
+  z-index: 9100;
+}
+
 .modal-dialog {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -10285,7 +10330,31 @@ body.batch-craft-split-dragging {
   font-size: 13px;
   color: var(--text);
 }
-.batch-import-file-item .file-name { flex: 1; }
+.batch-import-file-identity {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.batch-import-file-item .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-import-file-item .file-account-name {
+  color: var(--muted);
+  font-size: 11px;
+}
+.file-preflight-status {
+  width: fit-content;
+  font-size: 11px;
+  color: var(--muted);
+}
+.file-preflight-status.ready { color: var(--success); }
+.file-preflight-status.duplicate_existing { color: var(--accent); }
+.file-preflight-status.duplicate_batch,
+.file-preflight-status.invalid { color: var(--danger); }
 .batch-import-file-item .file-pwd {
   width: 140px;
   margin-left: 8px;
@@ -10411,6 +10480,153 @@ body.batch-craft-split-dragging {
 }
 .batch-import-result-item.ok { color: var(--success); background: rgba(75,226,157,0.08); }
 .batch-import-result-item.fail { color: var(--danger); background: rgba(255,122,144,0.08); }
+.batch-import-result-item.pending { color: var(--accent); background: rgba(243,199,121,0.08); }
+.batch-import-result-summary {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.batch-import-duplicate-dialog { max-width: 620px; }
+.batch-import-duplicate-summary {
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+.batch-import-duplicate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+}
+.batch-import-resolution-group {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.batch-import-resolution-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.batch-import-resolution-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.batch-import-resolution-head span,
+.batch-import-resolution-local {
+  color: var(--muted);
+  font-size: 11px;
+}
+.batch-import-resolution-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.batch-import-resolution-candidate {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.batch-import-resolution-candidate input,
+.batch-import-resolution-overwrite input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.batch-import-resolution-candidate.disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.batch-import-resolution-candidate-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.batch-import-resolution-file-name {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.batch-import-resolution-candidate-copy span:not(.batch-import-resolution-file-name) {
+  color: var(--muted);
+  font-size: 11px;
+}
+.batch-import-resolution-local {
+  margin-top: 7px;
+  overflow-wrap: anywhere;
+}
+.batch-import-resolution-password {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 9px;
+  border: 1px solid rgba(255, 122, 144, 0.45);
+  border-radius: 5px;
+  background: rgba(255, 122, 144, 0.06);
+}
+.batch-import-resolution-password > span {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+.batch-import-resolution-password > input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  font-family: Consolas, "Courier New", monospace;
+}
+.batch-import-resolution-password > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.batch-import-resolution-password > label input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.batch-import-resolution-overwrite {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .batch-import-file-item { align-items: flex-start; flex-wrap: wrap; }
+  .batch-import-file-item .file-pwd { width: 100%; margin: 6px 0 0; }
+  .batch-import-duplicate-dialog { width: calc(100vw - 24px); }
+  .batch-import-resolution-head { align-items: flex-start; flex-direction: column; }
+  .batch-import-duplicate-dialog .modal-footer { flex-wrap: wrap; gap: 8px; }
+  .batch-import-duplicate-dialog .modal-footer button { width: 100%; }
+}
 
 /* Web 库存 */
 .web-inventory-dialog { max-width: 800px; }
@@ -11247,7 +11463,7 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   color: var(--ops-accent-strong, #f3c779);
 }
 
-/* ═══ Steam Guard 令牌绑定弹窗 ═══ */
+/* ═══ Steam Guard 联合绑定弹窗 ═══ */
 .steam-guard-enroll-dialog { max-width: 520px; }
 
 .enroll-step.hidden { display: none; }
@@ -11262,6 +11478,7 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   line-height: 1.6;
 }
 .enroll-warning-box p { margin: 0 0 6px; }
+.enroll-warning-box p:last-child { margin-bottom: 0; }
 .enroll-warning-box ul {
   margin: 0;
   padding-left: 18px;
@@ -11275,7 +11492,7 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   font-size: 13px;
   color: var(--text);
 }
-.enroll-select-label select {
+.enroll-select-label :is(select, input) {
   padding: 7px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -11283,6 +11500,38 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   color: var(--text);
   font-size: 13px;
 }
+
+.enroll-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.enroll-mode-switch button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+}
+.enroll-mode-switch button.active {
+  border-color: rgba(220, 164, 76, 0.68);
+  background: rgba(220, 164, 76, 0.14);
+  color: #f3c779;
+}
+.enroll-fields {
+  display: grid;
+  gap: 10px;
+}
+.enroll-fields.hidden { display: none; }
+.enroll-step-copy {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.enroll-step-copy span { color: var(--muted); }
 
 .enroll-revocation-box {
   background: rgba(220, 164, 76, 0.10);
@@ -11323,6 +11572,90 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
   text-align: center;
 }
 
+.steam-verification-code-label {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-weight: 700;
+}
+
+.steam-verification-code-input {
+  position: relative;
+  width: min(100%, 280px);
+  height: 64px;
+  margin: 0 auto;
+}
+
+.steam-verification-code-input > input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  opacity: 0.02;
+  letter-spacing: 0;
+  cursor: text;
+}
+
+.steam-verification-code-slots {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  pointer-events: none;
+}
+
+.steam-verification-code-slot {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 40px;
+  border-bottom: 2px solid #718096;
+  color: var(--text);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.steam-verification-code-input.focused .steam-verification-code-slots {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.steam-verification-code-input.focused .steam-verification-code-slot {
+  border-bottom-color: var(--accent);
+}
+
+@media (max-width: 420px) {
+  .steam-verification-code-input {
+    width: 100%;
+  }
+
+  .steam-verification-code-slots {
+    grid-template-columns: repeat(5, 32px);
+    gap: 8px;
+  }
+
+  .steam-verification-code-slot {
+    width: 32px;
+  }
+}
+
 .enroll-success-box {
   text-align: center;
   padding: 16px 0;
@@ -11352,8 +11685,19 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
 }
 .enroll-status.error { color: var(--danger); }
 
-/* ═══ Steam Guard 令牌详情弹窗 ═══ */
+/* ═══ Steam Guard 令牌管理弹窗 ═══ */
 .token-detail-dialog { max-width: 480px; }
+
+.token-management-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.token-management-actions button {
+  min-height: 36px;
+  padding: 6px 8px;
+}
 
 .token-totp-section {
   text-align: center;
@@ -11439,6 +11783,17 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
 }
 .token-info-value.masked {
   letter-spacing: 2px;
+}
+.token-recovery-panel {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+@media (max-width: 520px) {
+  .token-management-actions { grid-template-columns: 1fr; }
 }
 .token-toggle-btn,
 .token-copy-btn {
