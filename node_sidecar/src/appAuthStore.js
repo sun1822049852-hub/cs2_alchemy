@@ -1,8 +1,11 @@
 const crypto = require("node:crypto");
+const fs = require("node:fs");
 const {DatabaseSync} = require("node:sqlite");
 const {PATHS} = require("./constants");
-const {readJson, writeJson} = require("./jsonStore");
 const {asString} = require("./utils");
+
+const LEGACY_ACCOUNTS_MIGRATION_KEY = "migration.accounts_json.v1";
+const GLOBAL_ACTIVE_STEAM_ACCOUNT_KEY = "steam_account.global_active";
 
 const ALL_PERMISSION_CODES = [
   "accounts.read",
@@ -117,11 +120,17 @@ class AppAuthStore {
     this.db = this.readOnly
       ? new DatabaseSync(this.dbPath, {readOnly: true})
       : new DatabaseSync(this.dbPath);
-    this.db.exec("PRAGMA foreign_keys = ON");
-    if (this.initialize) {
-      this.ensureSchema();
-      this.seedSystemData();
-      this.importLegacyAccountsIfNeeded();
+    try {
+      this.db.exec("PRAGMA foreign_keys = ON");
+      if (this.initialize) {
+        this.ensureSchema();
+        this.seedSystemData();
+        this.migrateLegacyAccountsOnce();
+      }
+    } catch (err) {
+      try { this.db.close(); } catch (_) {}
+      this.db = null;
+      throw err;
     }
   }
 
@@ -226,6 +235,12 @@ class AppAuthStore {
         last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS app_setting (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL DEFAULT '',
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     // 兼容已有数据库：新增字段（如果不存在则 ALTER TABLE）
@@ -288,61 +303,120 @@ class AppAuthStore {
     ).run("placeholder_member", "会员占位方案", "inactive", JSON.stringify({}));
   }
 
-  importLegacyAccountsIfNeeded() {
-    const legacy = this.readLegacyAccountsState();
-    const accounts = legacy && legacy.accounts && typeof legacy.accounts === "object" ? legacy.accounts : {};
-    const upsert = this.db.prepare(`
-      INSERT INTO steam_account(username, password, remark, steam_name, steam_id, avatar_url, mafile_content, steam_id64, updated_at)
-      VALUES(?, ?, ?, ?, ?, ?, '', '', ?)
-      ON CONFLICT(username) DO UPDATE SET
-        password = excluded.password,
-        remark = excluded.remark,
-        steam_name = excluded.steam_name,
-        steam_id = excluded.steam_id,
-        avatar_url = excluded.avatar_url,
-        updated_at = excluded.updated_at
-    `);
-    for (const [username, info] of Object.entries(accounts)) {
-      const key = asString(username).trim();
-      if (!key) {
-        continue;
-      }
-      const value = info && typeof info === "object" ? info : {};
-      upsert.run(
-        key,
-        asString(value.password).trim(),
-        asString(value.remark).trim(),
-        asString(value.steam_name || value.persona_name || value.steam_persona).trim(),
-        asString(value.steam_id || value.steamid).trim(),
-        asString(value.avatar_url || value.avatar).trim(),
-        nowSqlText()
-      );
-    }
+  getAppSetting(key) {
+    const settingKey = asString(key).trim();
+    if (!settingKey) return "";
+    const row = this.db.prepare("SELECT value FROM app_setting WHERE key = ?").get(settingKey);
+    return asString(row && row.value).trim();
   }
 
-  readLegacyAccountsState() {
-    const legacy = readJson(this.accountsFilePath, {accounts: {}, active: ""});
-    if (!legacy || typeof legacy !== "object") {
-      return {accounts: {}, active: ""};
+  setAppSetting(key, value) {
+    const settingKey = asString(key).trim();
+    if (!settingKey) throw new Error("setting key is required");
+    this.db.prepare(`
+      INSERT INTO app_setting(key, value, updated_at)
+      VALUES(?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(settingKey, asString(value).trim(), nowSqlText());
+  }
+
+  readLegacyAccountsForMigration() {
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(this.accountsFilePath, "utf8"));
+    } catch (err) {
+      const invalid = new Error("legacy accounts file is invalid");
+      invalid.code = "legacy_accounts_invalid";
+      invalid.cause = err;
+      throw invalid;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      const invalid = new Error("legacy accounts file is invalid");
+      invalid.code = "legacy_accounts_invalid";
+      throw invalid;
+    }
+    if (parsed.accounts != null && (typeof parsed.accounts !== "object" || Array.isArray(parsed.accounts))) {
+      const invalid = new Error("legacy accounts file is invalid");
+      invalid.code = "legacy_accounts_invalid";
+      throw invalid;
     }
     return {
-      ...legacy,
-      accounts: legacy.accounts && typeof legacy.accounts === "object" ? legacy.accounts : {},
-      active: asString(legacy.active).trim()
+      accounts: parsed.accounts || {},
+      active: asString(parsed.active).trim()
     };
   }
 
-  writeLegacyAccountsState(nextValue) {
-    const value = nextValue && typeof nextValue === "object" ? nextValue : {accounts: {}, active: ""};
-    writeJson(this.accountsFilePath, {
-      ...value,
-      accounts: value.accounts && typeof value.accounts === "object" ? value.accounts : {},
-      active: asString(value.active).trim()
-    });
+  removeLegacyAccountsFile() {
+    try {
+      if (fs.existsSync(this.accountsFilePath)) fs.unlinkSync(this.accountsFilePath);
+    } catch (err) {
+      const cleanupError = new Error("legacy accounts file cleanup failed");
+      cleanupError.code = "legacy_accounts_cleanup_failed";
+      cleanupError.cause = err;
+      throw cleanupError;
+    }
   }
 
-  getLegacyActiveSteamUsername() {
-    const active = asString(this.readLegacyAccountsState().active).trim();
+  migrateLegacyAccountsOnce() {
+    const migrationState = this.getAppSetting(LEGACY_ACCOUNTS_MIGRATION_KEY);
+    if (migrationState === "complete") {
+      this.removeLegacyAccountsFile();
+      return;
+    }
+    if (migrationState === "pending_cleanup") {
+      this.removeLegacyAccountsFile();
+      this.setAppSetting(LEGACY_ACCOUNTS_MIGRATION_KEY, "complete");
+      return;
+    }
+    if (!fs.existsSync(this.accountsFilePath)) {
+      this.setAppSetting(LEGACY_ACCOUNTS_MIGRATION_KEY, "complete");
+      return;
+    }
+
+    const legacy = this.readLegacyAccountsForMigration();
+    const insertMissing = this.db.prepare(`
+      INSERT INTO steam_account(username, password, remark, steam_name, steam_id, avatar_url, mafile_content, steam_id64, updated_at)
+      VALUES(?, ?, ?, ?, ?, ?, '', '', ?)
+      ON CONFLICT(username) DO NOTHING
+    `);
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const [username, info] of Object.entries(legacy.accounts)) {
+        const key = asString(username).trim();
+        if (!key) continue;
+        const value = info && typeof info === "object" && !Array.isArray(info) ? info : {};
+        insertMissing.run(
+          key,
+          asString(value.password).trim(),
+          asString(value.remark).trim(),
+          asString(value.steam_name || value.persona_name || value.steam_persona).trim(),
+          asString(value.steam_id || value.steamid).trim(),
+          asString(value.avatar_url || value.avatar).trim(),
+          nowSqlText()
+        );
+      }
+      const active = legacy.active;
+      if (
+        active
+        && !this.getAppSetting(GLOBAL_ACTIVE_STEAM_ACCOUNT_KEY)
+        && this.db.prepare("SELECT 1 FROM steam_account WHERE username = ?").get(active)
+      ) {
+        this.setAppSetting(GLOBAL_ACTIVE_STEAM_ACCOUNT_KEY, active);
+      }
+      this.setAppSetting(LEGACY_ACCOUNTS_MIGRATION_KEY, "pending_cleanup");
+      this.db.exec("COMMIT");
+    } catch (err) {
+      try { this.db.exec("ROLLBACK"); } catch (_) {}
+      throw err;
+    }
+
+    this.removeLegacyAccountsFile();
+    this.setAppSetting(LEGACY_ACCOUNTS_MIGRATION_KEY, "complete");
+  }
+
+  getGlobalActiveSteamUsername() {
+    const active = this.getAppSetting(GLOBAL_ACTIVE_STEAM_ACCOUNT_KEY);
     if (!active) {
       return "";
     }
@@ -350,11 +424,9 @@ class AppAuthStore {
     return row ? active : "";
   }
 
-  setLegacyActiveSteamUsername(username) {
+  setGlobalActiveSteamUsername(username) {
     const key = asString(username).trim();
-    const legacy = this.readLegacyAccountsState();
-    legacy.active = key;
-    this.writeLegacyAccountsState(legacy);
+    this.setAppSetting(GLOBAL_ACTIVE_STEAM_ACCOUNT_KEY, key);
   }
 
   needsBootstrap() {
@@ -576,7 +648,7 @@ class AppAuthStore {
 
   getViewerActiveSteamUsername(viewerUsername) {
     if (!asString(viewerUsername).trim()) {
-      return this.getLegacyActiveSteamUsername();
+      return this.getGlobalActiveSteamUsername();
     }
     const viewer = this.getUserByUsername(viewerUsername);
     return viewer ? asString(viewer.active_steam_username).trim() : "";
@@ -790,9 +862,10 @@ class AppAuthStore {
             throw new Error("active account update failed");
           }
         }
+      } else if (setActive) {
+        this.setGlobalActiveSteamUsername(key);
       }
       this.db.exec("COMMIT");
-      if (setActive && !viewer) this.setLegacyActiveSteamUsername(key);
       return true;
     } catch (err) {
       try { this.db.exec("ROLLBACK"); } catch (_) {}
@@ -964,13 +1037,24 @@ class AppAuthStore {
     if (!row) {
       return false;
     }
-    this.db.prepare("DELETE FROM user_steam_binding WHERE steam_account_id = ?").run(row.id);
-    this.db.prepare("UPDATE app_user SET active_steam_username = '' WHERE active_steam_username = ?").run(key);
-    if (!asString(viewerUsername).trim() && this.getLegacyActiveSteamUsername() === key) {
-      this.setLegacyActiveSteamUsername("");
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM user_steam_binding WHERE steam_account_id = ?").run(row.id);
+      this.db.prepare("UPDATE app_user SET active_steam_username = '' WHERE active_steam_username = ?").run(key);
+      if (this.getGlobalActiveSteamUsername() === key) {
+        this.setGlobalActiveSteamUsername("");
+      }
+      const result = this.db.prepare("DELETE FROM steam_account WHERE id = ?").run(row.id);
+      if (Number(result.changes) < 1) {
+        throw new Error("steam account delete failed");
+      }
+      this.db.exec("COMMIT");
+      return true;
+    } catch (err) {
+      try { this.db.exec("ROLLBACK"); } catch (_) {}
+      throw err;
     }
-    const result = this.db.prepare("DELETE FROM steam_account WHERE id = ?").run(row.id);
-    return Number(result.changes) > 0;
   }
 
   setActiveSteamAccount(viewerUsername, username) {
@@ -984,7 +1068,7 @@ class AppAuthStore {
       if (!row) {
         return false;
       }
-      this.setLegacyActiveSteamUsername(key);
+      this.setGlobalActiveSteamUsername(key);
       return true;
     }
     if (!this.canAccessSteamAccount(viewer, key)) {

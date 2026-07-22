@@ -176,6 +176,87 @@ function test_wallet_balance_latest_successful_source_replaces_current_value() {
   }
 }
 
+function test_legacy_accounts_migrate_once_and_remove_the_old_file() {
+  const ctx = createStore();
+  try {
+    assert.equal(fs.existsSync(ctx.accountsFilePath), false);
+    assert.equal(ctx.store.getViewerActiveSteamUsername(""), "countsteam01");
+    assert.deepEqual(
+      ctx.store.listSteamAccountsForUser("", {includeAll: true}).map((row) => row.username),
+      ["countsteam01", "countsteam02"]
+    );
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_completed_migration_never_reimports_a_recreated_legacy_file() {
+  const ctx = createStore();
+  try {
+    ctx.store.upsertSteamAccount({
+      username: "countsteam01",
+      password: "CurrentPassword",
+      remark: "current",
+      steamName: "Current Name"
+    }, {setActive: false});
+    writeJson(ctx.accountsFilePath, {
+      accounts: {
+        countsteam01: {
+          password: "StalePassword",
+          remark: "stale",
+          steam_name: "Stale Name"
+        }
+      },
+      active: "countsteam01"
+    });
+    ctx.store.close();
+    ctx.store = new AppAuthStore({
+      dbPath: ctx.dbPath,
+      accountsFilePath: ctx.accountsFilePath
+    });
+
+    const current = ctx.store.getSteamAccountCredentialsForUser("", "countsteam01");
+    assert.equal(current.password, "CurrentPassword");
+    assert.equal(current.remark, "current");
+    assert.equal(current.steam_name, "Current Name");
+    assert.equal(fs.existsSync(ctx.accountsFilePath), false);
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_unscoped_active_account_survives_without_accounts_json() {
+  const ctx = createStore();
+  try {
+    if (fs.existsSync(ctx.accountsFilePath)) fs.unlinkSync(ctx.accountsFilePath);
+    ctx.store.close();
+    ctx.store = new AppAuthStore({
+      dbPath: ctx.dbPath,
+      accountsFilePath: ctx.accountsFilePath
+    });
+    assert.equal(ctx.store.getViewerActiveSteamUsername(""), "countsteam01");
+    assert.equal(ctx.store.getActiveSteamAccount("").username, "countsteam01");
+  } finally {
+    cleanup(ctx);
+  }
+}
+
+function test_corrupt_legacy_accounts_file_blocks_migration_and_is_preserved() {
+  const tempDir = makeTempDir();
+  const dbPath = path.join(tempDir, "auth.db");
+  const accountsFilePath = path.join(tempDir, "accounts.json");
+  fs.writeFileSync(accountsFilePath, "{broken-json", "utf8");
+  try {
+    assert.throws(
+      () => new AppAuthStore({dbPath, accountsFilePath}),
+      /legacy accounts file is invalid/
+    );
+    assert.equal(fs.readFileSync(accountsFilePath, "utf8"), "{broken-json");
+  } finally {
+    fs.rmSync(tempDir, {recursive: true, force: true});
+  }
+}
+
 function test_public_steam_account_projection_hides_secrets_and_reports_guard_presence() {
   const ctx = createStore();
   try {
@@ -494,6 +575,10 @@ function main() {
   test_bootstrap_admin_creates_super_admin_and_imports_legacy_accounts();
   test_regular_user_only_sees_bound_steam_accounts();
   test_legacy_active_account_remains_available_for_unscoped_dev_viewer();
+  test_legacy_accounts_migrate_once_and_remove_the_old_file();
+  test_completed_migration_never_reimports_a_recreated_legacy_file();
+  test_unscoped_active_account_survives_without_accounts_json();
+  test_corrupt_legacy_accounts_file_blocks_migration_and_is_preserved();
   test_wallet_balance_source_metadata_is_persisted();
   test_wallet_balance_latest_successful_source_replaces_current_value();
   test_public_steam_account_projection_hides_secrets_and_reports_guard_presence();
