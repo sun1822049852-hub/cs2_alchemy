@@ -324,6 +324,33 @@ function test_account_store_saves_verified_credentials_without_overwriting_profi
   }
 }
 
+function test_cs2_license_verification_survives_account_delete_and_store_reopen() {
+  const ctx = createFixture();
+  try {
+    let store = new AccountStore({
+      dbPath: ctx.dbPath,
+      accountsFilePath: ctx.accountsFilePath,
+      viewerUsername: "member_a"
+    });
+
+    assert.equal(store.isSteamAppLicenseVerified("countsteam01", 730), false);
+    assert.equal(store.markSteamAppLicenseVerified("countsteam01", 730), true);
+    assert.equal(store.isSteamAppLicenseVerified("COUNTSTEAM01", 730), true);
+    assert.equal(store.remove("countsteam01"), true);
+    assert.equal(store.isSteamAppLicenseVerified("countsteam01", 730), true);
+
+    store = new AccountStore({
+      dbPath: ctx.dbPath,
+      accountsFilePath: ctx.accountsFilePath,
+      viewerUsername: "member_a"
+    });
+    assert.equal(store.isSteamAppLicenseVerified("countsteam01", 730), true);
+    assert.equal(store.isSteamAppLicenseVerified("countsteam01", 570), false);
+  } finally {
+    cleanup(ctx);
+  }
+}
+
 function main() {
   test_account_store_lists_sqlite_accounts_for_viewer_scope();
   test_account_store_reads_do_not_run_write_side_effects();
@@ -333,6 +360,7 @@ function main() {
   test_deleted_legacy_account_stays_deleted_before_passwordless_guard_recreation();
   test_guard_only_account_creation_binds_viewer_and_allows_empty_password();
   test_account_store_saves_verified_credentials_without_overwriting_profile_or_active_account();
+  test_cs2_license_verification_survives_account_delete_and_store_reopen();
   console.log("account-store-sqlite tests passed");
 }
 

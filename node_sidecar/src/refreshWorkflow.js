@@ -54,6 +54,11 @@ function createRefreshAuthError(code, message, {
 }
 
 function isLoginKeyInvalidError(err) {
+  const errorStage = asString(err && err.stage || "").trim();
+  const errorReason = asString(err && (err.reason || err.code) || "").trim();
+  if (errorStage === "steam_app_license" || errorReason.startsWith("cs2_license_")) {
+    return false;
+  }
   const message = asString(err && err.message ? err.message : err).trim().toLowerCase();
   const rawCode = asString(err && (err.code || err.eresult || err.result || "")).trim().toLowerCase();
   const numericCode = Number(rawCode);
@@ -104,6 +109,7 @@ async function refreshInventory({
   dumpRaw = false,
   logger,
   onConnectionReady = null,
+  onConnectionProgress = null,
   sessionPool = null,
   accountStore = null,
   tokenStore = null,
@@ -190,7 +196,8 @@ async function refreshInventory({
           refreshToken,
           tokenStore: tokens,
           refreshTokenOnly: true,
-          allowTokenRecovery: poolCanRecover
+          allowTokenRecovery: poolCanRecover,
+          onLicenseStatus: onConnectionProgress
         });
       } catch (err) {
         if (isLoginKeyInvalidError(err)) {
@@ -210,7 +217,8 @@ async function refreshInventory({
           username: accountName,
           password: accountPassword,
           refreshToken,
-          refreshTokenOnly: true
+          refreshTokenOnly: true,
+          onLicenseStatus: onConnectionProgress
         });
       } catch (err) {
         if (isLoginKeyInvalidError(err)) {

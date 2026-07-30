@@ -231,6 +231,13 @@ function loadLoginHarness({
     guardGuestAction() {
       return true;
     },
+    startAccountLoginLicenseEventStream(username) {
+      calls.events.push(`login-license-stream:start:${String(username || "")}`);
+      return true;
+    },
+    stopAccountLoginLicenseEventStream() {
+      calls.events.push("login-license-stream:stop");
+    },
     normalizeAccountTotpInput() {
       const normalized = String(ui.accountTotp.value || "").replace(/\s+/g, "").toUpperCase();
       ui.accountTotp.value = normalized;
@@ -321,6 +328,45 @@ function loadLoginHarness({
 
   context.calls = calls;
   return context;
+}
+
+function test_account_login_license_status_maps_to_login_overlay_stages() {
+  const source = extractFunctionSource("applyAccountLoginLicenseStatus");
+  const overlay = [];
+  const statuses = [];
+  const context = {
+    String,
+    state: {accountLoginBusy: true},
+    setAccountLoginOverlayStage(payload) {
+      overlay.push(payload);
+      return true;
+    },
+    setAccountStatus(message, isError) {
+      statuses.push({message: String(message || ""), isError: isError === true});
+    }
+  };
+  vm.runInNewContext(source, context, {filename: APP_PATH});
+
+  context.applyAccountLoginLicenseStatus({stage: "checking", message: "正在检查"});
+  context.applyAccountLoginLicenseStatus({stage: "claiming", message: "正在领取"});
+  context.applyAccountLoginLicenseStatus({stage: "claimed", message: "领取成功"});
+  context.applyAccountLoginLicenseStatus({stage: "failed", message: "领取失败"});
+
+  assert.deepEqual(
+    overlay.map((payload) => ({percent: payload.percent, title: payload.title})),
+    [
+      {percent: 45, title: "正在检查 CS2 入库"},
+      {percent: 58, title: "正在领取 CS2"},
+      {percent: 68, title: "CS2 领取成功"},
+      {percent: 68, title: "CS2 入库处理失败"}
+    ]
+  );
+  assert.deepEqual(statuses, [
+    {message: "正在检查", isError: false},
+    {message: "正在领取", isError: false},
+    {message: "领取成功", isError: false},
+    {message: "领取失败", isError: true}
+  ]);
 }
 
 function test_relogin_modal_locks_username_hides_guard_until_password_is_accepted() {
@@ -465,7 +511,7 @@ async function test_login_overlay_becomes_visible_before_login_request_and_uses_
   app.ui.accountTotp.value = "ab cd12";
 
   const pending = app.loginAndSave();
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(
     app.calls.overlay.length > 0,
@@ -516,7 +562,7 @@ async function test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_w
   app.ui.accountPassword.value = "SecretA";
   app.ui.accountTotp.value = "ABC123";
   const pending = app.ui.loginSaveBtn.onclick();
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(app.calls.api.length, 1);
   assert.equal(app.ui.loginSaveBtn.disabled, true, "loginSaveBtn should be visibly disabled while login is pending");
@@ -547,7 +593,7 @@ async function test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_w
   const reloginApiCountBeforePending = app.calls.api.length;
   const reloginUsernameBeforePending = app.ui.accountUsername.value;
   const reloginPending = app.ui.loginSaveBtn.onclick();
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(
     app.calls.api.length,
     reloginApiCountBeforePending + 1,
@@ -1347,6 +1393,7 @@ async function main() {
   test_invalid_password_formatter_preserves_existing_account_context();
   test_login_guard_input_declares_five_character_contract();
   test_login_guard_code_normalization_filters_uppercases_and_truncates();
+  test_account_login_license_status_maps_to_login_overlay_stages();
   await test_login_overlay_becomes_visible_before_login_request_and_uses_title_stage();
   await test_validation_failure_missing_password_keeps_modal_and_skips_overlay();
   await test_add_and_relogin_share_flow_and_all_modal_actions_are_inert_while_login_pending();

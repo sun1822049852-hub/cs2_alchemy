@@ -1636,6 +1636,18 @@ function normalizeCraftAssistFailure(input, {defaultStatus = 400, defaultCode = 
 
 function normalizeLoginSaveError(err) {
   const raw = asString(err && err.message ? err.message : err).trim();
+  const explicitReason = asString(err && (err.reason || err.code) || "").trim();
+  const errorStage = asString(err && err.stage || "").trim();
+  if (errorStage === "steam_app_license" || explicitReason.startsWith("cs2_license_")) {
+    return {
+      message: raw || "CS2 入库处理失败，请稍后重试",
+      reason: explicitReason || "cs2_license_failed",
+      status: Math.max(400, Number(err && err.status) || 409),
+      raw,
+      steam_eresult: Number(err && (err.steam_eresult || err.eresult) || 0) || 0,
+      retryable: err && err.retryable === true
+    };
+  }
   const rawCode = asString(err && (err.eresult || err.code || err.result || "")).trim();
   const lower = raw.toLowerCase();
   const lowerCode = rawCode.toLowerCase();
@@ -1797,6 +1809,12 @@ function normalizeLoginSaveError(err) {
     status: 500,
     raw: fallbackMessage
   };
+}
+
+function isSteamAppLicenseError(err) {
+  const stage = asString(err && err.stage || "").trim();
+  const reason = asString(err && (err.reason || err.code) || "").trim();
+  return stage === "steam_app_license" || reason.startsWith("cs2_license_");
 }
 
 function normalizeContextualLoginError(err, {existingAccount = false} = {}) {
@@ -1976,7 +1994,13 @@ function normalizeAvatarHash(value) {
   return /^[0-9a-fA-F]{40}$/.test(text) ? text.toLowerCase() : text;
 }
 
-async function resolveAccountProfile({username, password = "", viewerUsername = "", accountStoreOptions = {}} = {}) {
+async function resolveAccountProfile({
+  username,
+  password = "",
+  viewerUsername = "",
+  accountStoreOptions = {},
+  onLicenseStatus = null
+} = {}) {
   const accountStore = new AccountStore({
     ...accountStoreOptions,
     viewerUsername
@@ -2002,7 +2026,8 @@ async function resolveAccountProfile({username, password = "", viewerUsername = 
     username: accountName,
     password: accountPassword,
     refreshToken,
-    tokenStore
+    tokenStore,
+    onLicenseStatus
   });
   const steam = acquired && acquired.steam ? acquired.steam : null;
   const csgo = acquired && acquired.csgo ? acquired.csgo : null;
@@ -2390,6 +2415,14 @@ async function handleApi(req, res, urlObj, deps = {}) {
     : resolveAccountProfile;
   const viewerUsername = asString(auth && auth.user && auth.user.username ? auth.user.username : "").trim();
   const accountViewerUsername = resolveAccountViewerUsername(auth);
+  const createAccountLicenseStatusEmitter = (username, source = "account_login") => async (payload = {}) => {
+    if (!refreshRuntime || typeof refreshRuntime.emitSse !== "function") return;
+    refreshRuntime.emitSse("steam_app_license_status", {
+      ...payload,
+      username: asString(username).trim(),
+      source
+    });
+  };
   try {
     if (pathname === "/api/health" && req.method === "GET") {
       writeJson(res, 200, {ok: true});
@@ -2815,7 +2848,8 @@ async function handleApi(req, res, urlObj, deps = {}) {
         accountStoreOptions: {
           dbPath: auth.store.dbPath,
           accountsFilePath: auth.store.accountsFilePath
-        }
+        },
+        onLicenseStatus: createAccountLicenseStatusEmitter(username, "account_profile")
       });
       try {
         const accountStore = getViewerAccountStore(auth, deps);
@@ -3040,9 +3074,11 @@ async function handleApi(req, res, urlObj, deps = {}) {
             accountStoreOptions: {
               dbPath: auth.store.dbPath,
               accountsFilePath: auth.store.accountsFilePath
-            }
+            },
+            onLicenseStatus: createAccountLicenseStatusEmitter(username)
           });
         } catch (profileErr) {
+          if (isSteamAppLicenseError(profileErr)) throw profileErr;
           logger.warn("ui_server", `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`);
         }
         const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
@@ -3132,6 +3168,8 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
       logger.warn("ui_server", `login-start failed: account=${username} reason=${normalized.reason} status=${normalized.status} raw=${normalized.raw || "-"}`);
       const payload = {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw};
+      if (normalized.steam_eresult) payload.steam_eresult = normalized.steam_eresult;
+      if (typeof normalized.retryable === "boolean") payload.retryable = normalized.retryable;
       if (passwordCleared) payload.password_cleared = true;
       if (normalized.auth_state) payload.auth_state = normalized.auth_state;
       if (normalized.relogin_required) payload.relogin_required = true;
@@ -3195,9 +3233,11 @@ async function handleApi(req, res, urlObj, deps = {}) {
           accountStoreOptions: {
             dbPath: auth.store.dbPath,
             accountsFilePath: auth.store.accountsFilePath
-          }
+          },
+          onLicenseStatus: createAccountLicenseStatusEmitter(username)
         });
       } catch (profileErr) {
+        if (isSteamAppLicenseError(profileErr)) throw profileErr;
         logger.warn("ui_server", `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`);
       }
       const nextSteamId = asString(profile && profile.steam_id64 || "").trim();
@@ -3246,6 +3286,8 @@ async function handleApi(req, res, urlObj, deps = {}) {
       }
       logger.warn("ui_server", `login-submit-code failed: account=${username} reason=${normalized.reason} status=${normalized.status} raw=${normalized.raw || "-"}`);
       const payload = {ok: false, message: normalized.message, reason: normalized.reason, detail: normalized.raw};
+      if (normalized.steam_eresult) payload.steam_eresult = normalized.steam_eresult;
+      if (typeof normalized.retryable === "boolean") payload.retryable = normalized.retryable;
       if (normalized.auth_state) payload.auth_state = normalized.auth_state;
       if (normalized.relogin_required) payload.relogin_required = true;
       writeJson(res, normalized.status, payload);
@@ -3301,9 +3343,11 @@ async function handleApi(req, res, urlObj, deps = {}) {
           accountStoreOptions: {
             dbPath: auth.store.dbPath,
             accountsFilePath: auth.store.accountsFilePath
-          }
+          },
+          onLicenseStatus: createAccountLicenseStatusEmitter(username)
         });
       } catch (profileErr) {
+        if (isSteamAppLicenseError(profileErr)) throw profileErr;
         logger.warn(
           "ui_server",
           `profile resolve skipped: account=${username} message=${asString(profileErr && profileErr.message ? profileErr.message : profileErr)}`
@@ -3348,7 +3392,9 @@ async function handleApi(req, res, urlObj, deps = {}) {
         ok: false,
         message: normalized.message,
         reason: normalized.reason,
-        detail: normalized.raw
+        detail: normalized.raw,
+        ...(normalized.steam_eresult ? {steam_eresult: normalized.steam_eresult} : {}),
+        ...(typeof normalized.retryable === "boolean" ? {retryable: normalized.retryable} : {})
       });
     }
     return true;

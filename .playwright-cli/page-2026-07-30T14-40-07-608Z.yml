@@ -1,0 +1,44 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic:
+      - button "展开功能导航" [ref=e3] [cursor=pointer]
+      - complementary:
+        - generic: 功能导航
+        - button "账号管理"
+        - button "库存总览"
+        - button "炼金汰换"
+        - button "汰换模拟"
+        - button "多账号汰换"
+        - button "库存管理"
+        - button "会员充值"
+    - main [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e8]:
+            - heading "账号管理" [level=1] [ref=e9]
+            - generic [ref=e10]:
+              - generic [ref=e11]: 尚未保存账号
+              - generic [ref=e12]: 库存获取时间：-
+          - generic [ref=e13]:
+            - generic [ref=e14]: 账号
+            - combobox "账号" [ref=e15] [cursor=pointer]
+            - generic [ref=e16]: 未连接
+            - button "连接并刷新库存信息" [ref=e17] [cursor=pointer]
+            - button "断开连接" [ref=e18] [cursor=pointer]
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - heading "账号列表" [level=2] [ref=e23]
+            - paragraph [ref=e24]: 点击卡片即可切换当前工作账号，右侧状态区可直接触发连接。
+          - generic [ref=e25]:
+            - button "添加账号" [ref=e26] [cursor=pointer]
+            - button "批量导入" [ref=e27] [cursor=pointer]
+            - button "绑定令牌" [ref=e28] [cursor=pointer]
+  - generic:
+    - region "产物预测抽屉":
+      - generic:
+        - generic:
+          - generic:
+            - generic: 模拟结果
+            - generic: 等待选择配方
+          - button "收起产物预测抽屉": ×
+    - button "展开产物预测抽屉" [ref=e30] [cursor=pointer]

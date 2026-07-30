@@ -6,6 +6,7 @@ const {refreshInventory} = require("../src/refreshWorkflow");
 
 async function test_recovery_capable_pool_handles_missing_token_before_inventory_work() {
   const calls = [];
+  const licenseStatuses = [];
   const sessionPool = {
     hasTokenRecovery() {
       return true;
@@ -29,6 +30,9 @@ async function test_recovery_capable_pool_handles_missing_token_before_inventory
     tokenStore: {get: () => ""},
     schemaStore: {load: () => ({})},
     sessionPool,
+    onConnectionProgress(payload) {
+      licenseStatuses.push(payload);
+    },
     preloadComponentContentsFn: async () => ({
       waiting: 0,
       loaded_items: [],
@@ -44,6 +48,9 @@ async function test_recovery_capable_pool_handles_missing_token_before_inventory
   assert.equal(acquired.args.refreshToken, "");
   assert.equal(acquired.args.refreshTokenOnly, true);
   assert.equal(acquired.args.allowTokenRecovery, true);
+  assert.equal(typeof acquired.args.onLicenseStatus, "function");
+  acquired.args.onLicenseStatus({stage: "checking"});
+  assert.deepEqual(licenseStatuses, [{stage: "checking"}]);
 }
 
 async function test_raw_eresult_15_without_mafile_clears_token_and_returns_manual_relogin() {
@@ -152,10 +159,55 @@ async function test_access_denied_without_explicit_result_15_does_not_clear_toke
   assert.equal(diagnosticCalls, 0);
 }
 
+async function test_license_access_denied_does_not_clear_refresh_token() {
+  let token = "current-refresh-token";
+  let removeCalls = 0;
+  const licenseError = new Error("CS2 领取失败：Steam 拒绝了免费许可请求（EResult 15）");
+  licenseError.code = "cs2_license_claim_access_denied";
+  licenseError.reason = "cs2_license_claim_access_denied";
+  licenseError.stage = "steam_app_license";
+  licenseError.eresult = 15;
+  const sessionPool = {
+    hasTokenRecovery() {
+      return true;
+    },
+    async acquire() {
+      throw licenseError;
+    },
+    invalidate() {}
+  };
+
+  await assert.rejects(
+    () => refreshInventory({
+      username: "license-account",
+      accountStore: {
+        getCredentials() {
+          return {username: "license-account", password: "secret", mafile_content: ""};
+        }
+      },
+      tokenStore: {
+        get() {
+          return token;
+        },
+        remove() {
+          removeCalls += 1;
+          token = "";
+        }
+      },
+      schemaStore: {load: () => ({})},
+      sessionPool
+    }),
+    (err) => err === licenseError
+  );
+  assert.equal(token, "current-refresh-token");
+  assert.equal(removeCalls, 0);
+}
+
 async function main() {
   await test_recovery_capable_pool_handles_missing_token_before_inventory_work();
   await test_raw_eresult_15_without_mafile_clears_token_and_returns_manual_relogin();
   await test_access_denied_without_explicit_result_15_does_not_clear_token();
+  await test_license_access_denied_does_not_clear_refresh_token();
   console.log("refresh-workflow-token-recovery tests passed");
 }
 

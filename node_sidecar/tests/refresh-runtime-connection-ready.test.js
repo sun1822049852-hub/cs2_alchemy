@@ -26,6 +26,18 @@ function parseSseEvents(writes) {
     .filter(Boolean);
 }
 
+function parseSsePayloads(writes, eventName) {
+  return writes
+    .join("")
+    .split("\n\n")
+    .map((block) => String(block || "").trim())
+    .filter((block) => block.includes(`event: ${eventName}`))
+    .map((block) => {
+      const dataLine = block.split("\n").find((line) => line.startsWith("data: "));
+      return JSON.parse(dataLine.slice("data: ".length));
+    });
+}
+
 function attachSseClient(runtime, username) {
   const req = new EventEmitter();
   const writes = [];
@@ -45,6 +57,9 @@ async function test_run_refresh_job_emits_connection_ready_before_inventory_refr
   const runtime = createRefreshRuntime({
     refreshInventoryFn: async (args = {}) => {
       assert.equal(typeof args.onConnectionReady, "function", "refresh runtime should pass a connection-ready callback into refreshInventory");
+      assert.equal(typeof args.onConnectionProgress, "function", "refresh runtime should pass license progress into refreshInventory");
+      await args.onConnectionProgress({stage: "checking", app_id: 730, message: "正在检查 CS2 入库"});
+      await args.onConnectionProgress({stage: "claiming", app_id: 730, message: "正在领取 CS2"});
       await args.onConnectionReady({account: "acc-a"});
       await refreshDeferred.promise;
       return {
@@ -83,7 +98,7 @@ async function test_run_refresh_job_emits_connection_ready_before_inventory_refr
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(
     parseSseEvents(client.writes),
-    ["connected", "inventory_connection_ready"],
+    ["connected", "steam_app_license_status", "steam_app_license_status", "inventory_connection_ready"],
     "SSE should publish connection readiness before the full refresh payload finishes"
   );
 
@@ -91,7 +106,19 @@ async function test_run_refresh_job_emits_connection_ready_before_inventory_refr
   await task;
   assert.deepEqual(
     parseSseEvents(client.writes),
-    ["connected", "inventory_connection_ready", "inventory_refreshed"]
+    ["connected", "steam_app_license_status", "steam_app_license_status", "inventory_connection_ready", "inventory_refreshed"]
+  );
+  assert.deepEqual(
+    parseSsePayloads(client.writes, "steam_app_license_status").map((payload) => ({
+      username: payload.username,
+      source: payload.source,
+      stage: payload.stage,
+      app_id: payload.app_id
+    })),
+    [
+      {username: "acc-a", source: "manual", stage: "checking", app_id: 730},
+      {username: "acc-a", source: "manual", stage: "claiming", app_id: 730}
+    ]
   );
   client.req.emit("close");
 }

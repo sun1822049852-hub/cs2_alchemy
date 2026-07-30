@@ -6,6 +6,7 @@ const {asString} = require("./utils");
 
 const LEGACY_ACCOUNTS_MIGRATION_KEY = "migration.accounts_json.v1";
 const GLOBAL_ACTIVE_STEAM_ACCOUNT_KEY = "steam_account.global_active";
+const STEAM_APP_LICENSE_VERIFICATION_PREFIX = "steam_app_license_verified.v1";
 
 const ALL_PERMISSION_CODES = [
   "accounts.read",
@@ -49,6 +50,19 @@ function verifyPassword(password, encoded) {
 
 function hashSessionToken(token) {
   return crypto.createHash("sha256").update(asString(token)).digest("hex");
+}
+
+function steamAppLicenseVerificationKey(username, appId) {
+  const accountName = asString(username).trim().toLowerCase();
+  const numericAppId = Number(appId);
+  if (!accountName) {
+    throw new Error("steam username is required");
+  }
+  if (!Number.isSafeInteger(numericAppId) || numericAppId <= 0) {
+    throw new Error("steam app id is invalid");
+  }
+  const accountHash = crypto.createHash("sha256").update(accountName).digest("hex");
+  return `${STEAM_APP_LICENSE_VERIFICATION_PREFIX}.${numericAppId}.${accountHash}`;
 }
 
 function sanitizeUser(row) {
@@ -318,6 +332,15 @@ class AppAuthStore {
       VALUES(?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `).run(settingKey, asString(value).trim(), nowSqlText());
+  }
+
+  isSteamAppLicenseVerified(username, appId) {
+    return this.getAppSetting(steamAppLicenseVerificationKey(username, appId)) === "1";
+  }
+
+  markSteamAppLicenseVerified(username, appId) {
+    this.setAppSetting(steamAppLicenseVerificationKey(username, appId), "1");
+    return true;
   }
 
   readLegacyAccountsForMigration() {

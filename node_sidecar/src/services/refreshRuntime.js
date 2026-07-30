@@ -238,6 +238,13 @@ function createRefreshRuntime({
           includeHidden,
           dumpRaw: false,
           logger,
+          onConnectionProgress: async (payload = {}) => {
+            eventBus.emit("steam_app_license_status", {
+              username: account,
+              source,
+              ...payload
+            });
+          },
           onConnectionReady: async (payload = {}) => {
             eventBus.emit("inventory_connection_ready", {
               username: account,
@@ -405,6 +412,7 @@ function createRefreshRuntime({
     startHeartbeatLoop();
     startSseKeepaliveLoop();
     eventBus.on("inventory_connection_ready", (payload) => broadcastSse("inventory_connection_ready", payload));
+    eventBus.on("steam_app_license_status", (payload) => broadcastSse("steam_app_license_status", payload));
     eventBus.on("inventory_refreshed", (payload) => broadcastSse("inventory_refreshed", payload));
     eventBus.on("inventory_refresh_failed", (payload) => broadcastSse("inventory_refresh_failed", payload));
     eventBus.on("inventory_post_refresh_failed", (payload) => broadcastSse("inventory_post_refresh_failed", payload));

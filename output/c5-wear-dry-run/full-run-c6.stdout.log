@@ -1,0 +1,47 @@
+Loaded 15233 skin rows into 3528 target families.
+Resume skipped existing results: 2580; queued: 948.
+Output: C:\Users\18220\Desktop\cs2_alchemy\output\c5-wear-dry-run
+[2026-05-25T05:58:10+08:00] dry-run processed=2600/3528 success=2587 failure=13 diff=80 pending=923 rate=115.24/s
+[2026-05-25T05:58:44+08:00] dry-run processed=2625/3528 success=2612 failure=13 diff=80 pending=898 rate=46.49/s
+[2026-05-25T05:59:17+08:00] dry-run processed=2650/3528 success=2637 failure=13 diff=84 pending=873 rate=29.48/s
+[2026-05-25T05:59:51+08:00] dry-run processed=2675/3528 success=2662 failure=13 diff=91 pending=848 rate=21.69/s
+[2026-05-25T06:00:24+08:00] dry-run processed=2700/3528 success=2687 failure=13 diff=97 pending=823 rate=17.19/s
+[2026-05-25T06:01:01+08:00] dry-run processed=2725/3528 success=2712 failure=13 diff=97 pending=798 rate=14.07/s
+[2026-05-25T06:01:37+08:00] dry-run processed=2750/3528 success=2737 failure=13 diff=97 pending=773 rate=11.95/s
+[2026-05-25T06:02:12+08:00] dry-run processed=2775/3528 success=2762 failure=13 diff=97 pending=748 rate=10.49/s
+[2026-05-25T06:02:46+08:00] dry-run processed=2800/3528 success=2787 failure=13 diff=97 pending=723 rate=9.37/s
+[2026-05-25T06:02:47+08:00] periodic processed=2802/3528 success=2789 failure=13 diff=97 pending=720 rate=9.34/s
+[2026-05-25T06:03:20+08:00] dry-run processed=2825/3528 success=2812 failure=13 diff=98 pending=698 rate=8.49/s
+[2026-05-25T06:03:54+08:00] dry-run processed=2850/3528 success=2837 failure=13 diff=98 pending=673 rate=7.78/s
+[2026-05-25T06:04:30+08:00] dry-run processed=2875/3528 success=2862 failure=13 diff=98 pending=648 rate=7.14/s
+[2026-05-25T06:05:06+08:00] dry-run processed=2900/3528 success=2887 failure=13 diff=98 pending=623 rate=6.61/s
+[2026-05-25T06:05:40+08:00] dry-run processed=2925/3528 success=2912 failure=13 diff=98 pending=598 rate=6.19/s
+[2026-05-25T06:06:14+08:00] dry-run processed=2950/3528 success=2937 failure=13 diff=98 pending=573 rate=5.82/s
+[2026-05-25T06:06:48+08:00] dry-run processed=2975/3528 success=2962 failure=13 diff=103 pending=548 rate=5.51/s
+[2026-05-25T06:07:21+08:00] dry-run processed=3000/3528 success=2987 failure=13 diff=110 pending=523 rate=5.22/s
+[2026-05-25T06:07:47+08:00] periodic processed=3018/3528 success=3005 failure=13 diff=116 pending=504 rate=5.03/s
+[2026-05-25T06:07:59+08:00] dry-run processed=3025/3528 success=3012 failure=13 diff=116 pending=498 rate=4.95/s
+[2026-05-25T06:08:34+08:00] dry-run processed=3050/3528 success=3037 failure=13 diff=121 pending=473 rate=4.72/s
+[2026-05-25T06:09:06+08:00] dry-run processed=3075/3528 success=3059 failure=16 diff=123 pending=448 rate=4.53/s
+[2026-05-25T06:09:39+08:00] dry-run processed=3100/3528 success=3082 failure=18 diff=124 pending=423 rate=4.36/s
+[2026-05-25T06:10:12+08:00] dry-run processed=3125/3528 success=3105 failure=20 diff=124 pending=398 rate=4.20/s
+[2026-05-25T06:10:47+08:00] dry-run processed=3150/3528 success=3129 failure=21 diff=125 pending=373 rate=4.04/s
+[2026-05-25T06:11:22+08:00] dry-run processed=3175/3528 success=3153 failure=22 diff=125 pending=348 rate=3.90/s
+[2026-05-25T06:11:56+08:00] dry-run processed=3200/3528 success=3175 failure=25 diff=125 pending=323 rate=3.77/s
+[2026-05-25T06:12:30+08:00] dry-run processed=3225/3528 success=3198 failure=27 diff=125 pending=298 rate=3.65/s
+[2026-05-25T06:12:48+08:00] periodic processed=3239/3528 success=3212 failure=27 diff=126 pending=283 rate=3.60/s
+[2026-05-25T06:13:03+08:00] dry-run processed=3250/3528 success=3221 failure=29 diff=126 pending=273 rate=3.55/s
+[2026-05-25T06:13:38+08:00] dry-run processed=3275/3528 success=3246 failure=29 diff=127 pending=248 rate=3.44/s
+[2026-05-25T06:14:12+08:00] dry-run processed=3300/3528 success=3267 failure=33 diff=128 pending=223 rate=3.35/s
+[2026-05-25T06:14:46+08:00] dry-run processed=3325/3528 success=3291 failure=34 diff=128 pending=198 rate=3.26/s
+[2026-05-25T06:15:21+08:00] dry-run processed=3350/3528 success=3315 failure=35 diff=128 pending=173 rate=3.18/s
+[2026-05-25T06:15:55+08:00] dry-run processed=3375/3528 success=3339 failure=36 diff=129 pending=148 rate=3.10/s
+[2026-05-25T06:16:29+08:00] dry-run processed=3400/3528 success=3364 failure=36 diff=129 pending=123 rate=3.03/s
+[2026-05-25T06:17:03+08:00] dry-run processed=3425/3528 success=3387 failure=38 diff=129 pending=98 rate=2.96/s
+[2026-05-25T06:17:38+08:00] dry-run processed=3450/3528 success=3410 failure=40 diff=129 pending=73 rate=2.90/s
+[2026-05-25T06:17:48+08:00] periodic processed=3458/3528 success=3418 failure=40 diff=129 pending=64 rate=2.88/s
+[2026-05-25T06:18:13+08:00] dry-run processed=3475/3528 success=3435 failure=40 diff=129 pending=48 rate=2.83/s
+[2026-05-25T06:18:48+08:00] dry-run processed=3500/3528 success=3460 failure=40 diff=129 pending=23 rate=2.78/s
+[2026-05-25T06:19:27+08:00] dry-run processed=3525/3528 success=3485 failure=40 diff=129 pending=0 rate=2.71/s
+[2026-05-25T06:19:29+08:00] final processed=3528/3528 success=3488 failure=40 diff=129 pending=0 rate=2.71/s
+Summary: {"updated_at": "2026-05-25T06:19:29+08:00", "total_families": 3528, "success_count": 3488, "failure_count": 40, "skip_count": 0, "difference_count": 129, "failure_type_counts": {"page_parse_empty_related_list": 1, "page_parse_no_related_list": 37, "range_payload_no_begin_end": 2}, "paths": {"checkpoint": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\c5-wear-dry-run\\checkpoint.json", "families": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\c5-wear-dry-run\\families.json", "successes": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\c5-wear-dry-run\\successes.current.jsonl", "differences": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\c5-wear-dry-run\\differences.current.jsonl", "failures": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\c5-wear-dry-run\\failures.current.jsonl", "report": "C:\\Users\\18220\\Desktop\\cs2_alchemy\\output\\c5-wear-dry-run\\report.md"}, "db_hashes": {"csgo_skins.db": {"before": "04641c5f5ed55ed29d944e18cb4574c44168faaa634b82c4e3cc3b884f0ff11e", "after": "04641c5f5ed55ed29d944e18cb4574c44168faaa634b82c4e3cc3b884f0ff11e"}, "node_sidecar/build/csgo_skins.seed.db": {"before": "3e5c31fcd0565431d180efe7342fc3b534df6d7c7c8e6d338549885ac679fdbd", "after": "3e5c31fcd0565431d180efe7342fc3b534df6d7c7c8e6d338549885ac679fdbd"}}}

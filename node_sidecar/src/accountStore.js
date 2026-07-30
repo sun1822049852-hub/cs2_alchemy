@@ -151,6 +151,17 @@ class AccountStore {
     return this._withStore((store) => store.updateSteamRemark(this.options.viewerUsername, username, remark));
   }
 
+  isSteamAppLicenseVerified(username, appId) {
+    return this._withStore(
+      (store) => store.isSteamAppLicenseVerified(username, appId),
+      {readOnly: true}
+    );
+  }
+
+  markSteamAppLicenseVerified(username, appId) {
+    return this._withStore((store) => store.markSteamAppLicenseVerified(username, appId));
+  }
+
   remove(username) {
     return this._withStore((store) => store.removeSteamAccount(this.options.viewerUsername, username));
   }

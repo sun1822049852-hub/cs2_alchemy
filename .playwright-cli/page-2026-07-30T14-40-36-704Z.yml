@@ -1,0 +1,301 @@
+- generic [ref=e2]:
+  - generic:
+    - button "展开功能导航" [ref=e3] [cursor=pointer]
+    - complementary:
+      - generic: 功能导航
+      - generic:
+        - generic:
+          - generic: 当前授权
+          - generic: dev_local
+        - button "清除授权"
+      - button "账号管理"
+      - button "库存总览"
+      - button "炼金汰换"
+      - button "汰换模拟"
+      - button "多账号汰换"
+      - button "库存管理"
+      - button "会员充值"
+  - main [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - heading "账号管理" [level=1] [ref=e9]
+          - generic [ref=e10]:
+            - generic [ref=e11]: 已保存 20 个账号 · 当前：carterrobert3877
+            - generic [ref=e12]: 库存获取时间：2026-07-30 22:28:04
+        - generic [ref=e13]:
+          - generic [ref=e14]: 账号
+          - combobox "账号" [ref=e15] [cursor=pointer]:
+            - option "选择账号"
+            - option "Sun"
+            - option "X"
+            - option "Sun set"
+            - option "stupidchild"
+            - option "Ming"
+            - option "LOVE"
+            - option "Y"
+            - option "countsteam013"
+            - option "countsteam014"
+            - option "countsteam016"
+            - option "countsteam017"
+            - option "countsteam018"
+            - option "countsteam03"
+            - option "Nothing（11）"
+            - option "Ming"
+            - option "Eight"
+            - option "carterrobert3877" [selected]
+            - option "Moon"
+            - option "stupidchild005"
+            - option "Moon set"
+          - generic "点击连接并刷新库存" [ref=e32] [cursor=pointer]: 未连接
+          - button "连接并刷新库存信息" [ref=e17] [cursor=pointer]
+          - button "断开连接" [disabled] [ref=e18] [cursor=pointer]
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - heading "账号列表" [level=2] [ref=e23]
+            - paragraph [ref=e24]: 点击卡片即可切换当前工作账号，右侧状态区可直接触发连接。
+          - generic [ref=e25]:
+            - button "添加账号" [ref=e26] [cursor=pointer]
+            - button "批量导入" [ref=e27] [cursor=pointer]
+            - button "绑定令牌" [ref=e28] [cursor=pointer]
+        - generic [ref=e29]:
+          - generic [ref=e34] [cursor=pointer]:
+            - img "carterrobert3877 avatar" [ref=e36]
+            - generic [ref=e37]:
+              - generic [ref=e38]: carterrobert3877
+              - generic [ref=e39]: 账号：imr847218 · 令牌可用
+              - generic [ref=e40]:
+                - button "修改备注" [ref=e41]
+                - button "令牌管理" [ref=e42]
+                - button "Web库存" [ref=e43]
+                - button "删除" [ref=e44]
+            - generic "点击连接并刷新库存" [ref=e46]: 未连接
+          - generic [ref=e48] [cursor=pointer]:
+            - img "Sun avatar" [ref=e50]
+            - generic [ref=e51]:
+              - generic [ref=e52]: Sun
+              - generic [ref=e53]: 账号：1822049852 · 未添加令牌
+              - generic [ref=e54]:
+                - button "修改备注" [ref=e55]
+                - button "令牌管理" [disabled] [ref=e56]
+                - button "Web库存" [ref=e57]
+                - button "删除" [ref=e58]
+            - generic "点击连接并刷新库存" [ref=e60]: 未连接
+          - generic [ref=e62] [cursor=pointer]:
+            - img "X avatar" [ref=e64]
+            - generic [ref=e65]:
+              - generic [ref=e66]: X
+              - generic [ref=e67]: 账号：19174601720 · 未添加令牌
+              - generic [ref=e68]:
+                - button "修改备注" [ref=e69]
+                - button "令牌管理" [disabled] [ref=e70]
+                - button "Web库存" [ref=e71]
+                - button "删除" [ref=e72]
+            - generic "点击连接并刷新库存" [ref=e74]: 未连接
+          - generic [ref=e76] [cursor=pointer]:
+            - img "Sun set avatar" [ref=e78]
+            - generic [ref=e79]:
+              - generic [ref=e80]: Sun set
+              - generic [ref=e81]: 账号：430158438 · 令牌可用
+              - generic [ref=e82]:
+                - button "修改备注" [ref=e83]
+                - button "令牌管理" [ref=e84]
+                - button "Web库存" [ref=e85]
+                - button "删除" [ref=e86]
+            - generic "点击连接并刷新库存" [ref=e88]: 未连接
+          - generic [ref=e90] [cursor=pointer]:
+            - img "stupidchild avatar" [ref=e92]
+            - generic [ref=e93]:
+              - generic [ref=e94]: stupidchild
+              - generic [ref=e95]: 账号：StupidChild005 · 未添加令牌
+              - generic [ref=e96]:
+                - button "修改备注" [ref=e97]
+                - button "令牌管理" [disabled] [ref=e98]
+                - button "Web库存" [ref=e99]
+                - button "删除" [ref=e100]
+            - generic "点击连接并刷新库存" [ref=e102]: 未连接
+          - generic [ref=e104] [cursor=pointer]:
+            - img "Ming avatar" [ref=e106]
+            - generic [ref=e107]:
+              - generic [ref=e108]: Ming
+              - generic [ref=e109]: 账号：countSteam5 · 未添加令牌
+              - generic [ref=e110]:
+                - button "修改备注" [ref=e111]
+                - button "令牌管理" [disabled] [ref=e112]
+                - button "Web库存" [ref=e113]
+                - button "删除" [ref=e114]
+            - generic "点击连接并刷新库存" [ref=e116]: 未连接
+          - generic [ref=e118] [cursor=pointer]:
+            - img "LOVE avatar" [ref=e120]
+            - generic [ref=e121]:
+              - generic [ref=e122]: LOVE
+              - generic [ref=e123]: 账号：countsteam002 · 令牌可用
+              - generic [ref=e124]:
+                - button "修改备注" [ref=e125]
+                - button "令牌管理" [ref=e126]
+                - button "Web库存" [ref=e127]
+                - button "删除" [ref=e128]
+            - generic "点击连接并刷新库存" [ref=e130]: 未连接
+          - generic [ref=e132] [cursor=pointer]:
+            - img "Y avatar" [ref=e134]
+            - generic [ref=e135]:
+              - generic [ref=e136]: "Y"
+              - generic [ref=e137]: 账号：countsteam01 · 令牌可用
+              - generic [ref=e138]:
+                - button "修改备注" [ref=e139]
+                - button "令牌管理" [ref=e140]
+                - button "Web库存" [ref=e141]
+                - button "删除" [ref=e142]
+            - generic "点击连接并刷新库存" [ref=e144]: 未连接
+          - generic [ref=e146] [cursor=pointer]:
+            - generic [ref=e147]: C
+            - generic [ref=e149]:
+              - generic [ref=e150]: countsteam013
+              - generic [ref=e151]: 账号：countsteam013 · 令牌已保存
+              - generic [ref=e152]:
+                - button "修改备注" [ref=e153]
+                - button "令牌管理" [ref=e154]
+                - button "Web库存" [ref=e155]
+                - button "删除" [ref=e156]
+            - generic "点击连接并刷新库存" [ref=e158]: 无密码
+          - generic [ref=e160] [cursor=pointer]:
+            - generic [ref=e161]: C
+            - generic [ref=e163]:
+              - generic [ref=e164]: countsteam014
+              - generic [ref=e165]: 账号：countsteam014 · 令牌已保存
+              - generic [ref=e166]:
+                - button "修改备注" [ref=e167]
+                - button "令牌管理" [ref=e168]
+                - button "Web库存" [ref=e169]
+                - button "删除" [ref=e170]
+            - generic "点击连接并刷新库存" [ref=e172]: 无密码
+          - generic [ref=e174] [cursor=pointer]:
+            - generic [ref=e175]: C
+            - generic [ref=e177]:
+              - generic [ref=e178]: countsteam016
+              - generic [ref=e179]: 账号：countsteam016 · 令牌已保存
+              - generic [ref=e180]:
+                - button "修改备注" [ref=e181]
+                - button "令牌管理" [ref=e182]
+                - button "Web库存" [ref=e183]
+                - button "删除" [ref=e184]
+            - generic "点击连接并刷新库存" [ref=e186]: 无密码
+          - generic [ref=e188] [cursor=pointer]:
+            - generic [ref=e189]: C
+            - generic [ref=e191]:
+              - generic [ref=e192]: countsteam017
+              - generic [ref=e193]: 账号：countsteam017 · 令牌已保存
+              - generic [ref=e194]:
+                - button "修改备注" [ref=e195]
+                - button "令牌管理" [ref=e196]
+                - button "Web库存" [ref=e197]
+                - button "删除" [ref=e198]
+            - generic "点击连接并刷新库存" [ref=e200]: 无密码
+          - generic [ref=e202] [cursor=pointer]:
+            - generic [ref=e203]: C
+            - generic [ref=e205]:
+              - generic [ref=e206]: countsteam018
+              - generic [ref=e207]: 账号：countsteam018 · 令牌已保存
+              - generic [ref=e208]:
+                - button "修改备注" [ref=e209]
+                - button "令牌管理" [ref=e210]
+                - button "Web库存" [ref=e211]
+                - button "删除" [ref=e212]
+            - generic "点击连接并刷新库存" [ref=e214]: 无密码
+          - generic [ref=e216] [cursor=pointer]:
+            - generic [ref=e217]: C
+            - generic [ref=e219]:
+              - generic [ref=e220]: countsteam03
+              - generic [ref=e221]: 账号：countsteam03 · 令牌已保存
+              - generic [ref=e222]:
+                - button "修改备注" [ref=e223]
+                - button "令牌管理" [ref=e224]
+                - button "Web库存" [ref=e225]
+                - button "删除" [ref=e226]
+            - generic "点击连接并刷新库存" [ref=e228]: 无密码
+          - generic [ref=e230] [cursor=pointer]:
+            - img "Ming avatar" [ref=e232]
+            - generic [ref=e233]:
+              - generic [ref=e234]: Ming
+              - generic [ref=e235]: 账号：countsteam5 · 令牌可用
+              - generic [ref=e236]:
+                - button "修改备注" [ref=e237]
+                - button "令牌管理" [ref=e238]
+                - button "Web库存" [ref=e239]
+                - button "删除" [ref=e240]
+            - generic "点击连接并刷新库存" [ref=e242]: 未连接
+          - generic [ref=e244] [cursor=pointer]:
+            - img "Eight avatar" [ref=e246]
+            - generic [ref=e247]:
+              - generic [ref=e248]: Eight
+              - generic [ref=e249]: 账号：countsteam6 · 令牌可用
+              - generic [ref=e250]:
+                - button "修改备注" [ref=e251]
+                - button "令牌管理" [ref=e252]
+                - button "Web库存" [ref=e253]
+                - button "删除" [ref=e254]
+            - generic "点击连接并刷新库存" [ref=e256]: 未连接
+          - generic [ref=e258] [cursor=pointer]:
+            - img "Moon avatar" [ref=e260]
+            - generic [ref=e261]:
+              - generic [ref=e262]: Moon
+              - generic [ref=e263]: 账号：selenomorphology · 令牌可用
+              - generic [ref=e264]:
+                - button "修改备注" [ref=e265]
+                - button "令牌管理" [ref=e266]
+                - button "Web库存" [ref=e267]
+                - button "删除" [ref=e268]
+            - generic "点击连接并刷新库存" [ref=e270]: 未连接
+          - generic [ref=e272] [cursor=pointer]:
+            - generic [ref=e273]: S
+            - generic [ref=e275]:
+              - generic [ref=e276]: stupidchild005
+              - generic [ref=e277]: 账号：stupidchild005 · 令牌已保存
+              - generic [ref=e278]:
+                - button "修改备注" [ref=e279]
+                - button "令牌管理" [ref=e280]
+                - button "Web库存" [ref=e281]
+                - button "删除" [ref=e282]
+            - generic "点击连接并刷新库存" [ref=e284]: 无密码
+          - generic [ref=e286] [cursor=pointer]:
+            - img "Moon set avatar" [ref=e288]
+            - generic [ref=e289]:
+              - generic [ref=e290]: Moon set
+              - generic [ref=e291]: 账号：wy19174601720 · 令牌可用
+              - generic [ref=e292]:
+                - button "修改备注" [ref=e293]
+                - button "令牌管理" [ref=e294]
+                - button "Web库存" [ref=e295]
+                - button "删除" [ref=e296]
+            - generic "点击连接并刷新库存" [ref=e298]: 未连接
+          - generic [ref=e300] [cursor=pointer]:
+            - img "Nothing（11） avatar" [ref=e302]
+            - generic [ref=e303]:
+              - generic [ref=e304]: Nothing（11）
+              - generic [ref=e305]: 账号：countsteam04 · 令牌可用
+              - generic [ref=e306]:
+                - button "修改备注" [ref=e307]
+                - button "令牌管理" [ref=e308]
+                - button "Web库存" [ref=e309]
+                - button "删除" [ref=e310]
+            - generic "点击连接并刷新库存" [ref=e312]: 未连接
+    - dialog [ref=e313]:
+      - generic [ref=e314]:
+        - generic [ref=e316]:
+          - generic [ref=e317]: STEAM
+          - heading "添加账号" [level=3] [ref=e318]
+        - generic [ref=e319]:
+          - generic [ref=e320]: 先验证账号密码；Steam 要求验证码时再输入
+          - generic [ref=e321]:
+            - generic [ref=e322]:
+              - generic [ref=e323]: Steam 账号
+              - textbox "Steam 账号" [active] [ref=e324]
+            - generic [ref=e325]:
+              - generic [ref=e326]: 密码
+              - generic [ref=e327]:
+                - textbox "密码 显示密码" [ref=e328]
+                - button "显示密码" [ref=e329] [cursor=pointer]
+          - generic [ref=e331]:
+            - button "登录并保存" [ref=e332] [cursor=pointer]
+            - button "取消" [ref=e333] [cursor=pointer]

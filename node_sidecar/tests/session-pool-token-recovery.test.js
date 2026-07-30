@@ -4,6 +4,7 @@ const {createSessionPool} = require("../src/services/sessionPool");
 
 async function test_session_pool_connects_through_shared_token_recovery() {
   const calls = [];
+  const licenseStatuses = [];
   class FakeSession {
     constructor({tokenStore}) {
       this.tokenStore = tokenStore;
@@ -34,7 +35,10 @@ async function test_session_pool_connects_through_shared_token_recovery() {
       password: "must-not-be-used",
       refreshToken: "expired-token",
       tokenStore: {get() {}, set() {}},
-      refreshTokenOnly: true
+      refreshTokenOnly: true,
+      onLicenseStatus(payload) {
+        licenseStatuses.push(payload);
+      }
     });
     assert.equal(result.reused, false);
     assert.equal(pool.hasTokenRecovery(), true);
@@ -42,6 +46,9 @@ async function test_session_pool_connects_through_shared_token_recovery() {
     const connect = calls.find((entry) => entry.type === "connect");
     assert.equal(connect.args.refreshToken, "recovered-refresh-token");
     assert.equal(connect.args.refreshTokenOnly, true);
+    assert.equal(typeof connect.args.onLicenseStatus, "function");
+    connect.args.onLicenseStatus({stage: "claiming"});
+    assert.deepEqual(licenseStatuses, [{stage: "claiming"}]);
   } finally {
     pool.shutdown();
   }

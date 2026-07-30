@@ -1,0 +1,24 @@
+1822049852
+qlsq151732102928
+.venv\Scripts\python main_ui.py
+.venv\Scripts\python main.py
+
+ 1. 先切到项目根目录，不要在 docs 里执行：
+
+  cd C:\Users\18220\Desktop\cs2_alchemy
+
+  2. 生成一对本地测试密钥：
+
+  node tools/createLicenseKeyPair.js --private-key tmp/client_license_private.pem --public-key keys/client_license_public.pem
+
+  3. 用私钥签一个 15 分钟有效的本地授权包：
+
+  node tools/issueLocalLicenseBundle.js --private-key tmp/client_license_private.pem --out tmp/client_license_bundle.json --username admin --user-id admin_1 --plan admin --ttl-minutes 15
+
+
+
+ 现在可直接运行：                                                                                                                                                                                                              
+                                                                                                                                                                                                                                
+  cd admin_console                                                                                                                                                                                                              
+  npm start                                                                                                                                                                                                                     
+              

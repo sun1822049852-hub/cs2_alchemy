@@ -100,7 +100,8 @@ function createSessionPool({
     refreshToken,
     tokenStore,
     refreshTokenOnly = false,
-    allowTokenRecovery = true
+    allowTokenRecovery = true,
+    onLicenseStatus = null
   }) {
     const account = asString(username).trim();
     if (!account) {
@@ -138,7 +139,8 @@ function createSessionPool({
           username: account,
           password,
           refreshToken: effectiveRefreshToken,
-          refreshTokenOnly: recoveryEnabled ? true : refreshTokenOnly
+          refreshTokenOnly: recoveryEnabled ? true : refreshTokenOnly,
+          onLicenseStatus
         });
         return {session, steam: connected.steam, csgo: connected.csgo};
       } catch (err) {

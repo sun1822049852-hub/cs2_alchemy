@@ -2393,11 +2393,45 @@ function startInventoryEventStream(username) {
     syncInventoryTop();
   });
 
+  stream.addEventListener("steam_app_license_status", (evt) => {
+    const data = parseEventData(evt.data);
+    const eventUsername = String(data.username || "").trim();
+    if (!eventUsername || eventUsername !== state.currentAccountUsername) return;
+    const stage = String(data.stage || "").trim();
+    const message = String(data.message || "").trim();
+    const presentation = {
+      checking: {percent: 52, title: "正在检查 CS2 入库", phase: "正在检查 CS2 入库"},
+      claiming: {percent: 60, title: "正在领取 CS2", phase: "正在领取 CS2"},
+      owned: {percent: 66, title: "CS2 已入库", phase: "CS2 已入库，正在连接"},
+      claimed: {percent: 66, title: "CS2 领取成功", phase: "CS2 已入库，正在连接"},
+      failed: {percent: 66, title: "CS2 入库处理失败", phase: "CS2 入库处理失败"}
+    }[stage];
+    if (!presentation) return;
+    setRefreshPhase(presentation.phase);
+    if (!state.refreshSilentInfo && message) setSummary(message);
+    if (stage === "failed") {
+      clearCraftExecutionOverlayState({owner: "connect_flow"});
+      return;
+    }
+    if (state.refreshing) {
+      setCraftExecutionOverlayState({
+        owner: "connect_flow",
+        enabled: true,
+        visible: true,
+        mode: "connecting",
+        percent: presentation.percent,
+        title: presentation.title,
+        detail: message || presentation.phase
+      });
+    }
+  });
+
   stream.addEventListener("inventory_refresh_failed", (evt) => {
     const data = parseEventData(evt.data);
     const eventUsername = String(data.username || "").trim();
     if (!eventUsername || eventUsername !== state.currentAccountUsername) return;
     if (state.connectedUsername === eventUsername) state.connectedUsername = "";
+    clearCraftExecutionOverlayState({owner: "connect_flow"});
     syncInventoryTop();
     const msg = formatInventoryRefreshFailureMessage(data);
     setSummary(`自动刷新失败：${msg}`);
@@ -3200,6 +3234,61 @@ function setAccountLoginOverlayStage({percent = 0, title = "正在验证账号�
 function clearAccountLoginOverlay() {
   if (typeof clearCraftExecutionOverlayState !== "function") return true;
   return clearCraftExecutionOverlayState({owner: "login_flow"});
+}
+
+function applyAccountLoginLicenseStatus(data = {}) {
+  if (!state.accountLoginBusy) return false;
+  const stage = String(data.stage || "").trim();
+  const message = String(data.message || "").trim();
+  const presentation = {
+    checking: {percent: 45, title: "正在检查 CS2 入库"},
+    claiming: {percent: 58, title: "正在领取 CS2"},
+    owned: {percent: 68, title: "CS2 已入库"},
+    claimed: {percent: 68, title: "CS2 领取成功"},
+    failed: {percent: 68, title: "CS2 入库处理失败"}
+  }[stage];
+  if (!presentation) return false;
+  setAccountLoginOverlayStage({
+    ...presentation,
+    detail: message || presentation.title
+  });
+  if (message) setAccountStatus(message, stage === "failed");
+  return true;
+}
+
+function stopAccountLoginLicenseEventStream() {
+  const stream = state.accountLoginLicenseEventSource;
+  state.accountLoginLicenseEventSource = null;
+  state.accountLoginLicenseEventUsername = "";
+  if (!stream) return;
+  try { stream.close(); } catch (_) {}
+}
+
+function startAccountLoginLicenseEventStream(username) {
+  const key = String(username || "").trim();
+  stopAccountLoginLicenseEventStream();
+  if (!key || typeof EventSource !== "function") return Promise.resolve(false);
+  const stream = new EventSource(`/api/events?username=${encodeURIComponent(key)}&stream_version=2`);
+  state.accountLoginLicenseEventSource = stream;
+  state.accountLoginLicenseEventUsername = key;
+  stream.addEventListener("steam_app_license_status", (evt) => {
+    let data = {};
+    try { data = JSON.parse(String(evt && evt.data || "{}")); } catch (_) {}
+    if (String(data.username || "").trim() !== state.accountLoginLicenseEventUsername) return;
+    applyAccountLoginLicenseStatus(data);
+  });
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ready) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(ready);
+    };
+    const timer = setTimeout(() => finish(false), 1500);
+    stream.addEventListener("connected", () => finish(true));
+    stream.addEventListener("error", () => finish(false));
+  });
 }
 
 function handlePostLoginRefreshResult(username, result = null) {
@@ -4051,6 +4140,7 @@ async function loginAndSave() {
       setAccountLoginBusy(true);
       setAccountStatus("正在提交验证码，请稍候...");
       const authenticatedPassword = String(state.pendingGuard.password || password).trim();
+      await startAccountLoginLicenseEventStream(username);
       await api("/api/accounts/login-submit-code", {
         method: "POST",
         body: JSON.stringify({username, password: authenticatedPassword, code: totp, remark})
@@ -4075,6 +4165,7 @@ async function loginAndSave() {
       setAccountStatus(formatLoginSaveError(err), true);
       return false;
     } finally {
+      stopAccountLoginLicenseEventStream();
       clearAccountLoginOverlay();
       if (state.accountLoginBusy) setAccountLoginBusy(false);
     }
@@ -4095,6 +4186,7 @@ async function loginAndSave() {
     setAccountStatus(reloginAccount && reloginAccount.has_steam_guard
       ? "正在验证密码并由后端提交本地令牌..."
       : "正在验证账号与密码...");
+    await startAccountLoginLicenseEventStream(username);
     const resp = await api("/api/accounts/login-start", {
       method: "POST",
       body: JSON.stringify({username, password, totp, remark})
@@ -4140,6 +4232,7 @@ async function loginAndSave() {
     setAccountStatus(formatLoginSaveError(err), true);
     return false;
   } finally {
+    stopAccountLoginLicenseEventStream();
     clearAccountLoginOverlay();
     if (state.accountLoginBusy) setAccountLoginBusy(false);
   }

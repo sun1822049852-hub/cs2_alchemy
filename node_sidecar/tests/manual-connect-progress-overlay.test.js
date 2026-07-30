@@ -202,7 +202,8 @@ function loadInventoryEventStreamFns({
     renderSavedAccounts: 0,
     syncInventoryTop: 0,
     loadSnapshot: [],
-    componentQueue: []
+    componentQueue: [],
+    overlayState: []
   };
   const context = {
     String,
@@ -242,6 +243,10 @@ function loadInventoryEventStreamFns({
       calls.overlayClear.push(payload || null);
       return true;
     },
+    setCraftExecutionOverlayState(payload) {
+      calls.overlayState.push(payload || null);
+      return true;
+    },
     renderSavedAccounts() {
       calls.renderSavedAccounts += 1;
     },
@@ -251,6 +256,59 @@ function loadInventoryEventStreamFns({
   };
   vm.runInNewContext(`${lifecycleSource}\n${startSource}`, context, {filename: APP_PATH});
   return {context, calls, FakeEventSource};
+}
+
+function test_license_status_events_update_existing_connection_overlay() {
+  const {context, calls, FakeEventSource} = loadInventoryEventStreamFns({
+    currentAccountUsername: "acc-a",
+    connectedUsername: "",
+    refreshing: true
+  });
+
+  context.startInventoryEventStream("acc-a");
+  const stream = FakeEventSource.instances[0];
+  stream.emit("steam_app_license_status", {
+    username: "acc-a",
+    stage: "checking",
+    message: "正在检查 CS2 入库"
+  });
+  stream.emit("steam_app_license_status", {
+    username: "acc-a",
+    stage: "claiming",
+    message: "账号尚未入库，正在领取 CS2"
+  });
+  stream.emit("steam_app_license_status", {
+    username: "acc-a",
+    stage: "claimed",
+    message: "CS2 领取成功，已加入游戏库"
+  });
+
+  assert.deepEqual(
+    calls.overlayState.map((payload) => payload && payload.title),
+    ["正在检查 CS2 入库", "正在领取 CS2", "CS2 领取成功"]
+  );
+  assert.equal(calls.overlayState.every((payload) => payload.owner === "connect_flow"), true);
+  assert.equal(calls.overlayState.every((payload) => payload.mode === "connecting"), true);
+  assert.equal(calls.phase.at(-1), "CS2 已入库，正在连接");
+  assert.equal(calls.summary.at(-1), "CS2 领取成功，已加入游戏库");
+
+  stream.emit("steam_app_license_status", {
+    username: "other-account",
+    stage: "failed",
+    message: "不应显示"
+  });
+  assert.equal(calls.overlayClear.length, 0, "another account's license event must be ignored");
+
+  stream.emit("steam_app_license_status", {
+    username: "acc-a",
+    stage: "failed",
+    reason: "cs2_license_claim_rate_limited",
+    steam_eresult: 84,
+    message: "CS2 领取失败：请求过于频繁，请稍后重试（EResult 84）"
+  });
+  assert.equal(calls.overlayClear.length, 1, "license failure should release the connect overlay");
+  assert.equal(calls.overlayClear[0].owner, "connect_flow");
+  assert.equal(calls.summary.at(-1), "CS2 领取失败：请求过于频繁，请稍后重试（EResult 84）");
 }
 
 async function test_disconnected_manual_refresh_wires_connect_progress_overlay() {
@@ -457,6 +515,7 @@ async function main() {
   await test_use_account_reuses_shared_connect_overlay();
   test_connection_ready_event_marks_connected_and_clears_connect_overlay();
   test_connection_ready_event_respects_silent_refresh_summary();
+  test_license_status_events_update_existing_connection_overlay();
   test_hidden_page_does_not_open_inventory_event_stream();
   test_visibility_lifecycle_closes_and_restores_only_the_current_stream();
   test_page_lifecycle_handlers_release_inventory_event_stream();

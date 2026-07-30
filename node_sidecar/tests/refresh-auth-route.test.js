@@ -885,6 +885,67 @@ async function test_login_start_uses_saved_password_for_existing_account() {
   }
 }
 
+async function test_login_start_surfaces_profile_license_failure_and_emits_status() {
+  const emitted = [];
+  const licenseError = new Error("CS2 领取失败：请求过于频繁，请稍后重试（EResult 84）");
+  licenseError.code = "cs2_license_claim_rate_limited";
+  licenseError.reason = "cs2_license_claim_rate_limited";
+  licenseError.stage = "steam_app_license";
+  licenseError.status = 409;
+  licenseError.eresult = 84;
+  licenseError.steam_eresult = 84;
+  licenseError.retryable = true;
+  const ctx = await startServer({
+    createServerOptionsFactory: () => ({
+      refreshRuntime: {
+        start() {},
+        shutdown() {},
+        emitSse(event, payload) {
+          emitted.push({event, payload});
+        }
+      },
+      startLoginSessionFn: async ({username}) => ({
+        done: true,
+        result: {username, refresh_token: "new-login-token"}
+      }),
+      resolveAccountProfileFn: async (input) => {
+        assert.equal(typeof input.onLicenseStatus, "function");
+        await input.onLicenseStatus({
+          stage: "claiming",
+          app_id: 730,
+          message: "账号尚未入库，正在领取 CS2 免费许可"
+        });
+        throw licenseError;
+      }
+    })
+  });
+  try {
+    await authorize(ctx);
+    const response = await requestJson(ctx, "POST", "/api/accounts/login-start", {
+      body: {username: "countsteam01", password: "SecretA"}
+    });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.reason, "cs2_license_claim_rate_limited");
+    assert.equal(response.body.message, licenseError.message);
+    assert.equal(response.body.steam_eresult, 84);
+    assert.equal(response.body.retryable, true);
+    assert.deepEqual(emitted, [{
+      event: "steam_app_license_status",
+      payload: {
+        stage: "claiming",
+        app_id: 730,
+        message: "账号尚未入库，正在领取 CS2 免费许可",
+        username: "countsteam01",
+        source: "account_login"
+      }
+    }]);
+  } finally {
+    await stopServer(ctx);
+  }
+}
+
 async function test_login_start_persists_verified_credentials_before_guard_response() {
   const ctx = await startServer({
     accounts: [{
@@ -1273,6 +1334,7 @@ async function main() {
   await test_guard_account_retries_despite_persisted_auth_invalid_state();
   await test_login_save_clears_persisted_auth_invalid_state();
   await test_login_start_uses_saved_password_for_existing_account();
+  await test_login_start_surfaces_profile_license_failure_and_emits_status();
   await test_login_start_persists_verified_credentials_before_guard_response();
   await test_login_start_saves_new_verified_account_without_switching_active_account();
   await test_login_start_submits_local_guard_on_backend_after_password_phase();
