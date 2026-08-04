@@ -25,6 +25,7 @@ client_config.json
 node_modules/
 node_sidecar/node_modules/
 node_sidecar/.npm-cache/
+node_sidecar/dist/
 admin_console/node_modules/
 
 # local skin-db rebuild artifacts
