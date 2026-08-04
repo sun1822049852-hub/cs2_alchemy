@@ -56,6 +56,16 @@ function loadPreflightCompleter() {
   return context.completeBatchImportPreflightItems;
 }
 
+function loadBatchCredentialParser() {
+  const source = extractBlock(
+    "function parseBatchCredentials(",
+    "function renderBatchImportCredentialSummary("
+  );
+  const context = {Map};
+  vm.runInNewContext(source, context, {filename: APP_PATH});
+  return context.parseBatchCredentials;
+}
+
 function testPreflightPartitionsImmediateResolutionAndInvalidRows() {
   const partition = loadPreflightPartitioner();
   const result = partition([
@@ -189,6 +199,29 @@ function testFileListShowsBothFileNameAndEmbeddedAccountName() {
   assert.match(renderSource, /file-account-name/);
   assert.match(renderSource, /f\.name/);
   assert.match(renderSource, /f\.accountName/);
+  assert.match(renderSource, /steamGuardType/);
+  assert.match(renderSource, /仅登录令牌/);
+  assert.match(renderSource, /完整令牌/);
+}
+
+function testCredentialParserAcceptsKeywordAndAccountDashPasswordFormats() {
+  const parse = loadBatchCredentialParser();
+  const parsed = parse([
+    "账号legacy密码LegacyPwd1",
+    "imr847218----CtwV1O8iY5"
+  ].join("\n"));
+  assert.deepEqual([...parsed], [
+    ["legacy", "LegacyPwd1"],
+    ["imr847218", "CtwV1O8iY5"]
+  ]);
+}
+
+function testTokenManagementHidesUnsupportedCapabilities() {
+  const source = extractBlock("async function openTokenDetailModal(", "async function loadCurrentGuardCode(");
+  assert.match(source, /steam_guard_capabilities/);
+  assert.match(source, /tokenShowRecoveryBtn/);
+  assert.match(source, /classList\.toggle\("hidden"/);
+  assert.match(source, /login_only/);
 }
 
 function testFileSelectionSnapshotsLiveFileListBeforeAsyncReads() {
@@ -251,6 +284,8 @@ function main() {
   testDifferingImportedPasswordIsShownAndRequiresExplicitPerAccountDecision();
   testPreflightSendsImportedPasswordOnlyForServerSideDifferenceCheck();
   testFileListShowsBothFileNameAndEmbeddedAccountName();
+  testCredentialParserAcceptsKeywordAndAccountDashPasswordFormats();
+  testTokenManagementHidesUnsupportedCapabilities();
   testFileSelectionSnapshotsLiveFileListBeforeAsyncReads();
   testCredentialMatchSummaryDoesNotRenderAccountNamesAsHtml();
   testSuccessfulReadyImportsAreRemovedFromPendingFiles();

@@ -3795,7 +3795,9 @@ function renderSavedAccounts() {
     const balanceText = String(row.balance || "").trim();
     const balanceMeta = formatWalletBalanceSourceMeta(row);
     const guardLabel = row.has_steam_guard
-      ? (row.has_refresh_token ? "令牌可用" : "令牌已保存")
+      ? (row.steam_guard_type === "login_only"
+        ? "仅登录令牌"
+        : (row.steam_guard_type === "full" ? "完整令牌" : (row.has_refresh_token ? "令牌可用" : "令牌已保存")))
       : "未添加令牌";
     sub.textContent = balanceText
       ? `账号：${accountName || "-"} · 余额：${balanceText} · ${guardLabel}`
@@ -18918,6 +18920,12 @@ function renderBatchImportFileList() {
     accountSpan.className = "file-account-name";
     accountSpan.textContent = `登录账号：${f.accountName || "等待预检"}`;
     identity.append(nameSpan, accountSpan);
+    if (f.steamGuardType) {
+      const typeTag = document.createElement("span");
+      typeTag.className = `file-token-type ${f.steamGuardType}`;
+      typeTag.textContent = f.steamGuardType === "login_only" ? "仅登录令牌" : "完整令牌";
+      identity.append(typeTag);
+    }
     if (f.preflightStatus) {
       const statusTag = document.createElement("span");
       statusTag.className = `file-preflight-status ${f.preflightStatus}`;
@@ -18961,15 +18969,16 @@ function batchImportPreflightStatusText(file) {
 
 /**
  * 解析粘贴的账密文本，提取账号和密码对
- * 支持格式：账号xxx密码yyy（后面可能还有令牌秘钥等，忽略）
+ * 支持格式：账号xxx密码yyy，或 xxx----yyy
  * 每行一个账号
  */
 function parseBatchCredentials(text) {
   const result = new Map();
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   for (const line of lines) {
-    // 匹配「账号xxx密码yyy」格式，账号和密码之间可能有空格
-    const m = line.match(/账号\s*(\S+?)\s*密码\s*(\S+)/);
+    const trimmed = line.trim();
+    const m = trimmed.match(/账号\s*(\S+?)\s*密码\s*(\S+)/)
+      || trimmed.match(/^(\S+?)----(\S+)$/);
     if (m) {
       result.set(m[1].trim(), m[2].trim());
     }
@@ -19076,6 +19085,10 @@ async function startBatchImport() {
       const file = byClientId.get(String(item && item.client_id || ""));
       if (!file) continue;
       file.accountName = String(item.account_name || "").trim();
+      file.steamGuardType = String(item.steam_guard_type || "").trim();
+      file.steamGuardCapabilities = item.steam_guard_capabilities && typeof item.steam_guard_capabilities === "object"
+        ? {...item.steam_guard_capabilities}
+        : null;
       file.preflightStatus = String(item.status || "invalid").trim();
       file.preflightMessage = String(item.message || "").trim();
     }
@@ -20867,7 +20880,9 @@ let tokenDetailState = {
   period: 30,
   remaining: 0,
   recoveryCode: "",
-  recoveryVisible: false
+  recoveryVisible: false,
+  steamGuardType: "none",
+  capabilities: null
 };
 
 function clearTokenCodeTimer() {
@@ -20900,13 +20915,20 @@ async function copyTextWithFeedback(button, text, idleLabel = "复制") {
 async function openTokenDetailModal(username) {
   const modal = document.getElementById("tokenDetailModal");
   clearTokenCodeTimer();
+  const account = accountByUsername(username);
+  const capabilities = account && account.steam_guard_capabilities && typeof account.steam_guard_capabilities === "object"
+    ? account.steam_guard_capabilities
+    : {};
+  const steamGuardType = String(account && account.steam_guard_type || "none").trim();
   tokenDetailState = {
     interval: null,
     username: String(username || "").trim(),
     period: 30,
     remaining: 0,
     recoveryCode: "",
-    recoveryVisible: false
+    recoveryVisible: false,
+    steamGuardType,
+    capabilities
   };
   document.getElementById("tokenDetailAccountName").textContent = tokenDetailState.username;
   document.getElementById("tokenCodePanel").classList.add("hidden");
@@ -20921,6 +20943,15 @@ async function openTokenDetailModal(username) {
   document.getElementById("tokenRecoveryCopyBtn").disabled = true;
   document.getElementById("tokenManageStatus").textContent = "";
   document.getElementById("tokenManageStatus").className = "enroll-status";
+  const capabilityLabel = document.getElementById("tokenCapabilityLabel");
+  capabilityLabel.textContent = steamGuardType === "login_only"
+    ? "仅登录令牌"
+    : (steamGuardType === "full" ? "完整令牌" : "令牌不可用");
+  capabilityLabel.className = `token-capability-label ${steamGuardType === "login_only"
+    ? "login-only"
+    : (steamGuardType === "full" ? "full" : "unavailable")}`;
+  document.getElementById("tokenShowCodeBtn").classList.toggle("hidden", capabilities.login_code !== true);
+  document.getElementById("tokenShowRecoveryBtn").classList.toggle("hidden", capabilities.recovery_code !== true);
   modal.classList.remove("hidden");
 }
 

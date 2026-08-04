@@ -11686,6 +11686,38 @@ body.theme-inkblue #webInventoryPage .web-inv-sell-btn:hover {
 .enroll-status.error { color: var(--danger); }
 
 /* ═══ Steam Guard 令牌管理弹窗 ═══ */
+.token-capability-label {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.token-capability-label.login-only {
+  color: var(--accent);
+}
+
+.token-capability-label.full {
+  color: var(--success);
+}
+
+.token-capability-label.unavailable {
+  color: var(--danger);
+}
+
+.file-token-type {
+  width: fit-content;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.file-token-type.login_only {
+  color: var(--accent);
+}
+
+.file-token-type.full {
+  color: var(--success);
+}
 .token-detail-dialog { max-width: 480px; }
 
 .token-management-actions {

@@ -28,6 +28,12 @@ function parseRawMaFile(content) {
   return content;
 }
 
+function readSessionObject(raw) {
+  return raw && raw.Session && typeof raw.Session === "object" && !Array.isArray(raw.Session)
+    ? raw.Session
+    : null;
+}
+
 function normalizeMaFileForExport(content) {
   const raw = parseRawMaFile(content);
   const normalized = {};
@@ -46,6 +52,30 @@ function normalizeMaFileForExport(content) {
   return normalized;
 }
 
+function getSteamGuardCapabilities(content) {
+  try {
+    const raw = parseRawMaFile(content);
+    const parsed = parseMaFile(raw);
+    const isFull = !!parsed.identitySecret;
+    const type = isFull ? "full" : "login_only";
+    return {
+      type,
+      login_code: !!parsed.sharedSecret,
+      confirmation: isFull,
+      recovery_code: isFull && !!parsed.revocationCode,
+      web_session: isFull && !!(parsed.refreshToken || parsed.accessToken)
+    };
+  } catch (_) {
+    return {
+      type: "none",
+      login_code: false,
+      confirmation: false,
+      recovery_code: false,
+      web_session: false
+    };
+  }
+}
+
 function invalidImportMaFileError() {
   const err = new Error("令牌文件格式错误");
   err.code = "invalid_mafile_format";
@@ -57,21 +87,36 @@ function normalizeSteamGuardImportMaFile(content) {
     const raw = parseRawMaFile(content);
     const accountName = asString(raw.account_name).trim();
     const sharedSecret = asString(raw.shared_secret).trim();
-    const revocationCode = asString(raw.revocation_code).trim();
-    if (!accountName || !sharedSecret || revocationCode.length !== 6) {
+    if (!accountName || !sharedSecret) {
+      throw invalidImportMaFileError();
+    }
+    const capabilities = getSteamGuardCapabilities(raw);
+    if (!capabilities.login_code) {
       throw invalidImportMaFileError();
     }
     const normalized = {};
-    for (const [key, value] of Object.entries(raw)) {
-      if (key === "Session" || LOGIN_TOKEN_FIELDS.has(key)) continue;
-      normalized[key] = value;
+    if (capabilities.type === "full") {
+      Object.assign(normalized, raw);
+    } else {
+      const steamId64 = asString(raw.steamid || raw.steam_id64).trim();
+      if (steamId64) normalized.steamid = steamId64;
+      const session = readSessionObject(raw);
+      if (session && Object.hasOwn(session, "SteamID")) {
+        normalized.Session = {SteamID: session.SteamID};
+      }
     }
     normalized.account_name = accountName;
     normalized.shared_secret = sharedSecret;
-    normalized.revocation_code = revocationCode;
-    normalized.Session = null;
+    const capabilityFlags = {
+      login_code: capabilities.login_code,
+      confirmation: capabilities.confirmation,
+      recovery_code: capabilities.recovery_code,
+      web_session: capabilities.web_session
+    };
     return {
       accountName,
+      steamGuardType: capabilities.type,
+      capabilities: capabilityFlags,
       maFileContent: JSON.stringify(normalized)
     };
   } catch (err) {
@@ -112,6 +157,7 @@ function hasCompleteSteamGuard(content) {
 }
 
 module.exports = {
+  getSteamGuardCapabilities,
   hasCompleteSteamGuard,
   normalizeSteamGuardImportMaFile,
   normalizeMaFileForExport,

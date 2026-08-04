@@ -61,7 +61,8 @@ function createExternalCallTracker() {
     fetchBalanceResult: {success: true, balance: "12.34"},
     fetchTradeUrl: [],
     refreshWebCookie: [],
-    refreshWebCookieFromToken: []
+    refreshWebCookieFromToken: [],
+    confirmTradeOfferResult: true
   };
 }
 
@@ -108,7 +109,7 @@ function loadCreateServer({calls = createExternalCallTracker()} = {}) {
         },
         async confirmTradeOffer(args) {
           calls.confirmTradeOffer.push({...args});
-          return true;
+          return calls.confirmTradeOfferResult;
         },
         async acceptTradeOffer(args) {
           calls.acceptTradeOffer.push({...args});
@@ -565,6 +566,41 @@ async function test_trade_routes_allow_any_saved_steam_account() {
   });
 }
 
+async function test_trade_routes_report_manual_confirmation_when_auto_confirmation_misses() {
+  await withScopedServer({
+    username: "member_a",
+    permissions: accountReadPermissions()
+  }, async ({port, calls}) => {
+    calls.confirmTradeOfferResult = false;
+    const sendResponse = await requestSse({
+      port,
+      method: "POST",
+      route: "/api/accounts/send-trade-offer",
+      body: {
+        fromUsername: "countsteam02",
+        toTradeUrl: "https://steamcommunity.com/tradeoffer/new/?partner=123456&token=test",
+        assetIds: ["asset-1"]
+      }
+    });
+    const sendDone = sendResponse.events.find((event) => event.event === "done");
+    assert.equal(sendDone.data.sender_confirmed, false);
+    assert.equal(sendDone.data.needs_manual_confirm, true);
+
+    const acceptResponse = await requestJson({
+      port,
+      method: "POST",
+      route: "/api/accounts/accept-offers",
+      body: {
+        username: "countsteam02",
+        tradeofferIds: ["offer-1"]
+      }
+    });
+    assert.equal(acceptResponse.body.results[0].confirmed, false);
+    assert.equal(acceptResponse.body.results[0].needs_manual_confirm, true);
+    assert.equal(acceptResponse.body.needs_manual_confirm, true);
+  });
+}
+
 async function test_market_routes_allow_any_saved_steam_account() {
   await withScopedServer({
     username: "member_a",
@@ -972,6 +1008,7 @@ async function main() {
   await test_read_only_user_does_not_receive_saved_steam_passwords();
   await test_control_plane_user_can_select_any_saved_steam_account();
   await test_trade_routes_allow_any_saved_steam_account();
+  await test_trade_routes_report_manual_confirmation_when_auto_confirmation_misses();
   await test_market_routes_allow_any_saved_steam_account();
   await test_fetch_balance_persists_steam_store_source_metadata();
   await test_fetch_balance_failure_does_not_fall_back_to_steam_cm_balance();

@@ -18,6 +18,21 @@ function makeMaFile(accountName, overrides = {}) {
   });
 }
 
+function makeLoginOnlyMaFile(accountName) {
+  return JSON.stringify({
+    account_name: accountName,
+    shared_secret: Buffer.from(`shared-${accountName}`).toString("base64"),
+    Session: {SteamID: "76561198000000001"}
+  });
+}
+
+const FULL_CAPABILITIES = {
+  login_code: true,
+  confirmation: true,
+  recovery_code: true,
+  web_session: true
+};
+
 function createReadyLicenseRuntime() {
   const state = {
     ok: true,
@@ -213,21 +228,32 @@ async function test_preflight_distinguishes_attach_overwrite_and_manual_file_sel
   try {
     const response = await request(ctx, "POST", "/api/accounts/batch-import/preflight", {accounts: [
       {client_id: "ready", file_name: "same.maFile", maFileContent: makeMaFile("ready")},
+      {client_id: "login-only", file_name: "login-only.maFile", maFileContent: makeLoginOnlyMaFile("login_only")},
       {client_id: "existing", file_name: "existing.maFile", password: "different-password", maFileContent: makeMaFile("existing")},
       {client_id: "without-guard", file_name: "without-guard.maFile", password: "different-password", maFileContent: makeMaFile("without_guard")},
       {client_id: "without-guard-same", file_name: "without-guard-same.maFile", password: "saved-password", maFileContent: makeMaFile("without_guard_same")},
       {client_id: "batch-a", file_name: "a.maFile", maFileContent: makeMaFile("duplicate")},
       {client_id: "batch-b", file_name: "b.maFile", maFileContent: makeMaFile("duplicate")},
-      {client_id: "invalid", file_name: "invalid.maFile", maFileContent: makeMaFile("invalid", {revocation_code: "12345"})},
+      {client_id: "invalid", file_name: "invalid.maFile", maFileContent: makeMaFile("invalid", {shared_secret: ""})},
       {client_id: "invalid-json", file_name: "invalid-json.maFile", maFileContent: "not-json"},
       {client_id: "mixed-valid", file_name: "mixed-valid.maFile", maFileContent: makeMaFile("mixed")},
-      {client_id: "mixed-invalid", file_name: "mixed-invalid.maFile", maFileContent: makeMaFile("mixed", {revocation_code: "12345"})},
+      {client_id: "mixed-invalid", file_name: "mixed-invalid.maFile", maFileContent: makeMaFile("mixed", {shared_secret: ""})},
       {client_id: "other-name", file_name: "same.maFile", maFileContent: makeMaFile("other")}
     ]});
     assert.equal(response.statusCode, 200);
     const body = parseJson(response);
     const byId = new Map(body.items.map((item) => [item.client_id, item]));
     assert.equal(byId.get("ready").status, "ready");
+    assert.equal(byId.get("ready").steam_guard_type, "full");
+    assert.deepEqual(byId.get("ready").steam_guard_capabilities, FULL_CAPABILITIES);
+    assert.equal(byId.get("login-only").status, "ready");
+    assert.equal(byId.get("login-only").steam_guard_type, "login_only");
+    assert.deepEqual(byId.get("login-only").steam_guard_capabilities, {
+      login_code: true,
+      confirmation: false,
+      recovery_code: false,
+      web_session: false
+    });
     assert.equal(byId.get("other-name").status, "ready");
     assert.equal(byId.get("ready").target_action, "create");
     assert.deepEqual(byId.get("existing"), {
@@ -239,7 +265,9 @@ async function test_preflight_distinguishes_attach_overwrite_and_manual_file_sel
       existing_has_steam_guard: true,
       existing_remark: "本地备注",
       connected: true,
-      password_differs: true
+      password_differs: true,
+      steam_guard_type: "full",
+      steam_guard_capabilities: FULL_CAPABILITIES
     });
     assert.deepEqual(byId.get("without-guard"), {
       client_id: "without-guard",
@@ -250,7 +278,9 @@ async function test_preflight_distinguishes_attach_overwrite_and_manual_file_sel
       existing_has_steam_guard: false,
       existing_remark: "保留备注",
       connected: false,
-      password_differs: true
+      password_differs: true,
+      steam_guard_type: "full",
+      steam_guard_capabilities: FULL_CAPABILITIES
     });
     assert.equal(byId.get("without-guard-same").status, "ready");
     assert.equal(byId.get("without-guard-same").password_differs, false);
@@ -311,6 +341,8 @@ async function test_batch_import_creates_new_attaches_missing_guard_and_defers_e
       password_differs: true,
       existing_has_steam_guard: true,
       target_action: "overwrite",
+      steam_guard_type: "full",
+      steam_guard_capabilities: FULL_CAPABILITIES,
       done: 5,
       total: 5
     });
@@ -327,10 +359,9 @@ async function test_batch_import_creates_new_attaches_missing_guard_and_defers_e
     assert.equal(store.rows.get("ready_empty").password, "");
     const saved = JSON.parse(store.calls.created.find((entry) => entry.username === "ready").mafile_content);
     assert.equal(saved.account_name, "ready");
-    assert.equal(saved.Session, null);
-    assert.equal(Object.hasOwn(saved, "access_token"), false);
-    assert.equal(Object.hasOwn(saved, "refresh_token"), false);
-    assert.equal(JSON.stringify(saved).includes("must-not-leak-cookie"), false);
+    assert.equal(saved.Session.WebCookie, "must-not-leak-cookie");
+    assert.equal(saved.access_token, "must-not-leak-access");
+    assert.equal(saved.refresh_token, "must-not-leak-refresh");
     assert.equal(store.calls.overwritten.length, 0);
     const done = events.find((item) => item.event === "done").data;
     assert.equal(done.pending_confirmation, 1);
@@ -349,7 +380,7 @@ async function test_batch_import_requires_manual_selection_then_applies_only_sel
       {client_id: "batch-a", file_name: "a.maFile", password: "a", maFileContent: makeMaFile("same-batch")},
       {client_id: "batch-b", file_name: "b.maFile", password: "b", maFileContent: makeMaFile("same-batch")},
       {client_id: "mixed-valid", file_name: "mixed-valid.maFile", password: "valid", maFileContent: makeMaFile("mixed")},
-      {client_id: "mixed-invalid", file_name: "mixed-invalid.maFile", password: "invalid", maFileContent: makeMaFile("mixed", {revocation_code: "12345"})}
+      {client_id: "mixed-invalid", file_name: "mixed-invalid.maFile", password: "invalid", maFileContent: makeMaFile("mixed", {shared_secret: ""})}
     ]});
     const events = parseSse(blocked);
     const results = events.filter((item) => item.event === "account_result").map((item) => item.data);

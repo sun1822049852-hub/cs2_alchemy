@@ -39,8 +39,16 @@ function parseMaFile(content) {
   }
 
   // refreshToken 可能在 Session 中
-  let refreshToken = "";
-  if (data.Session) {
+  const session = data.Session && typeof data.Session === "object" && !Array.isArray(data.Session)
+    ? data.Session
+    : null;
+  let refreshToken = asString(
+    (session && (session.RefreshToken || session.refresh_token || session.refreshToken))
+      || data.refresh_token
+      || data.refreshToken
+      || ""
+  ).trim();
+  if (!refreshToken && session) {
     // 有些 maFile 存了 SteamLoginSecure 里的 JWT
     const loginSecure = asString(data.Session.SteamLoginSecure || "").trim();
     if (loginSecure) {
@@ -52,8 +60,12 @@ function parseMaFile(content) {
     }
   }
 
-  // access_token 顶层
-  const accessToken = asString(data.access_token || "").trim();
+  const accessToken = asString(
+    (session && (session.AccessToken || session.access_token || session.accessToken))
+      || data.access_token
+      || data.accessToken
+      || ""
+  ).trim();
 
   if (!sharedSecret) {
     throw new Error("maFile 缺少 shared_secret");

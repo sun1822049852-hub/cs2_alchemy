@@ -45,7 +45,7 @@ function makeAccountStore(state = {}) {
     has_steam_guard: true,
     is_active: true
   };
-  const mutable = {maFile, password: "secret"};
+  const mutable = {maFile: state.maFile || maFile, password: "secret"};
   const store = {
     list: () => [publicRow],
     getActive: () => publicRow,
@@ -186,7 +186,43 @@ async function test_writer_account_projection_includes_password_but_not_guard_se
     assert.equal(row.has_steam_guard, true);
     assert.equal(row.has_refresh_token, true);
     assert.equal(row.password, "secret");
+    assert.equal(row.steam_guard_type, "full");
+    assert.deepEqual(row.steam_guard_capabilities, {
+      login_code: true,
+      confirmation: true,
+      recovery_code: true,
+      web_session: true
+    });
     assert.equal(Object.hasOwn(row, "mafile_content"), false);
+  } finally {
+    await new Promise((resolve) => ctx.server.close(resolve));
+  }
+}
+
+async function test_login_only_account_projects_limited_capabilities_and_blocks_recovery_code() {
+  const loginOnlyMaFile = JSON.stringify({
+    account_name: "demo",
+    shared_secret: sharedSecret,
+    Session: {SteamID: "76561198000000001"}
+  });
+  const ctx = await startServer({accountStore: makeAccountStore({maFile: loginOnlyMaFile})});
+  try {
+    const accounts = await request(ctx, "GET", "/api/accounts");
+    assert.equal(accounts.statusCode, 200);
+    assert.equal(accounts.body.accounts[0].steam_guard_type, "login_only");
+    assert.deepEqual(accounts.body.accounts[0].steam_guard_capabilities, {
+      login_code: true,
+      confirmation: false,
+      recovery_code: false,
+      web_session: false
+    });
+
+    const code = await request(ctx, "GET", "/api/accounts/steam-guard/code?username=demo");
+    assert.equal(code.statusCode, 200);
+    const recovery = await request(ctx, "GET", "/api/accounts/steam-guard/recovery-code?username=demo");
+    assert.equal(recovery.statusCode, 409);
+    assert.equal(recovery.body.reason, "guard_capability_missing");
+    assert.equal(JSON.stringify(accounts.body).includes(sharedSecret), false);
   } finally {
     await new Promise((resolve) => ctx.server.close(resolve));
   }
@@ -420,6 +456,7 @@ async function test_legacy_secret_and_enrollment_routes_are_gone() {
 
 async function main() {
   await test_writer_account_projection_includes_password_but_not_guard_secret();
+  await test_login_only_account_projects_limited_capabilities_and_blocks_recovery_code();
   await test_token_code_and_recovery_routes_do_not_leak_secret();
   await test_expired_guard_account_recovers_login_and_clears_auth_state();
   await test_expired_guard_account_requests_password_only_from_structured_credential_state();

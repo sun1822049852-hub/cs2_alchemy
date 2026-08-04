@@ -137,6 +137,7 @@ async function test_single_inventory_route_logs_trace_lines_to_cmd() {
           refreshToken: "refresh_token",
           accessToken: "access_token",
           sharedSecret: "shared_secret",
+          identitySecret: "identity_secret",
           raw: {}
         };
       },

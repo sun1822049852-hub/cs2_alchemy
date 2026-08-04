@@ -11,7 +11,7 @@ const {UiStateStore} = require("./uiStateStore");
 const {loginAndSaveToken, startLoginSession, submitGuardCode, removePendingSession} = require("./authService");
 const {precheckAuthApi} = require("./networkPrecheck");
 const {parseMaFile} = require("./maFileParser");
-const {normalizeMaFileForExport, readSteamGuardSummary} = require("./steamGuardTokenService");
+const {getSteamGuardCapabilities, normalizeMaFileForExport, readSteamGuardSummary} = require("./steamGuardTokenService");
 const {createSteamGuardImportService} = require("./steamGuardImportService");
 const {createSteamGuardCoexistService} = require("./steamGuardCoexistService");
 const {createSteamGuardCoexistProcessAdapter} = require("./steamGuardCoexistProcessAdapter");
@@ -214,6 +214,13 @@ async function resolveWebSessionForAccount(account, {tokenRecoveryService = null
         hasMaFile: false,
         tokenRecoveryService
       });
+    }
+    if (!maData.identitySecret) {
+      const err = new Error("此令牌文件仅支持登录令牌码，不能用于 Web 功能");
+      err.code = "guard_capability_missing";
+      err.reason = "guard_capability_missing";
+      err.status = 409;
+      throw err;
     }
     try {
       const webSession = await refreshWebCookie(maData);
@@ -2829,12 +2836,22 @@ async function handleApi(req, res, urlObj, deps = {}) {
       const decorate = (row) => {
         if (!row || typeof row !== "object") return null;
         const username = asString(row.username).trim();
+        const credentials = username && typeof store.getCredentials === "function"
+          ? store.getCredentials(username)
+          : null;
+        const guardCapabilities = getSteamGuardCapabilities(credentials && credentials.mafile_content);
         const projected = {
           ...mergeAccountAuthState(row, uiState),
-          has_refresh_token: !!(username && tokenStore.get(username))
+          has_refresh_token: !!(username && tokenStore.get(username)),
+          steam_guard_type: guardCapabilities.type,
+          steam_guard_capabilities: {
+            login_code: guardCapabilities.login_code,
+            confirmation: guardCapabilities.confirmation,
+            recovery_code: guardCapabilities.recovery_code,
+            web_session: guardCapabilities.web_session
+          }
         };
-        if (mayReadSavedPassword && username && typeof store.getCredentials === "function") {
-          const credentials = store.getCredentials(username);
+        if (mayReadSavedPassword && credentials) {
           projected.password = asString(credentials && credentials.password).trim();
         }
         return projected;
@@ -4967,7 +4984,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         tradeofferid,
         sender_confirmed: confirmed,
         receiver_accepted: receiverAccepted,
-        needs_manual_confirm: !fromHasMaFile
+        needs_manual_confirm: !confirmed
       });
     } catch (err) {
       sendSse("error", {message: asString(err && err.message ? err.message : err).trim()});
@@ -5022,13 +5039,17 @@ async function handleApi(req, res, urlObj, deps = {}) {
             });
           }
 
-          results.push({tradeofferid: offerId, ok: true, confirmed, needs_manual_confirm: !hasMaFile});
+          results.push({tradeofferid: offerId, ok: true, confirmed, needs_manual_confirm: !confirmed});
         } catch (err) {
           results.push({tradeofferid: offerId, ok: false, message: asString(err.message || err).slice(0, 200)});
         }
       }
 
-      writeJson(res, 200, {ok: true, results, needs_manual_confirm: !hasMaFile});
+      writeJson(res, 200, {
+        ok: true,
+        results,
+        needs_manual_confirm: results.some((result) => result.ok && result.needs_manual_confirm)
+      });
     } catch (err) {
       writeJson(res, 500, {ok: false, message: asString(err && err.message ? err.message : err).trim()});
     }
@@ -5739,6 +5760,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         writeJson(res, 409, {ok: false, reason: "guard_missing", message: "该账号尚未添加令牌"});
         return true;
       }
+      const capabilities = getSteamGuardCapabilities(account.mafile_content);
       const summary = readSteamGuardSummary(account.mafile_content);
       if (pathname === "/api/accounts/steam-guard/code") {
         writeJson(res, 200, {
@@ -5750,6 +5772,14 @@ async function handleApi(req, res, urlObj, deps = {}) {
         return true;
       }
       if (pathname === "/api/accounts/steam-guard/recovery-code") {
+        if (!capabilities.recovery_code) {
+          writeJson(res, 409, {
+            ok: false,
+            reason: "guard_capability_missing",
+            message: "此令牌文件不包含恢复码"
+          });
+          return true;
+        }
         writeJson(res, 200, {ok: true, recovery_code: summary.revocationCode});
         return true;
       }

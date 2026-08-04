@@ -67,6 +67,7 @@ async function test_incomplete_mafile_falls_back_to_token_store_refresh_token() 
     parseMaFile() {
       return {
         sharedSecret: "abc",
+        identitySecret: "xyz",
         steamId64: "",
         raw: {
           Session: {}
@@ -107,6 +108,48 @@ async function test_incomplete_mafile_falls_back_to_token_store_refresh_token() 
     {tokenLookup: "demo"},
     {refreshToken: "refresh_1", steamId64: "76561198000000001"}
   ]);
+}
+
+async function test_login_only_mafile_cannot_use_token_store_web_session() {
+  const calls = [];
+  const resolveWebSessionForAccount = loadResolveWebSessionForAccount({
+    parseMaFile() {
+      return {
+        sharedSecret: "login-only-secret",
+        identitySecret: "",
+        steamId64: "76561198000000006",
+        raw: {Session: {SteamID: "76561198000000006"}}
+      };
+    },
+    async refreshWebCookie() {
+      calls.push({refreshMaFile: true});
+      return {cookieString: "should-not-exist"};
+    },
+    async refreshWebCookieFromToken(refreshToken, steamId64) {
+      calls.push({refreshToken, steamId64});
+      return {cookieString: "should-not-exist"};
+    },
+    TokenStore: class FakeTokenStore {
+      get(username) {
+        calls.push({tokenLookup: username});
+        return "stored-refresh-token";
+      }
+    }
+  });
+
+  await assert.rejects(
+    resolveWebSessionForAccount({
+      username: "login-only",
+      steam_id64: "76561198000000006",
+      mafile_content: JSON.stringify({
+        account_name: "login-only",
+        shared_secret: "login-only-secret",
+        Session: {SteamID: "76561198000000006"}
+      })
+    }),
+    (err) => err && err.code === "guard_capability_missing" && err.status === 409
+  );
+  assert.deepEqual(calls, []);
 }
 
 async function test_malformed_mafile_json_falls_back_to_token_store_refresh_token() {
@@ -210,6 +253,7 @@ async function test_missing_token_uses_shared_recovery_before_web_session_retry(
     parseMaFile() {
       return {
         sharedSecret: "abc",
+        identitySecret: "xyz",
         steamId64: "",
         raw: {Session: {}}
       };
@@ -306,6 +350,7 @@ async function main() {
   await test_malformed_mafile_json_falls_back_to_token_store_refresh_token();
   await test_mafile_missing_shared_secret_falls_back_to_token_store_refresh_token();
   await test_incomplete_mafile_falls_back_to_token_store_refresh_token();
+  await test_login_only_mafile_cannot_use_token_store_web_session();
   await test_missing_token_uses_shared_recovery_before_web_session_retry();
   await test_business_auth_rejection_recovers_token_and_retries_once();
   console.log("steam-guard-web-session-fallback tests passed");

@@ -95,6 +95,14 @@ function test_retryable_coexist_code_errors_do_not_claim_expiry_or_attempt_limit
   assert.doesNotMatch(app, /本次绑定已超时或结束/);
 }
 
+function test_token_management_exposes_capability_scoped_controls() {
+  assert.match(html, /id="tokenCapabilityLabel"/);
+  assert.match(app, /steam_guard_type/);
+  assert.match(app, /steam_guard_capabilities/);
+  assert.match(app, /tokenShowRecoveryBtn/);
+  assert.match(app, /steamGuardType === "full" \? "完整令牌" : "令牌不可用"/);
+}
+
 function main() {
   test_coexist_modal_exposes_both_account_modes_and_new_steps();
   test_ui_uses_only_new_coexist_routes();
@@ -103,6 +111,7 @@ function main() {
   test_delete_success_is_not_relabelled_when_account_refresh_fails();
   test_all_verification_codes_share_five_slot_uppercase_alphanumeric_ui();
   test_retryable_coexist_code_errors_do_not_claim_expiry_or_attempt_limits();
+  test_token_management_exposes_capability_scoped_controls();
   console.log("steam-guard-ui-contract tests passed");
 }
 

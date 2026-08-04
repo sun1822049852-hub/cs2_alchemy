@@ -2,17 +2,30 @@ const {normalizeSteamGuardImportMaFile} = require("./steamGuardTokenService");
 const {asString} = require("./utils");
 
 function baseProjection(entry, accountName = "") {
-  return {
-    client_id: asString(entry && entry.client_id).trim(),
-    file_name: asString(entry && entry.file_name).trim(),
+  const source = entry && entry.source ? entry.source : entry;
+  const projection = {
+    client_id: asString(source && source.client_id).trim(),
+    file_name: asString(source && source.file_name).trim(),
     account_name: asString(accountName).trim()
   };
+  const steamGuardType = asString(entry && entry.steam_guard_type).trim();
+  const capabilities = entry && entry.steam_guard_capabilities;
+  if (steamGuardType) projection.steam_guard_type = steamGuardType;
+  if (capabilities && typeof capabilities === "object") {
+    projection.steam_guard_capabilities = {
+      login_code: capabilities.login_code === true,
+      confirmation: capabilities.confirmation === true,
+      recovery_code: capabilities.recovery_code === true,
+      web_session: capabilities.web_session === true
+    };
+  }
+  return projection;
 }
 
 function safeExistingProjection(entry, existing, isConnected, passwordComparison = null) {
   const accountName = asString(entry && entry.account_name).trim();
   const projection = {
-    ...baseProjection(entry && entry.source, accountName),
+    ...baseProjection(entry, accountName),
     existing_remark: asString(existing && existing.remark).trim(),
     connected: !!isConnected(accountName)
   };
@@ -59,6 +72,8 @@ function prepareEntries(entries) {
         source: entry || {},
         account_name: normalized.accountName,
         mafile_content: normalized.maFileContent,
+        steam_guard_type: normalized.steamGuardType,
+        steam_guard_capabilities: normalized.capabilities,
         steam_id64: readSteamId64(normalized.maFileContent)
       };
     } catch (_) {
@@ -131,7 +146,7 @@ function createSteamGuardImportService({accountStore, isConnected = () => false}
     const items = prepareEntries(entries).map((entry) => {
       if (entry.invalid) {
         return {
-          ...baseProjection(entry.source, entry.account_name),
+          ...baseProjection(entry, entry.account_name),
           status: "invalid",
           reason: "invalid_mafile_format",
           message: "令牌文件格式错误"
@@ -144,7 +159,7 @@ function createSteamGuardImportService({accountStore, isConnected = () => false}
         return {
           ...(existing
             ? safeExistingProjection(entry, existing, isConnected, passwordComparison)
-            : baseProjection(entry.source, entry.account_name)),
+            : baseProjection(entry, entry.account_name)),
           status: "selection_required",
           selection_group: entry.account_name,
           group_size: entry.group_size,
@@ -168,7 +183,7 @@ function createSteamGuardImportService({accountStore, isConnected = () => false}
           existing_has_steam_guard: false
         };
       }
-      return {...baseProjection(entry.source, entry.account_name), status: "ready", target_action: action};
+      return {...baseProjection(entry, entry.account_name), status: "ready", target_action: action};
     });
     return {
       items,
@@ -185,7 +200,7 @@ function createSteamGuardImportService({accountStore, isConnected = () => false}
 
   function accountStateChanged(entry) {
     return {
-      ...baseProjection(entry.source, entry.account_name),
+      ...baseProjection(entry, entry.account_name),
       username: entry.account_name,
       ok: false,
       status: "failed",
@@ -224,7 +239,7 @@ function createSteamGuardImportService({accountStore, isConnected = () => false}
   }
 
   function attach(entry, password, passwordAction) {
-    const base = {...baseProjection(entry.source, entry.account_name), username: entry.account_name};
+    const base = {...baseProjection(entry, entry.account_name), username: entry.account_name};
     try {
       accountStore.attachSteamGuardImport(entry.account_name, {
         password,
@@ -248,7 +263,7 @@ function createSteamGuardImportService({accountStore, isConnected = () => false}
   function execute(entries) {
     const prepared = prepareEntries(entries);
     const results = prepared.map((entry) => {
-      const base = {...baseProjection(entry.source, entry.account_name), username: entry.account_name};
+      const base = {...baseProjection(entry, entry.account_name), username: entry.account_name};
       if (entry.invalid) {
         return {...base, ok: false, status: "invalid", reason: "invalid_mafile_format", message: "令牌文件格式错误"};
       }
@@ -259,7 +274,7 @@ function createSteamGuardImportService({accountStore, isConnected = () => false}
         return {
           ...(existing
             ? safeExistingProjection(entry, existing, isConnected, passwordComparison)
-            : baseProjection(entry.source, entry.account_name)),
+            : baseProjection(entry, entry.account_name)),
           username: entry.account_name,
           ok: false,
           status: "selection_required",

@@ -868,7 +868,7 @@
           </div>
           <!-- 粘贴账密文本 -->
           <div id="batchImportPasteSection" class="batch-import-paste-section">
-            <textarea id="batchImportPasteArea" class="batch-import-paste-area" rows="5" placeholder="粘贴账密文本，每行一个账号&#10;格式示例：账号gb840489密码oo893199令牌秘钥xxx&#10;只需包含「账号」和「密码」关键词即可识别"></textarea>
+            <textarea id="batchImportPasteArea" class="batch-import-paste-area" rows="5" placeholder="粘贴账密文本，每行一个账号&#10;支持：账号gb840489密码oo893199&#10;或：gb840489----oo893199"></textarea>
             <button id="batchImportParseBtn" type="button" class="batch-import-parse-btn">解析并匹配</button>
             <div id="batchImportParseResult" class="batch-import-parse-result"></div>
           </div>
@@ -1145,6 +1145,7 @@
           <button id="tokenDetailCloseBtn" class="modal-close-btn" type="button">&times;</button>
         </div>
         <div class="modal-body">
+          <div id="tokenCapabilityLabel" class="token-capability-label"></div>
           <div class="token-management-actions">
             <button id="tokenExportBtn" type="button">导出 maFile</button>
             <button id="tokenShowCodeBtn" type="button">查看令牌码</button>
