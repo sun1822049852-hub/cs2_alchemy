@@ -181,6 +181,7 @@ function createCraftTradeupWithComponentsService({
     password,
     recipes,
     allowCooling = false,
+    normalizeSpecialQuality = false,
     prepareOnly = false,
     onProgress,
     shouldPause
@@ -486,6 +487,7 @@ function createCraftTradeupWithComponentsService({
           item_ids: [...recipe.item_ids]
         })),
         allowCooling,
+        normalizeSpecialQuality,
         shouldPause: isPauseRequested,
         onProgress: (progress) => {
           emitProgress({

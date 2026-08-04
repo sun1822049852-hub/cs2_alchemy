@@ -2538,7 +2538,7 @@ async function runCraftAssistSelectionForRecipe({
   };
 }
 
-function getTradeUpRecipeFromRows(rows) {
+function getTradeUpRecipeFromRows(rows, {normalizeSpecialQuality = false} = {}) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length !== 10) {
     return {ok: false, reason: `需选择 10 件，当前 ${list.length} 件`, text: "配方：-"};
@@ -2551,11 +2551,14 @@ function getTradeUpRecipeFromRows(rows) {
   if (rarity < 1 || rarity > 5) {
     return {ok: false, reason: `该稀有度不支持汰换（${rarity}）`, text: "配方：当前稀有度不支持"};
   }
-  const stSet = new Set(list.map((x) => (isRowStatTrak(x) ? 1 : 0)));
-  if (stSet.size !== 1) {
-    return {ok: false, reason: "必须全是 StatTrak 或全是普通", text: "配方：品质不一致"};
+  let stattrak = false;
+  if (!normalizeSpecialQuality) {
+    const stSet = new Set(list.map((row) => (isRowStatTrak(row) ? 1 : 0)));
+    if (stSet.size !== 1) {
+      return {ok: false, reason: "必须全是 StatTrak 或全是普通", text: "配方：品质不一致"};
+    }
+    stattrak = [...stSet][0] === 1;
   }
-  const stattrak = [...stSet][0] === 1;
   const recipe = stattrak ? rarity + 9 : rarity - 1;
   const rarityLabel = RARITY_MAP[rarity] || `R${rarity}`;
   const nextLabel = RARITY_MAP[rarity + 1] || `R${rarity + 1}`;
@@ -2569,6 +2572,21 @@ function getTradeUpRecipeFromRows(rows) {
   };
 }
 
+function normalizeCraftAssistMaterialMode(value) {
+  return asString(value).trim().toLowerCase() === "rarity_tag" ? "rarity_tag" : "specific";
+}
+
+function normalizeCraftAssistRarityTag(value) {
+  const rarity = Math.trunc(Number(value) || 0);
+  return rarity >= 1 && rarity <= 3 ? rarity : 0;
+}
+
+function compareCraftAssistRarityTagRows(a, b) {
+  const wearDelta = getRelativeWearValue(a) - getRelativeWearValue(b);
+  if (Math.abs(wearDelta) > 1e-15) return wearDelta;
+  return rowAssetId(a).localeCompare(rowAssetId(b), undefined, {numeric: true, sensitivity: "base"});
+}
+
 function buildPickedRowsPayload(rows) {
   const list = Array.isArray(rows) ? rows : [];
   return list.map((row, index) => ({
@@ -2579,6 +2597,36 @@ function buildPickedRowsPayload(rows) {
     absolute_wear: numberTextTrunc(getAbsoluteWearValue(row), WEAR_INPUT_DECIMALS),
     rarity: craftRarityLabel(craftRarityValue(row))
   }));
+}
+
+function buildCraftAssistSelectionResult(selectedRows, {
+  overall = null,
+  approachMode = "below",
+  selectionTrace = null,
+  normalizeSpecialQuality = false
+} = {}) {
+  const list = Array.isArray(selectedRows) ? selectedRows : [];
+  const itemIds = normalizeCraftRecipeItemIds(list.map((row) => rowAssetId(row)));
+  const recipeInfo = getTradeUpRecipeFromRows(list, {normalizeSpecialQuality});
+  const average = list.length
+    ? list.reduce((sum, row) => sum + getRelativeWearValue(row), 0) / list.length
+    : 0;
+  const hasOverall = overall !== null
+    && overall !== undefined
+    && String(overall).trim() !== ""
+    && Number.isFinite(Number(overall));
+  return {
+    ok: true,
+    item_ids: itemIds,
+    overall: hasOverall ? Number(overall) : average,
+    rarity: list.length ? craftRarityValue(list[0]) : 0,
+    approach_mode: normalizeCraftAssistApproachMode(approachMode),
+    selection_trace: selectionTrace,
+    recipe_ok: !!recipeInfo.ok,
+    recipe_reason: recipeInfo.ok ? "" : asString(recipeInfo.reason || "").trim(),
+    recipe_text: asString(recipeInfo.text || "").trim(),
+    picks: buildPickedRowsPayload(list)
+  };
 }
 
 async function selectCraftAssistForRecipe({
@@ -2594,15 +2642,85 @@ async function selectCraftAssistForRecipe({
   includeCooling,
   wearOffset,
   wearOffsetPct,
-  enableFastCraftAssist
+  enableFastCraftAssist,
+  materialMode,
+  rarityTag,
+  normalizeSpecialQuality = false
 } = {}) {
+  const normalizedMaterialMode = normalizeCraftAssistMaterialMode(materialMode);
+  const normalizedRarityTag = normalizeCraftAssistRarityTag(rarityTag);
   const targetValue = parseOptionalWear01(targetWear);
-  if (targetValue == null) {
+  if (normalizedMaterialMode === "specific" && targetValue == null) {
     return {ok: false, message: "请先输入目标相对磨损"};
+  }
+  const context = resolveCraftAssistSelectionContext({
+    selectionContext,
+    rows,
+    candidateRows,
+    includeCooling: !!includeCooling
+  });
+  const contextCandidateRows = Array.isArray(context.candidateRows) ? context.candidateRows : [];
+  if (!contextCandidateRows.length) {
+    return {ok: false, message: "主库存无可选炼金物品"};
+  }
+
+  let effectiveMaterials = materials;
+  let effectiveWearOffset = wearOffset;
+  let effectiveWearOffsetPct = wearOffsetPct;
+  if (normalizedMaterialMode === "rarity_tag") {
+    if (!normalizedRarityTag) {
+      return {ok: false, message: "请选择有效的品级标签"};
+    }
+    const blocked = new Set(normalizeCraftRecipeItemIds(blockedIds));
+    const rarityRows = contextCandidateRows
+      .filter((row) => (
+        craftRarityValue(row) === normalizedRarityTag
+        && !blocked.has(rowAssetId(row))
+        && getRelativeWearValue(row) != null
+      ))
+      .sort(compareCraftAssistRarityTagRows);
+    const requiredCount = resolveCraftAssistRequiredCount();
+    if (rarityRows.length < requiredCount) {
+      return {
+        ok: false,
+        code: "rarity_tag_quantity_shortfall",
+        message: `${craftRarityLabel(normalizedRarityTag)}可用材料不足 ${requiredCount} 件，当前 ${rarityRows.length} 件`,
+        required_count: requiredCount,
+        current_count: rarityRows.length
+      };
+    }
+    if (targetValue == null) {
+      return buildCraftAssistSelectionResult(rarityRows.slice(0, requiredCount), {
+        approachMode: wearApproachMode,
+        normalizeSpecialQuality,
+        selectionTrace: {
+          mode: "rarity_tag",
+          rarity: normalizedRarityTag,
+          ordering: "relative_wear_asc"
+        }
+      });
+    }
+    effectiveMaterials = [{
+      id: `rarity_tag_${normalizedRarityTag}`,
+      role: "main",
+      count: requiredCount,
+      names: [...new Set(rarityRows.map((row) => itemDisplayName(row)).filter(Boolean))],
+      wear_filter_mode: "relative",
+      wear_min: 0,
+      wear_max: 1,
+      custom_range: false,
+      disable_direction_limit: true
+    }];
+    effectiveWearOffset = 0;
+    effectiveWearOffsetPct = 0;
   }
 
   const approachMode = normalizeCraftAssistApproachMode(wearApproachMode);
-  const normalizedWearOffset = resolveCraftAssistWearOffset({targetValue, wearOffset, wearOffsetPct});
+  const normalizedWearOffset = resolveCraftAssistWearOffset({
+    targetValue,
+    wearOffset: effectiveWearOffset,
+    wearOffsetPct: effectiveWearOffsetPct
+  });
   const offsetValue = normalizedWearOffset;
   let targetStepSpec = null;
   try {
@@ -2624,17 +2742,7 @@ async function selectCraftAssistForRecipe({
     `目标台阶: raw=${formatCraftAssistRawLogValue(targetWearRaw, targetValue)} input_step=${formatCraftAssistStepLogValue(targetStepSpec.inputStep)} target_step=${formatCraftAssistStepLogValue(targetStepSpec.targetStep)} approach_mode=${approachMode}`
   );
 
-  const context = resolveCraftAssistSelectionContext({
-    selectionContext,
-    rows,
-    candidateRows,
-    includeCooling: !!includeCooling
-  });
-  const contextCandidateRows = Array.isArray(context.candidateRows) ? context.candidateRows : [];
-  if (!contextCandidateRows.length) {
-    return {ok: false, message: "主库存无可选炼金物品"};
-  }
-  const normalizedMaterials = normalizeCraftAssistMaterialsForRun(materials, {
+  const normalizedMaterials = normalizeCraftAssistMaterialsForRun(effectiveMaterials, {
     rows: contextCandidateRows,
     legacyWearFilterMode: normalizeCraftAssistFilterMode(wearFilterMode)
   });
@@ -2670,19 +2778,12 @@ async function selectCraftAssistForRecipe({
   const itemIds = normalizeCraftRecipeItemIds(run.itemIds);
   const rowsById = context.rowsById instanceof Map ? context.rowsById : buildRowsByAssetId(contextCandidateRows);
   const selectedRows = itemIds.map((id) => rowsById.get(id)).filter(Boolean);
-  const recipeInfo = getTradeUpRecipeFromRows(selectedRows);
-  return {
-    ok: true,
-    item_ids: itemIds,
+  return buildCraftAssistSelectionResult(selectedRows, {
     overall: Number(run.overall),
-    rarity: Number(run.rarity || 0),
-    approach_mode: normalizeCraftAssistApproachMode(run.approachMode),
-    selection_trace: run.selectionTrace || null,
-    recipe_ok: !!recipeInfo.ok,
-    recipe_reason: recipeInfo.ok ? "" : asString(recipeInfo.reason || "").trim(),
-    recipe_text: asString(recipeInfo.text || "").trim(),
-    picks: buildPickedRowsPayload(selectedRows)
-  };
+    approachMode: run.approachMode,
+    selectionTrace: run.selectionTrace || null,
+    normalizeSpecialQuality
+  });
 }
 
 function createCraftAssistService({logger} = {}) {

@@ -382,6 +382,9 @@
               <div class="row craft-left-head">
                 <span id="craftSelectionTitle">主库存可炼金物品</span>
                 <div class="craft-settings-wrap">
+                  <button id="craftAddPresetBtn" class="icon-btn craft-add-preset-btn" type="button" title="添加配方" aria-label="添加配方">
+                    <span class="craft-plus-glyph" aria-hidden="true"></span>
+                  </button>
                   <button id="craftSettingsBtn" class="icon-btn craft-settings-btn" type="button" title="炼金设置" aria-label="炼金设置">
                     <span class="craft-gear-glyph" aria-hidden="true"></span>
                   </button>
@@ -410,31 +413,7 @@
                 <button id="craftAssistCloseBtn" type="button" class="craft-assist-close craft-assist-close-floating" aria-label="关闭辅助选材">×</button>
                 <div id="craftAssistPanel" class="craft-assist-panel" aria-label="辅助选材面板">
                   <div id="craftAssistContent" class="craft-assist-line craft-assist-content">
-                    <div class="craft-assist-main-col">
-                      <div class="craft-assist-main-tools">
-                        <div id="craftAssistOverlayHandle" class="craft-assist-overlay-handle" title="拖拽调整辅助选材覆盖范围" aria-hidden="true"></div>
-                        <label id="craftAssistPresetNameField" class="craft-assist-field craft-assist-inline-field craft-assist-preset-name-field hidden">
-                          <span>配置名称</span>
-                          <input id="craftAssistPresetNameInput" type="text" maxlength="40" />
-                        </label>
-                        <label class="craft-assist-field craft-assist-inline-field craft-assist-target-field">
-                          <span>目标相对磨损</span>
-                          <input id="craftAssistTargetWear" type="text" inputmode="decimal" />
-                        </label>
-                        <button id="craftAssistPresetSaveBtn" class="btn-primary craft-assist-save-btn" type="button">保存当前</button>
-                        <button id="craftAssistApplyBtn" class="btn-primary craft-assist-apply-btn" type="button">按配置选材</button>
-                      </div>
-                      <button id="craftAssistSelectBox" class="craft-assist-select-box merged" type="button" aria-label="悬停选择父类材料">
-                        <span id="craftAssistSelectText">尚未选择父类材料</span>
-                        <span id="craftAssistRoleSplit" class="craft-assist-role-split hidden" aria-hidden="true">
-                          <span class="role-main">主料</span>
-                          <span class="role-aux">辅料</span>
-                        </span>
-                      </button>
-                      <div id="craftAssistPicker" class="craft-assist-picker hidden"></div>
-                      <div id="craftAssistList" class="craft-assist-list"></div>
-                    </div>
-                    <div id="craftAssistSplitBar" class="craft-assist-split-bar" title="拖拽调整配置区宽度" aria-hidden="true"></div>
+                    <div id="craftAssistOverlayHandle" class="craft-assist-overlay-handle" title="拖拽调整辅助选材覆盖范围" aria-hidden="true"></div>
                     <aside id="craftAssistPresetPanel" class="craft-assist-preset-panel" aria-label="辅助选材方案列表">
                       <div id="craftAssistPresetList" class="craft-assist-preset-list"></div>
                     </aside>
@@ -959,6 +938,104 @@
         <div class="modal-footer">
           <span id="tradeTransferItemCount">0 件物品</span>
           <button id="tradeTransferStartBtn" type="button" class="btn-primary">发送报价</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="craftAssistEditorModal" class="modal craft-assist-editor-modal hidden" role="dialog" aria-modal="true" aria-labelledby="craftAssistEditorTitle">
+      <div class="modal-card craft-assist-editor-card">
+        <div class="modal-header craft-assist-editor-header">
+          <div>
+            <h3 id="craftAssistEditorTitle">添加配方</h3>
+            <div id="craftAssistEditorStatus" class="craft-assist-editor-status" aria-live="polite"></div>
+          </div>
+          <button id="craftAssistEditorCloseBtn" class="modal-close" type="button" aria-label="关闭配方编辑器">×</button>
+        </div>
+        <div class="craft-assist-editor-tools">
+          <label id="craftAssistPresetNameField" class="craft-assist-field craft-assist-preset-name-field">
+            <span>配置名称</span>
+            <input id="craftAssistPresetNameInput" type="text" maxlength="40" />
+          </label>
+          <label class="craft-assist-field craft-assist-target-field">
+            <span>目标相对磨损</span>
+            <input id="craftAssistTargetWear" type="text" inputmode="decimal" placeholder="可选" />
+          </label>
+        </div>
+        <div class="craft-assist-editor-columns">
+          <section id="craftAssistEditorLeft" class="craft-assist-editor-column craft-assist-editor-left" aria-label="已添加材料">
+            <div class="craft-assist-editor-column-head">
+              <strong>已添加材料</strong>
+              <span id="craftAssistRoleHint">先选择待填入的材料角色</span>
+            </div>
+            <div id="craftAssistList" class="craft-assist-list">
+              <div id="craftAssistMainRoleGroup" class="craft-assist-item craft-assist-editor-role-group main" data-role="main"></div>
+              <div id="craftAssistAuxRoleGroup" class="craft-assist-item craft-assist-editor-role-group aux" data-role="aux"></div>
+            </div>
+          </section>
+          <section class="craft-assist-editor-column craft-assist-editor-middle" aria-label="材料候选">
+            <div class="craft-assist-rarity-tags" role="group" aria-label="快捷标签材料">
+              <button type="button" data-rarity-tag="1">消费级</button>
+              <button type="button" data-rarity-tag="2">工业级</button>
+              <button type="button" data-rarity-tag="3">军规级</button>
+            </div>
+            <div class="craft-assist-editor-search-row">
+              <input id="craftAssistEditorSearch" type="search" placeholder="搜索可炼金物品" autocomplete="off" />
+              <button id="craftAssistWarehouseSourceBtn" class="icon-btn" type="button" title="从仓库选择" aria-label="从仓库选择">
+                <span class="craft-assist-backpack-glyph" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div id="craftAssistPicker" class="craft-assist-picker"></div>
+          </section>
+          <section id="craftAssistEditorPrediction" class="craft-assist-editor-column craft-assist-editor-prediction" aria-label="产物预测">
+            <div class="craft-assist-editor-column-head">
+              <strong>产物预测</strong>
+              <span id="craftAssistEditorPredictionMeta">等待完整配置</span>
+            </div>
+            <div id="craftAssistEditorOutcomeList" class="craft-assist-editor-outcomes"></div>
+          </section>
+        </div>
+        <div class="row modal-actions craft-assist-editor-actions">
+          <button id="craftAssistEditorSaveBtn" class="btn-primary" type="button">保存配方</button>
+          <button id="craftAssistEditorCancelBtn" type="button">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="craftAssistOutcomeModal" class="modal craft-assist-outcome-modal hidden" role="dialog" aria-modal="true" aria-labelledby="craftAssistOutcomeModalTitle">
+      <div class="modal-card craft-assist-outcome-modal-card">
+        <div class="modal-header">
+          <h3 id="craftAssistOutcomeModalTitle">产物磨损换算</h3>
+          <button id="craftAssistOutcomeModalCloseBtn" class="modal-close" type="button" aria-label="关闭产物磨损换算">×</button>
+        </div>
+        <div class="craft-assist-outcome-modal-body">
+          <div class="simulation-card-modal-preview">
+            <div id="craftAssistOutcomeModalArt" class="simulation-card-art">
+              <span id="craftAssistOutcomeModalWearLabel" class="simulation-card-wear-badge">-</span>
+              <span id="craftAssistOutcomeModalArtEmpty" class="simulation-card-art-empty">暂无图</span>
+              <div class="simulation-card-float">绝对磨损 <span id="craftAssistOutcomeModalAbsoluteValue">0.0000000000000000</span></div>
+            </div>
+            <div class="simulation-card-content">
+              <div id="craftAssistOutcomeModalWearBar" class="simulation-card-bar" style="--simulation-card-wear-pos:0%"><span style="width:0%"></span></div>
+              <div id="craftAssistOutcomeModalName" class="simulation-card-name">未命名产物</div>
+              <div class="simulation-card-meta"><span id="craftAssistOutcomeModalCollection">未标记</span> · <span id="craftAssistOutcomeModalRarityBadge">未分级</span></div>
+            </div>
+          </div>
+          <div id="craftAssistOutcomeRange" class="craft-assist-outcome-range">允许范围：-</div>
+          <label class="craft-assist-outcome-field" for="craftAssistOutcomeAbsoluteWear">
+            <span>绝对磨损</span>
+            <span class="craft-assist-outcome-decimal-input">
+              <span class="craft-assist-outcome-decimal-prefix" aria-hidden="true">0.</span>
+              <input id="craftAssistOutcomeAbsoluteWear" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="16" autocomplete="off" aria-label="绝对磨损小数位" />
+            </span>
+          </label>
+          <label id="craftAssistOutcomeRelativeWrap" class="craft-assist-outcome-field" for="craftAssistOutcomeRelativeWear">
+            <span>相对磨损</span>
+            <input id="craftAssistOutcomeRelativeWear" type="text" readonly />
+          </label>
+          <div id="craftAssistOutcomeError" class="craft-assist-outcome-error" aria-live="polite"></div>
+        </div>
+        <div class="row modal-actions">
+          <button id="craftAssistOutcomeModalCloseActionBtn" type="button">关闭</button>
         </div>
       </div>
     </div>

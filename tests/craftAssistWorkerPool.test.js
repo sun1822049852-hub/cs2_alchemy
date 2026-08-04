@@ -212,7 +212,7 @@ async function test_worker_pool_preserves_raw_target_wear_for_below_mode() {
   });
   const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 2000});
   try {
-    const result = await pool.selectForRecipe({
+    const args = {
       candidateRows: rows,
       targetWear: step,
       targetWearRaw: raw,
@@ -224,10 +224,51 @@ async function test_worker_pool_preserves_raw_target_wear_for_below_mode() {
       blockedIds: [],
       includeCooling: false,
       wearOffsetPct: 0
-    });
+    };
+    const direct = await selectCraftAssistForRecipe({...args, rows});
+    const result = await pool.selectForRecipe(args);
 
-    assert.equal(result.ok, true);
-    assert.equal(Math.fround(result.overall), step);
+    assert.deepEqual(result, direct);
+    assert.equal(result.ok, false);
+    assert.equal(result.code, "overall_not_below_target");
+  } finally {
+    await pool.close();
+  }
+}
+
+async function test_worker_pool_matches_targetless_rarity_tag_selection() {
+  const rows = Array.from({length: 12}, (_, index) => makeRow({
+    id: `tag-${12 - index}`,
+    name: `Tag ${index + 1}`,
+    relative: index < 2 ? 0.02 : 0.03 + index / 100,
+    rarity: 3
+  }));
+  rows[1].quality = 9;
+  rows[1].quality_name = "StatTrak";
+  rows[2].quality = 11;
+  rows[2].quality_name = "Souvenir";
+  const args = {
+    candidateRows: rows,
+    targetWear: null,
+    targetWearRaw: "",
+    materialMode: "rarity_tag",
+    rarityTag: 3,
+    previewOnly: true,
+    normalizeSpecialQuality: true,
+    materials: [],
+    blockedIds: [],
+    includeCooling: false,
+    wearOffset: 0.9
+  };
+  const pool = createCraftAssistWorkerPool({size: 1, requestTimeoutMs: 2000});
+  try {
+    const direct = await selectCraftAssistForRecipe({...args, rows});
+    const viaPool = await pool.selectForRecipe(args);
+    assert.deepEqual(viaPool, direct);
+    assert.equal(viaPool.ok, true);
+    assert.equal(viaPool.item_ids.length, 10);
+    assert.equal(viaPool.recipe_ok, true);
+    assert.deepEqual(viaPool.item_ids.slice(0, 2), ["tag-11", "tag-12"]);
   } finally {
     await pool.close();
   }
@@ -395,6 +436,7 @@ async function test_worker_pool_handles_nested_prefilter_workers() {
   await test_worker_pool_matches_direct_selection();
   await test_worker_pool_accepts_inline_candidate_rows();
   await test_worker_pool_preserves_raw_target_wear_for_below_mode();
+  await test_worker_pool_matches_targetless_rarity_tag_selection();
   await test_worker_pool_matches_direct_selection_for_infinite_approach_mode();
   await test_worker_pool_reloads_snapshot_after_file_change();
   await test_worker_pool_times_out_and_rejects();

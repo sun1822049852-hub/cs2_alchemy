@@ -1179,9 +1179,15 @@ function createCraftAssistRouteValidationError(code, message) {
   return err;
 }
 
-function normalizeCraftAssistRouteTarget(body) {
+function normalizeCraftAssistRouteTarget(body, {allowEmpty = false} = {}) {
   const payload = body && typeof body === "object" ? body : {};
   const hasRaw = Object.prototype.hasOwnProperty.call(payload, "target_wear_raw");
+  const hasTarget = Object.prototype.hasOwnProperty.call(payload, "target_wear");
+  const rawCandidate = hasRaw ? asString(payload.target_wear_raw).trim() : "";
+  const targetCandidate = hasTarget ? asString(payload.target_wear).trim() : "";
+  if (allowEmpty && !rawCandidate && !targetCandidate) {
+    return {targetWear: null, targetWearRaw: ""};
+  }
   let rawText = "";
   let rawValue = null;
   if (hasRaw) {
@@ -1230,7 +1236,14 @@ function normalizeCraftAssistRouteTarget(body) {
 }
 
 function buildCraftAssistSelectRoutePayload(body, {rows = []} = {}) {
-  const target = normalizeCraftAssistRouteTarget(body);
+  const materialMode = asString(body && body.material_mode).trim().toLowerCase() === "rarity_tag"
+    ? "rarity_tag"
+    : "specific";
+  const rarityTag = Math.trunc(Number(body && body.rarity_tag) || 0);
+  if (materialMode === "rarity_tag" && (rarityTag < 1 || rarityTag > 3)) {
+    throw createCraftAssistRouteValidationError("invalid_rarity_tag", "rarity_tag must be 1, 2, or 3");
+  }
+  const target = normalizeCraftAssistRouteTarget(body, {allowEmpty: materialMode === "rarity_tag"});
   const includeComponentItems = parseLooseBoolean(
     Object.prototype.hasOwnProperty.call(body || {}, "include_component_items")
       ? body.include_component_items
@@ -1264,7 +1277,11 @@ function buildCraftAssistSelectRoutePayload(body, {rows = []} = {}) {
       includeCooling,
       wearOffset: body && body.wear_offset,
       wearOffsetPct: body && body.wear_offset_pct,
-      enableFastCraftAssist
+      enableFastCraftAssist,
+      materialMode,
+      rarityTag: materialMode === "rarity_tag" ? rarityTag : 0,
+      previewOnly: parseLooseBoolean(body && body.preview_only),
+      normalizeSpecialQuality: parseLooseBoolean(body && body.normalize_special_quality)
     },
     candidateRows
   };
@@ -3965,7 +3982,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
       return true;
     }
     const recipeMatch = asString(result.recipe_text || "").match(/recipe\s+(-?\d+)/i);
-    appendCraftDebugEvent({
+    if (!workerArgs.previewOnly) appendCraftDebugEvent({
       ...buildCraftAssistSelectionEvent({
         account: username,
         targetRaw: workerArgs.targetWearRaw,
@@ -4139,6 +4156,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
         const allowCoolingRaw = body.allow_cooling;
         const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
         const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
+        const normalizeSpecialQuality = parseBooleanBodyValue(body.normalize_special_quality, false);
         const prepareOnlyRaw = body.prepare_only;
         const prepareOnlyText = asString(prepareOnlyRaw).trim().toLowerCase();
         const prepareOnly = prepareOnlyRaw === true || prepareOnlyRaw === 1 || prepareOnlyText === "1" || prepareOnlyText === "true";
@@ -4153,6 +4171,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
           password: body.password,
           recipes: body.recipes,
           allowCooling,
+          normalizeSpecialQuality,
           prepareOnly,
           shouldPause: activeRun && typeof activeRun.shouldPause === "function" ? () => activeRun.shouldPause() : null,
           onProgress: (progress) => {
@@ -4281,6 +4300,7 @@ async function handleApi(req, res, urlObj, deps = {}) {
           const allowCoolingRaw = body.allow_cooling;
           const allowCoolingText = asString(allowCoolingRaw).trim().toLowerCase();
           const allowCooling = allowCoolingRaw === true || allowCoolingRaw === 1 || allowCoolingText === "1" || allowCoolingText === "true";
+          const normalizeSpecialQuality = parseBooleanBodyValue(body.normalize_special_quality, false);
           const hasRecipes = Array.isArray(body.recipes) && body.recipes.length > 0;
           const recipeCount = hasRecipes ? body.recipes.length : (Array.isArray(body.item_ids) && body.item_ids.length ? 1 : 0);
           if (requestUsesComponentSourceRecipes(body)) {
@@ -4297,13 +4317,15 @@ async function handleApi(req, res, urlObj, deps = {}) {
               username,
               password: body.password,
               recipes: body.recipes,
-              allowCooling
+              allowCooling,
+              normalizeSpecialQuality
             })
             : await craftService.runTradeUp({
               username,
               password: body.password,
               itemIds: body.item_ids,
-              allowCooling
+              allowCooling,
+              normalizeSpecialQuality
             });
           logger.info(
             "ui_server",

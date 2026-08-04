@@ -168,6 +168,10 @@ function summarizeAssistArgs(args, {snapshotRows = null} = {}) {
     includeCooling: !!(args && args.includeCooling),
     wearOffset: Number(args && args.wearOffset),
     enableFastCraftAssist: !!(args && args.enableFastCraftAssist),
+    materialMode: String(args && args.materialMode || "specific"),
+    rarityTag: Math.trunc(Number(args && args.rarityTag) || 0),
+    previewOnly: !!(args && args.previewOnly),
+    normalizeSpecialQuality: !!(args && args.normalizeSpecialQuality),
     materials: projectCraftAssistPersistedMaterials(materials),
     candidateCacheKeyTuples: materials.map((material) => buildCraftAssistCandidateCacheKeyTuple(material, args && args.targetWear)),
     selectionTraceGroups: materials.map((material) => projectCraftAssistTraceMaterial(material)),
@@ -498,6 +502,55 @@ async function test_assist_select_route_feeds_direct_and_worker_from_same_normal
       assert.equal(workerResponse.statusCode, 200);
       assert.deepEqual(directResponse.body.debug, workerResponse.body.debug);
       assert.deepEqual(directResponse.body.debug, expectedSummary);
+    } finally {
+      await closeServer(directServer);
+      await closeServer(workerServer);
+      delete require.cache[require.resolve("../src/uiServer")];
+    }
+  });
+}
+
+async function test_assist_select_route_allows_targetless_rarity_preview_in_direct_and_worker_paths() {
+  await withTempDir(async (dir) => {
+    const rows = Array.from({length: 10}, (_, index) => makeRow({
+      id: `tag-${index + 1}`,
+      name: "Tag Candidate (Factory New)",
+      relative: (index + 1) / 100,
+      rarity: 3
+    }));
+    const snapshotPath = path.join(dir, "snapshot.json");
+    writeSnapshot(snapshotPath, rows);
+    const body = makeAssistSelectBody({
+      material_mode: "rarity_tag",
+      rarity_tag: 3,
+      preview_only: true,
+      normalize_special_quality: true,
+      target_wear: null,
+      target_wear_raw: "",
+      materials: []
+    });
+    const directServer = loadCreateServerForAssistRoute({snapshotPath, useWorkerPool: false})({
+      licenseRuntimeFactory: () => createReadyLicenseRuntime()
+    });
+    const workerServer = loadCreateServerForAssistRoute({snapshotPath, useWorkerPool: true})({
+      licenseRuntimeFactory: () => createReadyLicenseRuntime()
+    });
+
+    try {
+      const directAddress = await listen(directServer);
+      const workerAddress = await listen(workerServer);
+      const directResponse = await requestJson({port: directAddress.port, route: "/api/craft/assist-select", body});
+      const workerResponse = await requestJson({port: workerAddress.port, route: "/api/craft/assist-select", body});
+
+      assert.equal(directResponse.statusCode, 200);
+      assert.equal(workerResponse.statusCode, 200);
+      assert.deepEqual(directResponse.body.debug, workerResponse.body.debug);
+      assert.equal(directResponse.body.debug.targetWear, "");
+      assert.equal(directResponse.body.debug.targetWearRaw, "");
+      assert.equal(directResponse.body.debug.materialMode, "rarity_tag");
+      assert.equal(directResponse.body.debug.rarityTag, 3);
+      assert.equal(directResponse.body.debug.previewOnly, true);
+      assert.deepEqual(directResponse.body.debug.materials, []);
     } finally {
       await closeServer(directServer);
       await closeServer(workerServer);
@@ -1137,6 +1190,7 @@ async function test_assist_select_route_maps_final_validation_and_unreachable_fa
 
 (async () => {
   await test_assist_select_route_feeds_direct_and_worker_from_same_normalized_request();
+  await test_assist_select_route_allows_targetless_rarity_preview_in_direct_and_worker_paths();
   await test_assist_select_route_normalizes_technical_service_message_to_human_message();
   await test_assist_select_route_accepts_matching_raw_and_step_request();
   await test_assist_select_route_keeps_legacy_fallback_when_raw_is_missing();

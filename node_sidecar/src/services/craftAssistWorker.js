@@ -49,6 +49,10 @@ parentPort.on("message", async (message) => {
       wearOffset: payload.wearOffset,
       wearOffsetPct: payload.wearOffsetPct,
       enableFastCraftAssist: payload.enableFastCraftAssist,
+      materialMode: payload.materialMode,
+      rarityTag: payload.rarityTag,
+      previewOnly: payload.previewOnly,
+      normalizeSpecialQuality: payload.normalizeSpecialQuality,
       rows,
       candidateRows: candidateContext.candidateRows
     });

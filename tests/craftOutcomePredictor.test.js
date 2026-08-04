@@ -278,6 +278,60 @@ function test_predictor_returns_realtime_probabilities_for_partial_recipe() {
   assert.equal(clutchOutcome.probability, 0.2);
 }
 
+function test_predictor_returns_products_and_probabilities_without_target_wear() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const result = predictor.predict({
+    required_count: 10,
+    input_rarity: "军规级",
+    stattrak: false,
+    groups: [{collection: "Fracture Case", count: 3}]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.current_count, 3);
+  assert.equal(result.target_relative_wear, null);
+  assert.equal(result.summary.probability_total, 0.3);
+  assert.ok(result.outcomes.length > 0);
+  assert.equal(result.outcomes.every((item) => item.predicted_float == null), true);
+  assert.equal(result.outcomes.every((item) => item.predicted_wearlevel === ""), true);
+  assert.equal(result.outcomes.every((item) => item.name === item.base_name), true);
+}
+
+function test_predictor_returns_outcome_union_without_probabilities_for_unknown_distribution() {
+  const dbPath = buildPredictorFixtureDb();
+  const predictor = createCraftOutcomePredictor({
+    catalog: createCraftOutcomeCatalog({dbPath})
+  });
+  const result = predictor.predict({
+    required_count: 10,
+    current_count: 10,
+    probability_mode: "unknown",
+    target_relative_wear: 0.2,
+    input_rarity: "军规级",
+    stattrak: false,
+    groups: [
+      {collection: "Fracture Case", count: 1},
+      {collection: "Clutch Case", count: 1}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.current_count, 10);
+  assert.equal(result.probability_known, false);
+  assert.equal(result.summary.probability_total, null);
+  assert.equal(result.summary.probability_missing, null);
+  assert.ok(result.outcomes.length > 0);
+  assert.equal(result.outcomes.every((item) => item.probability === null), true);
+  assert.equal(result.outcomes.some((item) => Number.isFinite(item.predicted_float)), true);
+  assert.deepEqual(
+    [...new Set(result.outcomes.map((item) => item.collection_key))].sort(),
+    ["Clutch Case", "Fracture Case"]
+  );
+}
+
 function test_predictor_isolates_stattrak_pools_and_maps_wear() {
   const dbPath = buildPredictorFixtureDb();
   const predictor = createCraftOutcomePredictor({
@@ -718,6 +772,8 @@ function runTests() {
   test_predictor_ignores_parenthesized_souvenir_outcome_when_normal_display_exists();
   test_predictor_invalidates_top_rarity_and_missing_collections();
   test_predictor_returns_realtime_probabilities_for_partial_recipe();
+  test_predictor_returns_products_and_probabilities_without_target_wear();
+  test_predictor_returns_outcome_union_without_probabilities_for_unknown_distribution();
   test_predictor_isolates_stattrak_pools_and_maps_wear();
   test_predictor_uses_infinite_mode_input_float32_step_for_output_float();
   test_predictor_below_uses_raw_decimal_step_when_raw_sits_above_float32_step();

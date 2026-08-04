@@ -155,6 +155,7 @@ async function testUsesRealAvailableWithdrawCapacityForHiddenAndCoolingRows() {
 
   const result = await service.runTradeUpWithComponents({
     username: "demo",
+    normalizeSpecialQuality: true,
     recipes: [
       buildRecipe(0, [13001, 5000, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008], {"13001": "8101"}),
       buildRecipe(1, [13002, 5009, 5010, 5011, 5012, 5013, 5014, 5015, 5016, 5017], {"13002": "8102"})
@@ -164,6 +165,7 @@ async function testUsesRealAvailableWithdrawCapacityForHiddenAndCoolingRows() {
   assert.equal(result.ok, true);
   assert.equal(withdrawCalls.length, 2);
   assert.equal(tradeupCalls.length, 1);
+  assert.equal(tradeupCalls[0].normalizeSpecialQuality, true);
   assert.deepEqual(tradeupCalls[0].recipes.map((entry) => entry.queue_index), [0, 1]);
 }
 

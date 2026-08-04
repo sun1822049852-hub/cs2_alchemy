@@ -250,6 +250,57 @@ function testTradeUpStillRejectsYellowShieldWhenCoolingAllowed() {
   );
 }
 
+function testTradeUpKeepsLegacyStatTrakRulesByDefault() {
+  const resolveTradeUpRecipe = loadResolveTradeUpRecipe();
+  const statTrakRows = makeRecipeRows().map((row) => ({
+    ...row,
+    quality: 9,
+    quality_name: "StatTrak"
+  }));
+  const statTrakResult = resolveTradeUpRecipe(statTrakRows);
+  assert.equal(statTrakResult.recipe, 12);
+  assert.equal(statTrakResult.rarity, 3);
+  assert.equal(statTrakResult.stattrak, true);
+
+  const rows = makeRecipeRows();
+  rows[1] = {
+    ...rows[1],
+    quality: 9,
+    quality_name: "StatTrak"
+  };
+  rows[2] = {
+    ...rows[2],
+    quality: 11,
+    quality_name: "Souvenir"
+  };
+
+  assert.throws(
+    () => resolveTradeUpRecipe(rows),
+    /StatTrak|全部普通/
+  );
+}
+
+function testMainCraftCanNormalizeSpecialQualitiesToNormalRecipe() {
+  const resolveTradeUpRecipe = loadResolveTradeUpRecipe();
+  const rows = makeRecipeRows();
+  rows[1] = {
+    ...rows[1],
+    quality: 9,
+    quality_name: "StatTrak"
+  };
+  rows[2] = {
+    ...rows[2],
+    quality: 11,
+    quality_name: "Souvenir"
+  };
+
+  const result = resolveTradeUpRecipe(rows, {normalizeSpecialQuality: true});
+  assert.equal(result.recipe, 2);
+  assert.equal(result.rarity, 3);
+  assert.equal(result.stattrak, false);
+  assert.doesNotMatch(result.recipe_name, /StatTrak/i);
+}
+
 function main() {
   testParserMarksAttr312AsYellowShieldBlocked();
   testParserKeepsPlainSteamCooldownOutOfYellowShieldBucket();
@@ -257,6 +308,8 @@ function main() {
   testCraftCandidatesExcludeYellowShieldEvenWhenCoolingIncluded();
   testCraftAssistCandidatesExcludeYellowShieldEvenWhenCoolingIncluded();
   testTradeUpStillRejectsYellowShieldWhenCoolingAllowed();
+  testTradeUpKeepsLegacyStatTrakRulesByDefault();
+  testMainCraftCanNormalizeSpecialQualitiesToNormalRecipe();
   console.log("yellow-shield-rules tests passed");
 }
 

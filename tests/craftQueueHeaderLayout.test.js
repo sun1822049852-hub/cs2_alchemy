@@ -34,8 +34,10 @@ for (const fragment of htmlFragments) {
   );
 }
 
+const queueHeaderMatch = html.match(/<div class="row craft-queue-header"[\s\S]*?<\/div>/);
+assert.ok(queueHeaderMatch, "craft queue header should be present");
 assert.equal(
-  html.includes('>配方预览<'),
+  queueHeaderMatch[0].includes("配方预览"),
   false,
   "craft queue header should no longer render the 配方预览 title text"
 );
@@ -86,7 +88,7 @@ for (const fragment of appFragments) {
 }
 
 assert.equal(
-  app.includes('ui.craftAddRecipeBtn.disabled = topActionsLocked || pendingQueueCount >= 50;'),
+  app.includes('applyClientPermissionToButton(ui.craftAddRecipeBtn, "craft.use", {disabled: topActionsLocked || pendingQueueCount >= 50});'),
   true,
   "add recipe button should stay clickable while offline"
 );

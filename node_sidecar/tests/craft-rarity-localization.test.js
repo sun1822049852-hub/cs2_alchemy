@@ -51,6 +51,7 @@ vm.runInNewContext(
     extractConst("RARITY_VALUES"),
     "globalThis.__RARITY_VALUES__ = RARITY_VALUES;",
     extractFunctionSource("normalizeCraftPredictorRarityLabel"),
+    extractFunctionSource("localizeCraftStatusText"),
     extractFunctionSource("rarityName"),
     extractFunctionSource("getTradeUpRecipeFromRows"),
     extractFunctionSource("craftRarityLabel")
@@ -87,6 +88,18 @@ assert.equal(
   context.rarityName({alchemy_rarity: "Industrial"}),
   "工业级",
   "rarityName should normalize backend English alchemy_rarity values before showing them in the UI"
+);
+
+assert.equal(
+  context.localizeCraftStatusText("配方#12：Mil-Spec可用材料不足 10 件，当前 1 件"),
+  "配方#12：军规级可用材料不足 10 件，当前 1 件",
+  "craft status toasts should localize English rarity labels"
+);
+
+assert.equal(
+  context.localizeCraftStatusText("配方#12：Mi-Spec可用材料不足 10 件，当前 1 件"),
+  "配方#12：军规级可用材料不足 10 件，当前 1 件",
+  "craft status toasts should also handle the abbreviated Mil-Spec spelling"
 );
 
 const recipe = context.getTradeUpRecipeFromRows(Array.from({length: 10}, () => ({rarity: 3})));

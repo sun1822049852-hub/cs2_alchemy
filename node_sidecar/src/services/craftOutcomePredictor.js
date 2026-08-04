@@ -89,7 +89,10 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
     predict(payload = {}) {
       const requiredCount = Math.trunc(Number(payload && payload.required_count));
       const normalizedGroups = normalizeGroups(payload && payload.groups);
-      const currentCount = normalizedGroups.reduce((sum, group) => sum + group.count, 0);
+      const probabilityKnown = String(payload && payload.probability_mode || "").trim() !== "unknown";
+      const groupedCount = normalizedGroups.reduce((sum, group) => sum + group.count, 0);
+      const requestedCurrentCount = Math.trunc(Number(payload && payload.current_count));
+      const currentCount = probabilityKnown ? groupedCount : requestedCurrentCount;
       if (!ALLOWED_REQUIRED_COUNTS.has(requiredCount)) {
         return invalidResult({
           invalid_reason: "invalid_required_count",
@@ -98,8 +101,12 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
           current_count: currentCount
         });
       }
-      const targetRelativeWear = Number(payload && payload.target_relative_wear);
-      if (!Number.isFinite(targetRelativeWear) || targetRelativeWear < 0 || targetRelativeWear > 1) {
+      const rawTargetRelativeWear = payload && payload.target_relative_wear;
+      const hasTargetRelativeWear = rawTargetRelativeWear !== undefined
+        && rawTargetRelativeWear !== null
+        && String(rawTargetRelativeWear).trim() !== "";
+      const targetRelativeWear = hasTargetRelativeWear ? Number(rawTargetRelativeWear) : null;
+      if (hasTargetRelativeWear && (!Number.isFinite(targetRelativeWear) || targetRelativeWear < 0 || targetRelativeWear > 1)) {
         return invalidResult({
           invalid_reason: "invalid_target_relative_wear",
           message: "配方无效：目标相对磨损非法",
@@ -108,20 +115,22 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
         });
       }
       let quantizedRelativeWear = null;
-      try {
-        quantizedRelativeWear = resolvePredictionTargetRelativeWear(
-          targetRelativeWear,
-          payload && payload.wear_approach_mode
-        );
-      } catch (err) {
-        return invalidResult({
-          invalid_reason: String(err && err.code || "invalid_target_relative_wear"),
-          message: "配方无效：目标相对磨损非法",
-          required_count: requiredCount,
-          current_count: currentCount
-        });
+      if (hasTargetRelativeWear) {
+        try {
+          quantizedRelativeWear = resolvePredictionTargetRelativeWear(
+            targetRelativeWear,
+            payload && payload.wear_approach_mode
+          );
+        } catch (err) {
+          return invalidResult({
+            invalid_reason: String(err && err.code || "invalid_target_relative_wear"),
+            message: "配方无效：目标相对磨损非法",
+            required_count: requiredCount,
+            current_count: currentCount
+          });
+        }
       }
-      if (!normalizedGroups.length || currentCount > requiredCount) {
+      if (!normalizedGroups.length || !Number.isFinite(currentCount) || currentCount <= 0 || currentCount > requiredCount) {
         return invalidResult({
           invalid_reason: "invalid_group_count",
           message: "配方无效：材料数量非法",
@@ -167,8 +176,8 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
             current_count: currentCount
           });
         }
-        const collectionShare = group.count / requiredCount;
-        const perOutcomeProbability = roundNumber(collectionShare / candidates.length);
+        const collectionShare = probabilityKnown ? group.count / requiredCount : null;
+        const perOutcomeProbability = probabilityKnown ? roundNumber(collectionShare / candidates.length) : null;
         for (const candidate of candidates) {
           const baseOutcome = {
             collection_key: group.collection_key,
@@ -193,37 +202,44 @@ function createCraftOutcomePredictor({catalog, rarityOrder = []} = {}) {
             outcomes.push(baseOutcome);
             continue;
           }
-          const predictedFloat = roundNumber(
-            outputWearFromRelativeFloat32(quantizedRelativeWear, candidate.minfloat, candidate.maxfloat)
-          );
-          const wearlevel = predictedWearLevel(predictedFloat);
-          const concrete = outcomeWearMap.get(candidate.basemarkethashname)?.get(wearlevel) || null;
-          baseOutcome.predicted_float = predictedFloat;
-          baseOutcome.predicted_wearlevel = wearlevel;
-          if (concrete) {
-            baseOutcome.name = asString(concrete.name || concrete.markethashname).trim();
-            baseOutcome.markethashname = asString(concrete.markethashname).trim();
-          } else {
-            baseOutcome.mapped_skin_missing = true;
+          if (hasTargetRelativeWear) {
+            const predictedFloat = roundNumber(
+              outputWearFromRelativeFloat32(quantizedRelativeWear, candidate.minfloat, candidate.maxfloat)
+            );
+            const wearlevel = predictedWearLevel(predictedFloat);
+            const concrete = outcomeWearMap.get(candidate.basemarkethashname)?.get(wearlevel) || null;
+            baseOutcome.predicted_float = predictedFloat;
+            baseOutcome.predicted_wearlevel = wearlevel;
+            if (concrete) {
+              baseOutcome.name = asString(concrete.name || concrete.markethashname).trim();
+              baseOutcome.markethashname = asString(concrete.markethashname).trim();
+            } else {
+              baseOutcome.mapped_skin_missing = true;
+            }
           }
           outcomes.push(baseOutcome);
         }
       }
 
-      const probabilityTotal = roundNumber(outcomes.reduce((sum, item) => sum + Number(item.probability || 0), 0)) || 0;
+      const probabilityTotal = probabilityKnown
+        ? roundNumber(outcomes.reduce((sum, item) => sum + Number(item.probability || 0), 0)) || 0
+        : null;
       return {
         ok: true,
         invalid_reason: "",
         message: "",
         required_count: requiredCount,
         current_count: currentCount,
-        target_relative_wear: roundNumber(targetRelativeWear),
+        target_relative_wear: hasTargetRelativeWear ? roundNumber(targetRelativeWear) : null,
         input_rarity: inputRarity,
         output_rarity: outputRarity,
         stattrak,
+        probability_known: probabilityKnown,
         summary: {
           probability_total: probabilityTotal,
-          probability_missing: roundNumber(Math.max(0, 1 - probabilityTotal)) || 0
+          probability_missing: probabilityKnown
+            ? roundNumber(Math.max(0, 1 - probabilityTotal)) || 0
+            : null
         },
         outcomes
       };

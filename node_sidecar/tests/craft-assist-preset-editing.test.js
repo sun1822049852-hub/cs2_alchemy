@@ -44,7 +44,7 @@ function loadDirtyFns(overrides = {}) {
 }
 
 function loadEditingFns(overrides = {}) {
-  const source = extractBlock("function saveCraftAssistPresetEditingSession(", "function applyCraftAssistPresetForEdit(");
+  const source = extractBlock("function saveCraftAssistPresetEditingSession(", "async function applyCraftAssistPresetForEdit(");
   const context = {
     state: overrides.state,
     guardGuestAction: overrides.guardGuestAction || (() => true),

@@ -324,6 +324,82 @@ function testBuildCraftPredictorRequestFromDraftAggregatesCollections() {
   ]);
 }
 
+function testBuildCraftPredictorRequestFromDraftAllowsMissingTargetForLiveEditor() {
+  const app = loadPredictorPanelFns();
+  const result = app.buildCraftPredictorRequestFromDraft({
+    allowMissingTarget: true,
+    targetWear: null,
+    requiredCount: 10,
+    materials: [{names: ["AK-47 | Slate"], count: 3}],
+    parentGroups: [
+      {name: "AK-47 | Slate", collection: "Fracture Case", rarity: "军规级", stattrak: false}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.payload, "target_relative_wear"), false);
+  assert.deepEqual(Array.from(result.payload.groups), [{collection: "Fracture Case", count: 3}]);
+}
+
+function testBuildCraftPredictorRequestFromDraftAllowsUnknownDistributionForEditor() {
+  const app = loadPredictorPanelFns();
+  const result = app.buildCraftPredictorRequestFromDraft({
+    allowUnknownDistribution: true,
+    targetWear: 0.21,
+    requiredCount: 10,
+    materials: [
+      {names: ["AK-47 | Slate", "USP-S | Cortex"], count: 10}
+    ],
+    parentGroups: [
+      {name: "AK-47 | Slate", collection: "Fracture Case", rarity: "军规级", stattrak: false},
+      {name: "USP-S | Cortex", collection: "Clutch Case", rarity: "军规级", stattrak: false}
+    ]
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.currentCount, 10);
+  assert.equal(result.payload.current_count, 10);
+  assert.equal(result.payload.probability_mode, "unknown");
+  assert.deepEqual(Array.from(result.payload.groups), [
+    {collection: "Fracture Case", count: 1},
+    {collection: "Clutch Case", count: 1}
+  ]);
+}
+
+function testCraftAssistEditorOutcomeMetaOmitsWearWithoutTarget() {
+  const app = loadPredictorPanelFns();
+  assert.equal(typeof app.formatCraftAssistEditorOutcomeMeta, "function");
+  assert.equal(
+    app.formatCraftAssistEditorOutcomeMeta(
+      {probability: 0.3, predicted_float: null},
+      {target_relative_wear: null}
+    ),
+    "30%"
+  );
+  assert.equal(
+    app.formatCraftAssistEditorOutcomeMeta(
+      {probability: 0.3, predicted_float: 0.2},
+      {target_relative_wear: 0.21}
+    ),
+    "30% · 0.2"
+  );
+  assert.equal(app.formatCraftPredictorProbability(null), "");
+  assert.equal(
+    app.formatCraftAssistEditorOutcomeMeta(
+      {probability: null, predicted_float: 0.2},
+      {target_relative_wear: 0.21, probability_known: false}
+    ),
+    "0.2"
+  );
+  assert.equal(
+    app.formatCraftAssistEditorOutcomeMeta(
+      {probability: null, predicted_float: null},
+      {target_relative_wear: null, probability_known: false}
+    ),
+    ""
+  );
+}
+
 function testBuildCraftPredictorRequestFromDraftPassesCurrentApproachMode() {
   const app = loadPredictorPanelFns({
     currentPage: "craftPage",
@@ -369,7 +445,7 @@ function testBuildCraftPredictorRequestFromRecipePassesCurrentApproachMode() {
   assert.equal(result.payload.wear_approach_mode, "infinite");
 }
 
-function testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools() {
+function testBuildCraftPredictorRequestRejectsAmbiguousPoolButNormalizesMixedQuality() {
   const app = loadPredictorPanelFns();
 
   const ambiguous = app.buildCraftPredictorRequestFromDraft({
@@ -398,8 +474,12 @@ function testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools() {
       {name: "StatTrak™ USP-S | Cortex", collection: "Clutch Case", rarity: "军规级", stattrak: true}
     ]
   });
-  assert.equal(mixedPool.ok, false);
-  assert.equal(mixedPool.reason, "mixed_stattrak");
+  assert.equal(mixedPool.ok, true);
+  assert.equal(mixedPool.payload.stattrak, false);
+  assert.deepEqual(Array.from(mixedPool.payload.groups), [
+    {collection: "Fracture Case", count: 4},
+    {collection: "Clutch Case", count: 6}
+  ]);
 }
 
 function testBuildCraftPredictorRequestFromDraftSupportsItemLevelMaterialsAndSharedRequiredCount() {
@@ -439,9 +519,12 @@ async function main() {
   testDifferentDraftAlsoStaysMutedAfterManualCollapse();
   await testFocusCraftPredictorOnActiveDraftKeepsImmediatePredictionAcrossFollowupRefresh();
   testBuildCraftPredictorRequestFromDraftAggregatesCollections();
+  testBuildCraftPredictorRequestFromDraftAllowsMissingTargetForLiveEditor();
+  testBuildCraftPredictorRequestFromDraftAllowsUnknownDistributionForEditor();
+  testCraftAssistEditorOutcomeMetaOmitsWearWithoutTarget();
   testBuildCraftPredictorRequestFromDraftPassesCurrentApproachMode();
   testBuildCraftPredictorRequestFromRecipePassesCurrentApproachMode();
-  testBuildCraftPredictorRequestRejectsAmbiguousOrMixedPools();
+  testBuildCraftPredictorRequestRejectsAmbiguousPoolButNormalizesMixedQuality();
   testBuildCraftPredictorRequestFromDraftSupportsItemLevelMaterialsAndSharedRequiredCount();
   console.log("craft-predictor-panel-state tests passed");
 }

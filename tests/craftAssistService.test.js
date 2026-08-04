@@ -3115,6 +3115,133 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
   assert.match(text, /selected_items=\[\{"asset_id":"a1","name":"AK-47 \| Redline","absolute_wear":"0\.123456","relative_wear":"0\.234567"\},\{"asset_id":"a2","name":"M4A4 \| Buzz Kill","absolute_wear":"0\.223344","relative_wear":"0\.255566"\}\]/);
 }
 
+async function test_rarity_tag_without_target_selects_lowest_relative_wear_with_stable_id_tie_break() {
+  const rows = Array.from({length: 13}, (_, index) => makeRow({
+    id: String(20 - index),
+    name: `Tag Material ${index + 1}`,
+    relative: index === 0 || index === 1 ? 0.02 : 0.03 + index * 0.01,
+    rarity: 3
+  }));
+  rows.push(makeRow({id: "other-rarity", name: "Other Rarity", relative: 0, rarity: 2}));
+
+  const result = await selectCraftAssistForRecipe({
+    rows,
+    materialMode: "rarity_tag",
+    rarityTag: 3,
+    targetWear: null,
+    materials: [],
+    blockedIds: [],
+    includeCooling: false,
+    wearOffset: 0.9
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.item_ids.length, 10);
+  assert.deepEqual(result.item_ids.slice(0, 2), ["19", "20"]);
+  assert.equal(Number(result.picks[0].relative_wear), 0.02);
+  assert.equal(Math.fround(result.overall), Math.fround(0.072));
+  assert.equal(result.recipe_ok, true);
+  assert.match(result.recipe_text, /recipe 2/);
+}
+
+async function test_rarity_tag_without_target_reports_quantity_shortfall() {
+  const rows = Array.from({length: 9}, (_, index) => makeRow({
+    id: `short-${index}`,
+    name: `Short Material ${index}`,
+    relative: index / 20,
+    rarity: 1
+  }));
+  const result = await selectCraftAssistForRecipe({
+    rows,
+    materialMode: "rarity_tag",
+    rarityTag: 1,
+    targetWear: null,
+    materials: [],
+    blockedIds: [],
+    includeCooling: false
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /10/);
+  assert.match(result.message, /9/);
+}
+
+async function test_rarity_tag_special_quality_normalization_is_explicit() {
+  const rows = Array.from({length: 10}, (_, index) => {
+    const row = makeRow({
+      id: `quality-${index + 1}`,
+      name: `Quality Material ${index + 1}`,
+      relative: (index + 1) / 100,
+      rarity: 3
+    });
+    if (index === 1) {
+      row.quality = 9;
+      row.quality_name = "StatTrak";
+    }
+    if (index === 2) {
+      row.quality = 11;
+      row.quality_name = "Souvenir";
+    }
+    return row;
+  });
+  const args = {
+    rows,
+    materialMode: "rarity_tag",
+    rarityTag: 3,
+    targetWear: null,
+    materials: [],
+    blockedIds: [],
+    includeCooling: false
+  };
+  const legacy = await selectCraftAssistForRecipe(args);
+  const normalized = await selectCraftAssistForRecipe({...args, normalizeSpecialQuality: true});
+  const statTrakRows = rows.map((row) => ({...row, quality: 9, quality_name: "StatTrak"}));
+  const legacyStatTrak = await selectCraftAssistForRecipe({...args, rows: statTrakRows});
+
+  assert.equal(legacy.ok, true);
+  assert.equal(legacy.recipe_ok, false);
+  assert.match(legacy.recipe_reason, /StatTrak|全部普通/);
+  assert.equal(normalized.recipe_ok, true);
+  assert.match(normalized.recipe_text, /recipe 2/);
+  assert.doesNotMatch(normalized.recipe_text, /StatTrak/i);
+  assert.equal(legacyStatTrak.recipe_ok, true);
+  assert.match(legacyStatTrak.recipe_text, /StatTrak/);
+  assert.match(legacyStatTrak.recipe_text, /recipe 12/);
+}
+
+async function test_rarity_tag_with_target_reuses_solver_and_ignores_wear_offset() {
+  const rows = Array.from({length: 10}, (_, index) => makeRow({
+    id: `target-${index + 1}`,
+    name: "Targeted Tag Material",
+    relative: 0.1999999,
+    rarity: 2
+  })).concat([
+    makeRow({id: "target-low", name: "Targeted Tag Material", relative: 0.1, rarity: 2}),
+    makeRow({id: "target-high", name: "Targeted Tag Material", relative: 0.3, rarity: 2})
+  ]);
+  const rawTarget = "0.2";
+  const runWithOffset = (wearOffset) => selectCraftAssistForRecipe({
+      rows,
+      materialMode: "rarity_tag",
+      rarityTag: 2,
+      targetWear: Math.fround(Number(rawTarget)),
+      targetWearRaw: rawTarget,
+      wearApproachMode: "below",
+      materials: [],
+      blockedIds: [],
+      includeCooling: false,
+      wearOffset
+    });
+  const [result, comparison] = await Promise.all([runWithOffset(0.9), runWithOffset(0.000001)]);
+
+  assert.equal(result.ok, true);
+  assert.equal(comparison.ok, true);
+  assert.equal(result.item_ids.length, 10);
+  assert.deepEqual(result.item_ids, comparison.item_ids);
+  assert.equal(result.item_ids.includes("target-low"), false);
+  assert.equal(result.item_ids.includes("target-high"), false);
+  assert.equal(Math.abs(result.overall - 0.1999999) < 1e-12, true);
+}
+
 (async () => {
   await test_step_target_below_searches_previous_float32_step();
   await test_step_target_infinite_accepts_raw_mean_on_target_float32_step();
@@ -3189,6 +3316,10 @@ async function test_failure_log_text_includes_final_validation_diagnostics() {
   await test_final_validation_below_raw_rejects_normalized_overall_between_conservative_and_original_target();
   await test_final_validation_skips_infinite_mode_cross_target_guard();
   await test_failure_log_text_includes_final_validation_diagnostics();
+  await test_rarity_tag_without_target_selects_lowest_relative_wear_with_stable_id_tie_break();
+  await test_rarity_tag_without_target_reports_quantity_shortfall();
+  await test_rarity_tag_special_quality_normalization_is_explicit();
+  await test_rarity_tag_with_target_reuses_solver_and_ignores_wear_offset();
   console.log("craftAssistService tests passed");
 })().catch((err) => {
   console.error(err);

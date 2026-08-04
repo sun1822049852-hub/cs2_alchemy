@@ -159,7 +159,7 @@ function isYellowShieldBlockedRow(row) {
   return hiddenReason === "flags=24" || hiddenReason === "attr#277" || hiddenReason === "attr#312";
 }
 
-function resolveTradeUpRecipe(rows, {allowCooling = false} = {}) {
+function resolveTradeUpRecipe(rows, {allowCooling = false, normalizeSpecialQuality = false} = {}) {
   const list = Array.isArray(rows) ? rows : [];
   if (list.length !== 10) {
     throw badRequest(`汰换需要正好 10 件物品，当前为 ${list.length} 件`);
@@ -205,11 +205,14 @@ function resolveTradeUpRecipe(rows, {allowCooling = false} = {}) {
     throw badRequest(`当前稀有度不支持汰换：${rarity}`);
   }
 
-  const stSet = new Set(list.map((row) => (isStatTrakRow(row) ? 1 : 0)));
-  if (stSet.size !== 1) {
-    throw badRequest("汰换物品必须全部同为 StatTrak 或全部普通");
+  let stattrak = false;
+  if (!normalizeSpecialQuality) {
+    const stSet = new Set(list.map((row) => (isStatTrakRow(row) ? 1 : 0)));
+    if (stSet.size !== 1) {
+      throw badRequest("汰换物品必须全部同为 StatTrak 或全部普通");
+    }
+    stattrak = Array.from(stSet)[0] === 1;
   }
-  const stattrak = Array.from(stSet)[0] === 1;
   const recipe = stattrak ? rarity + 9 : rarity - 1;
   return {
     recipe,
@@ -414,11 +417,11 @@ function createCraftService({sessionPool, logger}) {
     return {snapshotPath, fetchTime};
   }
 
-  async function runTradeUp({username, password, itemIds, allowCooling = false, onProgress, shouldPause}) {
-    return runTradeUpBatch({username, password, itemIds, allowCooling, onProgress, shouldPause});
+  async function runTradeUp({username, password, itemIds, allowCooling = false, normalizeSpecialQuality = false, onProgress, shouldPause}) {
+    return runTradeUpBatch({username, password, itemIds, allowCooling, normalizeSpecialQuality, onProgress, shouldPause});
   }
 
-  async function runTradeUpBatch({username, password, itemIds, recipes, allowCooling = false, onProgress, shouldPause}) {
+  async function runTradeUpBatch({username, password, itemIds, recipes, allowCooling = false, normalizeSpecialQuality = false, onProgress, shouldPause}) {
     const recipeRequests = normalizeRecipeRequests({itemIds, recipes});
     const {accountName, csgo} = await acquireContext({username, password});
     const progressCb = typeof onProgress === "function" ? onProgress : null;
@@ -494,7 +497,7 @@ function createCraftService({sessionPool, logger}) {
             );
           }
 
-          const recipeInfo = resolveTradeUpRecipe(selectedRows, {allowCooling});
+          const recipeInfo = resolveTradeUpRecipe(selectedRows, {allowCooling, normalizeSpecialQuality});
           if (logger) {
             logger.info(
               "craft_ops",

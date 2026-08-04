@@ -187,9 +187,48 @@ async function testPredictOutcomeRouteReturnsInvalidReasonWithBadRequest() {
   }
 }
 
+async function testPredictOutcomeRouteAllowsMissingTargetWearForLiveEditor() {
+  const calls = [];
+  const server = createServer({
+    licenseRuntimeFactory: () => createReadyLicenseRuntime(),
+    craftOutcomePredictor: {
+      predict(payload) {
+        calls.push(payload);
+        return {
+          ok: true,
+          invalid_reason: "",
+          target_relative_wear: null,
+          outcomes: [{base_name: "AK-47 | Ice Coaled", probability: 0.3}]
+        };
+      }
+    }
+  });
+  try {
+    const address = await listen(server);
+    const payload = {
+      required_count: 10,
+      input_rarity: "军规级",
+      stattrak: false,
+      groups: [{collection: "Fracture Case", count: 3}]
+    };
+    const response = await requestJson({
+      port: address.port,
+      path: "/api/craft/predict-outcomes",
+      body: payload
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.ok, true);
+    assert.equal(response.body.target_relative_wear, null);
+    assert.deepEqual(calls, [payload]);
+  } finally {
+    await closeServer(server);
+  }
+}
+
 async function main() {
   await testPredictOutcomeRouteReturnsSuccessPayload();
   await testPredictOutcomeRouteReturnsInvalidReasonWithBadRequest();
+  await testPredictOutcomeRouteAllowsMissingTargetWearForLiveEditor();
   console.log("craft-outcome-predictor route tests passed");
 }
 

@@ -73,6 +73,7 @@ function loadTargetWearFns(overrides = {}) {
       return Number.isFinite(numeric) ? numeric : fallback;
     }),
     normalizeCraftAssistRole: overrides.normalizeCraftAssistRole || ((role) => String(role || "").trim() === "aux" ? "aux" : "main"),
+    getCraftAssistFilterMode: overrides.getCraftAssistFilterMode || (() => state.craftAssistUseAbsoluteWear ? "absolute" : "relative"),
     api: overrides.api || (async () => ({item_ids: []})),
     clearScopedCraftAssistRuntimeState: overrides.clearScopedCraftAssistRuntimeState || (() => {}),
     clearCraftAssistActiveRunToken: overrides.clearCraftAssistActiveRunToken || (() => {}),
@@ -228,6 +229,33 @@ function test_sanitize_rejects_missing_target_wear_fields() {
   }));
 
   assert.equal(preset, null);
+}
+
+function test_sanitize_legacy_preset_defaults_to_specific_mode() {
+  const app = loadTargetWearFns();
+  const preset = app.sanitizeCraftAssistPresetPayload(createPreset());
+
+  assert.equal(preset.material_mode, "specific");
+  assert.equal(preset.rarity_tag, null);
+}
+
+function test_sanitize_rarity_tag_allows_empty_target_and_discards_materials() {
+  const app = loadTargetWearFns();
+  const preset = app.sanitizeCraftAssistPresetPayload(createPreset({
+    name: "自定义名称",
+    material_mode: "rarity_tag",
+    rarity_tag: 3,
+    target_wear: undefined,
+    target_wear_raw: undefined
+  }));
+
+  assert.equal(preset.name, "军规级");
+  assert.equal(preset.material_mode, "rarity_tag");
+  assert.equal(preset.rarity_tag, 3);
+  assert.equal(preset.target_wear, null);
+  assert.equal(preset.target_wear_raw, "");
+  assert.equal(Array.isArray(preset.materials), true);
+  assert.equal(preset.materials.length, 0);
 }
 
 function test_rejects_target_wear_raw_above_one() {
@@ -473,6 +501,8 @@ async function main() {
   test_load_mismatched_dual_field_preset_trusts_raw();
   test_rejects_unparsable_target_wear_raw();
   test_sanitize_rejects_missing_target_wear_fields();
+  test_sanitize_legacy_preset_defaults_to_specific_mode();
+  test_sanitize_rarity_tag_allows_empty_target_and_discards_materials();
   test_rejects_target_wear_raw_above_one();
   test_rejects_target_wear_raw_below_zero();
   test_draft_snapshot_and_restore_preserve_target_wear_raw();
